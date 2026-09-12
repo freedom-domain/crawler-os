@@ -18,8 +18,11 @@ export const spiderRun = (id: number) => request.post(`/spider/${id}/run`)
 
 export const taskPage = (params: any) => request.get('/spider/task/page', { params })
 export const taskDetail = (id: number) => request.get(`/spider/task/${id}`)
+export const taskLogs = (id: number, params: any) => request.get(`/spider/task/${id}/logs`, { params })
 export const taskCancel = (id: number) => request.put(`/spider/task/${id}/cancel`)
 
 export const searchContent = (params: any) => request.get('/search', { params })
+export const searchDetail = (id: string) => request.get(`/search/${id}`)
+export const searchDelete = (id: string) => request.delete(`/search/${id}`)
 
 export const filePage = (params: any) => request.get('/file/page', { params })

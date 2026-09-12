@@ -1,6 +1,7 @@
 package com.collect.search.controller;
 
 import com.collect.common.result.R;
+import com.collect.search.dto.SearchResult;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.service.SearchService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,7 +22,7 @@ public class SearchController {
 
     @Operation(summary = "搜索爬取的数据")
     @GetMapping
-    public R<Page<SpiderContentDoc>> search(@RequestParam(value = "keyword", required = false) String keyword,
+    public R<Page<SearchResult>> search(@RequestParam(value = "keyword", required = false) String keyword,
                                               @RequestParam(value = "spiderId", required = false) Long spiderId,
                                               @RequestParam(value = "current", defaultValue = "1") int current,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
@@ -32,5 +33,12 @@ public class SearchController {
     @GetMapping("/{id}")
     public R<SpiderContentDoc> detail(@PathVariable("id") String id) throws IOException {
         return R.ok(searchService.getById(id));
+    }
+
+    @Operation(summary = "删除数据")
+    @DeleteMapping("/{id}")
+    public R<Void> delete(@PathVariable("id") String id) throws IOException {
+        searchService.delete(id);
+        return R.ok();
     }
 }

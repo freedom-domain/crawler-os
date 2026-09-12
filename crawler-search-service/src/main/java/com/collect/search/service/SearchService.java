@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import com.collect.search.dto.SearchResult;
 import com.collect.search.es.SpiderContentDoc;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,17 +30,17 @@ public class SearchService {
         this.elasticsearchClient = elasticsearchClient;
     }
 
-    public Page<SpiderContentDoc> search(String keyword, Long spiderId,
-                                          int current, int size) {
+    public Page<SearchResult> search(String keyword, Long spiderId,
+                                     int current, int size) {
         PageRequest pageRequest = PageRequest.of(current - 1, size);
 
         BoolQuery.Builder boolBuilder = new BoolQuery.Builder();
 
         if (keyword != null && !keyword.isBlank()) {
             String kw = keyword;
-            boolBuilder.must(m -> m.match(mt -> mt.field("title").query(kw)));
+            boolBuilder.should(s -> s.match(mt -> mt.field("title").query(kw)));
             boolBuilder.should(s -> s.match(mt -> mt.field("content").query(kw)));
-            boolBuilder.minimumShouldMatch("0");
+            boolBuilder.minimumShouldMatch("1");
         } else {
             boolBuilder.must(m -> m.matchAll(mt -> mt));
         }
@@ -50,22 +51,53 @@ public class SearchService {
 
         Query query = Query.of(q -> q.bool(boolBuilder.build()));
 
-        SearchRequest request = new SearchRequest.Builder()
+        SearchRequest.Builder reqBuilder = new SearchRequest.Builder()
                 .index(indexName)
                 .from(pageRequest.getPageNumber() * pageRequest.getPageSize())
                 .size(pageRequest.getPageSize())
-                .query(query)
-                .build();
+                .query(query);
+
+        if (keyword != null && !keyword.isBlank()) {
+            reqBuilder.highlight(h -> h
+                    .preTags("<em>")
+                    .postTags("</em>")
+                    .fragmentSize(200)
+                    .numberOfFragments(3)
+                    .fields("title", f -> f)
+                    .fields("content", f -> f)
+            );
+        }
+
+        SearchRequest request = reqBuilder.build();
 
         try {
             SearchResponse<SpiderContentDoc> response = elasticsearchClient
                     .search(request, SpiderContentDoc.class);
-            List<SpiderContentDoc> docs = response.hits().hits().stream()
-                    .map(Hit::source)
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
+            List<SearchResult> results = new java.util.ArrayList<>();
+            for (Hit<SpiderContentDoc> hit : response.hits().hits()) {
+                SpiderContentDoc doc = hit.source();
+                if (doc == null) continue;
+                SearchResult sr = new SearchResult();
+                sr.setId(doc.getId());
+                sr.setTitle(doc.getTitle());
+                sr.setContent(doc.getContent());
+                sr.setUrl(doc.getUrl());
+                sr.setAuthor(doc.getAuthor());
+                sr.setSpiderId(doc.getSpiderId());
+                sr.setSpiderName(doc.getSpiderName());
+                sr.setSourceType(doc.getSourceType());
+                sr.setCrawlTime(doc.getCrawlTime());
+                if (hit.highlight() != null) {
+                    sr.setTitleHl(hit.highlight().get("title") != null ? String.join(" ", hit.highlight().get("title")) : doc.getTitle());
+                    sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));
+                } else {
+                    sr.setTitleHl(doc.getTitle());
+                    sr.setContentHl(snippet(doc.getContent()));
+                }
+                results.add(sr);
+            }
             long total = response.hits().total() != null ? response.hits().total().value() : 0;
-            return new PageImpl<>(docs, pageRequest, total);
+            return new PageImpl<>(results, pageRequest, total);
         } catch (co.elastic.clients.elasticsearch._types.ElasticsearchException e) {
             if (e.response() != null
                     && e.response().error() != null
@@ -81,9 +113,18 @@ public class SearchService {
         }
     }
 
+    private String snippet(String content) {
+        if (content == null) return null;
+        return content.length() > 200 ? content.substring(0, 200) + "..." : content;
+    }
+
     public SpiderContentDoc getById(String id) throws java.io.IOException {
         return elasticsearchClient
                 .get(g -> g.index(indexName).id(id), SpiderContentDoc.class)
                 .source();
+    }
+
+    public void delete(String id) throws java.io.IOException {
+        elasticsearchClient.delete(d -> d.index(indexName).id(id));
     }
 }

@@ -10,6 +10,7 @@ import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
+import com.collect.spider.entity.SpiderTaskLog;
 import com.alibaba.fastjson2.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -156,6 +157,13 @@ public class SpiderService {
 
     public SpiderTask taskDetail(Long id) {
         return taskMapper.selectById(id);
+    }
+
+    public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size) {
+        LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
+        qw.eq(SpiderTaskLog::getTaskId, taskId);
+        qw.orderByAsc(SpiderTaskLog::getCreateTime);
+        return logMapper.selectPage(new Page<>(current, size), qw);
     }
 
     public void cancelTask(Long id) {

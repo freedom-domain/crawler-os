@@ -6,6 +6,7 @@ import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
+import com.collect.spider.entity.SpiderTaskLog;
 import com.collect.spider.service.SpiderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -88,6 +89,18 @@ public class SpiderController {
     @GetMapping("/task/{id}")
     public R<SpiderTask> taskDetail(@PathVariable("id") Long id) {
         return R.ok(spiderService.taskDetail(id));
+    }
+
+    @Operation(summary = "任务日志")
+    @GetMapping("/task/{id}/logs")
+    public R<IPage<SpiderTaskLog>> taskLogs(@PathVariable("id") Long id,
+                                             @RequestParam(value = "current", defaultValue = "1") int current,
+                                             @RequestParam(value = "size", defaultValue = "50") int size) {
+        SpiderTask task = spiderService.taskDetail(id);
+        if (task == null) {
+            return R.ok();
+        }
+        return R.ok(spiderService.taskLogPage(task.getTaskId(), current, size));
     }
 
     @Operation(summary = "取消任务")
