@@ -20,7 +20,11 @@
       </el-table-column>
       <el-table-column prop="url" label="来源URL" width="240" show-overflow-tooltip />
       <el-table-column prop="spiderName" label="爬虫" width="120" />
-      <el-table-column prop="crawlTime" label="抓取时间" width="180" />
+      <el-table-column label="抓取时间" width="180">
+        <template #default="{ row }">
+          {{ formatTime(row.crawlTime) }}
+        </template>
+      </el-table-column>
     </el-table>
 
     <el-pagination
@@ -45,6 +49,13 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
+
+const formatTime = (ts: number) => {
+  if (!ts) return ''
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
 
 const loadData = async () => {
   loading.value = true
