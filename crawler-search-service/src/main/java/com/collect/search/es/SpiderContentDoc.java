@@ -37,7 +37,7 @@ public class SpiderContentDoc {
     private String sourceType;
 
     @Field(type = FieldType.Date)
-    private Long crawlTime;
+    private String crawlTime;
 
     @Field(type = FieldType.Keyword)
     private String fileId;

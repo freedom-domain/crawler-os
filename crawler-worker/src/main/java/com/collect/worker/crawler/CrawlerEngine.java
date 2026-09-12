@@ -19,7 +19,7 @@ import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -114,7 +114,7 @@ public class CrawlerEngine {
         docObj.setSpiderId(msg.getSpiderId());
         docObj.setSpiderName(msg.getSpiderName());
         docObj.setSourceType(msg.getType());
-        docObj.setCrawlTime(LocalDateTime.now().toEpochSecond(ZoneOffset.ofHours(8)) * 1000);
+        docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
 
         String objectName = HTML_PREFIX + msg.getSpiderId() + "/" +
                 System.currentTimeMillis() + "_" + Integer.toHexString(url.hashCode()) + ".html";

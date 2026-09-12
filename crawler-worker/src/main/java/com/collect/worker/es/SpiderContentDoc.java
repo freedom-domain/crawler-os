@@ -7,7 +7,7 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.annotations.WriteTypeHint;
 
-import java.time.LocalDateTime;
+
 
 @Data
 @Document(indexName = "spider_content", createIndex = false, writeTypeHint = WriteTypeHint.FALSE)
@@ -38,7 +38,7 @@ public class SpiderContentDoc {
     private String sourceType;
 
     @Field(type = FieldType.Date)
-    private Long crawlTime;
+    private String crawlTime;
 
     @Field(type = FieldType.Keyword)
     private String fileId;

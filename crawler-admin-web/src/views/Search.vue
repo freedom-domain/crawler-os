@@ -50,9 +50,9 @@ const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
 
-const formatTime = (ts: number) => {
-  if (!ts) return ''
-  const d = new Date(ts)
+const formatTime = (t: string) => {
+  if (!t) return ''
+  const d = new Date(t)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
