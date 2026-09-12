@@ -7,8 +7,8 @@ import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.collect.search.es.SpiderContentDoc;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -18,10 +18,16 @@ import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class SearchService {
 
     private final ElasticsearchClient elasticsearchClient;
+
+    @Value("${app.es.content-index:spider_content}")
+    private String indexName;
+
+    public SearchService(ElasticsearchClient elasticsearchClient) {
+        this.elasticsearchClient = elasticsearchClient;
+    }
 
     public Page<SpiderContentDoc> search(String keyword, Long spiderId,
                                           int current, int size) {
@@ -45,7 +51,7 @@ public class SearchService {
         Query query = Query.of(q -> q.bool(boolBuilder.build()));
 
         SearchRequest request = new SearchRequest.Builder()
-                .index("spider_content")
+                .index(indexName)
                 .from(pageRequest.getPageNumber() * pageRequest.getPageSize())
                 .size(pageRequest.getPageSize())
                 .query(query)
@@ -60,6 +66,15 @@ public class SearchService {
                     .toList();
             long total = response.hits().total() != null ? response.hits().total().value() : 0;
             return new PageImpl<>(docs, pageRequest, total);
+        } catch (co.elastic.clients.elasticsearch._types.ElasticsearchException e) {
+            if (e.response() != null
+                    && e.response().error() != null
+                    && "index_not_found_exception".equals(e.response().error().type())) {
+                log.warn("ES 索引不存在，返回空结果: {}", indexName);
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+            log.error("ES search failed", e);
+            return new PageImpl<>(List.of(), pageRequest, 0);
         } catch (Exception e) {
             log.error("ES search failed", e);
             return new PageImpl<>(List.of(), pageRequest, 0);
@@ -68,7 +83,7 @@ public class SearchService {
 
     public SpiderContentDoc getById(String id) throws java.io.IOException {
         return elasticsearchClient
-                .get(g -> g.index("spider_content").id(id), SpiderContentDoc.class)
+                .get(g -> g.index(indexName).id(id), SpiderContentDoc.class)
                 .source();
     }
 }

@@ -5,20 +5,21 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+import org.springframework.data.elasticsearch.annotations.WriteTypeHint;
 
 import java.time.LocalDateTime;
 
 @Data
-@Document(indexName = "spider_content")
+@Document(indexName = "spider_content", createIndex = false, writeTypeHint = WriteTypeHint.FALSE)
 public class SpiderContentDoc {
 
     @Id
     private String id;
 
-    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
+    @Field(type = FieldType.Text)
     private String title;
 
-    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
+    @Field(type = FieldType.Text)
     private String content;
 
     @Field(type = FieldType.Keyword)

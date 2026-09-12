@@ -10,3 +10,7 @@ spring:
       password: ${ES_PASSWORD:Elastic_dnw7WH}
       connection-timeout: 10s
       socket-timeout: 30s
+
+app:
+  es:
+    content-index: ${ES_CONTENT_INDEX:spider_content_local}

@@ -15,6 +15,10 @@ spring:
       username: ${ES_USER:}
       password: ${ES_PASSWORD:}
 
+app:
+  es:
+    content-index: ${ES_CONTENT_INDEX:spider_content}
+
 jwt:
   secret: crawler-platform-jwt-secret-key-must-be-long-enough-256
   expire: 7200

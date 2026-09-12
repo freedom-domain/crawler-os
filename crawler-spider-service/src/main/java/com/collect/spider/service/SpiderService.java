@@ -119,7 +119,7 @@ public class SpiderService {
 
         TaskMessage msg = buildMessage(spider, taskId);
         String destination = MqConstants.SPIDER_TASK_TOPIC + ":" + MqConstants.TASK_EXECUTE_TAG;
-        rocketMQTemplate.syncSend(destination, JSON.toJSONString(msg));
+        rocketMQTemplate.syncSend(destination, msg);
         log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
         return task;
     }

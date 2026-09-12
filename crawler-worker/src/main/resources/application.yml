@@ -27,6 +27,10 @@ spring:
       username: ${ES_USER:}
       password: ${ES_PASSWORD:}
 
+app:
+  es:
+    content-index: ${ES_CONTENT_INDEX:spider_content}
+
 mybatis-plus:
   global-config:
     db-config:

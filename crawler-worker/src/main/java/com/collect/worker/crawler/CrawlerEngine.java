@@ -2,19 +2,20 @@ package com.collect.worker.crawler;
 
 import com.collect.common.mq.TaskMessage;
 import com.collect.worker.es.SpiderContentDoc;
-import com.collect.worker.es.SpiderContentRepository;
 import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
 import com.collect.worker.minio.MinioHelper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -27,13 +28,23 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CrawlerEngine {
 
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
-    private final SpiderContentRepository contentRepository;
+    private final ElasticsearchOperations elasticsearchOperations;
     private final MinioHelper minioHelper;
+
+    @Value("${app.es.content-index:spider_content}")
+    private String contentIndex;
+
+    public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
+                         ElasticsearchOperations elasticsearchOperations, MinioHelper minioHelper) {
+        this.taskMapper = taskMapper;
+        this.logMapper = logMapper;
+        this.elasticsearchOperations = elasticsearchOperations;
+        this.minioHelper = minioHelper;
+    }
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -109,7 +120,7 @@ public class CrawlerEngine {
         minioHelper.putHtml(MINIO_BUCKET, objectName, doc.outerHtml());
         docObj.setFileId(objectName);
 
-        contentRepository.save(docObj);
+        elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
         writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                 "抓取成功: " + parsed.getTitle(), (int) cost);
 

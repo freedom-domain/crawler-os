@@ -44,7 +44,7 @@
         <rocketmq-spring.version>2.3.3</rocketmq-spring.version>
         <rocketmq-client.version>5.2.0</rocketmq-client.version>
         <springdoc.version>2.5.0</springdoc.version>
-        <fastjson2.version>2.0.49</fastjson2.version>
+        <fastjson2.version>2.0.65</fastjson2.version>
     </properties>
 
     <dependencyManagement>

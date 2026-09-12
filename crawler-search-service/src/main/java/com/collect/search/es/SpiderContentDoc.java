@@ -9,7 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.time.LocalDateTime;
 
 @Data
-@Document(indexName = "spider_content")
+@Document(indexName = "spider_content", createIndex = false)
 public class SpiderContentDoc {
 
     @Id
