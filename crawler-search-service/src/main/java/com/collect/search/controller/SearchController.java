@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+
 @Tag(name = "数据搜索")
 @RestController
 @RequestMapping("/api/search")
@@ -19,16 +21,16 @@ public class SearchController {
 
     @Operation(summary = "搜索爬取的数据")
     @GetMapping
-    public R<Page<SpiderContentDoc>> search(@RequestParam(required = false) String keyword,
-                                             @RequestParam(required = false) Long spiderId,
-                                             @RequestParam(defaultValue = "1") int current,
-                                             @RequestParam(defaultValue = "20") int size) {
+    public R<Page<SpiderContentDoc>> search(@RequestParam(value = "keyword", required = false) String keyword,
+                                              @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                              @RequestParam(value = "current", defaultValue = "1") int current,
+                                              @RequestParam(value = "size", defaultValue = "20") int size) {
         return R.ok(searchService.search(keyword, spiderId, current, size));
     }
 
     @Operation(summary = "数据详情")
     @GetMapping("/{id}")
-    public R<SpiderContentDoc> detail(@PathVariable String id) {
+    public R<SpiderContentDoc> detail(@PathVariable("id") String id) throws IOException {
         return R.ok(searchService.getById(id));
     }
 }

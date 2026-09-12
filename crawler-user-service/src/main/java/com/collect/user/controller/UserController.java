@@ -40,15 +40,15 @@ public class UserController {
 
     @Operation(summary = "用户分页列表")
     @GetMapping("/page")
-    public R<IPage<SysUser>> page(@RequestParam(defaultValue = "1") int current,
-                                  @RequestParam(defaultValue = "10") int size,
-                                  @RequestParam(required = false) String keyword) {
+    public R<IPage<SysUser>> page(@RequestParam(value = "current", defaultValue = "1") int current,
+                                  @RequestParam(value = "size", defaultValue = "10") int size,
+                                  @RequestParam(value = "keyword", required = false) String keyword) {
         return R.ok(userService.page(current, size, keyword));
     }
 
     @Operation(summary = "用户详情")
     @GetMapping("/{id}")
-    public R<SysUser> detail(@PathVariable Long id) {
+    public R<SysUser> detail(@PathVariable("id") Long id) {
         return R.ok(userService.getById(id));
     }
 

@@ -16,7 +16,8 @@ import org.springframework.stereotype.Component;
 @RocketMQMessageListener(
         topic = MqConstants.SPIDER_TASK_TOPIC,
         selectorExpression = MqConstants.TASK_EXECUTE_TAG,
-        consumerGroup = "worker-consumer-group"
+        consumerGroup = "worker-consumer-group",
+        nameServer = "${spring.rocketmq.name-server}"
 )
 public class TaskConsumer implements RocketMQListener<String> {
 

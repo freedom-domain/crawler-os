@@ -1,9 +1,5 @@
-package com.collect.search.config;
+package com.collect.common.config;
 
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.json.jackson.JacksonJsonpMapper;
-import co.elastic.clients.transport.ElasticsearchTransport;
-import co.elastic.clients.transport.rest_client.RestClientHttpClient;
 import org.apache.http.HttpHost;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
@@ -11,13 +7,15 @@ import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestClientBuilder;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 
 @Configuration
-public class ElasticsearchConfig {
+@ConditionalOnClass(RestClient.class)
+public class ElasticsearchRestClientConfig {
 
     @Value("${spring.data.elasticsearch.uris}")
     private String uris;
@@ -55,11 +53,5 @@ public class ElasticsearchConfig {
         }
 
         return builder.build();
-    }
-
-    @Bean
-    public ElasticsearchClient elasticsearchClient(RestClient restClient) {
-        ElasticsearchTransport transport = new RestClientHttpClient(restClient, new JacksonJsonpMapper());
-        return new ElasticsearchClient(transport);
     }
 }

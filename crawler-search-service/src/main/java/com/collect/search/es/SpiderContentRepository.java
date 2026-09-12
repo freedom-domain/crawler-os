@@ -8,7 +8,7 @@ import org.springframework.data.elasticsearch.repository.ElasticsearchRepository
 public interface SpiderContentRepository extends ElasticsearchRepository<SpiderContentDoc, String> {
 
     @Query("SELECT * FROM SpiderContentDoc WHERE " +
-            "(:keyword IS NULL OR title LIKE CONCAT('%', :keyword, '%') OR content LIKE CONCAT('%', :keyword, '%')) " +
+            "(:keyword IS NULL OR MATCH(title, :keyword) OR MATCH(content, :keyword)) " +
             "AND (:spiderId IS NULL OR spiderId = :spiderId)")
     Page<SpiderContentDoc> search(String keyword, Long spiderId, Pageable pageable);
 }

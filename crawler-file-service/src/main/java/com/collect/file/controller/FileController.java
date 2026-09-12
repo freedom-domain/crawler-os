@@ -27,16 +27,16 @@ public class FileController {
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
     public R<FileMetadata> upload(@RequestParam("file") MultipartFile file,
-                                  @RequestParam(defaultValue = "crawler") String bucket,
-                                  @RequestParam(defaultValue = "file") String category,
-                                  @RequestParam(required = false) Long spiderId) {
+                                   @RequestParam(value = "bucket", defaultValue = "crawler") String bucket,
+                                   @RequestParam(value = "category", defaultValue = "file") String category,
+                                   @RequestParam(value = "spiderId", required = false) Long spiderId) {
         return R.ok(fileService.upload(bucket, file, category, spiderId));
     }
 
     @Operation(summary = "下载文件")
     @GetMapping("/download")
-    public ResponseEntity<InputStreamResource> download(@RequestParam String bucket,
-                                                        @RequestParam String objectName) {
+    public ResponseEntity<InputStreamResource> download(@RequestParam("bucket") String bucket,
+                                                         @RequestParam("objectName") String objectName) {
         InputStream in = fileService.download(bucket, objectName);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + objectName + "\"")
@@ -46,16 +46,16 @@ public class FileController {
 
     @Operation(summary = "删除文件")
     @DeleteMapping
-    public R<Void> delete(@RequestParam String bucket, @RequestParam String objectName) {
+    public R<Void> delete(@RequestParam("bucket") String bucket, @RequestParam("objectName") String objectName) {
         fileService.delete(bucket, objectName);
         return R.ok();
     }
 
     @Operation(summary = "文件分页列表")
     @GetMapping("/page")
-    public R<IPage<FileMetadata>> page(@RequestParam(defaultValue = "1") int current,
-                                       @RequestParam(defaultValue = "10") int size,
-                                       @RequestParam(required = false) String category) {
+    public R<IPage<FileMetadata>> page(@RequestParam(value = "current", defaultValue = "1") int current,
+                                        @RequestParam(value = "size", defaultValue = "10") int size,
+                                        @RequestParam(value = "category", required = false) String category) {
         return R.ok(fileService.page(current, size, category));
     }
 }
