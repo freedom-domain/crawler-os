@@ -1,0 +1,251 @@
+version: "3.8"
+
+services:
+  # ===================== 基础设施 =====================
+  mysql:
+    image: mysql:8.0
+    container_name: crawler-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - crawler-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: crawler-redis
+    restart: always
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - crawler-net
+
+  elasticsearch:
+    image: elasticsearch:7.17.9
+    container_name: crawler-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - ./docker/elasticsearch/plugins:/usr/share/elasticsearch/plugins
+    networks:
+      - crawler-net
+
+  kibana:
+    image: kibana:7.17.9
+    container_name: crawler-kibana
+    restart: always
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - crawler-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: crawler-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - crawler-net
+
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    container_name: crawler-nacos
+    restart: always
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    networks:
+      - crawler-net
+
+  # ===================== RocketMQ =====================
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.1.4
+    container_name: crawler-rocketmq-namesrv
+    restart: always
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+    networks:
+      - crawler-net
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.1.4
+    container_name: crawler-rocketmq-broker
+    restart: always
+    command: sh mqbroker -n rocketmq-namesrv:9876
+    depends_on:
+      - rocketmq-namesrv
+    environment:
+      - NAMESRV_ADDR=rocketmq-namesrv:9876
+    ports:
+      - "10911:10911"
+      - "10912:10912"
+    networks:
+      - crawler-net
+
+  # ===================== 应用服务 =====================
+  crawler-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-app
+      args:
+        SERVICE: crawler-gateway
+    container_name: crawler-gateway
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+    ports:
+      - "8080:8080"
+    depends_on:
+      - nacos
+    networks:
+      - crawler-net
+
+  crawler-user-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-app
+      args:
+        SERVICE: crawler-user-service
+    container_name: crawler-user-service
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+    depends_on:
+      - nacos
+      - mysql
+    networks:
+      - crawler-net
+
+  crawler-spider-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-app
+      args:
+        SERVICE: crawler-spider-service
+    container_name: crawler-spider-service
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+    depends_on:
+      - nacos
+      - mysql
+      - rocketmq-broker
+    networks:
+      - crawler-net
+
+  crawler-search-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-app
+      args:
+        SERVICE: crawler-search-service
+    container_name: crawler-search-service
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      ES_URLS: http://elasticsearch:9200
+    depends_on:
+      - nacos
+      - elasticsearch
+    networks:
+      - crawler-net
+
+  crawler-file-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-app
+      args:
+        SERVICE: crawler-file-service
+    container_name: crawler-file-service
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS: admin
+      MINIO_SECRET: admin123
+    depends_on:
+      - nacos
+      - mysql
+      - minio
+    networks:
+      - crawler-net
+
+  crawler-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile-app
+      args:
+        SERVICE: crawler-worker
+    container_name: crawler-worker
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+      ES_URLS: http://elasticsearch:9200
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS: admin
+      MINIO_SECRET: admin123
+    depends_on:
+      - nacos
+      - mysql
+      - elasticsearch
+      - minio
+      - rocketmq-broker
+    networks:
+      - crawler-net
+
+networks:
+  crawler-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  es-data:
+  minio-data:

@@ -1,0 +1,49 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: crawler-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: user-service
+          uri: lb://crawler-user-service
+          predicates:
+            - Path=/api/user/**
+        - id: spider-service
+          uri: lb://crawler-spider-service
+          predicates:
+            - Path=/api/spider/**
+        - id: search-service
+          uri: lb://crawler-search-service
+          predicates:
+            - Path=/api/search/**
+        - id: file-service
+          uri: lb://crawler-file-service
+          predicates:
+            - Path=/api/file/**
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            exposedHeaders: "Authorization,Content-Disposition"
+            allowCredentials: true
+            maxAge: 3600
+
+jwt:
+  secret: crawler-platform-jwt-secret-key-must-be-long-enough-256
+  expire: 7200
+
+logging:
+  level:
+    com.collect: INFO

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<analysis>
+    <tokenizer name="ik_max_word" class="org.wltea.analyzer.lucence.IKTokenizer" />
+    <filter name="stop" class="org.wltea.analyzer.lucence.IKStopWordFilter" />
+</analysis>

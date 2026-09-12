@@ -1,0 +1,12 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:192.168.31.2:8848}
+  data:
+    elasticsearch:
+      uris: ${ES_URLS:http://192.168.31.2:9200}
+      username: ${ES_USER:elastic}
+      password: ${ES_PASSWORD:Elastic_dnw7WH}
+      connection-timeout: 10s
+      socket-timeout: 30s

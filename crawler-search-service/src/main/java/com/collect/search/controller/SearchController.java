@@ -1,0 +1,34 @@
+package com.collect.search.controller;
+
+import com.collect.common.result.R;
+import com.collect.search.es.SpiderContentDoc;
+import com.collect.search.service.SearchService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.web.bind.annotation.*;
+
+@Tag(name = "数据搜索")
+@RestController
+@RequestMapping("/api/search")
+@RequiredArgsConstructor
+public class SearchController {
+
+    private final SearchService searchService;
+
+    @Operation(summary = "搜索爬取的数据")
+    @GetMapping
+    public R<Page<SpiderContentDoc>> search(@RequestParam(required = false) String keyword,
+                                             @RequestParam(required = false) Long spiderId,
+                                             @RequestParam(defaultValue = "1") int current,
+                                             @RequestParam(defaultValue = "20") int size) {
+        return R.ok(searchService.search(keyword, spiderId, current, size));
+    }
+
+    @Operation(summary = "数据详情")
+    @GetMapping("/{id}")
+    public R<SpiderContentDoc> detail(@PathVariable String id) {
+        return R.ok(searchService.getById(id));
+    }
+}

@@ -1,0 +1,14 @@
+target/
+node_modules/
+dist/
+*.log
+.idea/
+.vscode/
+.env
+.DS_Store
+*.iml
+docker-data/
+mysql-data/
+es-data/
+minio-data/
+redis-data/

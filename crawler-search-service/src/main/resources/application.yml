@@ -1,0 +1,30 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: crawler-search-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:public}
+  data:
+    elasticsearch:
+      uris: ${ES_URLS:http://127.0.0.1:9200}
+      username: ${ES_USER:}
+      password: ${ES_PASSWORD:}
+
+jwt:
+  secret: crawler-platform-jwt-secret-key-must-be-long-enough-256
+  expire: 7200
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.collect: INFO
