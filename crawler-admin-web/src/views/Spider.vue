@@ -26,6 +26,8 @@
       </el-table-column>
       <el-table-column prop="startUrls" label="起始URL" show-overflow-tooltip />
       <el-table-column prop="schedule" label="调度" width="160" />
+      <el-table-column prop="createTime" label="创建时间" width="180" />
+      <el-table-column prop="updateTime" label="更新时间" width="180" />
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'">
@@ -33,12 +35,13 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="260">
+      <el-table-column label="操作" width="320">
         <template #default="{ row }">
           <el-button size="small" type="primary" @click="handleRun(row)" :loading="row._running">执行</el-button>
           <el-button size="small" @click="row.status === 1 ? handleStop(row) : handleStart(row)">
             {{ row.status === 1 ? '停止' : '启动' }}
           </el-button>
+          <el-button size="small" @click="showEdit(row)">编辑</el-button>
           <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -53,7 +56,7 @@
       @change="loadData"
     />
 
-    <el-dialog v-model="createVisible" title="新建爬虫" width="600px">
+    <el-dialog v-model="createVisible" :title="editingId ? '编辑爬虫' : '新建爬虫'" width="600px">
       <el-form :model="form" label-width="100px">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />
@@ -82,7 +85,7 @@
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate">确定</el-button>
+        <el-button type="primary" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
   </el-card>
@@ -91,7 +94,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { spiderPage, spiderCreate, spiderStart, spiderStop, spiderDelete, spiderRun } from '@/api'
+import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun } from '@/api'
 import { Plus, Search } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
@@ -101,6 +104,7 @@ const size = ref(10)
 const total = ref(0)
 const keyword = ref('')
 const createVisible = ref(false)
+const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
   name: '', description: '', type: 'http',
@@ -119,19 +123,42 @@ const loadData = async () => {
 }
 
 const showCreate = () => {
+  editingId.value = null
   form.value = { name: '', description: '', type: 'http', schedule: '', maxDepth: 2, timeout: 15000 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
 
-const handleCreate = async () => {
+const showEdit = async (row: any) => {
+  const res: any = await spiderDetail(row.id)
+  const d = res.data
+  editingId.value = d.id
+  form.value = {
+    name: d.name, description: d.description || '', type: d.type,
+    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000
+  }
+  try {
+    const urls = JSON.parse(d.startUrls || '[]')
+    startUrlsStr.value = urls.join(', ')
+  } catch {
+    startUrlsStr.value = d.startUrls || ''
+  }
+  createVisible.value = true
+}
+
+const handleSubmit = async () => {
   const startUrls = startUrlsStr.value.split(',').map(s => s.trim()).filter(Boolean)
   if (!form.value.name || startUrls.length === 0) {
     ElMessage.warning('请填写名称和起始URL')
     return
   }
-  await spiderCreate({ ...form.value, startUrls })
-  ElMessage.success('创建成功')
+  if (editingId.value) {
+    await spiderUpdate(editingId.value, { ...form.value, startUrls })
+    ElMessage.success('更新成功')
+  } else {
+    await spiderCreate({ ...form.value, startUrls })
+    ElMessage.success('创建成功')
+  }
   createVisible.value = false
   loadData()
 }

@@ -3,6 +3,7 @@ package com.collect.spider.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.collect.common.result.R;
 import com.collect.spider.dto.SpiderCreateReq;
+import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
 import com.collect.spider.service.SpiderService;
@@ -42,8 +43,8 @@ public class SpiderController {
 
     @Operation(summary = "更新爬虫")
     @PutMapping("/{id}")
-    public R<Void> update(@PathVariable("id") Long id, @RequestBody Spider spider) {
-        spiderService.update(id, spider);
+    public R<Void> update(@PathVariable("id") Long id, @Valid @RequestBody SpiderUpdateReq req) {
+        spiderService.update(id, req);
         return R.ok();
     }
 

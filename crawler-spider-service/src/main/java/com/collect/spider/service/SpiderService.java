@@ -7,6 +7,7 @@ import com.collect.common.exception.BizException;
 import com.collect.common.mq.MqConstants;
 import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
+import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
 import com.alibaba.fastjson2.JSON;
@@ -65,13 +66,26 @@ public class SpiderService {
         return spiderMapper.selectById(id);
     }
 
-    public void update(Long id, Spider spider) {
+    public void update(Long id, SpiderUpdateReq req) {
         Spider exist = spiderMapper.selectById(id);
         if (exist == null) {
             throw new BizException("爬虫不存在");
         }
-        spider.setId(id);
-        spiderMapper.updateById(spider);
+        Spider other = spiderMapper.selectOne(
+                new LambdaQueryWrapper<Spider>().eq(Spider::getName, req.getName()).ne(Spider::getId, id));
+        if (other != null) {
+            throw new BizException("爬虫名称已存在");
+        }
+        exist.setName(req.getName());
+        exist.setDescription(req.getDescription());
+        exist.setType(req.getType());
+        exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
+        exist.setSelectors(req.getSelectors());
+        exist.setSchedule(req.getSchedule());
+        exist.setMaxDepth(req.getMaxDepth());
+        exist.setTimeout(req.getTimeout());
+        exist.setHeaders(req.getHeaders());
+        spiderMapper.updateById(exist);
     }
 
     public void delete(Long id) {

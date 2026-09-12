@@ -6,7 +6,6 @@ import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
-import com.collect.worker.minio.MinioHelper;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -34,17 +33,15 @@ public class CrawlerEngine {
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
     private final ElasticsearchOperations elasticsearchOperations;
-    private final MinioHelper minioHelper;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
-                         ElasticsearchOperations elasticsearchOperations, MinioHelper minioHelper) {
+                         ElasticsearchOperations elasticsearchOperations) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
         this.elasticsearchOperations = elasticsearchOperations;
-        this.minioHelper = minioHelper;
     }
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
@@ -52,9 +49,6 @@ public class CrawlerEngine {
             .readTimeout(30, TimeUnit.SECONDS)
             .followRedirects(true)
             .build();
-
-    private static final String MINIO_BUCKET = "crawler";
-    private static final String HTML_PREFIX = "html/";
 
     public void execute(TaskMessage msg) {
         SpiderTask task = taskMapper.selectByTaskId(msg.getTaskId());
@@ -115,11 +109,7 @@ public class CrawlerEngine {
         docObj.setSpiderName(msg.getSpiderName());
         docObj.setSourceType(msg.getType());
         docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-
-        String objectName = HTML_PREFIX + msg.getSpiderId() + "/" +
-                System.currentTimeMillis() + "_" + Integer.toHexString(url.hashCode()) + ".html";
-        minioHelper.putHtml(MINIO_BUCKET, objectName, doc.outerHtml());
-        docObj.setFileId(objectName);
+        docObj.setRawHtml(doc.outerHtml());
 
         elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
         writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
