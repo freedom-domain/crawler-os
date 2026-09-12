@@ -105,9 +105,16 @@ const showPreview = async (row: any) => {
 }
 
 const handleDelete = async (row: any) => {
-  await ElMessageBox.confirm('确定删除该条数据?', '警告', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm('确定删除该条数据?', '警告', { type: 'warning' })
+  } catch {
+    return
+  }
   await searchDelete(row.id)
   ElMessage.success('删除成功')
+  if (list.value.length === 1 && page.value > 1) {
+    page.value--
+  }
   loadData()
 }
 

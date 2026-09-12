@@ -9,7 +9,9 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Data
 public class ContentParser {
@@ -43,14 +45,19 @@ public class ContentParser {
         return parser;
     }
 
-    public static List<String> extractNextUrls(Document doc, String baseUrl, int maxDepth) {
+    public static List<String> extractNextUrls(Document doc, String baseUrl, int remainingDepth) {
         List<String> urls = new ArrayList<>();
-        if (maxDepth <= 0) {
+        if (remainingDepth <= 0) {
             return urls;
         }
+        int limit = 50;
+        Set<String> seen = new HashSet<>();
         for (Element a : doc.select("a[href]")) {
+            if (urls.size() >= limit) break;
             String href = a.absUrl("href");
-            if (!href.isEmpty() && !href.startsWith("javascript:") && !href.startsWith("mailto:")) {
+            if (!href.isEmpty() && !href.startsWith("javascript:") && !href.startsWith("mailto:")
+                    && !href.startsWith("tel:") && !href.startsWith("#")
+                    && seen.add(href)) {
                 urls.add(href);
             }
         }
