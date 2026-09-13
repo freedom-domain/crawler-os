@@ -100,7 +100,7 @@ public class SpiderController {
         if (task == null) {
             return R.ok();
         }
-        return R.ok(spiderService.taskLogPage(task.getTaskId(), current, size));
+        return R.ok(spiderService.taskLogPage(task.getId(), current, size));
     }
 
     @Operation(summary = "取消任务")
