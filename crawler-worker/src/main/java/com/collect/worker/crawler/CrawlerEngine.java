@@ -6,6 +6,7 @@ import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
+import com.collect.worker.redis.UrlQueueService;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -20,7 +21,6 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -32,15 +32,17 @@ public class CrawlerEngine {
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
     private final ElasticsearchOperations elasticsearchOperations;
+    private final UrlQueueService urlQueue;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
-                         ElasticsearchOperations elasticsearchOperations) {
+                         ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
         this.elasticsearchOperations = elasticsearchOperations;
+        this.urlQueue = urlQueue;
     }
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
@@ -56,42 +58,48 @@ public class CrawlerEngine {
             return;
         }
 
-        AtomicInteger success = new AtomicInteger(0);
-        AtomicInteger fail = new AtomicInteger(0);
-        Set<String> visited = ConcurrentHashMap.newKeySet();
+        Long taskId = msg.getTaskId();
         int maxDepth = msg.getMaxDepth() != null ? msg.getMaxDepth() : 2;
         int concurrency = 8;
-
         var semaphore = new java.util.concurrent.Semaphore(concurrency);
-        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
-            List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>();
+        var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
 
+        AtomicInteger success = new AtomicInteger(0);
+        AtomicInteger fail = new AtomicInteger(0);
+
+        try {
             for (String startUrl : msg.getStartUrls()) {
-                if (visited.size() >= 100) break;
-                futures.add(executor.submit(() -> {
-                    try {
-                        semaphore.acquire();
-                        try {
-                            crawlStartUrl(startUrl, msg, task, visited, 0, maxDepth, success, fail, semaphore, executor);
-                        } finally {
-                            semaphore.release();
-                        }
-                    } catch (Exception e) {
-                        fail.incrementAndGet();
-                        log.error("抓取失败: url={}", startUrl, e);
-                        writeLog(task.getId(), msg.getSpiderId(), startUrl, 0, "ERROR",
-                                e.getMessage(), 0);
-                    }
-                    return null;
-                }));
+                if (urlQueue.isVisited(taskId, startUrl)) continue;
+                urlQueue.markVisited(taskId, startUrl);
+                urlQueue.push(taskId, startUrl + "\t0");
             }
 
-            for (var f : futures) {
-                try {
-                    f.get();
-                } catch (Exception ignored) {
+            while (urlQueue.size(taskId) > 0) {
+                List<Runnable> batch = new java.util.ArrayList<>();
+                for (int i = 0; i < concurrency; i++) {
+                    String item = urlQueue.pop(taskId);
+                    if (item == null) break;
+                    String[] parts = item.split("\t", 2);
+                    String url = parts[0];
+                    int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+                    batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail, semaphore, executor));
+                }
+                if (batch.isEmpty()) break;
+                var futures = batch.stream().map(executor::submit).toList();
+                for (var f : futures) {
+                    try { f.get(); } catch (Exception ignored) {}
                 }
             }
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+            }
+            urlQueue.clear(taskId);
         }
 
         taskMapper.incrSuccess(task.getId(), success.get());
@@ -99,80 +107,60 @@ public class CrawlerEngine {
         task.setStatus("SUCCESS");
         task.setEndTime(LocalDateTime.now());
         taskMapper.updateById(task);
-        log.info("任务完成: taskId={}, success={}, fail={}", msg.getTaskId(), success.get(), fail.get());
+        log.info("任务完成: taskId={}, success={}, fail={}", taskId, success.get(), fail.get());
     }
 
-    private void crawlStartUrl(String url, TaskMessage msg, SpiderTask task,
-                               Set<String> visited, int depth, int maxDepth,
-                               AtomicInteger success, AtomicInteger fail,
-                               java.util.concurrent.Semaphore semaphore,
-                               java.util.concurrent.ExecutorService executor) throws Exception {
-        if (!visited.add(url)) {
-            return;
-        }
-        if (visited.size() > 100) {
-            return;
-        }
-
-        long start = System.currentTimeMillis();
-        Document doc;
+    private void crawlUrl(String url, int depth, int maxDepth, TaskMessage msg, SpiderTask task,
+                          Long taskId, AtomicInteger success, AtomicInteger fail,
+                          java.util.concurrent.Semaphore semaphore,
+                          java.util.concurrent.ExecutorService executor) {
         try {
-            doc = fetch(url, msg.getTimeout());
+            semaphore.acquire();
+            try {
+                long start = System.currentTimeMillis();
+                Document doc = fetch(url, msg.getTimeout());
+                long cost = System.currentTimeMillis() - start;
+
+                ContentParser parsed = ContentParser.parse(doc.outerHtml(), url);
+
+                SpiderContentDoc docObj = new SpiderContentDoc();
+                docObj.setId(md5(url));
+                docObj.setTitle(parsed.getTitle());
+                docObj.setContent(parsed.getContent());
+                docObj.setUrl(url);
+                docObj.setAuthor(parsed.getAuthor());
+                docObj.setSpiderId(msg.getSpiderId());
+                docObj.setSpiderName(msg.getSpiderName());
+                docObj.setSourceType(msg.getType());
+                docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+                docObj.setRawHtml(doc.outerHtml());
+
+                elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
+                success.incrementAndGet();
+                writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
+                        "抓取成功: " + parsed.getTitle(), (int) cost);
+
+                if (depth < maxDepth) {
+                    List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
+                    next.removeIf(u -> msg.getStartUrls().contains(u));
+                    int enqueued = 0;
+                    for (String nextUrl : next) {
+                        if (urlQueue.isVisited(taskId, nextUrl)) continue;
+                        urlQueue.markVisited(taskId, nextUrl);
+                        urlQueue.push(taskId, nextUrl + "\t" + (depth + 1));
+                        enqueued++;
+                    }
+                    log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
+                }
+            } finally {
+                semaphore.release();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             fail.incrementAndGet();
-            log.warn("子链接抓取失败: {}", url, e);
+            log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
-            return;
-        }
-        long cost = System.currentTimeMillis() - start;
-
-        ContentParser parsed = ContentParser.parse(doc.outerHtml(), url);
-
-        SpiderContentDoc docObj = new SpiderContentDoc();
-        docObj.setId(md5(url));
-        docObj.setTitle(parsed.getTitle());
-        docObj.setContent(parsed.getContent());
-        docObj.setUrl(url);
-        docObj.setAuthor(parsed.getAuthor());
-        docObj.setSpiderId(msg.getSpiderId());
-        docObj.setSpiderName(msg.getSpiderName());
-        docObj.setSourceType(msg.getType());
-        docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-        docObj.setRawHtml(doc.outerHtml());
-
-        elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
-        success.incrementAndGet();
-        writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                "抓取成功: " + parsed.getTitle(), (int) cost);
-
-        if (depth < maxDepth) {
-            List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
-            next.removeIf(u -> msg.getStartUrls().contains(u));
-            List<String> toCrawl = new java.util.ArrayList<>();
-            for (String nextUrl : next) {
-                if (visited.size() >= 100) break;
-                if (visited.add(nextUrl)) {
-                    toCrawl.add(nextUrl);
-                }
-            }
-            log.info("depth={}, url={}, extracted={}, toCrawl={}", depth, url, next.size(), toCrawl.size());
-            for (String nextUrl : toCrawl) {
-                executor.submit(() -> {
-                    try {
-                        semaphore.acquire();
-                        try {
-                            crawlStartUrl(nextUrl, msg, task, visited, depth + 1, maxDepth, success, fail, semaphore, executor);
-                        } finally {
-                            semaphore.release();
-                        }
-                    } catch (Exception e) {
-                        fail.incrementAndGet();
-                        log.warn("子链接抓取失败: {}", nextUrl, e);
-                        writeLog(task.getId(), msg.getSpiderId(), nextUrl, 0, "ERROR",
-                                e.getMessage(), 0);
-                    }
-                });
-            }
         }
     }
 

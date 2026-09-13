@@ -14,7 +14,7 @@ import com.collect.spider.entity.SpiderTaskLog;
 import com.alibaba.fastjson2.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.spring.core.RocketMQTemplate;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -29,7 +29,7 @@ public class SpiderService {
     private final com.collect.spider.mapper.SpiderMapper spiderMapper;
     private final com.collect.spider.mapper.SpiderTaskMapper taskMapper;
     private final com.collect.spider.mapper.SpiderTaskLogMapper logMapper;
-    private final RocketMQTemplate rocketMQTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
 
     public Spider create(SpiderCreateReq req) {
         Spider exist = spiderMapper.selectOne(
@@ -133,8 +133,8 @@ public class SpiderService {
         taskMapper.insert(task);
 
         TaskMessage msg = buildMessage(spider, taskId);
-        String destination = MqConstants.SPIDER_TASK_TOPIC + ":" + MqConstants.TASK_EXECUTE_TAG;
-        rocketMQTemplate.syncSend(destination, msg);
+        String payload = JSON.toJSONString(msg);
+        kafkaTemplate.send(MqConstants.SPIDER_TASK_TOPIC, payload);
         log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
         return task;
     }

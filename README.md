@@ -10,7 +10,7 @@
 | 注册/配置中心 | Nacos |
 | 后端服务 | Spring Boot 3.2 + JDK 17 |
 | ORM | MyBatis-Plus |
-| 消息队列 | RocketMQ |
+| 消息队列 | Kafka |
 | 数据库 | MySQL 8.0 |
 | 搜索 | Elasticsearch 7.17 |
 | 对象存储 | MinIO |
@@ -47,11 +47,11 @@ User  Spider     Search     File
  │    │           │          │
  └────┴─────┬─────┴──────────┘
             │
-   MySQL / ES / MinIO
-            │
-       RocketMQ
-            │
-       Worker 1..N (Jsoup 抓取)
+    MySQL / ES / MinIO
+             │
+          Kafka
+             │
+        Worker 1..N (Jsoup 抓取)
 ```
 
 ## 快速开始
@@ -59,7 +59,7 @@ User  Spider     Search     File
 ### 1. 启动中间件
 
 ```bash
-docker-compose up -d mysql redis elasticsearch minio nacos rocketmq-namesrv rocketmq-broker
+docker-compose up -d mysql redis elasticsearch minio nacos kafka
 ```
 
 等待所有容器健康后：
@@ -67,7 +67,7 @@ docker-compose up -d mysql redis elasticsearch minio nacos rocketmq-namesrv rock
 - ES: `127.0.0.1:9200`
 - MinIO: `127.0.0.1:9000` (控制台 9001, admin/admin123)
 - Nacos: `127.0.0.1:8848`
-- RocketMQ: `127.0.0.1:9876`
+- Kafka: `127.0.0.1:9092`
 
 > IK 分词器：需手动将 IK 插件放入 ES 的 plugins 目录后重启，否则搜索退回标准分词。
 
@@ -110,7 +110,7 @@ npm run build      # 生产构建到 dist/
 ## 核心流程
 
 1. 前端创建爬虫（配置起始URL、类型、深度、调度）
-2. spider-service 生成任务记录，投递 RocketMQ
+2. spider-service 生成任务记录，投递 Kafka
 3. worker 消费消息，Jsoup 抓取页面
 4. 抓取内容写入 ES（全文检索）+ 原始 HTML 存入 MinIO
 5. 任务状态/日志回写 MySQL
@@ -132,7 +132,7 @@ npm run build      # 生产构建到 dist/
 | ES | 9200 |
 | Kibana | 5601 |
 | MinIO | 9000 / 9001 |
-| RocketMQ | 9876 |
+| Kafka | 9092 |
 | Redis | 6379 |
 
 ## Swagger 文档

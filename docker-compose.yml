@@ -89,29 +89,22 @@ services:
     networks:
       - crawler-net
 
-  # ===================== RocketMQ =====================
-  rocketmq-namesrv:
-    image: apache/rocketmq:5.1.4
-    container_name: crawler-rocketmq-namesrv
+  # ===================== Kafka =====================
+  kafka:
+    image: bitnami/kafka:3.6
+    container_name: crawler-kafka
     restart: always
-    command: sh mqnamesrv
-    ports:
-      - "9876:9876"
-    networks:
-      - crawler-net
-
-  rocketmq-broker:
-    image: apache/rocketmq:5.1.4
-    container_name: crawler-rocketmq-broker
-    restart: always
-    command: sh mqbroker -n rocketmq-namesrv:9876
-    depends_on:
-      - rocketmq-namesrv
     environment:
-      - NAMESRV_ADDR=rocketmq-namesrv:9876
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
-      - "10911:10911"
-      - "10912:10912"
+      - "9092:9092"
     networks:
       - crawler-net
 
@@ -165,11 +158,11 @@ services:
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
-      ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+      KAFKA_BOOTSTRAP: kafka:9092
     depends_on:
       - nacos
       - mysql
-      - rocketmq-broker
+      - kafka
     networks:
       - crawler-net
 
@@ -226,7 +219,7 @@ services:
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
-      ROCKETMQ_NAMESRV: rocketmq-namesrv:9876
+      KAFKA_BOOTSTRAP: kafka:9092
       ES_URLS: http://elasticsearch:9200
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS: admin
@@ -236,7 +229,7 @@ services:
       - mysql
       - elasticsearch
       - minio
-      - rocketmq-broker
+      - kafka
     networks:
       - crawler-net
 

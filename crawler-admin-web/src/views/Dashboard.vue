@@ -79,7 +79,7 @@
             <div class="status-item"><el-tag type="success">MySQL</el-tag></div>
             <div class="status-item"><el-tag type="success">Elasticsearch</el-tag></div>
             <div class="status-item"><el-tag type="success">MinIO</el-tag></div>
-            <div class="status-item"><el-tag type="success">RocketMQ</el-tag></div>
+            <div class="status-item"><el-tag type="success">Kafka</el-tag></div>
             <div class="status-item"><el-tag type="success">Redis</el-tag></div>
             <div class="status-item"><el-tag type="success">Nacos</el-tag></div>
           </div>

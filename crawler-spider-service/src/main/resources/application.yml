@@ -15,11 +15,11 @@ spring:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:public}
-  rocketmq:
-    name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:127.0.0.1:9092}
     producer:
-      group: spider-producer
-      send-message-timeout: 10000
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 mybatis-plus:
   global-config:

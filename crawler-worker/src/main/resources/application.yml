@@ -15,17 +15,23 @@ spring:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:public}
-  rocketmq:
-    name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:127.0.0.1:9092}
     consumer:
-      group: worker-consumer-group
-      consume-thread-min: 2
-      consume-thread-max: 8
+      group-id: worker-consumer-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: latest
   data:
     elasticsearch:
       uris: ${ES_URLS:http://127.0.0.1:9200}
       username: ${ES_USER:}
       password: ${ES_PASSWORD:}
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
 
 app:
   es:

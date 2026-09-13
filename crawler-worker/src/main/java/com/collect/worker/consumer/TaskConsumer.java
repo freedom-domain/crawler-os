@@ -6,24 +6,20 @@ import com.collect.common.mq.TaskMessage;
 import com.collect.worker.crawler.CrawlerEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
-import org.apache.rocketmq.spring.core.RocketMQListener;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@RocketMQMessageListener(
-        topic = MqConstants.SPIDER_TASK_TOPIC,
-        selectorExpression = MqConstants.TASK_EXECUTE_TAG,
-        consumerGroup = "worker-consumer-group",
-        nameServer = "${spring.rocketmq.name-server}"
-)
-public class TaskConsumer implements RocketMQListener<String> {
+public class TaskConsumer {
 
     private final CrawlerEngine crawlerEngine;
 
-    @Override
+    @KafkaListener(
+            topics = MqConstants.SPIDER_TASK_TOPIC,
+            groupId = "worker-consumer-group"
+    )
     public void onMessage(String message) {
         log.info("收到爬虫任务消息: {}", message);
         try {
