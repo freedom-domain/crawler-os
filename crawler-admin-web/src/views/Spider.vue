@@ -152,26 +152,38 @@ const handleSubmit = async () => {
     ElMessage.warning('请填写名称和起始URL')
     return
   }
-  if (editingId.value) {
-    await spiderUpdate(editingId.value, { ...form.value, startUrls })
-    ElMessage.success('更新成功')
-  } else {
-    await spiderCreate({ ...form.value, startUrls })
-    ElMessage.success('创建成功')
+  try {
+    if (editingId.value) {
+      await spiderUpdate(editingId.value, { ...form.value, startUrls })
+      ElMessage.success('更新成功')
+    } else {
+      await spiderCreate({ ...form.value, startUrls })
+      ElMessage.success('创建成功')
+    }
+  } catch {
+    ElMessage.error('操作失败')
   }
   createVisible.value = false
   loadData()
 }
 
 const handleStart = async (row: any) => {
-  await spiderStart(row.id)
-  ElMessage.success('已启动')
+  try {
+    await spiderStart(row.id)
+    ElMessage.success('已启动')
+  } catch {
+    ElMessage.error('启动失败')
+  }
   loadData()
 }
 
 const handleStop = async (row: any) => {
-  await spiderStop(row.id)
-  ElMessage.success('已停止')
+  try {
+    await spiderStop(row.id)
+    ElMessage.success('已停止')
+  } catch {
+    ElMessage.error('停止失败')
+  }
   loadData()
 }
 
@@ -186,9 +198,17 @@ const handleRun = async (row: any) => {
 }
 
 const handleDelete = async (row: any) => {
-  await ElMessageBox.confirm('确定删除该爬虫?', '警告', { type: 'warning' })
-  await spiderDelete(row.id)
-  ElMessage.success('删除成功')
+  try {
+    await ElMessageBox.confirm('确定删除该爬虫?', '警告', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await spiderDelete(row.id)
+    ElMessage.success('删除成功')
+  } catch {
+    ElMessage.error('删除失败')
+  }
   loadData()
 }
 

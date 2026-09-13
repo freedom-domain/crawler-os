@@ -110,8 +110,12 @@ const handleDelete = async (row: any) => {
   } catch {
     return
   }
-  await searchDelete(row.id)
-  ElMessage.success('删除成功')
+  try {
+    await searchDelete(row.id)
+    ElMessage.success('删除成功')
+  } catch {
+    ElMessage.error('删除失败')
+  }
   if (list.value.length === 1 && page.value > 1) {
     page.value--
   }

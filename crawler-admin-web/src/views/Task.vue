@@ -62,6 +62,7 @@
         <el-select v-model="logStatus" placeholder="状态" clearable size="small" style="width: 100px" @change="reloadLogs">
           <el-option label="成功" :value="1" />
           <el-option label="失败" :value="0" />
+          <el-option label="已存在" :value="2" />
         </el-select>
         <el-select v-model="logLevel" placeholder="级别" clearable size="small" style="width: 100px" @change="reloadLogs">
           <el-option label="INFO" value="INFO" />
@@ -72,11 +73,11 @@
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
       <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh">
         <el-table-column prop="url" label="URL" show-overflow-tooltip />
-        <el-table-column label="状态" width="70" align="center">
+        <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
-              {{ row.status === 1 ? '成功' : '失败' }}
-            </el-tag>
+            <el-tag v-if="row.status === 1" type="success" size="small">成功</el-tag>
+            <el-tag v-else-if="row.status === 0" type="danger" size="small">失败</el-tag>
+            <el-tag v-else type="warning" size="small">已存在</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="level" label="级别" width="70" align="center" />
@@ -205,8 +206,12 @@ const loadLogs = async () => {
 }
 
 const handleCancel = async (row: any) => {
-  await taskCancel(row.id)
-  ElMessage.success('已取消')
+  try {
+    await taskCancel(row.id)
+    ElMessage.success('已取消')
+  } catch {
+    ElMessage.error('取消失败')
+  }
   loadData()
 }
 
@@ -216,8 +221,12 @@ const handleDelete = async (row: any) => {
   } catch {
     return
   }
-  await taskDelete(row.id)
-  ElMessage.success('已删除')
+  try {
+    await taskDelete(row.id)
+    ElMessage.success('已删除')
+  } catch {
+    ElMessage.error('删除失败')
+  }
   loadData()
 }
 

@@ -144,7 +144,7 @@ public class CrawlerEngine {
                 }
 
                 if (matched != null) {
-                    writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
+                    writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
                     log.info("内容未变化，跳过: url={}", url);
                 } else {
