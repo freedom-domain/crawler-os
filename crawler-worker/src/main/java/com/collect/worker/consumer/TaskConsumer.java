@@ -17,8 +17,7 @@ public class TaskConsumer {
     private final CrawlerEngine crawlerEngine;
 
     @KafkaListener(
-            topics = MqConstants.SPIDER_TASK_TOPIC,
-            groupId = "worker-consumer-group"
+            topics = MqConstants.SPIDER_TASK_TOPIC
     )
     public void onMessage(String message) {
         log.info("收到爬虫任务消息: {}", message);

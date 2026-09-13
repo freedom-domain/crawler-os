@@ -162,7 +162,7 @@ public class SpiderService {
     public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size) {
         LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
         qw.eq(SpiderTaskLog::getTaskId, taskId);
-        qw.orderByAsc(SpiderTaskLog::getCreateTime);
+        qw.orderByDesc(SpiderTaskLog::getCreateTime);
         return logMapper.selectPage(new Page<>(current, size), qw);
     }
 

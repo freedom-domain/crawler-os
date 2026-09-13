@@ -19,8 +19,16 @@ spring:
     redis:
       host: 192.168.31.2
       port: 6379
-      password: redis_4rzHHH
+      password: redis_4rzHHD
+      timeout: 10s
       database: 3
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 5s
 
 app:
   es:
