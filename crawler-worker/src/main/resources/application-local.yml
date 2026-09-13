@@ -21,7 +21,7 @@ spring:
       port: 6379
       password: redis_4rzHHD
       timeout: 10s
-      database: 3
+      database: 5
       lettuce:
         pool:
           enabled: true

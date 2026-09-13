@@ -15,7 +15,11 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
+import org.springframework.data.elasticsearch.core.query.Criteria;
+import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -124,23 +128,43 @@ public class CrawlerEngine {
                 long cost = System.currentTimeMillis() - start;
 
                 ContentParser parsed = ContentParser.parse(doc.outerHtml(), url);
+                String newHtml = doc.outerHtml();
+                String newHtmlHash = md5(newHtml);
 
-                SpiderContentDoc docObj = new SpiderContentDoc();
-                docObj.setId(md5(url));
-                docObj.setTitle(parsed.getTitle());
-                docObj.setContent(parsed.getContent());
-                docObj.setUrl(url);
-                docObj.setAuthor(parsed.getAuthor());
-                docObj.setSpiderId(msg.getSpiderId());
-                docObj.setSpiderName(msg.getSpiderName());
-                docObj.setSourceType(msg.getType());
-                docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-                docObj.setRawHtml(doc.outerHtml());
+                CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
+                SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
+                        criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+                SpiderContentDoc matched = null;
+                for (SearchHit<SpiderContentDoc> hit : existing) {
+                    SpiderContentDoc d = hit.getContent();
+                    if (newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""))) {
+                        matched = d;
+                        break;
+                    }
+                }
 
-                elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
-                success.incrementAndGet();
-                writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                        "抓取成功: " + parsed.getTitle(), (int) cost);
+                if (matched != null) {
+                    writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
+                            "已存在，跳过: " + parsed.getTitle(), (int) cost);
+                    log.info("内容未变化，跳过: url={}", url);
+                } else {
+                    SpiderContentDoc docObj = new SpiderContentDoc();
+                    docObj.setId(md5(url));
+                    docObj.setTitle(parsed.getTitle());
+                    docObj.setContent(parsed.getContent());
+                    docObj.setUrl(url);
+                    docObj.setAuthor(parsed.getAuthor());
+                    docObj.setSpiderId(msg.getSpiderId());
+                    docObj.setSpiderName(msg.getSpiderName());
+                    docObj.setSourceType(msg.getType());
+                    docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+                    docObj.setRawHtml(newHtml);
+
+                    elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
+                    success.incrementAndGet();
+                    writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
+                            "抓取成功: " + parsed.getTitle(), (int) cost);
+                }
 
                 if (depth < maxDepth) {
                     List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);

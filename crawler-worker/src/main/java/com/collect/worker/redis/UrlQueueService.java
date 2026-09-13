@@ -36,6 +36,7 @@ public class UrlQueueService {
 
     public void clear(Long taskId) {
         redis.delete(KEY_PREFIX + taskId);
+        redis.delete(KEY_PREFIX + taskId + ":visited");
     }
 
     public boolean isVisited(Long taskId, String url) {
