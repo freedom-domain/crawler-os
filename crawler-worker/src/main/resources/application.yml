@@ -16,12 +16,12 @@ spring:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:public}
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:127.0.0.1:9092}
+    bootstrap-servers: 192.168.31.2:9092
     consumer:
-      group-id: worker-consumer-group
+      group-id: ${KAFKA_CONSUMER_GROUP:worker-consumer-group}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      auto-offset-reset: latest
+      auto-offset-reset: earliest
   data:
     elasticsearch:
       uris: ${ES_URLS:http://127.0.0.1:9200}

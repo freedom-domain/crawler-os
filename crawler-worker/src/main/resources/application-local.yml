@@ -8,7 +8,9 @@ spring:
       discovery:
         server-addr: ${NACOS_ADDR:192.168.31.2:8848}
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP:192.168.31.2:9092}
+    bootstrap-servers: 192.168.31.2:9092
+    consumer:
+      group-id: worker-consumer-group-local
   data:
     elasticsearch:
       uris: ${ES_URLS:http://192.168.31.2:9200}
