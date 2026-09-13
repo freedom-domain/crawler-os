@@ -37,10 +37,11 @@
       <el-table-column prop="endTime" label="结束时间" width="180" />
       <el-table-column prop="successCount" label="成功" width="70" align="center" />
       <el-table-column prop="failCount" label="失败" width="70" align="center" />
-      <el-table-column label="操作" width="180">
+      <el-table-column label="操作" width="220">
         <template #default="{ row }">
           <el-button v-if="row.status === 'RUNNING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>
           <el-button size="small" type="primary" text @click="showLogs(row)">日志</el-button>
+          <el-button size="small" type="danger" text @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -56,7 +57,20 @@
     />
 
     <el-dialog v-model="logVisible" title="任务日志" width="900px" top="5vh" destroy-on-close>
-      <el-table :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh">
+      <div class="log-filter">
+        <el-input v-model="logKeyword" placeholder="搜索 URL / 信息" clearable size="small" style="width: 220px" @clear="reloadLogs" @keyup.enter="reloadLogs" />
+        <el-select v-model="logStatus" placeholder="状态" clearable size="small" style="width: 100px" @change="reloadLogs">
+          <el-option label="成功" :value="1" />
+          <el-option label="失败" :value="0" />
+        </el-select>
+        <el-select v-model="logLevel" placeholder="级别" clearable size="small" style="width: 100px" @change="reloadLogs">
+          <el-option label="INFO" value="INFO" />
+          <el-option label="ERROR" value="ERROR" />
+        </el-select>
+        <el-button size="small" :icon="Search" @click="reloadLogs">查询</el-button>
+      </div>
+      <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
+      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh">
         <el-table-column prop="url" label="URL" show-overflow-tooltip />
         <el-table-column label="状态" width="70" align="center">
           <template #default="{ row }">
@@ -71,6 +85,7 @@
         <el-table-column prop="createTime" label="时间" width="180" />
       </el-table>
       <el-pagination
+        v-show="logs.length > 0"
         style="margin-top: 12px; justify-content: flex-end"
         v-model:current-page="logPage"
         :page-size="logSize"
@@ -84,12 +99,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { taskPage, taskLogs, taskCancel, spiderPage } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage } from '@/api'
 import { Refresh, Search } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
 const loading = ref(false)
+const prevStatusMap = new Map<string, string>()
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
@@ -106,6 +122,14 @@ const logPage = ref(1)
 const logSize = ref(50)
 const logTotal = ref(0)
 const currentTask = ref<any>(null)
+const logKeyword = ref('')
+const logStatus = ref<number | null>(null)
+const logLevel = ref('')
+
+const reloadLogs = () => {
+  logPage.value = 1
+  loadLogs()
+}
 
 const statusTag = (status: string) => {
   const map: Record<string, string> = {
@@ -129,7 +153,20 @@ const loadData = async () => {
     const params: any = { current: page.value, size: size.value, status: statusFilter.value }
     if (spiderFilter.value) params.spiderId = spiderFilter.value
     const res: any = await taskPage(params)
-    list.value = res.data?.records || []
+    const records = res.data?.records || []
+    for (const t of records) {
+      const prev = prevStatusMap.get(String(t.id))
+      if (prev === 'RUNNING' && t.status !== 'RUNNING') {
+        const msg = t.status === 'SUCCESS'
+          ? `任务「${t.spiderName}」已完成：成功 ${t.successCount} 条，失败 ${t.failCount} 条`
+          : t.status === 'FAILED'
+            ? `任务「${t.spiderName}」执行失败`
+            : `任务「${t.spiderName}」已取消`
+        ElMessage({ type: t.status === 'SUCCESS' ? 'success' : 'warning', message: msg, duration: 5000 })
+      }
+      prevStatusMap.set(String(t.id), t.status)
+    }
+    list.value = records
     total.value = res.data?.total || 0
   } finally {
     loading.value = false
@@ -145,6 +182,9 @@ const showLogs = async (row: any) => {
   currentTask.value = row
   logVisible.value = true
   logPage.value = 1
+  logKeyword.value = ''
+  logStatus.value = null
+  logLevel.value = ''
   await loadLogs()
 }
 
@@ -152,7 +192,11 @@ const loadLogs = async () => {
   if (!currentTask.value) return
   logLoading.value = true
   try {
-    const res: any = await taskLogs(currentTask.value.id, { current: logPage.value, size: logSize.value })
+    const params: any = { current: logPage.value, size: logSize.value }
+    if (logStatus.value != null) params.status = logStatus.value
+    if (logLevel.value) params.level = logLevel.value
+    if (logKeyword.value) params.keyword = logKeyword.value
+    const res: any = await taskLogs(currentTask.value.id, params)
     logs.value = res.data?.records || []
     logTotal.value = res.data?.total || 0
   } finally {
@@ -166,11 +210,22 @@ const handleCancel = async (row: any) => {
   loadData()
 }
 
-const hasRunning = () => list.value.some((t: any) => t.status === 'RUNNING')
+const handleDelete = async (row: any) => {
+  try {
+    await ElMessageBox.confirm('确定删除该任务及其日志吗？', '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  await taskDelete(row.id)
+  ElMessage.success('已删除')
+  loadData()
+}
+
+const hasActive = () => list.value.some((t: any) => t.status === 'RUNNING' || t.status === 'PENDING')
 
 const startTimer = () => {
   stopTimer()
-  if (autoRefresh.value && hasRunning()) {
+  if (autoRefresh.value && hasActive()) {
     timer = setInterval(loadData, 5000)
   }
 }
@@ -213,5 +268,12 @@ onUnmounted(stopTimer)
   font-size: 14px;
   color: #606266;
   white-space: nowrap;
+}
+
+.log-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 </style>

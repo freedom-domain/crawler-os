@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -116,6 +117,7 @@ public class SpiderService {
         spiderMapper.updateById(spider);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public SpiderTask run(Long id) {
         Spider spider = spiderMapper.selectById(id);
         if (spider == null) {
@@ -159,11 +161,34 @@ public class SpiderService {
         return taskMapper.selectById(id);
     }
 
-    public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size) {
+    public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size,
+                                             Integer status, String level, String keyword) {
         LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
         qw.eq(SpiderTaskLog::getTaskId, taskId);
+        if (status != null) {
+            qw.eq(SpiderTaskLog::getStatus, status);
+        }
+        if (level != null && !level.isBlank()) {
+            qw.eq(SpiderTaskLog::getLevel, level);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            qw.and(w -> w.like(SpiderTaskLog::getUrl, keyword)
+                         .or().like(SpiderTaskLog::getMessage, keyword));
+        }
         qw.orderByDesc(SpiderTaskLog::getCreateTime);
         return logMapper.selectPage(new Page<>(current, size), qw);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteTask(Long id) {
+        SpiderTask task = taskMapper.selectById(id);
+        if (task == null) {
+            throw new BizException("任务不存在");
+        }
+        LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
+        qw.eq(SpiderTaskLog::getTaskId, task.getTaskId());
+        logMapper.delete(qw);
+        taskMapper.deleteById(id);
     }
 
     public void cancelTask(Long id) {

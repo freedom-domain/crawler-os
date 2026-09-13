@@ -94,19 +94,29 @@ public class SpiderController {
     @Operation(summary = "任务日志")
     @GetMapping("/task/{id}/logs")
     public R<IPage<SpiderTaskLog>> taskLogs(@PathVariable("id") Long id,
-                                             @RequestParam(value = "current", defaultValue = "1") int current,
-                                             @RequestParam(value = "size", defaultValue = "50") int size) {
+                                              @RequestParam(value = "current", defaultValue = "1") int current,
+                                              @RequestParam(value = "size", defaultValue = "50") int size,
+                                              @RequestParam(value = "status", required = false) Integer status,
+                                              @RequestParam(value = "level", required = false) String level,
+                                              @RequestParam(value = "keyword", required = false) String keyword) {
         SpiderTask task = spiderService.taskDetail(id);
         if (task == null) {
             return R.ok();
         }
-        return R.ok(spiderService.taskLogPage(task.getId(), current, size));
+        return R.ok(spiderService.taskLogPage(task.getId(), current, size, status, level, keyword));
     }
 
     @Operation(summary = "取消任务")
     @PutMapping("/task/{id}/cancel")
     public R<Void> cancel(@PathVariable("id") Long id) {
         spiderService.cancelTask(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "删除任务")
+    @DeleteMapping("/task/{id}")
+    public R<Void> deleteTask(@PathVariable("id") Long id) {
+        spiderService.deleteTask(id);
         return R.ok();
     }
 }
