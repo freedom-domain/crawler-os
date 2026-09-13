@@ -12,9 +12,9 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
     @Select("SELECT * FROM spider_task WHERE task_id = #{taskId} AND deleted = 0")
     SpiderTask selectByTaskId(Long taskId);
 
-    @Update("UPDATE spider_task SET success_count = success_count + #{delta} WHERE id = #{id}")
-    int incrSuccess(Long id, int delta);
+    @Update("UPDATE spider_task SET success_count = #{count} WHERE id = #{id} AND deleted = 0")
+    int setSuccess(Long id, int count);
 
-    @Update("UPDATE spider_task SET fail_count = fail_count + #{delta} WHERE id = #{id}")
-    int incrFail(Long id, int delta);
+    @Update("UPDATE spider_task SET fail_count = #{count} WHERE id = #{id} AND deleted = 0")
+    int setFail(Long id, int count);
 }

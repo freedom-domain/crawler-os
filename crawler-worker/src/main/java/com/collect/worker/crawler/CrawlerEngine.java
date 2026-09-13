@@ -102,8 +102,10 @@ public class CrawlerEngine {
             urlQueue.clear(taskId);
         }
 
-        taskMapper.incrSuccess(task.getId(), success.get());
-        taskMapper.incrFail(task.getId(), fail.get());
+        taskMapper.setSuccess(task.getId(), success.get());
+        taskMapper.setFail(task.getId(), fail.get());
+        task.setSuccessCount(success.get());
+        task.setFailCount(fail.get());
         task.setStatus("SUCCESS");
         task.setEndTime(LocalDateTime.now());
         taskMapper.updateById(task);
