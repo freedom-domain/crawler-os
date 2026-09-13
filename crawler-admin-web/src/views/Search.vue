@@ -22,7 +22,7 @@
 
     <div v-loading="loading" class="result-list">
       <div v-for="row in list" :key="row.id" class="result-item">
-        <div class="result-url">{{ row.url }}</div>
+        <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
         <h3 class="result-title" v-html="row.titleHl || row.title"></h3>
         <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
         <div class="result-meta">
@@ -208,12 +208,18 @@ onMounted(loadData)
 }
 
 .result-url {
+  display: block;
   color: #006621;
   font-size: 13px;
   margin-bottom: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-decoration: none;
+}
+
+.result-url:hover {
+  text-decoration: underline;
 }
 
 .result-title {
@@ -221,7 +227,6 @@ onMounted(loadData)
   font-size: 18px;
   font-weight: 400;
   margin: 0 0 6px 0;
-  cursor: pointer;
   line-height: 1.4;
 }
 
