@@ -3,21 +3,42 @@
     "configurations": [
         {
             "type": "java",
-            "name": "Run Java",
+            "name": "Run Java SpiderServiceApplication",
             "request": "launch",
             "mainClass": "com.collect.spider.SpiderServiceApplication",
             "vmArgs": "-Dspring.profiles.active=local"
         },
         {
             "type": "java",
-            "name": "Run Java",
+            "name": "Run Java SearchServiceApplication",
             "request": "launch",
             "mainClass": "com.collect.search.SearchServiceApplication",
             "vmArgs": "-Dspring.profiles.active=local"
         },
         {
             "type": "java",
-            "name": "Run Java",
+            "name": "Run Java UserServiceApplication",
+            "request": "launch",
+            "mainClass": "com.collect.user.UserServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
+            "name": "Run Java FileServiceApplication",
+            "request": "launch",
+            "mainClass": "com.collect.file.FileServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
+            "name": "Run Java WorkerApplication",
+            "request": "launch",
+            "mainClass": "com.collect.worker.WorkerApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
+            "name": "Run Java GatewayApplication",
             "request": "launch",
             "mainClass": "com.collect.gateway.GatewayApplication",
             "vmArgs": "-Dspring.profiles.active=local"
