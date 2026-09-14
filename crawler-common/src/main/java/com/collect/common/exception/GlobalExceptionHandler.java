@@ -8,6 +8,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -24,6 +25,7 @@ public class GlobalExceptionHandler {
     public R<Void> handleValidException(MethodArgumentNotValidException e) {
         String msg = e.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : fe.getField())
+                .filter(Objects::nonNull)
                 .collect(Collectors.joining("; "));
         return R.fail(ResultCode.PARAM_ERROR.getCode(), msg);
     }
@@ -32,6 +34,7 @@ public class GlobalExceptionHandler {
     public R<Void> handleBindException(BindException e) {
         String msg = e.getBindingResult().getFieldErrors().stream()
                 .map(fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : fe.getField())
+                .filter(Objects::nonNull)
                 .collect(Collectors.joining("; "));
         return R.fail(ResultCode.PARAM_ERROR.getCode(), msg);
     }
