@@ -19,8 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Service
@@ -32,6 +30,7 @@ public class SpiderService {
     private final com.collect.spider.mapper.SpiderTaskLogMapper logMapper;
     private final KafkaTemplate<String, String> kafkaTemplate;
 
+    @SuppressWarnings("null")
     public Spider create(SpiderCreateReq req) {
         Spider exist = spiderMapper.selectOne(
                 new LambdaQueryWrapper<Spider>().eq(Spider::getName, req.getName()));
@@ -55,6 +54,7 @@ public class SpiderService {
         return spider;
     }
 
+    @SuppressWarnings("null")
     public IPage<Spider> page(int current, int size, String keyword) {
         LambdaQueryWrapper<Spider> qw = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
@@ -73,6 +73,7 @@ public class SpiderService {
         if (exist == null) {
             throw new BizException("爬虫不存在");
         }
+        @SuppressWarnings("null")
         Spider other = spiderMapper.selectOne(
                 new LambdaQueryWrapper<Spider>().eq(Spider::getName, req.getName()).ne(Spider::getId, id));
         if (other != null) {
@@ -145,6 +146,7 @@ public class SpiderService {
         return System.currentTimeMillis() * 1000 + (long) (Math.random() * 999);
     }
 
+    @SuppressWarnings("null")
     public IPage<SpiderTask> taskPage(int current, int size, Long spiderId, String status) {
         LambdaQueryWrapper<SpiderTask> qw = new LambdaQueryWrapper<>();
         if (spiderId != null) {
@@ -161,6 +163,7 @@ public class SpiderService {
         return taskMapper.selectById(id);
     }
 
+    @SuppressWarnings("null")
     public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size,
                                              Integer status, String level, String keyword) {
         LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
@@ -179,6 +182,7 @@ public class SpiderService {
         return logMapper.selectPage(new Page<>(current, size), qw);
     }
 
+    @SuppressWarnings("null")
     @Transactional(rollbackFor = Exception.class)
     public void deleteTask(Long id) {
         SpiderTask task = taskMapper.selectById(id);

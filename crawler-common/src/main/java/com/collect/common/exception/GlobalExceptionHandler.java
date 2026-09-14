@@ -4,7 +4,6 @@ import com.collect.common.result.R;
 import com.collect.common.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindException;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -24,7 +23,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public R<Void> handleValidException(MethodArgumentNotValidException e) {
         String msg = e.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
+                .map(fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : fe.getField())
                 .collect(Collectors.joining("; "));
         return R.fail(ResultCode.PARAM_ERROR.getCode(), msg);
     }
@@ -32,7 +31,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BindException.class)
     public R<Void> handleBindException(BindException e) {
         String msg = e.getBindingResult().getFieldErrors().stream()
-                .map(FieldError::getDefaultMessage)
+                .map(fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : fe.getField())
                 .collect(Collectors.joining("; "));
         return R.fail(ResultCode.PARAM_ERROR.getCode(), msg);
     }

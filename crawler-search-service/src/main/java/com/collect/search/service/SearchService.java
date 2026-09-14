@@ -96,7 +96,8 @@ public class SearchService {
                 }
                 results.add(sr);
             }
-            long total = response.hits().total() != null ? response.hits().total().value() : 0;
+            var totalObj = response.hits().total();
+            long total = totalObj != null ? totalObj.value() : 0L;
             return new PageImpl<>(results, pageRequest, total);
         } catch (co.elastic.clients.elasticsearch._types.ElasticsearchException e) {
             if (e.response() != null

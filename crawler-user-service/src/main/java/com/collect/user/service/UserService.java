@@ -46,7 +46,7 @@ public class UserService {
         }
 
         List<SysPermission> perms = permissionMapper.selectByRoleId(user.getRoleId());
-        List<String> permCodes = perms.stream().map(SysPermission::getCode).collect(Collectors.toList());
+        List<String> permCodes = perms.stream().map(p -> p.getCode()).collect(Collectors.toList());
 
         LoginUser loginUser = new LoginUser();
         loginUser.setUserId(user.getId());
@@ -68,6 +68,7 @@ public class UserService {
         return resp;
     }
 
+    @SuppressWarnings("null")
     public void register(UserCreateReq req) {
         SysUser exist = userMapper.selectOne(
                 new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, req.getUsername()));
@@ -85,6 +86,7 @@ public class UserService {
         userMapper.insert(user);
     }
 
+    @SuppressWarnings("null")
     public IPage<SysUser> page(int current, int size, String keyword) {
         LambdaQueryWrapper<SysUser> qw = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {

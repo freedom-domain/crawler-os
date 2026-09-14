@@ -82,12 +82,14 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         }
     }
 
+    @SuppressWarnings("null")
     private Mono<Void> unauthorized(ServerWebExchange exchange, String msg) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
         String body = "{\"code\":401,\"msg\":\"" + msg + "\",\"data\":null}";
-        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        DataBuffer buffer = response.bufferFactory().wrap(bytes);
         return response.writeWith(Mono.just(buffer));
     }
 

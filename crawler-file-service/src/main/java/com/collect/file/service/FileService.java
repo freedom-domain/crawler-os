@@ -12,7 +12,6 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
-import io.minio.GetObjectResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -90,6 +89,7 @@ public class FileService {
         }
     }
 
+    @SuppressWarnings("null")
     public IPage<FileMetadata> page(int current, int size, String category) {
         LambdaQueryWrapper<FileMetadata> qw = new LambdaQueryWrapper<>();
         if (category != null && !category.isBlank()) {

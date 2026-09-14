@@ -27,7 +27,6 @@ public class ContentParser {
         ContentParser parser = new ContentParser();
         parser.setUrl(baseUrl);
 
-        Element titleEl = doc.title() != null ? null : null;
         parser.setTitle(doc.title() != null ? doc.title().trim() : baseUrl);
 
         Element body = doc.body();

@@ -25,7 +25,6 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -191,7 +190,6 @@ public class CrawlerEngine {
     }
 
     private Document fetch(String url, Integer timeout) throws Exception {
-        int timeoutMs = timeout != null ? timeout : 15000;
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
