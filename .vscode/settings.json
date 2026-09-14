@@ -1,0 +1,25 @@
+{
+    "java.jdt.ls.java.home": "/mnt/sdb/ProgramFiles/jdk-21.0.9",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "/mnt/sdb/ProgramFiles/jdk-17.0.12",
+            "default": false
+        },
+        {
+            "name": "JavaSE-19",
+            "path": "/mnt/sdb/ProgramFiles/jdk-19.0.2",
+            "default": false
+        },
+        {
+            "name": "JavaSE-21",
+            "path": "/mnt/sdb/ProgramFiles/jdk-21.0.9",
+            "default": true
+        }
+    ],
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.debug.settings.onBuildFailureProceed": true,
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.jdt.ls.vmargs": "-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx4G -Xms100m -Xlog:disable",
+    "terminal.integrated.defaultProfile.linux": "bash"
+}

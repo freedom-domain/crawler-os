@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Run Java",
+            "request": "launch",
+            "mainClass": "com.collect.spider.SpiderServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
+            "name": "Run Java",
+            "request": "launch",
+            "mainClass": "com.collect.search.SearchServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
+            "name": "Run Java",
+            "request": "launch",
+            "mainClass": "com.collect.gateway.GatewayApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        }
+    ]
+}
