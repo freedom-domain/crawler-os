@@ -37,9 +37,13 @@
             preview-teleported
           />
         </div>
+        <div class="result-tags" v-if="row.tags && row.tags.length">
+          <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item" @click="openTagEditor(row)">{{ t }}</el-tag>
+        </div>
         <div class="result-meta">
           <span v-if="row.spiderName" class="meta-tag">{{ row.spiderName }}</span>
           <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
+          <el-button size="small" text type="primary" @click="openTagEditor(row)">标签</el-button>
           <el-button size="small" text type="primary" @click="showPreview(row)">预览</el-button>
           <el-button size="small" text type="danger" @click="handleDelete(row)">删除</el-button>
         </div>
@@ -77,13 +81,38 @@
         <div class="preview-container" v-html="previewHtml"></div>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="tagVisible" title="编辑标签" width="480px" destroy-on-close>
+      <el-select
+        v-model="tagSelection"
+        multiple
+        filterable
+        allow-create
+        default-first-option
+        placeholder="选择或输入标签"
+        style="width: 100%"
+      >
+        <el-option-group v-for="parent in dictTree" :key="parent.id" :label="parent.label">
+          <el-option
+            v-for="child in (parent.children || [])"
+            :key="child.id"
+            :label="child.label"
+            :value="child.label"
+          />
+        </el-option-group>
+      </el-select>
+      <template #footer>
+        <el-button @click="tagVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTags">保存</el-button>
+      </template>
+    </el-dialog>
   </el-card>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { searchContent, searchDetail, searchDelete } from '@/api'
+import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictTree } from '@/api'
 import { Search } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
@@ -97,6 +126,41 @@ const previewLoading = ref(false)
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewImages = ref<string[]>([])
+
+const tagVisible = ref(false)
+const tagSelection = ref<string[]>([])
+const tagCurrentRow = ref<any>(null)
+const dictTree = ref<any[]>([])
+
+const loadDictOptions = async () => {
+  try {
+    const res: any = await dictTree()
+    dictTree.value = res.data || []
+  } catch {
+    dictTree.value = []
+  }
+}
+
+const openTagEditor = (row: any) => {
+  tagCurrentRow.value = row
+  tagSelection.value = [...(row.tags || [])]
+  tagVisible.value = true
+  if (dictTree.value.length === 0) {
+    loadDictOptions()
+  }
+}
+
+const saveTags = async () => {
+  if (!tagCurrentRow.value) return
+  try {
+    await searchUpdateTags(tagCurrentRow.value.id, tagSelection.value)
+    tagCurrentRow.value.tags = [...tagSelection.value]
+    ElMessage.success('标签已更新')
+    tagVisible.value = false
+  } catch {
+    ElMessage.error('标签更新失败')
+  }
+}
 
 const formatTime = (t: string) => {
   if (!t) return ''
@@ -303,6 +367,17 @@ onMounted(loadData)
   height: 72px;
   border-radius: 4px;
   border: 1px solid #eee;
+  cursor: pointer;
+}
+
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px 0;
+}
+
+.tag-item {
   cursor: pointer;
 }
 

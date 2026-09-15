@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'spider', name: 'Spider', component: () => import('@/views/Spider.vue') },
         { path: 'task', name: 'Task', component: () => import('@/views/Task.vue') },
         { path: 'search', name: 'Search', component: () => import('@/views/Search.vue') },
+        { path: 'dict', name: 'Dict', component: () => import('@/views/Dict.vue') },
         { path: 'user', name: 'User', component: () => import('@/views/User.vue') }
       ]
     }

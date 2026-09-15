@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.List;
 
 @Tag(name = "数据搜索")
 @RestController
@@ -33,6 +34,13 @@ public class SearchController {
     @GetMapping("/{id}")
     public R<SpiderContentDoc> detail(@PathVariable("id") String id) throws IOException {
         return R.ok(searchService.getById(id));
+    }
+
+    @Operation(summary = "更新数据标签")
+    @PutMapping("/{id}/tags")
+    public R<Void> updateTags(@PathVariable("id") String id, @RequestBody List<String> tags) throws IOException {
+        searchService.updateTags(id, tags);
+        return R.ok();
     }
 
     @Operation(summary = "删除数据")

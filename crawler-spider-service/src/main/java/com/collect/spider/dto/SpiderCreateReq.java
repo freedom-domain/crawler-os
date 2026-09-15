@@ -26,6 +26,8 @@ public class SpiderCreateReq {
 
     private Integer overwrite = 0;
 
+    private String group;
+
     private String schedule;
 
     private Integer maxDepth = 2;

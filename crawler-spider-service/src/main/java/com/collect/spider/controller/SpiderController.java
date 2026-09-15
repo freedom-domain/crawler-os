@@ -32,8 +32,9 @@ public class SpiderController {
     @GetMapping("/page")
     public R<IPage<Spider>> page(@RequestParam(value = "current", defaultValue = "1") int current,
                                   @RequestParam(value = "size", defaultValue = "10") int size,
-                                  @RequestParam(value = "keyword", required = false) String keyword) {
-        return R.ok(spiderService.page(current, size, keyword));
+                                  @RequestParam(value = "keyword", required = false) String keyword,
+                                  @RequestParam(value = "group", required = false) String group) {
+        return R.ok(spiderService.page(current, size, keyword, group));
     }
 
     @Operation(summary = "爬虫详情")

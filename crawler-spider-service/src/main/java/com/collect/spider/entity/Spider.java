@@ -1,5 +1,6 @@
 package com.collect.spider.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.collect.common.entity.BaseEntity;
 import lombok.Data;
@@ -17,6 +18,8 @@ public class Spider extends BaseEntity {
     private String selectors;
     private String imageSelector;
     private Integer overwrite;
+    @TableField("`group`")
+    private String group;
     private String schedule;
     private Integer maxDepth;
     private Integer timeout;

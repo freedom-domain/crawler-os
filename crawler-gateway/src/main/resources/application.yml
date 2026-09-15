@@ -18,6 +18,10 @@ spring:
           uri: lb://crawler-user-service
           predicates:
             - Path=/api/user/**
+        - id: dict-service
+          uri: lb://crawler-user-service
+          predicates:
+            - Path=/api/dict/**
         - id: spider-service
           uri: lb://crawler-spider-service
           predicates:

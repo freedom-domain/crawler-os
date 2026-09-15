@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS spider (
     selectors TEXT,
     image_selector VARCHAR(512),
     overwrite TINYINT DEFAULT 0,
+    group VARCHAR(64),
     schedule VARCHAR(64),
     max_depth INT DEFAULT 2,
     timeout INT DEFAULT 15000,
@@ -98,6 +99,19 @@ CREATE TABLE IF NOT EXISTS spider_task_log (
     level VARCHAR(16),
     message VARCHAR(1024),
     cost_ms INT,
+    deleted TINYINT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 字典（标签，支持父子项）
+CREATE TABLE IF NOT EXISTS sys_dict (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    parent_id BIGINT DEFAULT 0,
+    label VARCHAR(128) NOT NULL,
+    value VARCHAR(128),
+    sort INT DEFAULT 0,
+    status TINYINT DEFAULT 1,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
     update_time DATETIME

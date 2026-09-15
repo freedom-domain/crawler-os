@@ -25,5 +25,11 @@ export const taskDelete = (id: number) => request.delete(`/spider/task/${id}`)
 export const searchContent = (params: any) => request.get('/search', { params })
 export const searchDetail = (id: string) => request.get(`/search/${id}`)
 export const searchDelete = (id: string) => request.delete(`/search/${id}`)
+export const searchUpdateTags = (id: string, tags: string[]) => request.put(`/search/${id}/tags`, tags)
+
+export const dictTree = () => request.get('/dict')
+export const dictCreate = (data: any) => request.post('/dict', data)
+export const dictUpdate = (id: number, data: any) => request.put(`/dict/${id}`, data)
+export const dictDelete = (id: number) => request.delete(`/dict/${id}`)
 
 export const filePage = (params: any) => request.get('/file/page', { params })

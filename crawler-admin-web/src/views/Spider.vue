@@ -12,6 +12,11 @@
         <el-input v-model="keyword" placeholder="搜索爬虫名称" clearable @clear="loadData" @keyup.enter="loadData" />
       </el-form-item>
       <el-form-item>
+        <el-select v-model="groupFilter" placeholder="全部分组" clearable style="width: 160px" @change="loadData">
+          <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
         <el-button type="primary" @click="loadData" :icon="Search">查询</el-button>
       </el-form-item>
     </el-form>
@@ -19,6 +24,12 @@
     <el-table :data="list" v-loading="loading" stripe>
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" width="160" />
+      <el-table-column prop="group" label="分组" width="120">
+        <template #default="{ row }">
+          <el-tag v-if="row.group" size="small">{{ row.group }}</el-tag>
+          <span v-else class="text-muted">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="type" label="类型" width="100">
         <template #default="{ row }">
           <el-tag>{{ row.type }}</el-tag>
@@ -70,6 +81,11 @@
             <el-option label="JS渲染" value="playwright" />
           </el-select>
         </el-form-item>
+        <el-form-item label="分组">
+          <el-select v-model="form.group" placeholder="选择分组" clearable style="width: 100%">
+            <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="起始URL" required>
           <el-input v-model="startUrlsStr" placeholder="多个URL用逗号分隔" />
         </el-form-item>
@@ -101,7 +117,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun } from '@/api'
+import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, dictTree } from '@/api'
 import { Plus, Search } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
@@ -110,18 +126,33 @@ const page = ref(1)
 const size = ref(10)
 const total = ref(0)
 const keyword = ref('')
+const groupFilter = ref('')
+const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
 const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
-  name: '', description: '', type: 'http',
+  name: '', description: '', type: 'http', group: '',
   imageSelector: '', overwrite: 0, schedule: '', maxDepth: 2, timeout: 15000
 })
+
+const loadGroupOptions = async () => {
+  try {
+    const res: any = await dictTree()
+    const tree = res.data || []
+    const cat = tree.find((c: any) => c.value === 'spider-group' || c.label === 'spider-group')
+    groupOptions.value = cat
+      ? (cat.children || []).map((ch: any) => ch.value || ch.label)
+      : []
+  } catch {
+    groupOptions.value = []
+  }
+}
 
 const loadData = async () => {
   loading.value = true
   try {
-    const res: any = await spiderPage({ current: page.value, size: size.value, keyword: keyword.value })
+    const res: any = await spiderPage({ current: page.value, size: size.value, keyword: keyword.value, group: groupFilter.value || undefined })
     list.value = res.data?.records || []
     total.value = res.data?.total || 0
   } finally {
@@ -131,7 +162,7 @@ const loadData = async () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', imageSelector: '', overwrite: 0, schedule: '', maxDepth: 2, timeout: 15000 }
+  form.value = { name: '', description: '', type: 'http', group: '', imageSelector: '', overwrite: 0, schedule: '', maxDepth: 2, timeout: 15000 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -141,7 +172,7 @@ const showEdit = async (row: any) => {
   const d = res.data
   editingId.value = d.id
   form.value = {
-    name: d.name, description: d.description || '', type: d.type,
+    name: d.name, description: d.description || '', type: d.type, group: d.group || '',
     imageSelector: d.imageSelector || '', overwrite: d.overwrite ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000
   }
@@ -220,10 +251,14 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
-onMounted(loadData)
+onMounted(() => {
+  loadData()
+  loadGroupOptions()
+})
 </script>
 
 <style scoped>
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; }
+.text-muted { color: #c0c4cc; }
 </style>

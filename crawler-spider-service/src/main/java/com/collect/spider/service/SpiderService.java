@@ -45,6 +45,7 @@ public class SpiderService {
         spider.setSelectors(req.getSelectors());
         spider.setImageSelector(req.getImageSelector());
         spider.setOverwrite(req.getOverwrite());
+        spider.setGroup(req.getGroup());
         spider.setSchedule(req.getSchedule());
         spider.setMaxDepth(req.getMaxDepth());
         spider.setTimeout(req.getTimeout());
@@ -57,10 +58,13 @@ public class SpiderService {
     }
 
     @SuppressWarnings("null")
-    public IPage<Spider> page(int current, int size, String keyword) {
+    public IPage<Spider> page(int current, int size, String keyword, String group) {
         LambdaQueryWrapper<Spider> qw = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
             qw.like(Spider::getName, keyword);
+        }
+        if (group != null && !group.isBlank()) {
+            qw.eq(Spider::getGroup, group);
         }
         qw.orderByDesc(Spider::getCreateTime);
         return spiderMapper.selectPage(new Page<>(current, size), qw);
@@ -88,6 +92,7 @@ public class SpiderService {
         exist.setSelectors(req.getSelectors());
         exist.setImageSelector(req.getImageSelector());
         exist.setOverwrite(req.getOverwrite());
+        exist.setGroup(req.getGroup());
         exist.setSchedule(req.getSchedule());
         exist.setMaxDepth(req.getMaxDepth());
         exist.setTimeout(req.getTimeout());

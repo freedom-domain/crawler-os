@@ -29,6 +29,10 @@
           <el-icon><Search /></el-icon>
           <template #title>数据搜索</template>
         </el-menu-item>
+        <el-menu-item index="/dict">
+          <el-icon><PriceTag /></el-icon>
+          <template #title>字典管理</template>
+        </el-menu-item>
         <el-menu-item index="/user">
           <el-icon><User /></el-icon>
           <template #title>用户管理</template>
@@ -70,7 +74,7 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -82,6 +86,7 @@ const currentTitle = computed(() => {
     '/spider': '爬虫管理',
     '/task': '任务管理',
     '/search': '数据搜索',
+    '/dict': '字典管理',
     '/user': '用户管理'
   }
   return map[route.path] || ''

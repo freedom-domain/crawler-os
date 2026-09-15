@@ -88,6 +88,7 @@ public class SearchService {
                 sr.setSourceType(doc.getSourceType());
                 sr.setCrawlTime(doc.getCrawlTime());
                 sr.setImages(doc.getImages());
+                sr.setTags(doc.getTags());
                 if (hit.highlight() != null) {
                     sr.setTitleHl(hit.highlight().get("title") != null ? String.join(" ", hit.highlight().get("title")) : doc.getTitle());
                     sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));
@@ -124,6 +125,15 @@ public class SearchService {
         return elasticsearchClient
                 .get(g -> g.index(indexName).id(id), SpiderContentDoc.class)
                 .source();
+    }
+
+    public void updateTags(String id, List<String> tags) throws java.io.IOException {
+        SpiderContentDoc doc = getById(id);
+        if (doc == null) {
+            throw new com.collect.common.exception.BizException("数据不存在");
+        }
+        doc.setTags(tags != null ? tags : List.of());
+        elasticsearchClient.index(i -> i.index(indexName).id(id).document(doc));
     }
 
     public void delete(String id) throws java.io.IOException {

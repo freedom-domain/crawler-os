@@ -17,6 +17,7 @@ public class SearchResult {
     private String sourceType;
     private String crawlTime;
     private List<String> images;
+    private List<String> tags;
 
     private String titleHl;
     private String contentHl;
