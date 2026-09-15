@@ -6,6 +6,7 @@ import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
+import com.collect.worker.minio.MinioHelper;
 import com.collect.worker.redis.UrlQueueService;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -13,6 +14,8 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
@@ -27,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -36,16 +40,29 @@ public class CrawlerEngine {
     private final SpiderTaskLogMapper logMapper;
     private final ElasticsearchOperations elasticsearchOperations;
     private final UrlQueueService urlQueue;
+    private final MinioHelper minioHelper;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
 
+    @Value("${minio.image-bucket:crawler-images}")
+    private String imageBucket;
+
+    /**
+     * 浏览器可访问的 MinIO 地址，用于生成图片访问 URL。
+     * 未配置时回退到 minio.endpoint。
+     */
+    @Value("${minio.public-endpoint:${minio.endpoint:http://127.0.0.1:9000}}")
+    private String minioPublicEndpoint;
+
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
-                         ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue) {
+                         ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
+                         MinioHelper minioHelper) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
         this.elasticsearchOperations = elasticsearchOperations;
         this.urlQueue = urlQueue;
+        this.minioHelper = minioHelper;
     }
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
@@ -159,6 +176,11 @@ public class CrawlerEngine {
                     docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                     docObj.setRawHtml(newHtml);
 
+                    List<String> imageUrls = extractAndUploadImages(doc, url, msg, task);
+                    if (imageUrls != null && !imageUrls.isEmpty()) {
+                        docObj.setImages(imageUrls);
+                    }
+
                     elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
                     success.incrementAndGet();
                     writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
@@ -187,6 +209,124 @@ public class CrawlerEngine {
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
         }
+    }
+
+    /**
+     * 若爬虫配置了图片 CSS 选择器，则提取选择器命中的元素内的图片并上传到 MinIO。
+     * 返回已上传图片的访问 URL 列表（无图片时返回空列表）。
+     */
+    private List<String> extractAndUploadImages(Document doc, String pageUrl, TaskMessage msg, SpiderTask task) {
+        String selector = msg.getImageSelector();
+        if (selector == null || selector.isBlank()) {
+            return List.of();
+        }
+        List<String> uploadedUrls = new java.util.ArrayList<>();
+        try {
+            Elements matched = doc.select(selector);
+            if (matched.isEmpty()) {
+                log.info("页面未匹配到图片选择器: url={}, selector={}", pageUrl, selector);
+                return uploadedUrls;
+            }
+            // 收集选择器命中的元素本身（若是 img）以及其内部的所有 img
+            List<Element> imgs = new java.util.ArrayList<>();
+            for (Element el : matched) {
+                if ("img".equalsIgnoreCase(el.tagName())) {
+                    imgs.add(el);
+                }
+                imgs.addAll(el.select("img"));
+            }
+
+            int uploaded = 0;
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (Element img : imgs) {
+                String src = img.absUrl("src");
+                if (src.isBlank() || !seen.add(src)) {
+                    continue;
+                }
+                try {
+                    byte[] data = downloadImage(src);
+                    if (data == null || data.length == 0) {
+                        continue;
+                    }
+                    String ext = guessExt(src, data);
+                    String objectName = "spider/" + msg.getSpiderId() + "/" + UUID.randomUUID().toString().replace("-", "") + ext;
+                    minioHelper.putImage(imageBucket, objectName, data, guessContentType(ext));
+                    uploaded++;
+                    uploadedUrls.add(minioEndpoint() + "/" + imageBucket + "/" + objectName);
+                } catch (Exception e) {
+                    log.warn("图片下载/上传失败: src={}", src, e);
+                }
+            }
+            if (uploaded > 0) {
+                log.info("图片上传完成: url={}, count={}", pageUrl, uploaded);
+                writeLog(task.getId(), msg.getSpiderId(), pageUrl, 1, "INFO",
+                        "图片上传: " + uploaded + " 张", 0);
+            }
+        } catch (Exception e) {
+            log.warn("图片提取失败: url={}", pageUrl, e);
+        }
+        return uploadedUrls;
+    }
+
+    private String minioEndpoint() {
+        String endpoint = minioPublicEndpoint;
+        if (endpoint != null && endpoint.endsWith("/")) {
+            endpoint = endpoint.substring(0, endpoint.length() - 1);
+        }
+        return endpoint;
+    }
+
+    private byte[] downloadImage(String src) throws Exception {
+        Request request = new Request.Builder()
+                .url(src)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
+                .build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful() || response.body() == null) {
+                return null;
+            }
+            return response.body().bytes();
+        }
+    }
+
+    private String guessExt(String src, byte[] data) {
+        String lower = src.toLowerCase();
+        int q = lower.indexOf('?');
+        if (q > 0) {
+            lower = lower.substring(0, q);
+        }
+        String ext = "";
+        int dot = lower.lastIndexOf('.');
+        if (dot >= 0 && dot < lower.length() - 1) {
+            ext = lower.substring(dot);
+        }
+        if (ext.isEmpty()) {
+            // 通过魔数判断
+            if (data.length > 3 && (data[0] & 0xFF) == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
+                ext = ".png";
+            } else if (data.length > 2 && (data[0] & 0xFF) == 0xFF && (data[1] & 0xFF) == 0xD8) {
+                ext = ".jpg";
+            } else if (data.length > 5 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F') {
+                ext = ".gif";
+            } else if (data.length > 8 && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
+                ext = ".webp";
+            } else {
+                ext = ".img";
+            }
+        }
+        return ext;
+    }
+
+    private String guessContentType(String ext) {
+        return switch (ext) {
+            case ".png" -> "image/png";
+            case ".jpg", ".jpeg" -> "image/jpeg";
+            case ".gif" -> "image/gif";
+            case ".webp" -> "image/webp";
+            case ".bmp" -> "image/bmp";
+            case ".svg" -> "image/svg+xml";
+            default -> "application/octet-stream";
+        };
     }
 
     private Document fetch(String url, Integer timeout) throws Exception {

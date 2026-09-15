@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS spider (
     type VARCHAR(32) DEFAULT 'http',
     start_urls TEXT,
     selectors TEXT,
+    image_selector VARCHAR(512),
     schedule VARCHAR(64),
     max_depth INT DEFAULT 2,
     timeout INT DEFAULT 15000,

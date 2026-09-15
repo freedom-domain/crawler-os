@@ -22,6 +22,8 @@ public class SpiderUpdateReq {
 
     private String selectors;
 
+    private String imageSelector;
+
     private String schedule;
 
     private Integer maxDepth = 2;

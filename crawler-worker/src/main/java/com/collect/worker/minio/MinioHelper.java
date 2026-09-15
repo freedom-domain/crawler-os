@@ -46,4 +46,20 @@ public class MinioHelper {
             throw new RuntimeException("MinIO 上传失败: " + e.getMessage(), e);
         }
     }
+
+    public String putImage(String bucket, String objectName, byte[] data, String contentType) {
+        try {
+            ensureBucket(bucket);
+            ByteArrayInputStream in = new ByteArrayInputStream(data);
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .stream(in, data.length, -1)
+                    .contentType(contentType)
+                    .build());
+            return objectName;
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO 图片上传失败: " + e.getMessage(), e);
+        }
+    }
 }

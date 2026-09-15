@@ -14,6 +14,7 @@ public class TaskMessage implements Serializable {
     private String type;
     private List<String> startUrls;
     private String selectors;
+    private String imageSelector;
     private Integer maxDepth;
     private Integer timeout;
     private String headers;

@@ -73,6 +73,9 @@
         <el-form-item label="起始URL" required>
           <el-input v-model="startUrlsStr" placeholder="多个URL用逗号分隔" />
         </el-form-item>
+        <el-form-item label="图片选择器">
+          <el-input v-model="form.imageSelector" placeholder="CSS选择器，如 .article img 或 #content" />
+        </el-form-item>
         <el-form-item label="调度表达式">
           <el-input v-model="form.schedule" placeholder="如: 0 */10 * * * ?" />
         </el-form-item>
@@ -108,7 +111,7 @@ const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
   name: '', description: '', type: 'http',
-  schedule: '', maxDepth: 2, timeout: 15000
+  imageSelector: '', schedule: '', maxDepth: 2, timeout: 15000
 })
 
 const loadData = async () => {
@@ -124,7 +127,7 @@ const loadData = async () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', schedule: '', maxDepth: 2, timeout: 15000 }
+  form.value = { name: '', description: '', type: 'http', imageSelector: '', schedule: '', maxDepth: 2, timeout: 15000 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -135,6 +138,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type,
+    imageSelector: d.imageSelector || '',
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000
   }
   try {

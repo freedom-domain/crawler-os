@@ -43,6 +43,7 @@ public class SpiderService {
         spider.setType(req.getType());
         spider.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         spider.setSelectors(req.getSelectors());
+        spider.setImageSelector(req.getImageSelector());
         spider.setSchedule(req.getSchedule());
         spider.setMaxDepth(req.getMaxDepth());
         spider.setTimeout(req.getTimeout());
@@ -84,6 +85,7 @@ public class SpiderService {
         exist.setType(req.getType());
         exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         exist.setSelectors(req.getSelectors());
+        exist.setImageSelector(req.getImageSelector());
         exist.setSchedule(req.getSchedule());
         exist.setMaxDepth(req.getMaxDepth());
         exist.setTimeout(req.getTimeout());
@@ -215,6 +217,7 @@ public class SpiderService {
         msg.setType(spider.getType());
         msg.setStartUrls(JSON.parseArray(spider.getStartUrls(), String.class));
         msg.setSelectors(spider.getSelectors());
+        msg.setImageSelector(spider.getImageSelector());
         msg.setMaxDepth(spider.getMaxDepth());
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());
