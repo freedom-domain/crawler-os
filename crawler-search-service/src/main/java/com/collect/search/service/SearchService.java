@@ -87,6 +87,7 @@ public class SearchService {
                 sr.setSpiderName(doc.getSpiderName());
                 sr.setSourceType(doc.getSourceType());
                 sr.setCrawlTime(doc.getCrawlTime());
+                sr.setImages(doc.getImages());
                 if (hit.highlight() != null) {
                     sr.setTitleHl(hit.highlight().get("title") != null ? String.join(" ", hit.highlight().get("title")) : doc.getTitle());
                     sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));

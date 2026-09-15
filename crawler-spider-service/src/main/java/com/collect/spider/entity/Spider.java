@@ -16,6 +16,7 @@ public class Spider extends BaseEntity {
     private String startUrls;
     private String selectors;
     private String imageSelector;
+    private Integer overwrite;
     private String schedule;
     private Integer maxDepth;
     private Integer timeout;

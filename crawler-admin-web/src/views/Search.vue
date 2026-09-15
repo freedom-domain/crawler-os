@@ -25,6 +25,18 @@
         <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
         <h3 class="result-title" v-html="row.titleHl || row.title"></h3>
         <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
+        <div v-if="row.images && row.images.length" class="result-images">
+          <el-image
+            v-for="(img, idx) in row.images.slice(0, 6)"
+            :key="idx"
+            :src="imageUrl(img)"
+            :preview-src-list="row.images.map(imageUrl)"
+            :initial-index="idx"
+            fit="cover"
+            class="result-thumb"
+            preview-teleported
+          />
+        </div>
         <div class="result-meta">
           <span v-if="row.spiderName" class="meta-tag">{{ row.spiderName }}</span>
           <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
@@ -49,7 +61,21 @@
     />
 
     <el-dialog v-model="previewVisible" :title="previewTitle" width="80%" top="5vh" destroy-on-close>
-      <div v-loading="previewLoading" class="preview-container" v-html="previewHtml"></div>
+      <div v-loading="previewLoading">
+        <div v-if="previewImages.length" class="preview-images">
+          <el-image
+            v-for="(img, idx) in previewImages"
+            :key="idx"
+            :src="imageUrl(img)"
+            :preview-src-list="previewImages.map(imageUrl)"
+            :initial-index="idx"
+            fit="contain"
+            class="preview-img"
+            preview-teleported
+          />
+        </div>
+        <div class="preview-container" v-html="previewHtml"></div>
+      </div>
     </el-dialog>
   </el-card>
 </template>
@@ -70,12 +96,21 @@ const previewVisible = ref(false)
 const previewLoading = ref(false)
 const previewTitle = ref('')
 const previewHtml = ref('')
+const previewImages = ref<string[]>([])
 
 const formatTime = (t: string) => {
   if (!t) return ''
   const d = new Date(t)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+// ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
+const imageUrl = (objectName: string) => {
+  if (!objectName) return ''
+  // 兼容旧数据：若已是完整 URL 则直接返回
+  if (/^https?:\/\//i.test(objectName)) return objectName
+  return `/api/file/image?bucket=crawler-images&objectName=${encodeURIComponent(objectName)}`
 }
 
 const loadData = async () => {
@@ -94,9 +129,13 @@ const showPreview = async (row: any) => {
   previewLoading.value = true
   previewTitle.value = row.title || '内容预览'
   previewHtml.value = ''
+  previewImages.value = row.images || []
   try {
     const res: any = await searchDetail(row.id)
     previewHtml.value = res.data?.rawHtml || '<p>无原始内容</p>'
+    if (res.data?.images?.length) {
+      previewImages.value = res.data.images
+    }
   } catch {
     previewHtml.value = '<p>加载失败</p>'
   } finally {
@@ -252,6 +291,21 @@ onMounted(loadData)
   font-weight: 700;
 }
 
+.result-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px 0;
+}
+
+.result-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  cursor: pointer;
+}
+
 .result-meta {
   display: flex;
   align-items: center;
@@ -272,6 +326,22 @@ onMounted(loadData)
   color: #999;
   padding: 40px 0;
   font-size: 14px;
+}
+
+.preview-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.preview-img {
+  width: 160px;
+  height: 160px;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  background: #fafafa;
+  cursor: pointer;
 }
 
 .preview-container {

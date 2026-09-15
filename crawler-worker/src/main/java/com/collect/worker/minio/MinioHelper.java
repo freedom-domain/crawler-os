@@ -4,6 +4,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.StatObjectArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -60,6 +61,21 @@ public class MinioHelper {
             return objectName;
         } catch (Exception e) {
             throw new RuntimeException("MinIO 图片上传失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 判断对象是否已存在（用于跳过重复下载）。
+     */
+    public boolean objectExists(String bucket, String objectName) {
+        try {
+            minioClient.statObject(StatObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .build());
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 }

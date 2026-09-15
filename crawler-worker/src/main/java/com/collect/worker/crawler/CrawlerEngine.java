@@ -30,7 +30,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.UUID;
 
 @Slf4j
 @Component
@@ -47,13 +46,6 @@ public class CrawlerEngine {
 
     @Value("${minio.image-bucket:crawler-images}")
     private String imageBucket;
-
-    /**
-     * 浏览器可访问的 MinIO 地址，用于生成图片访问 URL。
-     * 未配置时回退到 minio.endpoint。
-     */
-    @Value("${minio.public-endpoint:${minio.endpoint:http://127.0.0.1:9000}}")
-    private String minioPublicEndpoint;
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
                          ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
@@ -146,46 +138,53 @@ public class CrawlerEngine {
                 ContentParser parsed = ContentParser.parse(doc.outerHtml(), url);
                 String newHtml = doc.outerHtml();
                 String newHtmlHash = md5(newHtml);
+                boolean overwrite = msg.getOverwrite() != null && msg.getOverwrite() == 1;
 
+                // 查询该 URL 是否已存在
                 CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
                 SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                         criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
                 SpiderContentDoc matched = null;
+                boolean contentUnchanged = false;
                 for (SearchHit<SpiderContentDoc> hit : existing) {
                     SpiderContentDoc d = hit.getContent();
-                    if (newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""))) {
+                    if (md5(url).equals(d.getId())) {
                         matched = d;
+                        contentUnchanged = newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""));
                         break;
                     }
                 }
 
-                if (matched != null) {
+                // 不覆盖 且 内容未变化 → 跳过
+                if (!overwrite && matched != null && contentUnchanged) {
                     writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
                     log.info("内容未变化，跳过: url={}", url);
-                } else {
-                    SpiderContentDoc docObj = new SpiderContentDoc();
-                    docObj.setId(md5(url));
-                    docObj.setTitle(parsed.getTitle());
-                    docObj.setContent(parsed.getContent());
-                    docObj.setUrl(url);
-                    docObj.setAuthor(parsed.getAuthor());
-                    docObj.setSpiderId(msg.getSpiderId());
-                    docObj.setSpiderName(msg.getSpiderName());
-                    docObj.setSourceType(msg.getType());
-                    docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-                    docObj.setRawHtml(newHtml);
-
-                    List<String> imageUrls = extractAndUploadImages(doc, url, msg, task);
-                    if (imageUrls != null && !imageUrls.isEmpty()) {
-                        docObj.setImages(imageUrls);
-                    }
-
-                    elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
-                    success.incrementAndGet();
-                    writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                            "抓取成功: " + parsed.getTitle(), (int) cost);
+                    return;
                 }
+
+                SpiderContentDoc docObj = new SpiderContentDoc();
+                docObj.setId(md5(url));
+                docObj.setTitle(parsed.getTitle());
+                docObj.setContent(parsed.getContent());
+                docObj.setUrl(url);
+                docObj.setAuthor(parsed.getAuthor());
+                docObj.setSpiderId(msg.getSpiderId());
+                docObj.setSpiderName(msg.getSpiderName());
+                docObj.setSourceType(msg.getType());
+                docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+                docObj.setRawHtml(newHtml);
+
+                // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
+                List<String> imageUrls = extractAndUploadImages(doc, url, msg, task, overwrite);
+                if (imageUrls != null && !imageUrls.isEmpty()) {
+                    docObj.setImages(imageUrls);
+                }
+
+                elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
+                success.incrementAndGet();
+                writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
+                        (overwrite && matched != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
 
                 if (depth < maxDepth) {
                     List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
@@ -213,14 +212,16 @@ public class CrawlerEngine {
 
     /**
      * 若爬虫配置了图片 CSS 选择器，则提取选择器命中的元素内的图片并上传到 MinIO。
-     * 返回已上传图片的访问 URL 列表（无图片时返回空列表）。
+     * overwrite=true 时重新下载并覆盖已存在的图片；否则跳过已存在的图片。
+     * 返回已上传图片的 objectName 列表（无图片时返回空列表）。
      */
-    private List<String> extractAndUploadImages(Document doc, String pageUrl, TaskMessage msg, SpiderTask task) {
+    private List<String> extractAndUploadImages(Document doc, String pageUrl, TaskMessage msg, SpiderTask task, boolean overwrite) {
         String selector = msg.getImageSelector();
         if (selector == null || selector.isBlank()) {
             return List.of();
         }
         List<String> uploadedUrls = new java.util.ArrayList<>();
+        long imgStart = System.currentTimeMillis();
         try {
             Elements matched = doc.select(selector);
             if (matched.isEmpty()) {
@@ -244,36 +245,48 @@ public class CrawlerEngine {
                     continue;
                 }
                 try {
+                    // 先用 URL 的 MD5 推算对象名
+                    String ext = guessExt(src, null);
+                    String objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + ext;
+                    // 不覆盖时，若图片已存在则跳过下载
+                    if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                        uploaded++;
+                        uploadedUrls.add(objectName);
+                        continue;
+                    }
                     byte[] data = downloadImage(src);
                     if (data == null || data.length == 0) {
                         continue;
                     }
-                    String ext = guessExt(src, data);
-                    String objectName = "spider/" + msg.getSpiderId() + "/" + UUID.randomUUID().toString().replace("-", "") + ext;
-                    minioHelper.putImage(imageBucket, objectName, data, guessContentType(ext));
+                    // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
+                    String realExt = guessExt(src, data);
+                    if (!realExt.equals(ext)) {
+                        objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + realExt;
+                        if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                            uploaded++;
+                            uploadedUrls.add(objectName);
+                            continue;
+                        }
+                    }
+                    // 覆盖模式下 putObject 会直接覆盖已存在的对象
+                    minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
                     uploaded++;
-                    uploadedUrls.add(minioEndpoint() + "/" + imageBucket + "/" + objectName);
+                    // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
+                    uploadedUrls.add(objectName);
                 } catch (Exception e) {
                     log.warn("图片下载/上传失败: src={}", src, e);
                 }
             }
+            long imgCost = System.currentTimeMillis() - imgStart;
             if (uploaded > 0) {
-                log.info("图片上传完成: url={}, count={}", pageUrl, uploaded);
+                log.info("图片上传完成: url={}, count={}, cost={}ms", pageUrl, uploaded, imgCost);
                 writeLog(task.getId(), msg.getSpiderId(), pageUrl, 1, "INFO",
-                        "图片上传: " + uploaded + " 张", 0);
+                        "图片上传: " + uploaded + " 张, 耗时 " + imgCost + "ms", (int) imgCost);
             }
         } catch (Exception e) {
             log.warn("图片提取失败: url={}", pageUrl, e);
         }
         return uploadedUrls;
-    }
-
-    private String minioEndpoint() {
-        String endpoint = minioPublicEndpoint;
-        if (endpoint != null && endpoint.endsWith("/")) {
-            endpoint = endpoint.substring(0, endpoint.length() - 1);
-        }
-        return endpoint;
     }
 
     private byte[] downloadImage(String src) throws Exception {

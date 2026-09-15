@@ -72,7 +72,11 @@
       </div>
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
       <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh">
-        <el-table-column prop="url" label="URL" show-overflow-tooltip />
+        <el-table-column label="URL" show-overflow-tooltip>
+          <template #default="{ row }">
+            <a class="log-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag v-if="row.status === 1" type="success" size="small">成功</el-tag>
@@ -284,5 +288,15 @@ onUnmounted(stopTimer)
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.log-url {
+  color: #409eff;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.log-url:hover {
+  text-decoration: underline;
 }
 </style>

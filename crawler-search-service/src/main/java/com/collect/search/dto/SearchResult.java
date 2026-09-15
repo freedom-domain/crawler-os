@@ -2,6 +2,8 @@ package com.collect.search.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class SearchResult {
 
@@ -14,6 +16,7 @@ public class SearchResult {
     private String spiderName;
     private String sourceType;
     private String crawlTime;
+    private List<String> images;
 
     private String titleHl;
     private String contentHl;

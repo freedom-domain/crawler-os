@@ -24,6 +24,8 @@ public class SpiderCreateReq {
 
     private String imageSelector;
 
+    private Integer overwrite = 0;
+
     private String schedule;
 
     private Integer maxDepth = 2;

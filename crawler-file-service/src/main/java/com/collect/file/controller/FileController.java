@@ -44,6 +44,27 @@ public class FileController {
                 .body(new InputStreamResource(in));
     }
 
+    @Operation(summary = "内联访问图片（用于浏览器预览）")
+    @GetMapping("/image")
+    public ResponseEntity<InputStreamResource> image(@RequestParam("bucket") String bucket,
+                                                     @RequestParam("objectName") String objectName) {
+        InputStream in = fileService.download(bucket, objectName);
+        String ext = objectName.contains(".") ? objectName.substring(objectName.lastIndexOf('.') + 1).toLowerCase() : "";
+        MediaType mediaType = switch (ext) {
+            case "png" -> MediaType.IMAGE_PNG;
+            case "jpg", "jpeg" -> MediaType.IMAGE_JPEG;
+            case "gif" -> MediaType.IMAGE_GIF;
+            case "webp" -> MediaType.parseMediaType("image/webp");
+            case "bmp" -> MediaType.parseMediaType("image/bmp");
+            case "svg" -> MediaType.parseMediaType("image/svg+xml");
+            default -> MediaType.APPLICATION_OCTET_STREAM;
+        };
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .contentType(mediaType)
+                .body(new InputStreamResource(in));
+    }
+
     @Operation(summary = "删除文件")
     @DeleteMapping
     public R<Void> delete(@RequestParam("bucket") String bucket, @RequestParam("objectName") String objectName) {

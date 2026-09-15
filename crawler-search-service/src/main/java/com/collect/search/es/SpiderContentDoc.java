@@ -6,6 +6,7 @@ import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
+import java.util.List;
 
 
 @Data
@@ -38,6 +39,9 @@ public class SpiderContentDoc {
 
     @Field(type = FieldType.Date)
     private String crawlTime;
+
+    @Field(type = FieldType.Keyword)
+    private List<String> images;
 
     @Field(type = FieldType.Text, index = false)
     private String rawHtml;

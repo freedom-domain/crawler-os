@@ -33,6 +33,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private static final List<String> WHITE_LIST = List.of(
             "/api/user/login",
             "/api/user/register",
+            "/api/file/image",
             "/actuator"
     );
 
