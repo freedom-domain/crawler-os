@@ -4,6 +4,22 @@ export const login = (data: { username: string; password: string }) =>
   request.post('/user/login', data)
 
 export const userPage = (params: any) => request.get('/user/page', { params })
+export const userDetail = (id: number) => request.get(`/user/${id}`)
+export const userCreate = (data: any) => request.post('/user/register', data)
+export const userUpdate = (id: number, data: any) => request.put(`/user/${id}`, data)
+export const userDelete = (id: number) => request.delete(`/user/${id}`)
+
+export const roleList = () => request.get('/role')
+export const roleCreate = (data: any) => request.post('/role', data)
+export const roleUpdate = (id: number, data: any) => request.put(`/role/${id}`, data)
+export const roleDelete = (id: number) => request.delete(`/role/${id}`)
+export const rolePermissions = (id: number) => request.get(`/role/${id}/permissions`)
+export const roleAssignPermissions = (data: any) => request.put('/role/permissions', data)
+
+export const permissionTree = () => request.get('/permission')
+export const permissionCreate = (data: any) => request.post('/permission', data)
+export const permissionUpdate = (id: number, data: any) => request.put(`/permission/${id}`, data)
+export const permissionDelete = (id: number) => request.delete(`/permission/${id}`)
 export const roles = () => request.get('/user/roles')
 export const assignRole = (data: any) => request.put('/user/assign-role', data)
 

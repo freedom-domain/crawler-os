@@ -1,6 +1,8 @@
 package com.collect.search.controller;
 
+import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
+import com.collect.common.security.LoginUtils;
 import com.collect.search.dto.SearchResult;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.service.SearchService;
@@ -27,18 +29,21 @@ public class SearchController {
                                               @RequestParam(value = "spiderId", required = false) Long spiderId,
                                               @RequestParam(value = "current", defaultValue = "1") int current,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
+        requirePermission("search:query");
         return R.ok(searchService.search(keyword, spiderId, current, size));
     }
 
     @Operation(summary = "数据详情")
     @GetMapping("/{id}")
     public R<SpiderContentDoc> detail(@PathVariable("id") String id) throws IOException {
+        requirePermission("search:query");
         return R.ok(searchService.getById(id));
     }
 
     @Operation(summary = "更新数据标签")
     @PutMapping("/{id}/tags")
     public R<Void> updateTags(@PathVariable("id") String id, @RequestBody List<String> tags) throws IOException {
+        requirePermission("search:query");
         searchService.updateTags(id, tags);
         return R.ok();
     }
@@ -46,7 +51,14 @@ public class SearchController {
     @Operation(summary = "删除数据")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable("id") String id) throws IOException {
+        requirePermission("search:query");
         searchService.delete(id);
         return R.ok();
+    }
+
+    private void requirePermission(String code) {
+        if (!LoginUtils.hasPermission(code)) {
+            throw new BizException("无权限执行该操作");
+        }
     }
 }

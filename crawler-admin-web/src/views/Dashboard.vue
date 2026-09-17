@@ -108,18 +108,18 @@ const statusTag = (status: string) => {
 onMounted(async () => {
   try {
     const spiderRes: any = await spiderPage({ current: 1, size: 1 })
-    stats.value.spiderCount = spiderRes.data?.total || 0
+    stats.value.spiderCount = spiderRes?.data?.total || 0
 
     const taskRes: any = await taskPage({ current: 1, size: 5 })
-    recentTasks.value = taskRes.data?.records || []
-    stats.value.taskCount = taskRes.data?.total || 0
-    const all = taskRes.data?.records || []
+    recentTasks.value = taskRes?.data?.records || []
+    stats.value.taskCount = taskRes?.data?.total || 0
+    const all = taskRes?.data?.records || []
     const total = all.reduce((s: number, t: any) => s + (t.successCount || 0) + (t.failCount || 0), 0)
     const success = all.reduce((s: number, t: any) => s + (t.successCount || 0), 0)
     stats.value.successRate = total > 0 ? Math.round(success / total * 100) : 0
 
     const searchRes: any = await searchContent({ current: 1, size: 1 })
-    stats.value.dataCount = searchRes.data?.totalElements || 0
+    stats.value.dataCount = searchRes?.data?.totalElements || 0
   } catch (e) {
     console.error(e)
   }

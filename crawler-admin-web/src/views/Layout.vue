@@ -17,26 +17,52 @@
           <el-icon><Odometer /></el-icon>
           <template #title>Dashboard</template>
         </el-menu-item>
-        <el-menu-item index="/spider">
-          <el-icon><Connection /></el-icon>
-          <template #title>爬虫管理</template>
-        </el-menu-item>
-        <el-menu-item index="/task">
-          <el-icon><List /></el-icon>
-          <template #title>任务管理</template>
-        </el-menu-item>
-        <el-menu-item index="/search">
-          <el-icon><Search /></el-icon>
-          <template #title>数据搜索</template>
-        </el-menu-item>
-        <el-menu-item index="/dict">
-          <el-icon><PriceTag /></el-icon>
-          <template #title>字典管理</template>
-        </el-menu-item>
-        <el-menu-item index="/user">
-          <el-icon><User /></el-icon>
-          <template #title>用户管理</template>
-        </el-menu-item>
+
+        <el-sub-menu index="system" v-if="hasPerm('user') || hasPerm('role') || hasPerm('permission')">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统管理</span>
+          </template>
+          <el-menu-item index="/user" v-if="hasPerm('user')">
+            <el-icon><User /></el-icon>
+            <template #title>用户管理</template>
+          </el-menu-item>
+          <el-menu-item index="/role" v-if="hasPerm('role')">
+            <el-icon><Avatar /></el-icon>
+            <template #title>角色管理</template>
+          </el-menu-item>
+          <el-menu-item index="/permission" v-if="hasPerm('permission')">
+            <el-icon><Lock /></el-icon>
+            <template #title>权限管理</template>
+          </el-menu-item>
+          <el-menu-item index="/dict" v-if="hasPerm('dict')">
+            <el-icon><PriceTag /></el-icon>
+            <template #title>字典管理</template>
+          </el-menu-item>
+        </el-sub-menu>
+
+        <el-sub-menu index="function" v-if="hasPerm('spider') || hasPerm('task') || hasPerm('search') || hasPerm('file')">
+          <template #title>
+            <el-icon><Operation /></el-icon>
+            <span>功能管理</span>
+          </template>
+          <el-menu-item index="/spider" v-if="hasPerm('spider')">
+            <el-icon><Connection /></el-icon>
+            <template #title>爬虫管理</template>
+          </el-menu-item>
+          <el-menu-item index="/task" v-if="hasPerm('task')">
+            <el-icon><List /></el-icon>
+            <template #title>任务管理</template>
+          </el-menu-item>
+          <el-menu-item index="/search" v-if="hasPerm('search')">
+            <el-icon><Search /></el-icon>
+            <template #title>数据搜索</template>
+          </el-menu-item>
+          <el-menu-item index="/file" v-if="hasPerm('file')">
+            <el-icon><Folder /></el-icon>
+            <template #title>文件管理</template>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 
@@ -74,11 +100,19 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const userStore = useUserStore()
 const collapsed = ref(false)
+
+// 管理员拥有全部权限
+const hasPerm = (code: string) => {
+  if (userStore.role === '管理员' || userStore.role === 'admin') {
+    return true
+  }
+  return userStore.permissions.includes(code)
+}
 
 const currentTitle = computed(() => {
   const map: Record<string, string> = {
@@ -86,8 +120,11 @@ const currentTitle = computed(() => {
     '/spider': '爬虫管理',
     '/task': '任务管理',
     '/search': '数据搜索',
+    '/file': '文件管理',
     '/dict': '字典管理',
-    '/user': '用户管理'
+    '/user': '用户管理',
+    '/role': '角色管理',
+    '/permission': '权限管理'
   }
   return map[route.path] || ''
 })

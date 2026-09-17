@@ -13,5 +13,6 @@ public class LoginUser implements Serializable {
     private String nickname;
     private Long roleId;
     private String roleName;
+    private String roleCode;
     private Set<String> permissions;
 }

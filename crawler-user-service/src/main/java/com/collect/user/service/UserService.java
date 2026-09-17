@@ -9,6 +9,7 @@ import com.collect.common.security.JwtUtils;
 import com.collect.user.dto.LoginReq;
 import com.collect.user.dto.LoginResp;
 import com.collect.user.dto.UserCreateReq;
+import com.collect.user.dto.UserUpdateReq;
 import com.collect.user.entity.SysPermission;
 import com.collect.user.entity.SysRole;
 import com.collect.user.entity.SysUser;
@@ -45,8 +46,20 @@ public class UserService {
             throw new BizException("账号已被禁用");
         }
 
-        List<SysPermission> perms = permissionMapper.selectByRoleId(user.getRoleId());
-        List<String> permCodes = perms.stream().map(p -> p.getCode()).collect(Collectors.toList());
+        SysRole role = roleMapper.selectById(user.getRoleId());
+        String roleCode = role != null ? role.getCode() : null;
+        boolean isAdmin = "admin".equals(roleCode);
+
+        // 管理员放行所有权限：返回全部权限码，避免依赖角色-权限绑定是否完整
+        List<String> permCodes;
+        if (isAdmin) {
+            permCodes = permissionMapper.selectList(null).stream()
+                    .map(p -> p.getCode())
+                    .collect(Collectors.toList());
+        } else {
+            List<SysPermission> perms = permissionMapper.selectByRoleId(user.getRoleId());
+            permCodes = perms.stream().map(p -> p.getCode()).collect(Collectors.toList());
+        }
 
         LoginUser loginUser = new LoginUser();
         loginUser.setUserId(user.getId());
@@ -54,6 +67,7 @@ public class UserService {
         loginUser.setNickname(user.getNickname());
         loginUser.setRoleId(user.getRoleId());
         loginUser.setRoleName(user.getRoleName());
+        loginUser.setRoleCode(roleCode);
         loginUser.setPermissions(new java.util.HashSet<>(permCodes));
 
         String token = jwtUtils.generateToken(loginUser);
@@ -107,6 +121,43 @@ public class UserService {
         return user;
     }
 
+    @SuppressWarnings("null")
+    public void update(Long id, UserUpdateReq req) {
+        SysUser user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BizException("用户不存在");
+        }
+        // 用户名唯一性校验
+        if (req.getUsername() != null && !req.getUsername().isBlank()
+                && !req.getUsername().equals(user.getUsername())) {
+            SysUser exist = userMapper.selectOne(
+                    new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, req.getUsername()));
+            if (exist != null && !exist.getId().equals(id)) {
+                throw new BizException("用户名已存在");
+            }
+            user.setUsername(req.getUsername());
+        }
+        if (req.getNickname() != null) {
+            user.setNickname(req.getNickname());
+        }
+        if (req.getEmail() != null) {
+            user.setEmail(req.getEmail());
+        }
+        if (req.getPhone() != null) {
+            user.setPhone(req.getPhone());
+        }
+        if (req.getStatus() != null) {
+            user.setStatus(req.getStatus());
+        }
+        if (req.getRoleId() != null) {
+            user.setRoleId(req.getRoleId());
+        }
+        if (req.getPassword() != null && !req.getPassword().isBlank()) {
+            user.setPassword(SecureUtil.md5(req.getPassword()));
+        }
+        userMapper.updateById(user);
+    }
+
     public void updatePassword(Long userId, String oldPassword, String newPassword) {
         SysUser user = userMapper.selectById(userId);
         if (user == null) {
@@ -132,5 +183,16 @@ public class UserService {
         user.setId(userId);
         user.setRoleId(roleId);
         userMapper.updateById(user);
+    }
+
+    public void delete(Long id) {
+        SysUser user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BizException("用户不存在");
+        }
+        if ("admin".equals(user.getUsername())) {
+            throw new BizException("不能删除超级管理员");
+        }
+        userMapper.deleteById(id);
     }
 }

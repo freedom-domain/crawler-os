@@ -1,10 +1,13 @@
 package com.collect.user.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
+import com.collect.common.security.LoginUtils;
 import com.collect.user.dto.LoginReq;
 import com.collect.user.dto.LoginResp;
 import com.collect.user.dto.UserCreateReq;
+import com.collect.user.dto.UserUpdateReq;
 import com.collect.user.entity.SysRole;
 import com.collect.user.entity.SysUser;
 import com.collect.user.service.UserService;
@@ -43,13 +46,37 @@ public class UserController {
     public R<IPage<SysUser>> page(@RequestParam(value = "current", defaultValue = "1") int current,
                                   @RequestParam(value = "size", defaultValue = "10") int size,
                                   @RequestParam(value = "keyword", required = false) String keyword) {
+        requirePermission("user:list");
         return R.ok(userService.page(current, size, keyword));
     }
 
     @Operation(summary = "用户详情")
     @GetMapping("/{id}")
     public R<SysUser> detail(@PathVariable("id") Long id) {
+        requirePermission("user:list");
         return R.ok(userService.getById(id));
+    }
+
+    @Operation(summary = "编辑用户")
+    @PutMapping("/{id}")
+    public R<Void> update(@PathVariable("id") Long id, @Valid @RequestBody UserUpdateReq req) {
+        requirePermission("user:create");
+        userService.update(id, req);
+        return R.ok();
+    }
+
+    @Operation(summary = "删除用户")
+    @DeleteMapping("/{id}")
+    public R<Void> delete(@PathVariable("id") Long id) {
+        requirePermission("user:create");
+        userService.delete(id);
+        return R.ok();
+    }
+
+    private void requirePermission(String code) {
+        if (!LoginUtils.hasPermission(code)) {
+            throw new BizException("无权限执行该操作");
+        }
     }
 
     @Operation(summary = "修改密码")

@@ -1,7 +1,9 @@
 package com.collect.spider.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
+import com.collect.common.security.LoginUtils;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.entity.Spider;
@@ -25,6 +27,7 @@ public class SpiderController {
     @Operation(summary = "创建爬虫")
     @PostMapping
     public R<Spider> create(@Valid @RequestBody SpiderCreateReq req) {
+        requirePermission("spider:create");
         return R.ok(spiderService.create(req));
     }
 
@@ -34,18 +37,21 @@ public class SpiderController {
                                   @RequestParam(value = "size", defaultValue = "10") int size,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @RequestParam(value = "group", required = false) String group) {
+        requirePermission("spider:list");
         return R.ok(spiderService.page(current, size, keyword, group));
     }
 
     @Operation(summary = "爬虫详情")
     @GetMapping("/{id}")
     public R<Spider> detail(@PathVariable("id") Long id) {
+        requirePermission("spider:list");
         return R.ok(spiderService.getById(id));
     }
 
     @Operation(summary = "更新爬虫")
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable("id") Long id, @Valid @RequestBody SpiderUpdateReq req) {
+        requirePermission("spider:create");
         spiderService.update(id, req);
         return R.ok();
     }
@@ -53,6 +59,7 @@ public class SpiderController {
     @Operation(summary = "删除爬虫")
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable("id") Long id) {
+        requirePermission("spider:create");
         spiderService.delete(id);
         return R.ok();
     }
@@ -60,6 +67,7 @@ public class SpiderController {
     @Operation(summary = "启动爬虫")
     @PutMapping("/{id}/start")
     public R<Void> start(@PathVariable("id") Long id) {
+        requirePermission("spider:run");
         spiderService.start(id);
         return R.ok();
     }
@@ -67,6 +75,7 @@ public class SpiderController {
     @Operation(summary = "停止爬虫")
     @PutMapping("/{id}/stop")
     public R<Void> stop(@PathVariable("id") Long id) {
+        requirePermission("spider:run");
         spiderService.stop(id);
         return R.ok();
     }
@@ -74,7 +83,14 @@ public class SpiderController {
     @Operation(summary = "立即执行爬虫")
     @PostMapping("/{id}/run")
     public R<SpiderTask> run(@PathVariable("id") Long id) {
+        requirePermission("spider:run");
         return R.ok(spiderService.run(id));
+    }
+
+    private void requirePermission(String code) {
+        if (!LoginUtils.hasPermission(code)) {
+            throw new BizException("无权限执行该操作");
+        }
     }
 
     @Operation(summary = "任务分页列表")

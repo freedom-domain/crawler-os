@@ -22,6 +22,14 @@ spring:
           uri: lb://crawler-user-service
           predicates:
             - Path=/api/dict/**
+        - id: role-service
+          uri: lb://crawler-user-service
+          predicates:
+            - Path=/api/role/**
+        - id: permission-service
+          uri: lb://crawler-user-service
+          predicates:
+            - Path=/api/permission/**
         - id: spider-service
           uri: lb://crawler-spider-service
           predicates:
