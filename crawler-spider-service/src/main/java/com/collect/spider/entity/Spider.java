@@ -15,7 +15,7 @@ public class Spider extends BaseEntity {
     private String description;
     private String type;
     private String startUrls;
-    private String selectors;
+    private String contentSelector;
     private String imageSelector;
     private Integer overwriteHtml;
     private Integer overwriteImage;

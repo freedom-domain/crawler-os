@@ -21,7 +21,7 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" stripe>
+    <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column prop="name" label="名称" width="160" />
       <el-table-column prop="group" label="分组" width="120">
@@ -89,6 +89,10 @@
         <el-form-item label="起始URL" required>
           <el-input v-model="startUrlsStr" placeholder="多个URL用逗号分隔" />
         </el-form-item>
+        <el-form-item label="内容选择器">
+          <el-input v-model="form.contentSelector" placeholder="CSS选择器，如 .article-content 或 #content" />
+          <div class="form-tip">优先取该选择器命中的文本作为 ES 内容；无内容时回退到标题</div>
+        </el-form-item>
         <el-form-item label="图片选择器">
           <el-input v-model="form.imageSelector" placeholder="CSS选择器，如 .article img 或 #content" />
         </el-form-item>
@@ -119,10 +123,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, dictTree } from '@/api'
 import { Plus, Search } from '@element-plus/icons-vue'
+
+const route = useRoute()
+const tableRef = ref<any>(null)
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -131,13 +139,14 @@ const size = ref(10)
 const total = ref(0)
 const keyword = ref('')
 const groupFilter = ref('')
+const highlightSpiderId = ref<number | null>(null)
 const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
 const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
   name: '', description: '', type: 'http', group: '',
-  imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000
+  contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000
 })
 
 const loadGroupOptions = async () => {
@@ -153,12 +162,35 @@ const loadGroupOptions = async () => {
   }
 }
 
+const tableRowClassName = ({ row }: { row: any }) => row.id === highlightSpiderId.value ? 'spider-highlight-row' : ''
+
+const focusSpiderRow = () => {
+  if (!highlightSpiderId.value) return
+  nextTick(() => {
+    const rows = tableRef.value?.$el?.querySelectorAll?.('.el-table__row') || []
+    const targetIndex = list.value.findIndex((row) => row.id === highlightSpiderId.value)
+    const targetRow = rows[targetIndex]
+    if (targetRow) {
+      targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      targetRow.classList.add('spider-focus-row')
+    }
+  })
+}
+
 const loadData = async () => {
   loading.value = true
   try {
-    const res: any = await spiderPage({ current: page.value, size: size.value, keyword: keyword.value, group: groupFilter.value || undefined })
+    const effectiveSize = highlightSpiderId.value ? 1000 : size.value
+    const res: any = await spiderPage({ current: 1, size: effectiveSize, keyword: keyword.value, group: groupFilter.value || undefined })
     list.value = res.data?.records || []
     total.value = res.data?.total || 0
+    if (highlightSpiderId.value) {
+      const found = list.value.some((row) => row.id === highlightSpiderId.value)
+      if (!found) {
+        highlightSpiderId.value = null
+      }
+    }
+    focusSpiderRow()
   } finally {
     loading.value = false
   }
@@ -166,7 +198,7 @@ const loadData = async () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000 }
+  form.value = { name: '', description: '', type: 'http', group: '', contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -177,7 +209,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '',
-    imageSelector: d.imageSelector || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
+    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000
   }
   try {
@@ -255,13 +287,33 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
+watch(
+  () => route.query.spiderId,
+  (val) => {
+    const id = Number(val)
+    highlightSpiderId.value = Number.isFinite(id) && id > 0 ? id : null
+    if (highlightSpiderId.value) {
+      loadData()
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
-  loadData()
   loadGroupOptions()
+  loadData()
 })
 </script>
 
 <style scoped>
+:deep(.spider-highlight-row) {
+  background: #fff7e6 !important;
+}
+
+:deep(.spider-focus-row) {
+  box-shadow: inset 0 0 0 2px #f59e0b;
+}
+
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; }
 .text-muted { color: #c0c4cc; }

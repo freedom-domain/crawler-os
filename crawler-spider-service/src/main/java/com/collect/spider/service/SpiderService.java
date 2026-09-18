@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -42,7 +43,7 @@ public class SpiderService {
         spider.setDescription(req.getDescription());
         spider.setType(req.getType());
         spider.setStartUrls(JSON.toJSONString(req.getStartUrls()));
-        spider.setSelectors(req.getSelectors());
+        spider.setContentSelector(req.getContentSelector());
         spider.setImageSelector(req.getImageSelector());
         spider.setOverwriteHtml(req.getOverwriteHtml());
         spider.setOverwriteImage(req.getOverwriteImage());
@@ -90,7 +91,7 @@ public class SpiderService {
         exist.setDescription(req.getDescription());
         exist.setType(req.getType());
         exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
-        exist.setSelectors(req.getSelectors());
+        exist.setContentSelector(req.getContentSelector());
         exist.setImageSelector(req.getImageSelector());
         exist.setOverwriteHtml(req.getOverwriteHtml());
         exist.setOverwriteImage(req.getOverwriteImage());
@@ -135,9 +136,25 @@ public class SpiderService {
         if (spider == null) {
             throw new BizException("爬虫不存在");
         }
+        return createTask(spider, JSON.parseArray(spider.getStartUrls(), String.class), null);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public SpiderTask rerun(Long id, String url) {
+        Spider spider = spiderMapper.selectById(id);
+        if (spider == null) {
+            throw new BizException("爬虫不存在");
+        }
+        if (url == null || url.isBlank()) {
+            throw new BizException("URL不能为空");
+        }
+        return createTask(spider, List.of(url), 0);
+    }
+
+    private SpiderTask createTask(Spider spider, List<String> startUrls, Integer maxDepthOverride) {
         Long taskId = snowflakeId();
         SpiderTask task = new SpiderTask();
-        task.setSpiderId(id);
+        task.setSpiderId(spider.getId());
         task.setSpiderName(spider.getName());
         task.setStatus("RUNNING");
         task.setStartTime(LocalDateTime.now());
@@ -146,7 +163,11 @@ public class SpiderService {
         task.setTaskId(taskId);
         taskMapper.insert(task);
 
-        TaskMessage msg = buildMessage(spider, taskId);
+        TaskMessage msg = buildMessage(spider, taskId, startUrls);
+        if (maxDepthOverride != null) {
+            msg.setMaxDepth(maxDepthOverride);
+            msg.setSingleUrl(true);
+        }
         String payload = JSON.toJSONString(msg);
         kafkaTemplate.send(MqConstants.SPIDER_TASK_TOPIC, payload);
         log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
@@ -212,21 +233,27 @@ public class SpiderService {
             throw new BizException("任务不存在");
         }
         if ("RUNNING".equals(task.getStatus())) {
+            LocalDateTime endTime = LocalDateTime.now();
             task.setStatus("CANCELED");
-            task.setEndTime(LocalDateTime.now());
+            task.setEndTime(endTime);
+            task.setTotalCostMs(task.getStartTime() == null ? 0L : java.time.Duration.between(task.getStartTime(), endTime).toMillis());
             taskMapper.updateById(task);
         }
     }
 
     private TaskMessage buildMessage(Spider spider, Long taskId) {
+        return buildMessage(spider, taskId, JSON.parseArray(spider.getStartUrls(), String.class));
+    }
+
+    private TaskMessage buildMessage(Spider spider, Long taskId, List<String> startUrls) {
         TaskMessage msg = new TaskMessage();
         msg.setTaskId(taskId);
         msg.setSpiderId(spider.getId());
         msg.setSpiderName(spider.getName());
         msg.setSpiderGroup(spider.getGroup());
         msg.setType(spider.getType());
-        msg.setStartUrls(JSON.parseArray(spider.getStartUrls(), String.class));
-        msg.setSelectors(spider.getSelectors());
+        msg.setStartUrls(startUrls);
+        msg.setContentSelector(spider.getContentSelector());
         msg.setImageSelector(spider.getImageSelector());
         msg.setOverwriteHtml(spider.getOverwriteHtml());
         msg.setOverwriteImage(spider.getOverwriteImage());

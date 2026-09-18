@@ -114,14 +114,16 @@ public class CrawlerEngine {
             urlQueue.clear(taskId);
         }
 
+        LocalDateTime endTime = LocalDateTime.now();
         taskMapper.setSuccess(task.getId(), success.get());
         taskMapper.setFail(task.getId(), fail.get());
         task.setSuccessCount(success.get());
         task.setFailCount(fail.get());
         task.setStatus("SUCCESS");
-        task.setEndTime(LocalDateTime.now());
+        task.setEndTime(endTime);
+        task.setTotalCostMs(task.getStartTime() == null ? 0L : java.time.Duration.between(task.getStartTime(), endTime).toMillis());
         taskMapper.updateById(task);
-        log.info("任务完成: taskId={}, success={}, fail={}", taskId, success.get(), fail.get());
+        log.info("任务完成: taskId={}, success={}, fail={}, totalCostMs={}", taskId, success.get(), fail.get(), task.getTotalCostMs());
     }
 
     private void crawlUrl(String url, int depth, int maxDepth, TaskMessage msg, SpiderTask task,
@@ -135,7 +137,7 @@ public class CrawlerEngine {
                 Document doc = fetch(url, msg.getTimeout());
                 long cost = System.currentTimeMillis() - start;
 
-                ContentParser parsed = ContentParser.parse(doc.outerHtml(), url);
+                ContentParser parsed = ContentParser.parse(doc.outerHtml(), url, msg.getContentSelector());
                 String newHtml = doc.outerHtml();
                 String newHtmlHash = md5(newHtml);
                 boolean overwriteHtml = msg.getOverwriteHtml() != null && msg.getOverwriteHtml() == 1;
@@ -145,17 +147,18 @@ public class CrawlerEngine {
                 CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
                 SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                         criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
-                SpiderContentDoc matched = null;
+                SpiderContentDoc existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
+                boolean contentUnchanged = false;
                 for (SearchHit<SpiderContentDoc> hit : existing) {
                     SpiderContentDoc d = hit.getContent();
                     if (newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""))) {
-                        matched = d;
+                        contentUnchanged = true;
                         break;
                     }
                 }
 
                 // 不覆盖HTML 且 内容未变化 → 跳过
-                if (!overwriteHtml && matched != null) {
+                if (!overwriteHtml && contentUnchanged) {
                     writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
                     log.info("内容未变化，跳过: url={}", url);
@@ -171,9 +174,13 @@ public class CrawlerEngine {
                 docObj.setSpiderId(msg.getSpiderId());
                 docObj.setSpiderName(msg.getSpiderName());
                 docObj.setSourceType(msg.getType());
-                docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-                docObj.setUpdateTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+                DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+                docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
+                docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
                 docObj.setRawHtml(newHtml);
+                if (existingDoc != null) {
+                    docObj.setTags(existingDoc.getTags());
+                }
 
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
                 List<String> imageUrls = extractAndUploadImages(doc, url, msg, task, overwriteImage);
@@ -184,9 +191,9 @@ public class CrawlerEngine {
                 elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
                 success.incrementAndGet();
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                        (overwriteHtml && matched != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
+                    (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
 
-                if (depth < maxDepth) {
+                if (!msg.isSingleUrl() && depth < maxDepth) {
                     List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
                     next.removeIf(u -> msg.getStartUrls().contains(u));
                     int enqueued = 0;

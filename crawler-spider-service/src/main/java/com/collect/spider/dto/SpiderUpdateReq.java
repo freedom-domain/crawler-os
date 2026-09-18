@@ -20,7 +20,7 @@ public class SpiderUpdateReq {
     @NotEmpty(message = "起始URL不能为空")
     private List<String> startUrls;
 
-    private String selectors;
+    private String contentSelector;
 
     private String imageSelector;
 

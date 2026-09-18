@@ -1,8 +1,5 @@
 package com.collect.worker.crawler;
 
-import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
-import com.alibaba.fastjson2.JSONObject;
 import lombok.Data;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -23,15 +20,39 @@ public class ContentParser {
     private List<String> nextUrls = new ArrayList<>();
 
     public static ContentParser parse(String html, String baseUrl) {
+        return parse(html, baseUrl, null);
+    }
+
+    /**
+     * 解析页面内容。
+     * 若配置了内容选择器（contentSelector），优先取选择器命中元素的文本作为内容；
+     * 若选择器未命中或文本为空，则回退到标题作为内容。
+     * 未配置内容选择器时，保持原有行为（取 body 文本）。
+     */
+    public static ContentParser parse(String html, String baseUrl, String contentSelector) {
         Document doc = Jsoup.parse(html, baseUrl);
         ContentParser parser = new ContentParser();
         parser.setUrl(baseUrl);
 
-        parser.setTitle(doc.title() != null ? doc.title().trim() : baseUrl);
+        String title = doc.title() != null ? doc.title().trim() : baseUrl;
+        parser.setTitle(title);
 
-        Element body = doc.body();
-        String text = body != null ? body.text() : "";
-        parser.setContent(text.length() > 5000 ? text.substring(0, 5000) : text);
+        String content;
+        if (contentSelector != null && !contentSelector.isBlank()) {
+            Element contentEl = doc.selectFirst(contentSelector);
+            String selectedText = contentEl != null ? contentEl.text().trim() : "";
+            if (!selectedText.isEmpty()) {
+                content = selectedText.length() > 5000 ? selectedText.substring(0, 5000) : selectedText;
+            } else {
+                // 内容选择器无内容，回退到标题
+                content = title;
+            }
+        } else {
+            Element body = doc.body();
+            String text = body != null ? body.text() : "";
+            content = text.length() > 5000 ? text.substring(0, 5000) : text;
+        }
+        parser.setContent(content);
 
         Element authorEl = doc.selectFirst("meta[name='author']");
         if (authorEl != null) {
@@ -61,25 +82,5 @@ public class ContentParser {
             }
         }
         return urls;
-    }
-
-    public static List<String> parseSelectors(String selectorsJson) {
-        if (selectorsJson == null || selectorsJson.isBlank()) {
-            return new ArrayList<>();
-        }
-        try {
-            JSONArray arr = JSON.parseArray(selectorsJson);
-            List<String> result = new ArrayList<>();
-            for (int i = 0; i < arr.size(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
-                String sel = obj.getString("selector");
-                if (sel != null) {
-                    result.add(sel);
-                }
-            }
-            return result;
-        } catch (Exception e) {
-            return new ArrayList<>();
-        }
     }
 }

@@ -33,7 +33,7 @@ public class ElasticsearchConfig {
     static class LenientLocalDateTimeDeserializer extends StdDeserializer<LocalDateTime> {
 
         private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
         LenientLocalDateTimeDeserializer() {
             super(LocalDateTime.class);

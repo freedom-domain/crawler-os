@@ -57,7 +57,7 @@
           <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item" @click="openTagEditor(row)">{{ t }}</el-tag>
         </div>
         <div class="result-meta">
-          <span v-if="row.spiderName" class="meta-tag">{{ row.spiderName }}</span>
+          <span v-if="row.spiderName" class="meta-tag spider-tag" @click="goToSpider(row.spiderId, row.spiderName)">{{ row.spiderName }}</span>
           <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
           <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
           <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
@@ -67,9 +67,11 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="view">查看详情</el-dropdown-item>
                 <el-dropdown-item command="tag">标签</el-dropdown-item>
                 <el-dropdown-item command="previewImages">预览图片</el-dropdown-item>
                 <el-dropdown-item command="previewContent">预览内容</el-dropdown-item>
+                <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
                 <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -141,7 +143,65 @@
 
     <el-dialog v-model="previewContentVisible" :title="previewTitle + ' - 内容'" width="80%" top="5vh" destroy-on-close>
       <div v-loading="previewLoading">
-        <div class="preview-container" v-html="previewHtml"></div>
+        <div class="preview-container detail-text">{{ previewHtml || '无正文内容' }}</div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="detailVisible" title="搜索结果详情" width="90%" top="5vh" destroy-on-close>
+      <div v-loading="detailLoading" class="detail-dialog-body">
+        <div v-if="detailData" class="detail-content">
+          <div class="detail-header">
+            <div>
+              <div class="detail-title">{{ detailData.title || '无标题' }}</div>
+              <a class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
+            </div>
+            <div class="detail-badges">
+              <span v-if="detailData.spiderName" class="meta-tag">{{ detailData.spiderName }}</span>
+              <span v-if="detailData.spiderGroup" class="meta-tag group-tag">{{ detailData.spiderGroup }}</span>
+            </div>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-card">
+              <span class="detail-label">来源</span>
+              <span>{{ detailData.sourceType || '未知' }}</span>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">抓取时间</span>
+              <span>{{ formatTime(detailData.crawlTime) || '未知' }}</span>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">更新时间</span>
+              <span>{{ formatTime(detailData.updateTime) || '未更新' }}</span>
+            </div>
+            <div class="detail-card">
+              <span class="detail-label">标签</span>
+              <span>{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
+            </div>
+          </div>
+
+          <div v-if="detailData.images && detailData.images.length" class="detail-images">
+            <el-image
+              v-for="(img, idx) in detailData.images"
+              :key="idx"
+              :src="imageUrl(img)"
+              :preview-src-list="detailData.images.map(imageUrl)"
+              :initial-index="idx"
+              fit="cover"
+              class="detail-image"
+              preview-teleported
+              hide-on-click-modal
+            />
+          </div>
+
+          <div class="detail-body">
+            <h4>正文内容</h4>
+            <div class="preview-container detail-text">
+              {{ stripHtml(detailData.content || detailData.rawHtml || '无正文内容') }}
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty">暂无详情</div>
       </div>
     </el-dialog>
 
@@ -172,9 +232,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage } from '@/api'
+import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+
+const router = useRouter()
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -189,10 +252,13 @@ const groupOptions = ref<string[]>([])
 const filterTag = ref('')
 const previewImagesVisible = ref(false)
 const previewContentVisible = ref(false)
+const detailVisible = ref(false)
 const previewLoading = ref(false)
+const detailLoading = ref(false)
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewImages = ref<string[]>([])
+const detailData = ref<any>(null)
 const imgWidths = ref<Record<number, string>>({})
 const isFullscreen = ref(false)
 const imgZoom = ref(1)
@@ -294,12 +360,36 @@ const formatTime = (t: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
+const stripHtml = (html: string) => {
+  if (!html) return ''
+  const div = document.createElement('div')
+  div.innerHTML = html
+  const text = div.textContent || div.innerText || ''
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+const getImageBucket = () => {
+  if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
+  return import.meta.env.DEV ? 'crawler-images-local' : 'crawler-images'
+}
+
 // ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
 const imageUrl = (objectName: string) => {
   if (!objectName) return ''
   // 兼容旧数据：若已是完整 URL 则直接返回
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/image?bucket=crawler-images&objectName=${encodeURIComponent(objectName)}`
+  return `/api/file/image?bucket=${encodeURIComponent(getImageBucket())}&objectName=${encodeURIComponent(objectName)}`
+}
+
+const goToSpider = async (spiderId?: number, spiderName?: string) => {
+  if (!spiderId) return
+  await router.push({
+    name: 'Spider',
+    query: {
+      spiderId: String(spiderId),
+      spiderName: spiderName || ''
+    }
+  })
 }
 
 const loadData = async () => {
@@ -342,23 +432,57 @@ const showPreviewContent = async (row: any) => {
   previewHtml.value = ''
   try {
     const res: any = await searchDetail(row.id)
-    previewHtml.value = res.data?.rawHtml || '<p>无原始内容</p>'
+    previewHtml.value = stripHtml(res.data?.content || res.data?.rawHtml || '无原始内容') || '无正文内容'
   } catch {
-    previewHtml.value = '<p>加载失败</p>'
+    previewHtml.value = '加载失败'
   } finally {
     previewLoading.value = false
   }
 }
 
+const showDetail = async (row: any) => {
+  detailVisible.value = true
+  detailLoading.value = true
+  detailData.value = null
+  try {
+    const res: any = await searchDetail(row.id)
+    detailData.value = res.data || row
+  } catch {
+    detailData.value = row
+  } finally {
+    detailLoading.value = false
+  }
+}
+
 const handleCommand = (command: string, row: any) => {
-  if (command === 'tag') {
+  if (command === 'view') {
+    showDetail(row)
+  } else if (command === 'tag') {
     openTagEditor(row)
   } else if (command === 'previewImages') {
     showPreviewImages(row)
   } else if (command === 'previewContent') {
     showPreviewContent(row)
+  } else if (command === 'rerun') {
+    handleRerun(row)
   } else if (command === 'delete') {
     handleDelete(row)
+  }
+}
+
+const handleRerun = async (row: any) => {
+  if (!row.spiderId || !row.url) return
+  try {
+    await ElMessageBox.confirm(`确定重新爬取该记录？\n${row.url}`, '重新爬取', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    await spiderRerun(row.spiderId, row.url)
+    ElMessage.success('重新爬取任务已创建')
+  } catch (error: any) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error?.message || '重新爬取失败')
   }
 }
 
@@ -624,6 +748,16 @@ onMounted(() => {
   color: #666;
 }
 
+.spider-tag {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.spider-tag:hover {
+  background: #e6f4ff;
+  color: #1677ff;
+}
+
 .group-tag {
   background: #e8f4fd;
   color: #409eff;
@@ -666,6 +800,98 @@ onMounted(() => {
   border-radius: 4px;
   padding: 16px;
   background: #fff;
+}
+
+.detail-dialog-body {
+  min-height: 220px;
+}
+
+.detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #202124;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.detail-url {
+  color: #006621;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: #f7f8fa;
+  border-radius: 8px;
+  border: 1px solid #eef0f3;
+}
+
+.detail-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.detail-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.detail-image {
+  width: 180px;
+  height: 120px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  overflow: hidden;
+}
+
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-body h4 {
+  margin: 0;
+  font-size: 16px;
+  color: #303133;
+}
+
+.detail-text {
+  white-space: pre-wrap;
+  line-height: 1.8;
+  color: #303133;
 }
 
 .dialog-header {

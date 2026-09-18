@@ -81,11 +81,15 @@ public class SearchService {
                 .size(pageRequest.getPageSize())
                 .query(query);
 
-        // 默认按更新时间倒序排列
-        reqBuilder.sort(s -> s.field(f -> f
+        boolean hasFilters = (spiderId != null)
+            || (spiderGroup != null && !spiderGroup.isBlank())
+            || (tag != null && !tag.isBlank());
+        if (!hasKeyword && !hasFilters) {
+            reqBuilder.sort(s -> s.field(f -> f
                 .field("updateTime")
                 .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
                 .missing("_last")));
+        }
 
         if (hasKeyword) {
             reqBuilder.highlight(h -> h
@@ -191,7 +195,8 @@ public class SearchService {
             throw new com.collect.common.exception.BizException("数据不存在");
         }
         doc.setTags(tags != null ? tags : List.of());
-        doc.setUpdateTime(java.time.Instant.now().toString());
+        doc.setUpdateTime(java.time.LocalDateTime.now()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
         elasticsearchClient.index(i -> i.index(indexName).id(id).document(doc));
     }
 

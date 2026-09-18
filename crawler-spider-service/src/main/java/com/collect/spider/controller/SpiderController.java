@@ -5,6 +5,7 @@ import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
 import com.collect.spider.dto.SpiderCreateReq;
+import com.collect.spider.dto.SpiderRerunReq;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
@@ -85,6 +86,13 @@ public class SpiderController {
     public R<SpiderTask> run(@PathVariable("id") Long id) {
         requirePermission("spider:run");
         return R.ok(spiderService.run(id));
+    }
+
+    @Operation(summary = "重新爬取单条记录")
+    @PostMapping("/{id}/rerun")
+    public R<SpiderTask> rerun(@PathVariable("id") Long id, @Valid @RequestBody SpiderRerunReq req) {
+        requirePermission("spider:run");
+        return R.ok(spiderService.rerun(id, req.getUrl()));
     }
 
     private void requirePermission(String code) {

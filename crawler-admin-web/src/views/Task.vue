@@ -35,6 +35,11 @@
       </el-table-column>
       <el-table-column prop="startTime" label="开始时间" width="180" />
       <el-table-column prop="endTime" label="结束时间" width="180" />
+      <el-table-column label="总耗时" width="110" align="center">
+        <template #default="{ row }">
+          {{ formatDuration(row.totalCostMs || 0) }}
+        </template>
+      </el-table-column>
       <el-table-column prop="successCount" label="成功" width="70" align="center" />
       <el-table-column prop="failCount" label="失败" width="70" align="center" />
       <el-table-column label="操作" width="220">
@@ -150,6 +155,17 @@ const statusLabel = (status: string) => {
     PENDING: '等待中', CANCELED: '已取消'
   }
   return map[status] || status
+}
+
+const formatDuration = (ms: number) => {
+  if (!ms && ms !== 0) return '-'
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000))
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
 }
 
 const loadData = async () => {
