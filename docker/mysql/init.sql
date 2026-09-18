@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS sys_permission (
     name VARCHAR(64) NOT NULL,
     code VARCHAR(128) NOT NULL,
     parent_id BIGINT DEFAULT 0,
-    type TINYINT DEFAULT 1,
+    type TINYINT DEFAULT 1 COMMENT '类型: 0=目录, 1=菜单, 2=按钮',
     path VARCHAR(255),
     sort INT DEFAULT 0,
     deleted TINYINT DEFAULT 0,
@@ -151,15 +151,16 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, sort) VALUES
 (9, '创建爬虫', 'spider:create', 2, 2, NULL, 2),
 (10, '执行爬虫', 'spider:run', 2, 2, NULL, 3),
 (11, '搜索数据', 'search:query', 4, 2, NULL, 1),
-(12, '角色管理', 'role', 0, 1, '/role', 6),
-(13, '权限管理', 'permission', 0, 1, '/permission', 7),
-(14, '字典管理', 'dict', 0, 1, '/dict', 8);
+(12, '系统管理', 'system', 0, 0, NULL, 6),
+(13, '角色管理', 'role', 12, 1, '/role', 1),
+(14, '权限管理', 'permission', 12, 1, '/permission', 2),
+(15, '字典管理', 'dict', 12, 1, '/dict', 3);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14);
+(1, 12),(1, 13),(1, 14),(1, 15);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

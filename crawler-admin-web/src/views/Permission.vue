@@ -13,8 +13,8 @@
       <el-table-column prop="code" label="权限编码" width="200" />
       <el-table-column prop="type" label="类型" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.type === 1 ? 'primary' : 'info'">
-            {{ row.type === 1 ? '菜单' : '按钮' }}
+          <el-tag :type="typeTag(row.type)">
+            {{ typeLabel(row.type) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -39,12 +39,13 @@
         </el-form-item>
         <el-form-item label="类型">
           <el-radio-group v-model="form.type">
+            <el-radio :value="0">目录</el-radio>
             <el-radio :value="1">菜单</el-radio>
             <el-radio :value="2">按钮</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="路由路径">
-          <el-input v-model="form.path" placeholder="如 /user（菜单类型）" />
+        <el-form-item label="路由路径" v-if="form.type === 1">
+          <el-input v-model="form.path" placeholder="如 /user（仅菜单类型需要）" />
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" />
@@ -70,6 +71,10 @@ const saving = ref(false)
 const formVisible = ref(false)
 const form = ref<any>({ id: null, name: '', code: '', type: 1, path: '', sort: 0, parentId: 0 })
 
+// 类型展示
+const typeLabel = (type: number) => (type === 0 ? '目录' : type === 1 ? '菜单' : '按钮')
+const typeTag = (type: number) => (type === 0 ? 'warning' : type === 1 ? 'primary' : 'info')
+
 const loadData = async () => {
   loading.value = true
   try {
@@ -85,7 +90,8 @@ const openCreate = (parent: any) => {
     id: null,
     name: '',
     code: '',
-    type: parent ? 2 : 1,
+    // 顶级默认目录，子级默认菜单
+    type: parent ? 1 : 0,
     path: '',
     sort: 0,
     parentId: parent ? parent.id : 0

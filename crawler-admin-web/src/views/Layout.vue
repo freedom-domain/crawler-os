@@ -19,22 +19,7 @@
         </el-menu-item>
 
         <template v-for="item in menuList" :key="item.id">
-          <!-- 有子菜单 -->
-          <el-sub-menu v-if="item.children && item.children.length" :index="item.path || String(item.id)">
-            <template #title>
-              <el-icon><component :is="getIcon(item.code)" /></el-icon>
-              <span>{{ item.name }}</span>
-            </template>
-            <el-menu-item v-for="child in item.children" :key="child.id" :index="child.path">
-              <el-icon><component :is="getIcon(child.code)" /></el-icon>
-              <template #title>{{ child.name }}</template>
-            </el-menu-item>
-          </el-sub-menu>
-          <!-- 无子菜单 -->
-          <el-menu-item v-else :index="item.path">
-            <el-icon><component :is="getIcon(item.code)" /></el-icon>
-            <template #title>{{ item.name }}</template>
-          </el-menu-item>
+          <MenuNode :item="item" />
         </template>
       </el-menu>
     </el-aside>
@@ -70,16 +55,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineComponent, h } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMenu } from '@/api'
+import { ElSubMenu, ElMenuItem } from 'element-plus'
 import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const userStore = useUserStore()
 const collapsed = ref(false)
 const menuList = ref<any[]>([])
+
+// 递归菜单节点：目录/有子项渲染为子菜单，叶子渲染为菜单项
+const MenuNode = defineComponent({
+  name: 'MenuNode',
+  props: {
+    item: { type: Object as any, required: true }
+  },
+  setup(props) {
+    return () => {
+      const item = props.item
+      const hasChildren = item.children && item.children.length > 0
+      const icon = h('el-icon', null, [h(getIcon(item.code))])
+      if (hasChildren) {
+        return h(ElSubMenu, { index: item.path || String(item.id) }, {
+          title: () => [icon, h('span', item.name)],
+          default: () => item.children.map((c: any) => h(MenuNode, { item: c, key: c.id }))
+        })
+      }
+      return h(ElMenuItem, { index: item.path }, {
+        default: () => [icon, h('span', item.name)]
+      })
+    }
+  }
+})
 
 // 根据权限 code 映射图标
 const iconMap: Record<string, any> = {

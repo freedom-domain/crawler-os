@@ -27,13 +27,17 @@ public class PermissionService {
     public List<SysPermission> tree() {
         List<SysPermission> all = permissionMapper.selectList(
                 new LambdaQueryWrapper<SysPermission>().orderByAsc(SysPermission::getSort));
-        return buildTree(all, 0L);
-    }
-
-    private List<SysPermission> buildTree(List<SysPermission> all, Long parentId) {
         Map<Long, List<SysPermission>> grouped = all.stream()
                 .collect(Collectors.groupingBy(p -> p.getParentId() == null ? 0L : p.getParentId()));
-        return new ArrayList<>(grouped.getOrDefault(parentId, new ArrayList<>()));
+        return buildChildren(grouped, 0L);
+    }
+
+    private List<SysPermission> buildChildren(Map<Long, List<SysPermission>> grouped, Long parentId) {
+        List<SysPermission> nodes = grouped.getOrDefault(parentId, new ArrayList<>());
+        for (SysPermission node : nodes) {
+            node.setChildren(buildChildren(grouped, node.getId()));
+        }
+        return nodes;
     }
 
     public void create(SysPermission perm) {

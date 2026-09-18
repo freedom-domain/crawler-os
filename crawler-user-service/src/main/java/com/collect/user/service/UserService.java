@@ -212,7 +212,7 @@ public class UserService {
     }
 
     /**
-     * 获取当前用户的菜单（type=1 的权限即菜单项）
+     * 获取当前用户的菜单（type=0 目录、type=1 菜单）
      */
     public List<MenuNode> getMenu() {
         LoginUser loginUser = com.collect.common.security.LoginUtils.getLoginUser();
@@ -221,9 +221,9 @@ public class UserService {
             return List.of();
         }
         List<SysPermission> perms = permissionMapper.selectByRoleId(user.getRoleId());
-        // 只取 type=1（菜单类型）
+        // 取 type=0（目录）和 type=1（菜单），按钮 type=2 不展示
         List<SysPermission> menus = perms.stream()
-                .filter(p -> p.getType() != null && p.getType() == 1)
+                .filter(p -> p.getType() != null && (p.getType() == 0 || p.getType() == 1))
                 .sorted((a, b) -> (a.getSort() != null ? a.getSort() : 0) - (b.getSort() != null ? b.getSort() : 0))
                 .collect(Collectors.toList());
 
@@ -235,6 +235,7 @@ public class UserService {
             node.setName(p.getName());
             node.setCode(p.getCode());
             node.setPath(p.getPath());
+            node.setType(p.getType());
             node.setSort(p.getSort());
             nodeMap.put(p.getId(), node);
         }

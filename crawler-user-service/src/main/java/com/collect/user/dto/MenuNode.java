@@ -12,6 +12,7 @@ public class MenuNode {
     private String name;
     private String code;
     private String path;
+    private Integer type;
     private Integer sort;
     private List<MenuNode> children = new ArrayList<>();
 }
