@@ -81,10 +81,7 @@ public class SearchService {
                 .size(pageRequest.getPageSize())
                 .query(query);
 
-        boolean hasFilters = (spiderId != null)
-            || (spiderGroup != null && !spiderGroup.isBlank())
-            || (tag != null && !tag.isBlank());
-        if (!hasKeyword && !hasFilters) {
+        if (!hasKeyword) {
             reqBuilder.sort(s -> s.field(f -> f
                 .field("updateTime")
                 .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)

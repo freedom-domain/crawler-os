@@ -136,7 +136,7 @@ public class SpiderService {
         if (spider == null) {
             throw new BizException("爬虫不存在");
         }
-        return createTask(spider, JSON.parseArray(spider.getStartUrls(), String.class), null);
+        return createTask(spider, JSON.parseArray(spider.getStartUrls(), String.class), null, false);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -148,10 +148,10 @@ public class SpiderService {
         if (url == null || url.isBlank()) {
             throw new BizException("URL不能为空");
         }
-        return createTask(spider, List.of(url), 0);
+        return createTask(spider, List.of(url), 0, true);
     }
 
-    private SpiderTask createTask(Spider spider, List<String> startUrls, Integer maxDepthOverride) {
+    private SpiderTask createTask(Spider spider, List<String> startUrls, Integer maxDepthOverride, boolean forceOverwrite) {
         Long taskId = snowflakeId();
         SpiderTask task = new SpiderTask();
         task.setSpiderId(spider.getId());
@@ -167,6 +167,10 @@ public class SpiderService {
         if (maxDepthOverride != null) {
             msg.setMaxDepth(maxDepthOverride);
             msg.setSingleUrl(true);
+        }
+        if (forceOverwrite) {
+            msg.setOverwriteHtml(1);
+            msg.setOverwriteImage(1);
         }
         String payload = JSON.toJSONString(msg);
         kafkaTemplate.send(MqConstants.SPIDER_TASK_TOPIC, payload);

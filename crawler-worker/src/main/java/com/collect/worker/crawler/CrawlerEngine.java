@@ -184,9 +184,7 @@ public class CrawlerEngine {
 
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
                 List<String> imageUrls = extractAndUploadImages(doc, url, msg, task, overwriteImage);
-                if (imageUrls != null && !imageUrls.isEmpty()) {
-                    docObj.setImages(imageUrls);
-                }
+                docObj.setImages(imageUrls);
 
                 elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
                 success.incrementAndGet();
