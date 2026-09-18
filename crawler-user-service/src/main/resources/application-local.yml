@@ -7,6 +7,11 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:192.168.31.2:8848}
+  data:
+    redis:
+      host: 192.168.31.2
+      port: 6379
+      password: redis_4rzHHD
 
 logging:
   level:

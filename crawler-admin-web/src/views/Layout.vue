@@ -18,51 +18,24 @@
           <template #title>Dashboard</template>
         </el-menu-item>
 
-        <el-sub-menu index="system" v-if="hasPerm('user') || hasPerm('role') || hasPerm('permission')">
-          <template #title>
-            <el-icon><Setting /></el-icon>
-            <span>系统管理</span>
-          </template>
-          <el-menu-item index="/user" v-if="hasPerm('user')">
-            <el-icon><User /></el-icon>
-            <template #title>用户管理</template>
+        <template v-for="item in menuList" :key="item.id">
+          <!-- 有子菜单 -->
+          <el-sub-menu v-if="item.children && item.children.length" :index="item.path || String(item.id)">
+            <template #title>
+              <el-icon><component :is="getIcon(item.code)" /></el-icon>
+              <span>{{ item.name }}</span>
+            </template>
+            <el-menu-item v-for="child in item.children" :key="child.id" :index="child.path">
+              <el-icon><component :is="getIcon(child.code)" /></el-icon>
+              <template #title>{{ child.name }}</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <!-- 无子菜单 -->
+          <el-menu-item v-else :index="item.path">
+            <el-icon><component :is="getIcon(item.code)" /></el-icon>
+            <template #title>{{ item.name }}</template>
           </el-menu-item>
-          <el-menu-item index="/role" v-if="hasPerm('role')">
-            <el-icon><Avatar /></el-icon>
-            <template #title>角色管理</template>
-          </el-menu-item>
-          <el-menu-item index="/permission" v-if="hasPerm('permission')">
-            <el-icon><Lock /></el-icon>
-            <template #title>权限管理</template>
-          </el-menu-item>
-          <el-menu-item index="/dict" v-if="hasPerm('dict')">
-            <el-icon><PriceTag /></el-icon>
-            <template #title>字典管理</template>
-          </el-menu-item>
-        </el-sub-menu>
-
-        <el-sub-menu index="function" v-if="hasPerm('spider') || hasPerm('task') || hasPerm('search') || hasPerm('file')">
-          <template #title>
-            <el-icon><Operation /></el-icon>
-            <span>功能管理</span>
-          </template>
-          <el-menu-item index="/spider" v-if="hasPerm('spider')">
-            <el-icon><Connection /></el-icon>
-            <template #title>爬虫管理</template>
-          </el-menu-item>
-          <el-menu-item index="/task" v-if="hasPerm('task')">
-            <el-icon><List /></el-icon>
-            <template #title>任务管理</template>
-          </el-menu-item>
-          <el-menu-item index="/search" v-if="hasPerm('search')">
-            <el-icon><Search /></el-icon>
-            <template #title>数据搜索</template>
-          </el-menu-item>
-          <el-menu-item index="/file" v-if="hasPerm('file')">
-            <el-icon><Folder /></el-icon>
-            <template #title>文件管理</template>
-          </el-menu-item>
-        </el-sub-menu>
+        </template>
       </el-menu>
     </el-aside>
 
@@ -97,36 +70,58 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder } from '@element-plus/icons-vue'
+import { getMenu } from '@/api'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const userStore = useUserStore()
 const collapsed = ref(false)
+const menuList = ref<any[]>([])
 
-// 管理员拥有全部权限
-const hasPerm = (code: string) => {
-  if (userStore.role === '管理员' || userStore.role === 'admin') {
-    return true
-  }
-  return userStore.permissions.includes(code)
+// 根据权限 code 映射图标
+const iconMap: Record<string, any> = {
+  user: User,
+  role: Avatar,
+  permission: Lock,
+  dict: PriceTag,
+  spider: Connection,
+  task: List,
+  search: Search,
+  file: Folder
 }
 
-const currentTitle = computed(() => {
-  const map: Record<string, string> = {
-    '/dashboard': 'Dashboard',
-    '/spider': '爬虫管理',
-    '/task': '任务管理',
-    '/search': '数据搜索',
-    '/file': '文件管理',
-    '/dict': '字典管理',
-    '/user': '用户管理',
-    '/role': '角色管理',
-    '/permission': '权限管理'
+const getIcon = (code: string) => {
+  return iconMap[code] || MenuIcon
+}
+
+const loadMenu = async () => {
+  try {
+    const res: any = await getMenu()
+    menuList.value = res.data || []
+  } catch {
+    menuList.value = []
   }
-  return map[route.path] || ''
+}
+
+onMounted(() => {
+  loadMenu()
+})
+
+const currentTitle = computed(() => {
+  const findTitle = (items: any[]): string => {
+    for (const item of items) {
+      if (item.path === route.path) return item.name
+      if (item.children?.length) {
+        const found = findTitle(item.children)
+        if (found) return found
+      }
+    }
+    return ''
+  }
+  return findTitle(menuList.value) || ''
 })
 
 const handleCommand = (cmd: string) => {

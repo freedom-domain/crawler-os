@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, FormInstance } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -34,6 +34,29 @@ const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
+
+// 判断 token 是否未过期
+const isTokenValid = (): boolean => {
+  const token = localStorage.getItem('token')
+  if (!token) return false
+  try {
+    const payload = token.split('.')[1]
+    const binary = atob(payload)
+    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0))
+    const json = new TextDecoder('utf-8').decode(bytes)
+    const decoded = JSON.parse(json)
+    const exp = decoded.exp as number
+    return exp * 1000 > Date.now()
+  } catch {
+    return false
+  }
+}
+
+onMounted(() => {
+  if (isTokenValid()) {
+    router.replace('/dashboard')
+  }
+})
 
 const handleLogin = async () => {
   await formRef.value?.validate()

@@ -10,6 +10,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,6 +30,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     @Value("${jwt.secret:crawler-platform-jwt-secret-key-must-be-long-enough-256}")
     private String secret;
+
+    private final ReactiveStringRedisTemplate redisTemplate;
 
     private static final List<String> WHITE_LIST = List.of(
             "/api/user/login",
@@ -67,9 +70,26 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
+            String jti = claims.getId();
             String userId = claims.getSubject();
             String username = claims.get("username", String.class);
             String role = claims.get("role", String.class);
+
+            // 校验 token 是否在 Redis 中存在（支持滑动过期）
+            if (jti != null) {
+                return redisTemplate.hasKey("token:" + jti)
+                        .flatMap(exists -> {
+                            if (!exists) {
+                                return unauthorized(exchange, "Token 已过期，请重新登录");
+                            }
+                            ServerHttpRequest mutated = request.mutate()
+                                    .header("X-User-Id", userId == null ? "" : userId)
+                                    .header("X-User-Name", username == null ? "" : username)
+                                    .header("X-User-Role", role == null ? "" : role)
+                                    .build();
+                            return chain.filter(exchange.mutate().request(mutated).build());
+                        });
+            }
 
             ServerHttpRequest mutated = request.mutate()
                     .header("X-User-Id", userId == null ? "" : userId)

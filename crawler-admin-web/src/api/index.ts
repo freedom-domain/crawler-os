@@ -3,6 +3,8 @@ import request from './request'
 export const login = (data: { username: string; password: string }) =>
   request.post('/user/login', data)
 
+export const getMenu = () => request.get('/user/menu')
+
 export const userPage = (params: any) => request.get('/user/page', { params })
 export const userDetail = (id: number) => request.get(`/user/${id}`)
 export const userCreate = (data: any) => request.post('/user/register', data)

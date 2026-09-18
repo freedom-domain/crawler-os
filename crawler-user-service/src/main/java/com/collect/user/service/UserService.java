@@ -8,6 +8,7 @@ import com.collect.common.security.LoginUser;
 import com.collect.common.security.JwtUtils;
 import com.collect.user.dto.LoginReq;
 import com.collect.user.dto.LoginResp;
+import com.collect.user.dto.MenuNode;
 import com.collect.user.dto.UserCreateReq;
 import com.collect.user.dto.UserUpdateReq;
 import com.collect.user.entity.SysPermission;
@@ -19,9 +20,13 @@ import com.collect.user.mapper.SysUserMapper;
 import cn.hutool.crypto.SecureUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +38,10 @@ public class UserService {
     private final SysRoleMapper roleMapper;
     private final SysPermissionMapper permissionMapper;
     private final JwtUtils jwtUtils;
+    private final StringRedisTemplate redisTemplate;
+
+    @Value("${jwt.expire:7200}")
+    private long expireSeconds;
 
     public LoginResp login(LoginReq req) {
         SysUser user = userMapper.selectByUsername(req.getUsername());
@@ -71,6 +80,12 @@ public class UserService {
         loginUser.setPermissions(new java.util.HashSet<>(permCodes));
 
         String token = jwtUtils.generateToken(loginUser);
+
+        // 将 token 存入 Redis，设置过期时间
+        String jti = jwtUtils.getTokenId(token);
+        if (jti != null) {
+            redisTemplate.opsForValue().set("token:" + jti, "1", expireSeconds, TimeUnit.SECONDS);
+        }
 
         LoginResp resp = new LoginResp();
         resp.setToken(token);
@@ -194,5 +209,47 @@ public class UserService {
             throw new BizException("不能删除超级管理员");
         }
         userMapper.deleteById(id);
+    }
+
+    /**
+     * 获取当前用户的菜单（type=1 的权限即菜单项）
+     */
+    public List<MenuNode> getMenu() {
+        LoginUser loginUser = com.collect.common.security.LoginUtils.getLoginUser();
+        SysUser user = userMapper.selectById(loginUser.getUserId());
+        if (user == null) {
+            return List.of();
+        }
+        List<SysPermission> perms = permissionMapper.selectByRoleId(user.getRoleId());
+        // 只取 type=1（菜单类型）
+        List<SysPermission> menus = perms.stream()
+                .filter(p -> p.getType() != null && p.getType() == 1)
+                .sorted((a, b) -> (a.getSort() != null ? a.getSort() : 0) - (b.getSort() != null ? b.getSort() : 0))
+                .collect(Collectors.toList());
+
+        // 构建树形结构
+        Map<Long, MenuNode> nodeMap = new java.util.LinkedHashMap<>();
+        for (SysPermission p : menus) {
+            MenuNode node = new MenuNode();
+            node.setId(p.getId());
+            node.setName(p.getName());
+            node.setCode(p.getCode());
+            node.setPath(p.getPath());
+            node.setSort(p.getSort());
+            nodeMap.put(p.getId(), node);
+        }
+
+        List<MenuNode> roots = new java.util.ArrayList<>();
+        for (MenuNode node : nodeMap.values()) {
+            SysPermission perm = menus.stream().filter(p -> p.getId().equals(node.getId())).findFirst().orElse(null);
+            if (perm == null) continue;
+            Long parentId = perm.getParentId();
+            if (parentId == null || parentId == 0 || !nodeMap.containsKey(parentId)) {
+                roots.add(node);
+            } else {
+                nodeMap.get(parentId).getChildren().add(node);
+            }
+        }
+        return roots;
     }
 }

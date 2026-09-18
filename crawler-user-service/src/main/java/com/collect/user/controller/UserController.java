@@ -6,6 +6,7 @@ import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
 import com.collect.user.dto.LoginReq;
 import com.collect.user.dto.LoginResp;
+import com.collect.user.dto.MenuNode;
 import com.collect.user.dto.UserCreateReq;
 import com.collect.user.dto.UserUpdateReq;
 import com.collect.user.entity.SysRole;
@@ -71,6 +72,12 @@ public class UserController {
         requirePermission("user:create");
         userService.delete(id);
         return R.ok();
+    }
+
+    @Operation(summary = "获取当前用户菜单")
+    @GetMapping("/menu")
+    public R<List<MenuNode>> menu() {
+        return R.ok(userService.getMenu());
     }
 
     private void requirePermission(String code) {

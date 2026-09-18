@@ -34,7 +34,9 @@ public class JwtUtils {
     public String generateToken(LoginUser user) {
         Date now = new Date();
         Date exp = new Date(now.getTime() + expireSeconds * 1000);
+        String jti = java.util.UUID.randomUUID().toString();
         return Jwts.builder()
+                .id(jti)
                 .subject(String.valueOf(user.getUserId()))
                 .claim("username", user.getUsername())
                 .claim("nickname", user.getNickname())
@@ -45,6 +47,19 @@ public class JwtUtils {
                 .expiration(exp)
                 .signWith(getKey())
                 .compact();
+    }
+
+    public String getTokenId(String token) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+            return claims.getId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public LoginUser parseToken(String token) {
