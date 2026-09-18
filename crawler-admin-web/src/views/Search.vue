@@ -17,8 +17,13 @@
         <el-button type="primary" class="search-btn" @click="loadData">搜索</el-button>
       </div>
       <div class="search-row filter-row">
-        <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="loadData">
+        <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="onGroupChange">
           <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+        </el-select>
+        <el-select v-model="filterSpider" placeholder="爬虫" clearable filterable style="width: 200px" @change="onSpiderChange">
+          <el-option-group v-for="sec in spiderGroupedOptions" :key="sec.key" :label="sec.label">
+            <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
+          </el-option-group>
         </el-select>
         <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
           <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
@@ -166,9 +171,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren } from '@/api'
+import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
@@ -177,6 +182,8 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
+const filterSpider = ref<number | ''>('')
+const spiderOptions = ref<any[]>([])
 const filterGroup = ref('')
 const groupOptions = ref<string[]>([])
 const filterTag = ref('')
@@ -299,6 +306,7 @@ const loadData = async () => {
   loading.value = true
   try {
     const params: any = { current: page.value, size: size.value, keyword: keyword.value }
+    if (filterSpider.value) params.spiderId = filterSpider.value
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
     const res: any = await searchContent(params)
@@ -383,9 +391,57 @@ const loadGroupOptions = async () => {
   }
 }
 
+const loadSpiderOptions = async () => {
+  try {
+    const res: any = await spiderPage({ current: 1, size: 1000 })
+    spiderOptions.value = res.data?.records || []
+  } catch {
+    spiderOptions.value = []
+  }
+}
+
+// 爬虫下拉按爬虫分组关联展示：已知分组在前，其余分组及未分组在后
+// 当选择了爬虫分组时，仅展示该分组下的爬虫（联动）
+const spiderGroupedOptions = computed(() => {
+  const source = filterGroup.value
+    ? spiderOptions.value.filter((s) => String(s.group || '') === filterGroup.value)
+    : spiderOptions.value
+  const map = new Map<string, any[]>()
+  for (const s of source) {
+    const key = s.group ? String(s.group) : '__none__'
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(s)
+  }
+  const sections: { key: string; label: string; items: any[] }[] = []
+  for (const g of groupOptions.value) {
+    if (map.has(g)) sections.push({ key: g, label: g, items: map.get(g)! })
+  }
+  for (const [key, items] of map.entries()) {
+    if (!groupOptions.value.includes(key)) {
+      sections.push({ key, label: key === '__none__' ? '未分组' : key, items })
+    }
+  }
+  return sections
+})
+
+// 选择分组后刷新（分组在服务端解析为该分组下的爬虫 ID 进行查询）
+const onGroupChange = () => {
+  loadData()
+}
+
+// 联动：选择爬虫后，自动带出其所属分组
+const onSpiderChange = () => {
+  if (filterSpider.value) {
+    const spider = spiderOptions.value.find((s) => s.id === filterSpider.value)
+    if (spider) filterGroup.value = spider.group || ''
+  }
+  loadData()
+}
+
 onMounted(() => {
   loadGroupOptions()
   loadTagOptions()
+  loadSpiderOptions()
   loadData()
 })
 </script>

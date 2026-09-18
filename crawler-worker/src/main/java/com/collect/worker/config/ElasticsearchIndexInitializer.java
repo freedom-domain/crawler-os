@@ -40,7 +40,6 @@ public class ElasticsearchIndexInitializer {
                     return;
                 }
                 // 补充新增字段到已有索引的 mapping
-                ensureField(mappings, "spiderGroup", "keyword");
                 ensureField(mappings, "tags", "keyword");
             } else {
                 ops.create();

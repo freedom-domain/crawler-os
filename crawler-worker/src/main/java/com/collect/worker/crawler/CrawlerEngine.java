@@ -170,7 +170,6 @@ public class CrawlerEngine {
                 docObj.setAuthor(parsed.getAuthor());
                 docObj.setSpiderId(msg.getSpiderId());
                 docObj.setSpiderName(msg.getSpiderName());
-                docObj.setSpiderGroup(msg.getSpiderGroup());
                 docObj.setSourceType(msg.getType());
                 docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 docObj.setUpdateTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));

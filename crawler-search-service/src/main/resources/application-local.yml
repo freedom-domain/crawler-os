@@ -3,6 +3,10 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:192.168.31.2:8848}
+  datasource:
+    url: jdbc:mysql://192.168.31.2:3306/crawler_platform_local?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: mysql_FxYHD4
   data:
     elasticsearch:
       uris: ${ES_URLS:http://192.168.31.2:9200}
