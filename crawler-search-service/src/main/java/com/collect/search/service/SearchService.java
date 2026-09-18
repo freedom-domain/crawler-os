@@ -30,7 +30,7 @@ public class SearchService {
         this.elasticsearchClient = elasticsearchClient;
     }
 
-    public Page<SearchResult> search(String keyword, Long spiderId,
+    public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup,
                                      int current, int size) {
         PageRequest pageRequest = PageRequest.of(current - 1, size);
 
@@ -47,6 +47,10 @@ public class SearchService {
 
         if (spiderId != null) {
             boolBuilder.must(m -> m.term(t -> t.field("spiderId").value(spiderId)));
+        }
+
+        if (spiderGroup != null && !spiderGroup.isBlank()) {
+            boolBuilder.must(m -> m.term(t -> t.field("spiderGroup").value(spiderGroup)));
         }
 
         Query query = Query.of(q -> q.bool(boolBuilder.build()));
@@ -85,6 +89,7 @@ public class SearchService {
                 sr.setAuthor(doc.getAuthor());
                 sr.setSpiderId(doc.getSpiderId());
                 sr.setSpiderName(doc.getSpiderName());
+                sr.setSpiderGroup(doc.getSpiderGroup());
                 sr.setSourceType(doc.getSourceType());
                 sr.setCrawlTime(doc.getCrawlTime());
                 sr.setImages(doc.getImages());

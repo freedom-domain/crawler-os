@@ -40,6 +40,31 @@ public class DictService {
         return parents;
     }
 
+    /**
+     * 根据父级 value 获取其子项列表
+     */
+    @SuppressWarnings("null")
+    public List<SysDict> childrenByParentValue(String parentValue) {
+        if (parentValue == null || parentValue.isBlank()) {
+            return new ArrayList<>();
+        }
+        // 先根据 value 找到父项
+        SysDict parent = dictMapper.selectOne(
+                new LambdaQueryWrapper<SysDict>()
+                        .eq(SysDict::getValue, parentValue)
+                        .eq(SysDict::getStatus, 1)
+                        .last("LIMIT 1"));
+        if (parent == null) {
+            return new ArrayList<>();
+        }
+        return dictMapper.selectList(
+                new LambdaQueryWrapper<SysDict>()
+                        .eq(SysDict::getParentId, parent.getId())
+                        .eq(SysDict::getStatus, 1)
+                        .orderByAsc(SysDict::getSort)
+                        .orderByDesc(SysDict::getId));
+    }
+
     @SuppressWarnings("null")
     private List<SysDict> listAll() {
         LambdaQueryWrapper<SysDict> qw = new LambdaQueryWrapper<>();

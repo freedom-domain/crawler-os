@@ -17,7 +17,8 @@ public class Spider extends BaseEntity {
     private String startUrls;
     private String selectors;
     private String imageSelector;
-    private Integer overwrite;
+    private Integer overwriteHtml;
+    private Integer overwriteImage;
     @TableField("`group`")
     private String group;
     private String schedule;

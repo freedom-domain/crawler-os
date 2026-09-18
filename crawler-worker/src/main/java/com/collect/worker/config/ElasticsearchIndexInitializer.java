@@ -1,5 +1,6 @@
 package com.collect.worker.config;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import com.collect.worker.es.SpiderContentDoc;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class ElasticsearchIndexInitializer {
 
     private final ElasticsearchOperations elasticsearchOperations;
+    private final ElasticsearchClient elasticsearchClient;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
@@ -37,6 +39,8 @@ public class ElasticsearchIndexInitializer {
                     log.info("已重建 ES 索引: {}", contentIndex);
                     return;
                 }
+                // 补充新增字段到已有索引的 mapping
+                ensureField(mappings, "spiderGroup", "keyword");
             } else {
                 ops.create();
                 ops.putMapping(ops.createMapping(SpiderContentDoc.class));
@@ -44,6 +48,23 @@ public class ElasticsearchIndexInitializer {
             }
         } catch (Exception e) {
             log.error("初始化 ES 索引失败: {}", contentIndex, e);
+        }
+    }
+
+    /**
+     * 若索引 mapping 中缺少指定字段，则动态添加。
+     */
+    private void ensureField(Map<String, Object> mappings, String field, String type) {
+        if (extractFieldType(mappings, field) == null) {
+            try {
+                elasticsearchClient.indices().putMapping(m -> m
+                        .index(contentIndex)
+                        .properties(field, p -> p.keyword(k -> k))
+                );
+                log.info("已为索引 {} 添加字段: {} ({})", contentIndex, field, type);
+            } catch (Exception e) {
+                log.warn("添加字段 {} 失败: {}", field, e.getMessage());
+            }
         }
     }
 

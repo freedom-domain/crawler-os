@@ -44,7 +44,8 @@ public class SpiderService {
         spider.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         spider.setSelectors(req.getSelectors());
         spider.setImageSelector(req.getImageSelector());
-        spider.setOverwrite(req.getOverwrite());
+        spider.setOverwriteHtml(req.getOverwriteHtml());
+        spider.setOverwriteImage(req.getOverwriteImage());
         spider.setGroup(req.getGroup());
         spider.setSchedule(req.getSchedule());
         spider.setMaxDepth(req.getMaxDepth());
@@ -91,7 +92,8 @@ public class SpiderService {
         exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         exist.setSelectors(req.getSelectors());
         exist.setImageSelector(req.getImageSelector());
-        exist.setOverwrite(req.getOverwrite());
+        exist.setOverwriteHtml(req.getOverwriteHtml());
+        exist.setOverwriteImage(req.getOverwriteImage());
         exist.setGroup(req.getGroup());
         exist.setSchedule(req.getSchedule());
         exist.setMaxDepth(req.getMaxDepth());
@@ -221,11 +223,13 @@ public class SpiderService {
         msg.setTaskId(taskId);
         msg.setSpiderId(spider.getId());
         msg.setSpiderName(spider.getName());
+        msg.setSpiderGroup(spider.getGroup());
         msg.setType(spider.getType());
         msg.setStartUrls(JSON.parseArray(spider.getStartUrls(), String.class));
         msg.setSelectors(spider.getSelectors());
         msg.setImageSelector(spider.getImageSelector());
-        msg.setOverwrite(spider.getOverwrite());
+        msg.setOverwriteHtml(spider.getOverwriteHtml());
+        msg.setOverwriteImage(spider.getOverwriteImage());
         msg.setMaxDepth(spider.getMaxDepth());
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());

@@ -11,11 +11,13 @@ public class TaskMessage implements Serializable {
     private Long taskId;
     private Long spiderId;
     private String spiderName;
+    private String spiderGroup;
     private String type;
     private List<String> startUrls;
     private String selectors;
     private String imageSelector;
-    private Integer overwrite;
+    private Integer overwriteHtml;
+    private Integer overwriteImage;
     private Integer maxDepth;
     private Integer timeout;
     private String headers;

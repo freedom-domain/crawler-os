@@ -138,7 +138,8 @@ public class CrawlerEngine {
                 ContentParser parsed = ContentParser.parse(doc.outerHtml(), url);
                 String newHtml = doc.outerHtml();
                 String newHtmlHash = md5(newHtml);
-                boolean overwrite = msg.getOverwrite() != null && msg.getOverwrite() == 1;
+                boolean overwriteHtml = msg.getOverwriteHtml() != null && msg.getOverwriteHtml() == 1;
+                boolean overwriteImage = msg.getOverwriteImage() != null && msg.getOverwriteImage() == 1;
 
                 // 查询该 URL 是否已存在
                 CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
@@ -155,8 +156,8 @@ public class CrawlerEngine {
                     }
                 }
 
-                // 不覆盖 且 内容未变化 → 跳过
-                if (!overwrite && matched != null && contentUnchanged) {
+                // 不覆盖HTML 且 内容未变化 → 跳过
+                if (!overwriteHtml && matched != null && contentUnchanged) {
                     writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
                     log.info("内容未变化，跳过: url={}", url);
@@ -171,12 +172,13 @@ public class CrawlerEngine {
                 docObj.setAuthor(parsed.getAuthor());
                 docObj.setSpiderId(msg.getSpiderId());
                 docObj.setSpiderName(msg.getSpiderName());
+                docObj.setSpiderGroup(msg.getSpiderGroup());
                 docObj.setSourceType(msg.getType());
                 docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 docObj.setRawHtml(newHtml);
 
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
-                List<String> imageUrls = extractAndUploadImages(doc, url, msg, task, overwrite);
+                List<String> imageUrls = extractAndUploadImages(doc, url, msg, task, overwriteImage);
                 if (imageUrls != null && !imageUrls.isEmpty()) {
                     docObj.setImages(imageUrls);
                 }
@@ -184,7 +186,7 @@ public class CrawlerEngine {
                 elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
                 success.incrementAndGet();
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                        (overwrite && matched != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
+                        (overwriteHtml && matched != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
 
                 if (depth < maxDepth) {
                     List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
@@ -238,6 +240,7 @@ public class CrawlerEngine {
             }
 
             int uploaded = 0;
+            int skipped = 0;
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (Element img : imgs) {
                 String src = img.absUrl("src");
@@ -250,7 +253,7 @@ public class CrawlerEngine {
                     String objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + ext;
                     // 不覆盖时，若图片已存在则跳过下载
                     if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
-                        uploaded++;
+                        skipped++;
                         uploadedUrls.add(objectName);
                         continue;
                     }
@@ -263,7 +266,7 @@ public class CrawlerEngine {
                     if (!realExt.equals(ext)) {
                         objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + realExt;
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
-                            uploaded++;
+                            skipped++;
                             uploadedUrls.add(objectName);
                             continue;
                         }
@@ -278,10 +281,12 @@ public class CrawlerEngine {
                 }
             }
             long imgCost = System.currentTimeMillis() - imgStart;
-            if (uploaded > 0) {
-                log.info("图片上传完成: url={}, count={}, cost={}ms", pageUrl, uploaded, imgCost);
-                writeLog(task.getId(), msg.getSpiderId(), pageUrl, 1, "INFO",
-                        "图片上传: " + uploaded + " 张, 耗时 " + imgCost + "ms", (int) imgCost);
+            if (uploaded > 0 || skipped > 0) {
+                String msg2 = skipped > 0
+                        ? "图片: 上传 " + uploaded + " 张, 已存在跳过 " + skipped + " 张, 耗时 " + imgCost + "ms"
+                        : "图片上传: " + uploaded + " 张, 耗时 " + imgCost + "ms";
+                log.info("图片处理完成: url={}, uploaded={}, skipped={}, cost={}ms", pageUrl, uploaded, skipped, imgCost);
+                writeLog(task.getId(), msg.getSpiderId(), pageUrl, 1, "INFO", msg2, (int) imgCost);
             }
         } catch (Exception e) {
             log.warn("图片提取失败: url={}", pageUrl, e);

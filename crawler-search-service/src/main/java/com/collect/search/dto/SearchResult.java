@@ -14,6 +14,7 @@ public class SearchResult {
     private String author;
     private Long spiderId;
     private String spiderName;
+    private String spiderGroup;
     private String sourceType;
     private String crawlTime;
     private List<String> images;

@@ -24,6 +24,12 @@ public class DictController {
         return R.ok(dictService.tree());
     }
 
+    @Operation(summary = "根据父级 value 获取子项列表")
+    @GetMapping("/children/{parentValue}")
+    public R<List<SysDict>> children(@PathVariable("parentValue") String parentValue) {
+        return R.ok(dictService.childrenByParentValue(parentValue));
+    }
+
     @Operation(summary = "新增字典项")
     @PostMapping
     public R<Void> create(@RequestBody SysDict dict) {

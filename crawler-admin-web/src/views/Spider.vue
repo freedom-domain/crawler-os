@@ -92,9 +92,13 @@
         <el-form-item label="图片选择器">
           <el-input v-model="form.imageSelector" placeholder="CSS选择器，如 .article img 或 #content" />
         </el-form-item>
-        <el-form-item label="覆盖已有数据">
-          <el-switch v-model="form.overwrite" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
-          <div class="form-tip">开启后重新爬取会覆盖 ES 内容与已存在的图片；关闭则内容未变化时跳过、已存在图片不重复下载</div>
+        <el-form-item label="覆盖HTML">
+          <el-switch v-model="form.overwriteHtml" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
+          <div class="form-tip">开启后重新爬取会覆盖 ES 中的内容；关闭则内容未变化时跳过</div>
+        </el-form-item>
+        <el-form-item label="覆盖图片">
+          <el-switch v-model="form.overwriteImage" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
+          <div class="form-tip">开启后重新爬取会重新下载并覆盖已存在的图片；关闭则已存在图片不重复下载</div>
         </el-form-item>
         <el-form-item label="调度表达式">
           <el-input v-model="form.schedule" placeholder="如: 0 */10 * * * ?" />
@@ -133,7 +137,7 @@ const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
   name: '', description: '', type: 'http', group: '',
-  imageSelector: '', overwrite: 0, schedule: '', maxDepth: 2, timeout: 15000
+  imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000
 })
 
 const loadGroupOptions = async () => {
@@ -162,7 +166,7 @@ const loadData = async () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', imageSelector: '', overwrite: 0, schedule: '', maxDepth: 2, timeout: 15000 }
+  form.value = { name: '', description: '', type: 'http', group: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -173,7 +177,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '',
-    imageSelector: d.imageSelector || '', overwrite: d.overwrite ?? 0,
+    imageSelector: d.imageSelector || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000
   }
   try {

@@ -13,6 +13,9 @@
         />
         <button v-if="keyword" class="clear-btn" @click="keyword = ''; loadData()">&times;</button>
       </div>
+      <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="loadData">
+        <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+      </el-select>
       <el-button type="primary" class="search-btn" @click="loadData">搜索</el-button>
     </div>
 
@@ -42,6 +45,7 @@
         </div>
         <div class="result-meta">
           <span v-if="row.spiderName" class="meta-tag">{{ row.spiderName }}</span>
+          <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
           <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
           <el-button size="small" text type="primary" @click="openTagEditor(row)">标签</el-button>
           <el-button size="small" text type="primary" @click="showPreview(row)">预览</el-button>
@@ -92,14 +96,12 @@
         placeholder="选择或输入标签"
         style="width: 100%"
       >
-        <el-option-group v-for="parent in dictTree" :key="parent.id" :label="parent.label">
-          <el-option
-            v-for="child in (parent.children || [])"
-            :key="child.id"
-            :label="child.label"
-            :value="child.label"
-          />
-        </el-option-group>
+        <el-option
+          v-for="child in tagOptions"
+          :key="child.id"
+          :label="child.label"
+          :value="child.label"
+        />
       </el-select>
       <template #footer>
         <el-button @click="tagVisible = false">取消</el-button>
@@ -112,7 +114,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictTree } from '@/api'
+import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren } from '@/api'
 import { Search } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
@@ -121,6 +123,8 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
+const filterGroup = ref('')
+const groupOptions = ref<string[]>([])
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 const previewTitle = ref('')
@@ -130,14 +134,15 @@ const previewImages = ref<string[]>([])
 const tagVisible = ref(false)
 const tagSelection = ref<string[]>([])
 const tagCurrentRow = ref<any>(null)
-const dictTree = ref<any[]>([])
+const tagOptions = ref<any[]>([])
 
-const loadDictOptions = async () => {
+const loadTagOptions = async () => {
   try {
-    const res: any = await dictTree()
-    dictTree.value = res.data || []
+    // 通过后端接口，根据父级 value 获取 tag 的子项作为标签选项
+    const res: any = await dictChildren('tag')
+    tagOptions.value = res.data || []
   } catch {
-    dictTree.value = []
+    tagOptions.value = []
   }
 }
 
@@ -145,8 +150,8 @@ const openTagEditor = (row: any) => {
   tagCurrentRow.value = row
   tagSelection.value = [...(row.tags || [])]
   tagVisible.value = true
-  if (dictTree.value.length === 0) {
-    loadDictOptions()
+  if (tagOptions.value.length === 0) {
+    loadTagOptions()
   }
 }
 
@@ -180,7 +185,9 @@ const imageUrl = (objectName: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const res: any = await searchContent({ current: page.value, size: size.value, keyword: keyword.value })
+    const params: any = { current: page.value, size: size.value, keyword: keyword.value }
+    if (filterGroup.value) params.spiderGroup = filterGroup.value
+    const res: any = await searchContent(params)
     list.value = res.data?.content || []
     total.value = res.data?.totalElements || 0
   } finally {
@@ -225,7 +232,21 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
-onMounted(loadData)
+const loadGroupOptions = async () => {
+  try {
+    // 通过后端接口，根据父级 value 获取其子项列表
+    const res: any = await dictChildren('spider-group')
+    const children = res.data || []
+    groupOptions.value = children.map((c: any) => c.value || c.label).filter(Boolean)
+  } catch {
+    groupOptions.value = []
+  }
+}
+
+onMounted(() => {
+  loadGroupOptions()
+  loadData()
+})
 </script>
 
 <style scoped>
@@ -394,6 +415,11 @@ onMounted(loadData)
   padding: 2px 8px;
   border-radius: 3px;
   color: #666;
+}
+
+.group-tag {
+  background: #e8f4fd;
+  color: #409eff;
 }
 
 .empty {

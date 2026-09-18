@@ -44,6 +44,7 @@ export const searchDelete = (id: string) => request.delete(`/search/${id}`)
 export const searchUpdateTags = (id: string, tags: string[]) => request.put(`/search/${id}/tags`, tags)
 
 export const dictTree = () => request.get('/dict')
+export const dictChildren = (parentValue: string) => request.get(`/dict/children/${parentValue}`)
 export const dictCreate = (data: any) => request.post('/dict', data)
 export const dictUpdate = (id: number, data: any) => request.put(`/dict/${id}`, data)
 export const dictDelete = (id: number) => request.delete(`/dict/${id}`)

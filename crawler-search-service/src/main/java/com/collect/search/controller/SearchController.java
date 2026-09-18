@@ -27,10 +27,11 @@ public class SearchController {
     @GetMapping
     public R<Page<SearchResult>> search(@RequestParam(value = "keyword", required = false) String keyword,
                                               @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                              @RequestParam(value = "spiderGroup", required = false) String spiderGroup,
                                               @RequestParam(value = "current", defaultValue = "1") int current,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
         requirePermission("search:query");
-        return R.ok(searchService.search(keyword, spiderId, current, size));
+        return R.ok(searchService.search(keyword, spiderId, spiderGroup, current, size));
     }
 
     @Operation(summary = "数据详情")

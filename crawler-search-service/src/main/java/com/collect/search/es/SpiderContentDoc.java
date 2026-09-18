@@ -35,6 +35,9 @@ public class SpiderContentDoc {
     private String spiderName;
 
     @Field(type = FieldType.Keyword)
+    private String spiderGroup;
+
+    @Field(type = FieldType.Keyword)
     private String sourceType;
 
     @Field(type = FieldType.Date)
