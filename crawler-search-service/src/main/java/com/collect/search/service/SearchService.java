@@ -68,13 +68,11 @@ public class SearchService {
                 .size(pageRequest.getPageSize())
                 .query(query);
 
-        // 无搜索条件时，按爬取时间倒序排列
-        if (!hasKeyword) {
-            reqBuilder.sort(s -> s.field(f -> f
-                    .field("crawlTime")
-                    .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
-                    .missing("_last")));
-        }
+        // 默认按更新时间倒序排列
+        reqBuilder.sort(s -> s.field(f -> f
+                .field("updateTime")
+                .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
+                .missing("_last")));
 
         if (hasKeyword) {
             reqBuilder.highlight(h -> h
@@ -107,6 +105,7 @@ public class SearchService {
                 sr.setSpiderGroup(doc.getSpiderGroup());
                 sr.setSourceType(doc.getSourceType());
                 sr.setCrawlTime(doc.getCrawlTime());
+                sr.setUpdateTime(doc.getUpdateTime());
                 sr.setImages(doc.getImages());
                 sr.setTags(doc.getTags());
                 if (hit.highlight() != null) {
@@ -153,6 +152,7 @@ public class SearchService {
             throw new com.collect.common.exception.BizException("数据不存在");
         }
         doc.setTags(tags != null ? tags : List.of());
+        doc.setUpdateTime(java.time.Instant.now().toString());
         elasticsearchClient.index(i -> i.index(indexName).id(id).document(doc));
     }
 

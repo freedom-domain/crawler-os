@@ -17,6 +17,7 @@ public class SearchResult {
     private String spiderGroup;
     private String sourceType;
     private String crawlTime;
+    private String updateTime;
     private List<String> images;
     private List<String> tags;
 

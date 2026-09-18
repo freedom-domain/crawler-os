@@ -42,6 +42,7 @@ public class ElasticsearchIndexInitializer {
                 // 补充新增字段到已有索引的 mapping
                 ensureField(mappings, "spiderGroup");
                 ensureField(mappings, "tags");
+                ensureDateField(mappings, "updateTime");
             } else {
                 ops.create();
                 ops.putMapping(ops.createMapping(SpiderContentDoc.class));
@@ -62,6 +63,20 @@ public class ElasticsearchIndexInitializer {
                 log.info("已为索引 {} 添加字段: {}", contentIndex, field);
             } catch (Exception e) {
                 log.warn("添加字段 {} 失败: {}", field, e.getMessage());
+            }
+        }
+    }
+
+    private void ensureDateField(Map<String, Object> mappings, String field) {
+        if (extractFieldType(mappings, field) == null) {
+            try {
+                elasticsearchClient.indices().putMapping(m -> m
+                        .index(contentIndex)
+                        .properties(field, p -> p.date(d -> d))
+                );
+                log.info("已为索引 {} 添加日期字段: {}", contentIndex, field);
+            } catch (Exception e) {
+                log.warn("添加日期字段 {} 失败: {}", field, e.getMessage());
             }
         }
     }

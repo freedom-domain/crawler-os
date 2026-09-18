@@ -45,6 +45,9 @@ public class SpiderContentDoc {
     @Field(type = FieldType.Date)
     private String crawlTime;
 
+    @Field(type = FieldType.Date)
+    private String updateTime;
+
     @Field(type = FieldType.Keyword)
     private List<String> images;
 

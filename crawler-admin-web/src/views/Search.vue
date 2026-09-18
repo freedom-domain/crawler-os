@@ -55,6 +55,7 @@
           <span v-if="row.spiderName" class="meta-tag">{{ row.spiderName }}</span>
           <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
           <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
+          <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
           <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
             <el-button size="small" text type="primary">
               操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
@@ -570,6 +571,11 @@ onMounted(() => {
 .group-tag {
   background: #e8f4fd;
   color: #409eff;
+}
+
+.update-time {
+  color: #999;
+  font-size: 12px;
 }
 
 .empty {

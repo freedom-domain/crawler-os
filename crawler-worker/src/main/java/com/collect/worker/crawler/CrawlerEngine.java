@@ -146,18 +146,16 @@ public class CrawlerEngine {
                 SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                         criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
                 SpiderContentDoc matched = null;
-                boolean contentUnchanged = false;
                 for (SearchHit<SpiderContentDoc> hit : existing) {
                     SpiderContentDoc d = hit.getContent();
-                    if (md5(url).equals(d.getId())) {
+                    if (newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""))) {
                         matched = d;
-                        contentUnchanged = newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""));
                         break;
                     }
                 }
 
                 // 不覆盖HTML 且 内容未变化 → 跳过
-                if (!overwriteHtml && matched != null && contentUnchanged) {
+                if (!overwriteHtml && matched != null) {
                     writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
                     log.info("内容未变化，跳过: url={}", url);
@@ -175,6 +173,7 @@ public class CrawlerEngine {
                 docObj.setSpiderGroup(msg.getSpiderGroup());
                 docObj.setSourceType(msg.getType());
                 docObj.setCrawlTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+                docObj.setUpdateTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 docObj.setRawHtml(newHtml);
 
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
