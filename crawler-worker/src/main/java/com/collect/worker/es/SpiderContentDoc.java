@@ -48,6 +48,9 @@ public class SpiderContentDoc {
     @Field(type = FieldType.Keyword)
     private List<String> images;
 
+    @Field(type = FieldType.Keyword)
+    private List<String> tags;
+
     @Field(type = FieldType.Text, index = false)
     private String rawHtml;
 }

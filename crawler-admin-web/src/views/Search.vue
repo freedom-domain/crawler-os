@@ -3,20 +3,27 @@
     <template #header><span>数据搜索</span></template>
 
     <div class="search-bar">
-      <div class="search-box">
-        <el-icon class="search-icon"><Search /></el-icon>
-        <input
-          v-model="keyword"
-          class="search-input"
-          placeholder="搜索爬取的内容…"
-          @keyup.enter="loadData"
-        />
-        <button v-if="keyword" class="clear-btn" @click="keyword = ''; loadData()">&times;</button>
+      <div class="search-row">
+        <div class="search-box">
+          <el-icon class="search-icon"><Search /></el-icon>
+          <input
+            v-model="keyword"
+            class="search-input"
+            placeholder="搜索爬取的内容…"
+            @keyup.enter="loadData"
+          />
+          <button v-if="keyword" class="clear-btn" @click="keyword = ''; loadData()">&times;</button>
+        </div>
+        <el-button type="primary" class="search-btn" @click="loadData">搜索</el-button>
       </div>
-      <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="loadData">
-        <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
-      </el-select>
-      <el-button type="primary" class="search-btn" @click="loadData">搜索</el-button>
+      <div class="search-row filter-row">
+        <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="loadData">
+          <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+        </el-select>
+        <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
+          <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
+        </el-select>
+      </div>
     </div>
 
     <div v-if="total > 0" class="result-count">
@@ -38,6 +45,7 @@
             fit="cover"
             class="result-thumb"
             preview-teleported
+            hide-on-click-modal
           />
         </div>
         <div class="result-tags" v-if="row.tags && row.tags.length">
@@ -47,9 +55,19 @@
           <span v-if="row.spiderName" class="meta-tag">{{ row.spiderName }}</span>
           <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
           <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
-          <el-button size="small" text type="primary" @click="openTagEditor(row)">标签</el-button>
-          <el-button size="small" text type="primary" @click="showPreview(row)">预览</el-button>
-          <el-button size="small" text type="danger" @click="handleDelete(row)">删除</el-button>
+          <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
+            <el-button size="small" text type="primary">
+              操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="tag">标签</el-dropdown-item>
+                <el-dropdown-item command="previewImages">预览图片</el-dropdown-item>
+                <el-dropdown-item command="previewContent">预览内容</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
       <div v-if="!loading && list.length === 0" class="empty">
@@ -68,8 +86,34 @@
       @change="loadData"
     />
 
-    <el-dialog v-model="previewVisible" :title="previewTitle" width="80%" top="5vh" destroy-on-close>
-      <div v-loading="previewLoading">
+    <el-dialog
+      v-model="previewImagesVisible"
+      :width="isFullscreen ? '100%' : '80%'"
+      :top="isFullscreen ? '0' : '5vh'"
+      :class="{ 'fullscreen-dialog': isFullscreen }"
+      destroy-on-close
+    >
+      <template #header>
+        <div class="dialog-header">
+          <span>{{ previewTitle }} - 图片</span>
+          <div class="dialog-header-actions">
+            <div class="zoom-controls">
+              <el-button size="small" text @click="zoomOut">
+                <el-icon><ZoomOut /></el-icon>
+              </el-button>
+              <span class="zoom-level">{{ Math.round(imgZoom * 100) }}%</span>
+              <el-button size="small" text @click="zoomIn">
+                <el-icon><ZoomIn /></el-icon>
+              </el-button>
+            </div>
+            <el-button size="small" text type="primary" @click="toggleFullscreen">
+              <el-icon><component :is="isFullscreen ? 'Minus' : 'FullScreen'" /></el-icon>
+              {{ isFullscreen ? '退出全屏' : '全屏' }}
+            </el-button>
+          </div>
+        </div>
+      </template>
+      <div v-loading="previewLoading" :class="{ 'fullscreen-content': isFullscreen }">
         <div v-if="previewImages.length" class="preview-images">
           <el-image
             v-for="(img, idx) in previewImages"
@@ -79,9 +123,18 @@
             :initial-index="idx"
             fit="contain"
             class="preview-img"
+            :style="{ width: isFullscreen ? `${Math.round(30 * imgZoom)}%` : (imgWidths[idx] || '240px') }"
             preview-teleported
+            hide-on-click-modal
+            @load="onPreviewImgLoad($event, idx)"
           />
         </div>
+        <div v-else class="preview-empty">暂无图片</div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="previewContentVisible" :title="previewTitle + ' - 内容'" width="80%" top="5vh" destroy-on-close>
+      <div v-loading="previewLoading">
         <div class="preview-container" v-html="previewHtml"></div>
       </div>
     </el-dialog>
@@ -112,10 +165,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren } from '@/api'
-import { Search } from '@element-plus/icons-vue'
+import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -125,11 +178,70 @@ const total = ref(0)
 const keyword = ref('')
 const filterGroup = ref('')
 const groupOptions = ref<string[]>([])
-const previewVisible = ref(false)
+const filterTag = ref('')
+const previewImagesVisible = ref(false)
+const previewContentVisible = ref(false)
 const previewLoading = ref(false)
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewImages = ref<string[]>([])
+const imgWidths = ref<Record<number, string>>({})
+const isFullscreen = ref(false)
+const imgZoom = ref(1)
+
+const zoomIn = () => {
+  imgZoom.value = Math.min(imgZoom.value + 0.25, 4)
+}
+
+const zoomOut = () => {
+  imgZoom.value = Math.max(imgZoom.value - 0.25, 0.25)
+}
+
+const toggleFullscreen = async () => {
+  if (!isFullscreen.value) {
+    // 进入浏览器全屏
+    try {
+      await document.documentElement.requestFullscreen()
+    } catch {
+      // 浏览器拒绝全屏时仍切换 UI 状态
+    }
+    isFullscreen.value = true
+  } else {
+    // 退出浏览器全屏
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen()
+      } catch {
+        // ignore
+      }
+    }
+    isFullscreen.value = false
+  }
+}
+
+const MAX_IMG_WIDTH = 480
+const MIN_IMG_WIDTH = 160
+
+const onPreviewImgLoad = (e: Event, idx: number) => {
+  const img = e.target as HTMLImageElement
+  if (!img.naturalWidth) return
+  const baseW = Math.min(Math.max(img.naturalWidth, MIN_IMG_WIDTH), MAX_IMG_WIDTH)
+  imgWidths.value[idx] = Math.round(baseW * imgZoom.value) + 'px'
+}
+
+// 缩放变化时重新计算所有图片宽度
+watch(imgZoom, () => {
+  const keys = Object.keys(imgWidths.value)
+  if (keys.length === 0) return
+  // 重新触发 load 事件来更新宽度
+  const imgs = document.querySelectorAll('.preview-img img')
+  imgs.forEach((img, idx) => {
+    const el = img as HTMLImageElement
+    if (!el.naturalWidth) return
+    const baseW = Math.min(Math.max(el.naturalWidth, MIN_IMG_WIDTH), MAX_IMG_WIDTH)
+    imgWidths.value[idx] = Math.round(baseW * imgZoom.value) + 'px'
+  })
+})
 
 const tagVisible = ref(false)
 const tagSelection = ref<string[]>([])
@@ -187,6 +299,7 @@ const loadData = async () => {
   try {
     const params: any = { current: page.value, size: size.value, keyword: keyword.value }
     if (filterGroup.value) params.spiderGroup = filterGroup.value
+    if (filterTag.value) params.tag = filterTag.value
     const res: any = await searchContent(params)
     list.value = res.data?.content || []
     total.value = res.data?.totalElements || 0
@@ -195,22 +308,48 @@ const loadData = async () => {
   }
 }
 
-const showPreview = async (row: any) => {
-  previewVisible.value = true
+const showPreviewImages = async (row: any) => {
+  previewImagesVisible.value = true
   previewLoading.value = true
   previewTitle.value = row.title || '内容预览'
-  previewHtml.value = ''
   previewImages.value = row.images || []
+  imgWidths.value = {}
   try {
     const res: any = await searchDetail(row.id)
-    previewHtml.value = res.data?.rawHtml || '<p>无原始内容</p>'
     if (res.data?.images?.length) {
       previewImages.value = res.data.images
     }
   } catch {
+    // 加载失败时保留列表中的图片
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const showPreviewContent = async (row: any) => {
+  previewContentVisible.value = true
+  previewLoading.value = true
+  previewTitle.value = row.title || '内容预览'
+  previewHtml.value = ''
+  try {
+    const res: any = await searchDetail(row.id)
+    previewHtml.value = res.data?.rawHtml || '<p>无原始内容</p>'
+  } catch {
     previewHtml.value = '<p>加载失败</p>'
   } finally {
     previewLoading.value = false
+  }
+}
+
+const handleCommand = (command: string, row: any) => {
+  if (command === 'tag') {
+    openTagEditor(row)
+  } else if (command === 'previewImages') {
+    showPreviewImages(row)
+  } else if (command === 'previewContent') {
+    showPreviewContent(row)
+  } else if (command === 'delete') {
+    handleDelete(row)
   }
 }
 
@@ -245,6 +384,7 @@ const loadGroupOptions = async () => {
 
 onMounted(() => {
   loadGroupOptions()
+  loadTagOptions()
   loadData()
 })
 </script>
@@ -253,9 +393,19 @@ onMounted(() => {
 .search-bar {
   margin-bottom: 20px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
   max-width: 700px;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-row {
+  gap: 12px;
 }
 
 .search-box {
@@ -432,17 +582,19 @@ onMounted(() => {
 .preview-images {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 16px;
   margin-bottom: 16px;
+  align-items: flex-start;
 }
 
 .preview-img {
-  width: 160px;
-  height: 160px;
+  height: auto;
+  max-width: 100%;
   border-radius: 4px;
   border: 1px solid #eee;
   background: #fafafa;
   cursor: pointer;
+  transition: width 0.2s ease;
 }
 
 .preview-container {
@@ -452,5 +604,28 @@ onMounted(() => {
   border-radius: 4px;
   padding: 16px;
   background: #fff;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.fullscreen-content {
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+:deep(.fullscreen-dialog) {
+  margin: 0 !important;
+  height: 100vh;
+  border-radius: 0;
+}
+
+:deep(.fullscreen-dialog .el-dialog__body) {
+  height: calc(100vh - 54px);
+  overflow-y: auto;
 }
 </style>

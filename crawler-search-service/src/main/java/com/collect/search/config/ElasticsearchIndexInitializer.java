@@ -41,6 +41,7 @@ public class ElasticsearchIndexInitializer {
                 }
                 // 补充新增字段到已有索引的 mapping
                 ensureField(mappings, "spiderGroup");
+                ensureField(mappings, "tags");
             } else {
                 ops.create();
                 ops.putMapping(ops.createMapping(SpiderContentDoc.class));

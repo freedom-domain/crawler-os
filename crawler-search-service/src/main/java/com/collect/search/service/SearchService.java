@@ -30,7 +30,7 @@ public class SearchService {
         this.elasticsearchClient = elasticsearchClient;
     }
 
-    public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup,
+    public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
                                      int current, int size) {
         PageRequest pageRequest = PageRequest.of(current - 1, size);
 
@@ -53,7 +53,14 @@ public class SearchService {
             boolBuilder.must(m -> m.term(t -> t.field("spiderGroup").value(spiderGroup)));
         }
 
+        if (tag != null && !tag.isBlank()) {
+            // tags 字段为 text 类型（带 keyword 子字段），需查询 tags.keyword 才能精确匹配
+            boolBuilder.must(m -> m.term(t -> t.field("tags.keyword").value(tag)));
+        }
+
         Query query = Query.of(q -> q.bool(boolBuilder.build()));
+
+        boolean hasKeyword = keyword != null && !keyword.isBlank();
 
         SearchRequest.Builder reqBuilder = new SearchRequest.Builder()
                 .index(indexName)
@@ -61,7 +68,15 @@ public class SearchService {
                 .size(pageRequest.getPageSize())
                 .query(query);
 
-        if (keyword != null && !keyword.isBlank()) {
+        // 无搜索条件时，按爬取时间倒序排列
+        if (!hasKeyword) {
+            reqBuilder.sort(s -> s.field(f -> f
+                    .field("crawlTime")
+                    .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
+                    .missing("_last")));
+        }
+
+        if (hasKeyword) {
             reqBuilder.highlight(h -> h
                     .preTags("<em>")
                     .postTags("</em>")
