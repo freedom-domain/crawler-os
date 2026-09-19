@@ -129,12 +129,22 @@ const triggerStyle = computed(() => ({
 const toolbarStyle = computed(() => {
   const { x, y } = triggerPos.value
   const vw = window.innerWidth
+  const vh = window.innerHeight
   // 判断按钮在左边还是右边
   const isLeft = x < vw / 2
+  // 工具栏高度约 200px，确保不超出顶部
+  const toolbarHeight = 200
+  let top = y - 80
+  if (top < 10) {
+    top = 10
+  }
+  if (top + toolbarHeight > vh - 10) {
+    top = vh - 10 - toolbarHeight
+  }
   return {
     position: 'fixed',
     left: isLeft ? `${x + 45}px` : `${x - 150}px`,
-    top: `${y - 80}px`,
+    top: `${top}px`,
     right: 'auto',
     transform: 'none',
     zIndex: 20
@@ -153,10 +163,12 @@ const startDrag = (e: MouseEvent) => {
 
 const onDrag = (e: MouseEvent) => {
   if (!isDragging.value) return
-  triggerPos.value = {
-    x: e.clientX - dragOffset.value.x,
-    y: e.clientY - dragOffset.value.y
-  }
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  // 限制在窗口内
+  const x = Math.max(0, Math.min(vw - 40, e.clientX - dragOffset.value.x))
+  const y = Math.max(0, Math.min(vh - 40, e.clientY - dragOffset.value.y))
+  triggerPos.value = { x, y }
 }
 
 const endDrag = () => {
@@ -166,7 +178,6 @@ const endDrag = () => {
   // 吸附到最近的边
   const { x, y } = triggerPos.value
   const vw = window.innerWidth
-  const vh = window.innerHeight
   const snapX = x < vw / 2 ? 0 : vw - 40
   triggerPos.value = { x: snapX, y }
 }
