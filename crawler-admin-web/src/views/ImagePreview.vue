@@ -446,13 +446,13 @@ onBeforeUnmount(() => {
 }
 .thumb {
   display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 88vh;
+  width: 100%;
+  height: 100vh;
+  object-fit: contain;
   border-radius: 10px;
   cursor: zoom-in;
   transition: transform 0.15s, box-shadow 0.15s;
+  background: #f8fafc;
 }
 .thumb:hover {
   transform: translateY(-2px);
