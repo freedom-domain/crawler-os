@@ -1,30 +1,46 @@
 <template>
   <div class="image-preview-page">
-    <!-- 顶部标题栏 -->
-    <header class="page-header">
-      <h1 class="page-title">{{ title }}</h1>
-      <div class="header-meta">
-        <span class="img-count">{{ images.length }} 张图片</span>
-        <label class="cols-control">
-          每行
-          <input
-            v-model.number="colsInput"
-            type="number"
-            min="1"
-            max="20"
-            class="cols-input"
-            @change="onColsChange"
-          />
-          张
-        </label>
-        <div class="toolbar">
-          <button type="button" class="tool-btn" @click="gridZoom(-0.1)" title="缩小网格">−</button>
-          <span class="zoom-label">{{ Math.round(gridScale * 100) }}%</span>
-          <button type="button" class="tool-btn" @click="gridZoom(0.1)" title="放大网格">＋</button>
-          <button type="button" class="tool-btn" @click="gridScale = 1" title="重置网格缩放">重置</button>
-        </div>
+    <!-- 工具栏触发按钮 -->
+    <button 
+      type="button" 
+      class="toolbar-trigger"
+      @mouseenter="showToolbar = true"
+      @mouseleave="showToolbar = false"
+    >
+      <el-icon><Setting /></el-icon>
+    </button>
+    
+    <!-- 工具栏 -->
+    <div 
+      v-show="showToolbar" 
+      class="toolbar-header"
+      @mouseenter="showToolbar = true"
+      @mouseleave="showToolbar = false"
+    >
+      <div class="toolbar-section">
+        <span class="section-label">图片</span>
+        <span class="img-count">{{ images.length }}</span>
       </div>
-    </header>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-section">
+        <span class="section-label">每行</span>
+        <input
+          v-model.number="colsInput"
+          type="number"
+          min="1"
+          max="20"
+          class="cols-input"
+          @change="onColsChange"
+        />
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-section zoom-section">
+        <button type="button" class="tool-btn" @click="gridZoom(-0.1)" title="缩小">−</button>
+        <span class="zoom-label">{{ Math.round(gridScale * 100) }}%</span>
+        <button type="button" class="tool-btn" @click="gridZoom(0.1)" title="放大">＋</button>
+      </div>
+      <button type="button" class="reset-btn" @click="gridScale = 1" title="重置">重置</button>
+    </div>
 
     <!-- 图片列表：直接显示图片，无卡片容器，每行张数可输入 -->
     <div class="grid-wrapper">
@@ -79,6 +95,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import { Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -93,6 +110,7 @@ const viewerIndex = ref(0)
 const viewerScale = ref(1)
 const stageRef = ref<HTMLElement | null>(null)
 const imgRef = ref<HTMLImageElement | null>(null)
+const showToolbar = ref(false)
 
 // 窗口标题跟随内容标题
 watch(title, (t) => {
@@ -234,33 +252,123 @@ onBeforeUnmount(() => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 }
 
-/* ===== 顶部标题栏 ===== */
-.page-header {
-  position: sticky;
-  top: 0;
+/* ===== 工具栏 ===== */
+.toolbar-header {
+  position: fixed;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
   z-index: 20;
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 14px 24px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 12px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
 }
-.page-title {
-  font-size: 17px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 60%;
-}
-.header-meta {
+.toolbar-section {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
+  gap: 6px;
+}
+.section-label {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+.img-count {
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+}
+.toolbar-divider {
+  width: 24px;
+  height: 1px;
+  background: #e2e8f0;
+}
+.cols-input {
+  width: 40px;
+  height: 28px;
+  text-align: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.cols-input:focus {
+  border-color: #3b82f6;
+}
+.zoom-section {
+  flex-direction: row;
+  gap: 8px;
+}
+.tool-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font-size: 16px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s;
+}
+.tool-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.zoom-label {
+  font-size: 12px;
+  color: #64748b;
+  min-width: 36px;
+  text-align: center;
+}
+.reset-btn {
+  padding: 6px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.reset-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.toolbar-trigger {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #64748b;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s;
+}
+.toolbar-trigger:hover {
+  background: #fff;
+  color: #3b82f6;
+  border-color: #94a3b8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 .img-count {
   font-size: 13px;
