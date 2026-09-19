@@ -42,7 +42,7 @@
       </el-table-column>
       <el-table-column prop="successCount" label="成功" width="70" align="center" />
       <el-table-column prop="failCount" label="失败" width="70" align="center" />
-      <el-table-column label="操作" width="220">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <el-button v-if="row.status === 'RUNNING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>
           <el-button size="small" type="primary" text @click="showLogs(row)">日志</el-button>

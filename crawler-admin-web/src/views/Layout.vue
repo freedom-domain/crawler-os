@@ -40,7 +40,12 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                <el-dropdown-item command="profile">
+                  <span class="dropdown-item-label">用户信息</span>
+                </el-dropdown-item>
+                <el-dropdown-item command="logout" divided>
+                  <span class="dropdown-item-label">退出登录</span>
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -56,13 +61,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, defineComponent, h } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMenu } from '@/api'
-import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
+import { ElIcon, ElSubMenu, ElMenuItem, ElMessageBox } from 'element-plus'
 import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const collapsed = ref(false)
 const menuList = ref<any[]>([])
@@ -117,10 +123,18 @@ const getIcon = (item: any) => {
   return iconMap[item.icon] || iconMap[item.code] || MenuIcon
 }
 
+const sortMenu = (items: any[]): any[] => {
+  return [...items].sort((a, b) => (a.sort || 0) - (b.sort || 0))
+}
+
 const loadMenu = async () => {
   try {
     const res: any = await getMenu()
-    menuList.value = res.data || []
+    const data = res.data || []
+    menuList.value = sortMenu(data).map(item => ({
+      ...item,
+      children: item.children ? sortMenu(item.children) : []
+    }))
   } catch {
     menuList.value = []
   }
@@ -146,7 +160,16 @@ const currentTitle = computed(() => {
 
 const handleCommand = (cmd: string) => {
   if (cmd === 'logout') {
-    userStore.logout()
+    ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      userStore.logout()
+      router.push('/login')
+    }).catch(() => {})
+  } else if (cmd === 'profile') {
+    router.push('/profile')
   }
 }
 </script>
@@ -255,6 +278,10 @@ const handleCommand = (cmd: string) => {
 .user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
 .user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
 .user-label { color: #243b53; font-size: 14px; font-weight: 600; }
+.user-dropdown-info { padding: 12px 16px; border-bottom: 1px solid #ebeef5; }
+.user-dropdown-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+.user-dropdown-row .label { color: #909399; }
+.user-dropdown-row .value { color: #303133; font-weight: 500; }
 :deep(.el-main) { padding: 30px; background: var(--canvas); overflow: auto; }
 @media (max-width: 1100px) {
   .layout { min-width: 0; }

@@ -9,7 +9,7 @@
     </el-form>
 
     <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }">
-      <el-table-column prop="name" label="权限名称" width="200" />
+      <el-table-column prop="name" label="权限名称" min-width="200" />
       <el-table-column label="图标" width="90" align="center">
         <template #default="{ row }">
           <el-icon v-if="row.icon" class="permission-icon"><component :is="iconLibrary[row.icon]" /></el-icon>
@@ -26,11 +26,17 @@
       </el-table-column>
       <el-table-column prop="path" label="路由路径" width="160" />
       <el-table-column prop="sort" label="排序" width="80" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link @click="openCreate(row)">新增子项</el-button>
-          <el-button type="warning" link @click="openEdit(row)">编辑</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          <div class="action-buttons">
+            <el-button type="primary" link @click="openCreate(row)">新增子项</el-button>
+            <el-button type="warning" link @click="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          </div>
+          <div class="action-buttons">
+            <el-button link @click="moveUp(row)" :disabled="isFirst(row)">上移</el-button>
+            <el-button link @click="moveDown(row)" :disabled="isLast(row)">下移</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -76,7 +82,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { permissionTree, permissionCreate, permissionUpdate, permissionDelete } from '@/api'
-import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection } from '@element-plus/icons-vue'
+import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection, Rank, ArrowRight } from '@element-plus/icons-vue'
 
 const tree = ref<any[]>([])
 const loading = ref(false)
@@ -106,11 +112,21 @@ const iconLibrary = Object.fromEntries(iconOptions.map(item => [item.value, item
 const typeLabel = (type: number) => (type === 0 ? '目录' : type === 1 ? '菜单' : '按钮')
 const typeTag = (type: number) => (type === 0 ? 'warning' : type === 1 ? 'primary' : 'info')
 
+const setLevel = (nodes: any[], level = 0) => {
+  for (const node of nodes) {
+    node.level = level
+    if (node.children && node.children.length > 0) {
+      setLevel(node.children, level + 1)
+    }
+  }
+}
+
 const loadData = async () => {
   loading.value = true
   try {
     const res: any = await permissionTree()
     tree.value = res.data || []
+    setLevel(tree.value)
   } finally {
     loading.value = false
   }
@@ -176,6 +192,71 @@ const handleDelete = (row: any) => {
     }).catch(() => {})
 }
 
+const moveUp = async (row: any) => {
+  const siblings = getSiblings(row)
+  const idx = siblings.findIndex(s => s.id === row.id)
+  if (idx <= 0) return
+  // 交换位置
+  const temp = siblings[idx - 1]
+  siblings[idx - 1] = siblings[idx]
+  siblings[idx] = temp
+  // 更新排序
+  for (let i = 0; i < siblings.length; i++) {
+    if (siblings[i].sort !== i) {
+      await permissionUpdate(siblings[i].id, { ...siblings[i], sort: i })
+    }
+  }
+  ElMessage.success('已上移')
+  loadData()
+}
+
+const moveDown = async (row: any) => {
+  const siblings = getSiblings(row)
+  const idx = siblings.findIndex(s => s.id === row.id)
+  if (idx < 0 || idx >= siblings.length - 1) return
+  // 交换位置
+  const temp = siblings[idx + 1]
+  siblings[idx + 1] = siblings[idx]
+  siblings[idx] = temp
+  // 更新排序
+  for (let i = 0; i < siblings.length; i++) {
+    if (siblings[i].sort !== i) {
+      await permissionUpdate(siblings[i].id, { ...siblings[i], sort: i })
+    }
+  }
+  ElMessage.success('已下移')
+  loadData()
+}
+
+const getSiblings = (row: any): any[] => {
+  const parentId = row.parentId
+  if (!parentId || parentId === 0) {
+    return tree.value
+  }
+  const findNode = (nodes: any[], targetId: number): any | null => {
+    for (const node of nodes) {
+      if (node.id === targetId) return node
+      if (node.children && node.children.length > 0) {
+        const result = findNode(node.children, targetId)
+        if (result) return result
+      }
+    }
+    return null
+  }
+  const parent = findNode(tree.value, parentId)
+  return parent?.children || []
+}
+
+const isFirst = (row: any): boolean => {
+  const siblings = getSiblings(row)
+  return siblings.findIndex(s => s.id === row.id) <= 0
+}
+
+const isLast = (row: any): boolean => {
+  const siblings = getSiblings(row)
+  return siblings.findIndex(s => s.id === row.id) >= siblings.length - 1
+}
+
 onMounted(loadData)
 </script>
 
@@ -183,4 +264,5 @@ onMounted(loadData)
 .permission-icon { color: #16a6a3; font-size: 18px; vertical-align: middle; }
 .icon-empty { color: #9fb3c8; font-size: 12px; }
 .icon-option { display: flex; align-items: center; gap: 8px; }
+.action-buttons { display: flex; gap: 4px; margin: 2px 0; }
 </style>

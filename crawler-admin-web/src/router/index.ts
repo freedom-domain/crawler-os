@@ -32,7 +32,8 @@ const router = createRouter({
         { path: 'dict', name: 'Dict', component: () => import('@/views/Dict.vue') },
         { path: 'user', name: 'User', component: () => import('@/views/User.vue') },
         { path: 'role', name: 'Role', component: () => import('@/views/Role.vue') },
-        { path: 'permission', name: 'Permission', component: () => import('@/views/Permission.vue') }
+        { path: 'permission', name: 'Permission', component: () => import('@/views/Permission.vue') },
+        { path: 'profile', name: 'Profile', component: () => import('@/views/Profile.vue') }
       ]
     }
   ]

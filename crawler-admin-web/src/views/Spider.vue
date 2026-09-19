@@ -46,14 +46,21 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="320">
+      <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" type="primary" @click="handleRun(row)" :loading="row._running">执行</el-button>
-          <el-button size="small" @click="row.status === 1 ? handleStop(row) : handleStart(row)">
-            {{ row.status === 1 ? '停止' : '启动' }}
-          </el-button>
-          <el-button size="small" @click="showEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row)">删除</el-button>
+          <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
+            <el-button size="small" type="primary">
+              操作 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="run" :disabled="row._running">执行</el-dropdown-item>
+                <el-dropdown-item command="toggle">{{ row.status === 1 ? '停止' : '启动' }}</el-dropdown-item>
+                <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -112,7 +119,32 @@
           <div class="form-tip">开启后，遵循目标站点 robots.txt 中的 Disallow 规则</div>
         </el-form-item>
         <el-form-item label="调度表达式">
-          <el-input v-model="form.schedule" placeholder="如: 0 */10 * * * ?" />
+          <div class="schedule-builder">
+            <el-select v-model="scheduleType" placeholder="选择频率" style="width: 120px" @change="generateSchedule">
+              <el-option label="每分钟" value="minute" />
+              <el-option label="每小时" value="hour" />
+              <el-option label="每天" value="day" />
+              <el-option label="每周" value="week" />
+              <el-option label="每月" value="month" />
+              <el-option label="自定义" value="custom" />
+            </el-select>
+            <el-input-number v-if="scheduleType === 'minute' || scheduleType === 'hour'" v-model="scheduleInterval" :min="1" :max="scheduleType === 'minute' ? 59 : 23" style="width: 100px" @change="generateSchedule" />
+            <span v-if="scheduleType === 'minute'">分钟</span>
+            <span v-if="scheduleType === 'hour'">小时</span>
+            <el-time-picker v-if="scheduleType === 'day' || scheduleType === 'week' || scheduleType === 'month'" v-model="scheduleTime" format="HH:mm" value-format="HH:mm" style="width: 120px" @change="generateSchedule" />
+            <el-select v-if="scheduleType === 'week'" v-model="scheduleWeekDay" placeholder="星期" style="width: 80px" @change="generateSchedule">
+              <el-option label="一" :value="1" />
+              <el-option label="二" :value="2" />
+              <el-option label="三" :value="3" />
+              <el-option label="四" :value="4" />
+              <el-option label="五" :value="5" />
+              <el-option label="六" :value="6" />
+              <el-option label="日" :value="0" />
+            </el-select>
+            <el-input-number v-if="scheduleType === 'month'" v-model="scheduleDay" :min="1" :max="31" style="width: 80px" @change="generateSchedule" />
+            <span v-if="scheduleType === 'month'">日</span>
+          </div>
+          <el-input v-model="form.schedule" placeholder="生成的 Cron 表达式" class="schedule-result" />
         </el-form-item>
         <el-form-item label="超时(ms)">
           <el-input-number v-model="form.timeout" :min="1000" :max="60000" :step="1000" />
@@ -131,7 +163,7 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, dictTree } from '@/api'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const tableRef = ref<any>(null)
@@ -152,6 +184,35 @@ const form = ref({
   name: '', description: '', type: 'http', group: '',
   contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
 })
+
+// 调度表达式生成器
+const scheduleType = ref('')
+const scheduleInterval = ref(10)
+const scheduleTime = ref('00:00')
+const scheduleWeekDay = ref(1)
+const scheduleDay = ref(1)
+
+const generateSchedule = () => {
+  const time = scheduleTime.value || '00:00'
+  const [hour, minute] = time.split(':')
+  switch (scheduleType.value) {
+    case 'minute':
+      form.value.schedule = `0 */${scheduleInterval.value} * * * ?`
+      break
+    case 'hour':
+      form.value.schedule = `0 ${minute} */${scheduleInterval.value} * * ?`
+      break
+    case 'day':
+      form.value.schedule = `0 ${minute} ${hour} * * ?`
+      break
+    case 'week':
+      form.value.schedule = `0 ${minute} ${hour} ? * ${scheduleWeekDay.value}`
+      break
+    case 'month':
+      form.value.schedule = `0 ${minute} ${hour} ${scheduleDay.value} * ?`
+      break
+  }
+}
 
 const loadGroupOptions = async () => {
   try {
@@ -291,6 +352,15 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
+const handleCommand = (cmd: string, row: any) => {
+  switch (cmd) {
+    case 'run': handleRun(row); break
+    case 'toggle': row.status === 1 ? handleStop(row) : handleStart(row); break
+    case 'edit': showEdit(row); break
+    case 'delete': handleDelete(row); break
+  }
+}
+
 watch(
   () => route.query.spiderId,
   (val) => {
@@ -329,5 +399,15 @@ onMounted(() => {
 }
 :deep(.spider-dialog .el-form-item__label) {
   white-space: nowrap;
+}
+.schedule-builder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.schedule-result {
+  width: 100%;
 }
 </style>

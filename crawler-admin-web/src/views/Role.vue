@@ -56,6 +56,10 @@
 
     <!-- 分配权限 -->
     <el-dialog v-model="assignVisible" title="分配权限" width="480px">
+      <div class="tree-toolbar">
+        <el-button size="small" @click="checkAll">全选</el-button>
+        <el-button size="small" @click="uncheckAll">取消全选</el-button>
+      </div>
       <el-tree
         ref="treeRef"
         :data="permTree"
@@ -184,6 +188,26 @@ const openAssign = async (row: any) => {
   }, 100)
 }
 
+const getAllIds = (nodes: any[]): number[] => {
+  let ids: number[] = []
+  for (const node of nodes) {
+    ids.push(node.id)
+    if (node.children && node.children.length > 0) {
+      ids = ids.concat(getAllIds(node.children))
+    }
+  }
+  return ids
+}
+
+const checkAll = () => {
+  const allIds = getAllIds(permTree.value)
+  allIds.forEach(id => treeRef.value?.setChecked(id, true, false))
+}
+
+const uncheckAll = () => {
+  treeRef.value?.setCheckedKeys([])
+}
+
 const saveAssign = async () => {
   if (!currentRoleId.value) return
   saving.value = true
@@ -204,4 +228,5 @@ onMounted(loadData)
 <style scoped>
 .permission-tree-node { display: inline-flex; align-items: center; gap: 8px; color: #243b53; }
 .tree-icon { color: #16a6a3; font-size: 16px; }
+.tree-toolbar { margin-bottom: 12px; display: flex; gap: 8px; }
 </style>
