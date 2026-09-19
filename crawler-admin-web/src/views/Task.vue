@@ -23,9 +23,13 @@
         <el-option label="已取消" value="CANCELED" />
       </el-select>
       <el-button type="primary" @click="loadData" :icon="Search" style="margin-left: 8px">查询</el-button>
+      <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length === 0" style="margin-left: 8px">
+        批量删除 ({{ selectedRows.length }})
+      </el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" stripe>
+    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange">
+      <el-table-column type="selection" width="50" />
       <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip />
       <el-table-column prop="spiderName" label="爬虫名称" width="160" />
       <el-table-column label="状态" width="100">
@@ -126,7 +130,7 @@ const list = ref<any[]>([])
 const loading = ref(false)
 const prevStatusMap = new Map<string, string>()
 const page = ref(1)
-const size = ref(20)
+const size = ref(10)
 const total = ref(0)
 const statusFilter = ref('')
 const spiderFilter = ref<number | null>(null)
@@ -139,6 +143,33 @@ const logLoading = ref(false)
 const logs = ref<any[]>([])
 const logPage = ref(1)
 const logSize = ref(50)
+const selectedRows = ref<any[]>([])
+
+const handleSelectionChange = (rows: any[]) => {
+  selectedRows.value = rows
+}
+
+const handleBatchDelete = async () => {
+  if (selectedRows.value.length === 0) return
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 个任务吗？`, '提示', { type: 'warning' })
+  } catch {
+    return
+  }
+  loading.value = true
+  try {
+    for (const row of selectedRows.value) {
+      await taskDelete(row.id)
+    }
+    ElMessage.success(`成功删除 ${selectedRows.value.length} 个任务`)
+    selectedRows.value = []
+    loadData()
+  } catch {
+    ElMessage.error('批量删除失败')
+  } finally {
+    loading.value = false
+  }
+}
 const logTotal = ref(0)
 const currentTask = ref<any>(null)
 const logKeyword = ref('')

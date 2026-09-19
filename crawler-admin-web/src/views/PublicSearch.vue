@@ -1,12 +1,5 @@
 <template>
   <div class="public-search">
-    <header class="ps-header">
-      <div class="ps-brand">
-        <span class="ps-logo">C</span>
-        <span class="ps-title">Crawler<span>OS</span> 数据搜索</span>
-      </div>
-    </header>
-
     <main class="ps-main">
       <div class="search-bar">
         <div class="search-row">
@@ -15,7 +8,7 @@
             <input
               v-model="keyword"
               class="search-input"
-              placeholder="搜索爬取的内容…"
+              placeholder="输入关键词"
               @keyup.enter="doSearch"
             />
             <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
@@ -23,10 +16,10 @@
           <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
         </div>
         <div class="search-row filter-row">
-          <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="onGroupChange">
+          <el-select v-model="filterGroup" placeholder="分组" clearable style="width: 160px" @change="onGroupChange">
             <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
           </el-select>
-          <el-select v-model="filterSpider" placeholder="爬虫" clearable filterable style="width: 200px" @change="onSpiderChange">
+          <el-select v-model="filterSpider" placeholder="站点" clearable filterable style="width: 200px" @change="onSpiderChange">
             <el-option-group v-for="sec in spiderGroupedOptions" :key="sec.key" :label="sec.label">
               <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
             </el-option-group>
@@ -546,48 +539,6 @@ onMounted(() => {
   background: #f5f6f8;
   display: flex;
   flex-direction: column;
-}
-
-.ps-header {
-  height: 64px;
-  background: linear-gradient(180deg, #132b47 0%, #10243d 100%);
-  display: flex;
-  align-items: center;
-  padding: 0 28px;
-  box-shadow: 0 2px 12px rgba(16, 42, 67, .18);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.ps-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #fff;
-}
-
-.ps-logo {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, .2);
-  border-radius: 9px;
-  color: #172b4d;
-  background: #72e0c8;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.ps-title {
-  font-size: 19px;
-  font-weight: 800;
-  letter-spacing: .5px;
-}
-
-.ps-title span {
-  color: #72e0c8;
 }
 
 .ps-main {

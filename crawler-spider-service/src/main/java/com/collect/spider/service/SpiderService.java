@@ -230,10 +230,12 @@ public class SpiderService {
         if (task == null) {
             throw new BizException("任务不存在");
         }
-        LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
-        qw.eq(SpiderTaskLog::getTaskId, task.getTaskId());
-        logMapper.delete(qw);
-        taskMapper.deleteById(id);
+        log.info("删除任务: id={}, taskId={}", id, task.getTaskId());
+        // 任务日志的 task_id 字段存储的是任务的主键 id
+        int deletedLogs = logMapper.physicalDeleteByTaskId(id);
+        log.info("删除任务日志: taskId={}, 删除数量={}", id, deletedLogs);
+        taskMapper.physicalDeleteById(id);
+        log.info("删除任务记录: id={}", id);
     }
 
     public void cancelTask(Long id) {
