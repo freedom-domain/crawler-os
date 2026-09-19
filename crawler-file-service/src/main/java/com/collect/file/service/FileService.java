@@ -1,5 +1,6 @@
 package com.collect.file.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
@@ -83,6 +84,9 @@ public class FileService {
                     .bucket(bucket)
                     .object(objectName)
                     .build());
+                fileMetadataMapper.delete(new QueryWrapper<FileMetadata>()
+                        .eq("bucket", bucket)
+                        .eq("object_name", objectName));
         } catch (Exception e) {
             throw new BizException("文件删除失败: " + e.getMessage());
         }
