@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.InputStream;
 
@@ -24,12 +25,18 @@ public class FileController {
 
     private final FileService fileService;
 
+    @Value("${minio.file-bucket:crawler-files}")
+    private String fileBucket;
+
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
     public R<FileMetadata> upload(@RequestParam("file") MultipartFile file,
-                                   @RequestParam(value = "bucket", defaultValue = "crawler") String bucket,
+                                   @RequestParam(value = "bucket", required = false) String bucket,
                                    @RequestParam(value = "category", defaultValue = "file") String category,
                                    @RequestParam(value = "spiderId", required = false) Long spiderId) {
+        if (bucket == null || bucket.isBlank()) {
+            bucket = fileBucket;
+        }
         return R.ok(fileService.upload(bucket, file, category, spiderId));
     }
 
@@ -72,12 +79,21 @@ public class FileController {
         return R.ok();
     }
 
+    @Operation(summary = "按条件删除文件")
+    @DeleteMapping("/condition")
+    public R<Integer> deleteByCondition(@RequestParam(value = "category", required = false) String category,
+                                         @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                         @RequestParam(value = "title", required = false) String title) {
+        return R.ok(fileService.deleteByCondition(category, spiderId, title));
+    }
+
     @Operation(summary = "文件分页列表")
     @GetMapping("/page")
     public R<IPage<FileMetadata>> page(@RequestParam(value = "current", defaultValue = "1") int current,
                                         @RequestParam(value = "size", defaultValue = "10") int size,
                                         @RequestParam(value = "category", required = false) String category,
-                                        @RequestParam(value = "spiderId", required = false) Long spiderId) {
-        return R.ok(fileService.page(current, size, category, spiderId));
+                                        @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                        @RequestParam(value = "title", required = false) String title) {
+        return R.ok(fileService.page(current, size, category, spiderId, title));
     }
 }

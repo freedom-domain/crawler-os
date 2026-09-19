@@ -1,10 +1,11 @@
 <template>
   <div class="file-page">
-    <el-card>
+    <el-card v-loading="deleting" element-loading-text="正在删除文件及 MinIO 对象...">
       <template #header>
         <div class="card-header">
           <span>文件管理</span>
           <div>
+            <el-input v-model="filterTitle" placeholder="搜索标题" clearable style="width: 180px; margin-right: 12px" @keyup.enter="refresh" @clear="refresh" />
             <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 140px; margin-right: 12px" @change="refresh">
               <el-option label="文件" value="file" />
               <el-option label="图片" value="image" />
@@ -13,10 +14,11 @@
             <el-select v-model="filterSpider" placeholder="全部爬虫" clearable filterable style="width: 160px; margin-right: 12px" @change="refresh">
               <el-option v-for="spider in spiders" :key="spider.id" :label="spider.name" :value="spider.id" />
             </el-select>
-            <el-button type="danger" plain size="small" :disabled="selectedRows.length === 0" @click="removeSelected">
+            <el-button type="danger" plain size="small" :disabled="deleting || selectedRows.length === 0" @click="removeSelected">
               批量删除<span v-if="selectedRows.length">（{{ selectedRows.length }}）</span>
             </el-button>
-            <el-button type="primary" size="small" @click="refresh">
+            <el-button type="danger" plain size="small" :disabled="deleting || !hasFilters" @click="removeByCondition">删除筛选结果</el-button>
+            <el-button type="primary" size="small" :disabled="deleting" @click="refresh">
               <el-icon><Refresh /></el-icon>刷新
             </el-button>
           </div>
@@ -26,13 +28,11 @@
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event">
         <el-table-column type="selection" width="48" />
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="bucket" label="存储桶" width="120" />
-        <el-table-column prop="category" label="分类" width="100" />
+        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
         <el-table-column prop="crawlerName" label="所属爬虫" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.crawlerName || '-' }}</template>
         </el-table-column>
+        <el-table-column prop="category" label="分类" width="100" />
         <el-table-column label="来源" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link v-if="row.source" :href="row.source" target="_blank" rel="noopener noreferrer" type="primary">
@@ -46,11 +46,14 @@
         </el-table-column>
         <el-table-column prop="contentType" label="类型" width="160" show-overflow-tooltip />
         <el-table-column prop="createTime" label="上传时间" width="170" />
+        <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="bucket" label="存储桶" width="120" />
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button v-if="canPreview(row)" type="primary" link size="small" @click="preview(row)">预览</el-button>
             <el-button type="primary" link size="small" @click="download(row)">下载</el-button>
-            <el-button type="danger" link size="small" @click="remove(row)">删除</el-button>
+            <el-button type="danger" link size="small" :disabled="deleting" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -68,17 +71,32 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="previewVisible" title="图片预览" width="760px" @closed="clearPreview">
+    <el-dialog v-model="previewVisible" :title="previewRow?.title || '图片预览'" width="820px" @closed="clearPreview">
       <div v-loading="previewLoading" class="preview-body">
-        <img v-if="previewUrl" :src="previewUrl" :alt="previewRow?.fileName || '图片预览'" />
-        <el-empty v-else description="图片加载失败" />
+        <el-image
+          v-if="previewUrl && !previewError"
+          :src="previewUrl"
+          :alt="previewRow?.fileName || '图片预览'"
+          fit="contain"
+          class="preview-image"
+          :preview-src-list="[previewUrl]"
+          preview-teleported
+          hide-on-click-modal
+          @error="previewError = true"
+        />
+        <el-empty v-else-if="previewError" description="图片加载失败，请重新尝试" />
+        <el-empty v-else description="暂无预览内容" />
+      </div>
+      <div v-if="previewRow && !previewError" class="preview-meta">
+        <span>{{ previewRow.fileName || previewRow.objectName }}</span>
+        <el-button link type="primary" size="small" @click="download(previewRow)">下载原图</el-button>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { filePage, spiderPage } from '@/api'
@@ -89,12 +107,16 @@ const tableData = ref<any[]>([])
 const selectedRows = ref<any[]>([])
 const filterCategory = ref('')
 const filterSpider = ref<number | null>(null)
+const filterTitle = ref('')
 const spiders = ref<any[]>([])
 const page = reactive({ current: 1, size: 10, total: 0 })
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 const previewUrl = ref('')
 const previewRow = ref<any>(null)
+const previewError = ref(false)
+const deleting = ref(false)
+const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterTitle.value.trim()))
 
 const formatSize = (bytes: number) => {
   if (!bytes && bytes !== 0) return '-'
@@ -110,6 +132,7 @@ const loadData = async () => {
     const params: any = { current: page.current, size: page.size }
     if (filterCategory.value) params.category = filterCategory.value
     if (filterSpider.value) params.spiderId = filterSpider.value
+    if (filterTitle.value.trim()) params.title = filterTitle.value.trim()
     const res: any = await filePage(params)
     tableData.value = res?.data?.records || []
     page.total = res?.data?.total || 0
@@ -136,6 +159,7 @@ const preview = async (row: any) => {
   previewRow.value = row
   previewVisible.value = true
   previewLoading.value = true
+  previewError.value = false
   try {
     const response: any = await request.get('/file/image', {
       params: { bucket: row.bucket, objectName: row.objectName },
@@ -154,6 +178,7 @@ const clearPreview = () => {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
   previewUrl.value = ''
   previewRow.value = null
+  previewError.value = false
 }
 
 const deleteRows = async (rows: any[]) => {
@@ -165,6 +190,7 @@ const deleteRows = async (rows: any[]) => {
 const remove = async (row: any) => {
   try {
     await ElMessageBox.confirm('确定删除该文件？', '提示', { type: 'warning' })
+    deleting.value = true
     await request.delete('/file', {
       params: { bucket: row.bucket, objectName: row.objectName }
     })
@@ -172,6 +198,8 @@ const remove = async (row: any) => {
     loadData()
   } catch (e: any) {
     if (e !== 'cancel') console.error(e)
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -179,12 +207,37 @@ const removeSelected = async () => {
   const rows = [...selectedRows.value]
   try {
     await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 个文件？`, '提示', { type: 'warning' })
+    deleting.value = true
     await deleteRows(rows)
     selectedRows.value = []
     ElMessage.success('批量删除成功')
     loadData()
   } catch (e: any) {
     if (e !== 'cancel') console.error(e)
+  } finally {
+    deleting.value = false
+  }
+}
+
+const removeByCondition = async () => {
+  if (!hasFilters.value) return
+  try {
+    await ElMessageBox.confirm('确定删除当前筛选条件下的全部文件？此操作不可恢复。', '危险操作', { type: 'warning' })
+    deleting.value = true
+    const res: any = await request.delete('/file/condition', {
+      params: {
+        category: filterCategory.value || undefined,
+        spiderId: filterSpider.value || undefined,
+        title: filterTitle.value.trim() || undefined
+      }
+    })
+    ElMessage.success(`已删除 ${res?.data || 0} 个文件`)
+    selectedRows.value = []
+    refresh()
+  } catch (e: any) {
+    if (e !== 'cancel') console.error(e)
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -204,5 +257,6 @@ onUnmounted(clearPreview)
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 .preview-body { min-height: 240px; display: flex; align-items: center; justify-content: center; }
-.preview-body img { display: block; max-width: 100%; max-height: 60vh; object-fit: contain; }
+.preview-image { display: block; width: 100%; height: min(62vh, 620px); }
+.preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0f4; color: #5e6c84; font-size: 13px; }
 </style>

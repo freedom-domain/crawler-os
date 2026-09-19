@@ -12,3 +12,4 @@ minio:
   endpoint: ${MINIO_ENDPOINT:http://192.168.31.2:9000}
   accessKey: ${MINIO_ACCESS:minio_ZzhWQ2}
   secretKey: ${MINIO_SECRET:minio_DhYfdD}
+  file-bucket: ${MINIO_FILE_BUCKET:crawler-files-local}

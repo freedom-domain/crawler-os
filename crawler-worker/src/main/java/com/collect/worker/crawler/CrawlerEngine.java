@@ -188,7 +188,7 @@ public class CrawlerEngine {
                 }
 
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
-                List<String> imageUrls = extractAndUploadImages(doc, url, msg, task, overwriteImage);
+                List<String> imageUrls = extractAndUploadImages(doc, url, parsed.getTitle(), msg, task, overwriteImage);
                 docObj.setImages(imageUrls);
 
                 elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
@@ -225,7 +225,8 @@ public class CrawlerEngine {
      * overwrite=true 时重新下载并覆盖已存在的图片；否则跳过已存在的图片。
      * 返回已上传图片的 objectName 列表（无图片时返回空列表）。
      */
-    private List<String> extractAndUploadImages(Document doc, String pageUrl, TaskMessage msg, SpiderTask task, boolean overwrite) {
+    private List<String> extractAndUploadImages(Document doc, String pageUrl, String title,
+                                                TaskMessage msg, SpiderTask task, boolean overwrite) {
         String selector = msg.getImageSelector();
         if (selector == null || selector.isBlank()) {
             return List.of();
@@ -262,7 +263,7 @@ public class CrawlerEngine {
                     // 不覆盖时，若图片已存在则跳过下载
                     if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                         skipped++;
-                        saveExistingFileMetadata(objectName, msg.getSpiderId(), pageUrl);
+                        saveExistingFileMetadata(objectName, msg.getSpiderId(), title, pageUrl);
                         uploadedUrls.add(objectName);
                         continue;
                     }
@@ -276,14 +277,14 @@ public class CrawlerEngine {
                         objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + realExt;
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skipped++;
-                            saveExistingFileMetadata(objectName, msg.getSpiderId(), pageUrl);
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, pageUrl);
                             uploadedUrls.add(objectName);
                             continue;
                         }
                     }
                     // 覆盖模式下 putObject 会直接覆盖已存在的对象
                     minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
-                    saveFileMetadata(objectName, data.length, guessContentType(realExt), msg.getSpiderId(), pageUrl);
+                    saveFileMetadata(objectName, data.length, guessContentType(realExt), msg.getSpiderId(), title, pageUrl);
                     uploaded++;
                     // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
                     uploadedUrls.add(objectName);
@@ -305,7 +306,8 @@ public class CrawlerEngine {
         return uploadedUrls;
     }
 
-    private void saveFileMetadata(String objectName, long fileSize, String contentType, Long spiderId, String source) {
+    private void saveFileMetadata(String objectName, long fileSize, String contentType, Long spiderId,
+                                  String title, String source) {
         if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
             return;
         }
@@ -313,6 +315,7 @@ public class CrawlerEngine {
         metadata.setBucket(imageBucket);
         metadata.setObjectName(objectName);
         metadata.setFileName(objectName.substring(objectName.lastIndexOf('/') + 1));
+        metadata.setTitle(title);
         metadata.setContentType(contentType);
         metadata.setFileSize(fileSize);
         metadata.setCategory("image");
@@ -321,13 +324,13 @@ public class CrawlerEngine {
         fileMetadataMapper.insert(metadata);
     }
 
-    private void saveExistingFileMetadata(String objectName, Long spiderId, String source) {
+    private void saveExistingFileMetadata(String objectName, Long spiderId, String title, String source) {
         if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
             return;
         }
         try {
             StatObjectResponse stat = minioHelper.statObject(imageBucket, objectName);
-            saveFileMetadata(objectName, stat.size(), stat.contentType(), spiderId, source);
+            saveFileMetadata(objectName, stat.size(), stat.contentType(), spiderId, title, source);
         } catch (Exception e) {
             log.warn("读取已有文件元数据失败: bucket={}, object={}", imageBucket, objectName, e);
         }

@@ -127,6 +127,7 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     bucket VARCHAR(64),
     object_name VARCHAR(512),
     file_name VARCHAR(255),
+    title VARCHAR(512),
     content_type VARCHAR(128),
     file_size BIGINT,
     category VARCHAR(32),

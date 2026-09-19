@@ -148,16 +148,20 @@
     </el-dialog>
 
     <el-dialog v-model="detailVisible" title="搜索结果详情" width="90%" top="5vh" destroy-on-close>
+      <template #header>
+        <div class="detail-dialog-title">{{ detailData?.title || '搜索结果详情' }}</div>
+      </template>
       <div v-loading="detailLoading" class="detail-dialog-body">
         <div v-if="detailData" class="detail-content">
           <div class="detail-header">
             <div>
-              <div class="detail-title">{{ detailData.title || '无标题' }}</div>
-              <a class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
+              <a v-if="detailData.url" class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
+              <span v-else class="detail-url">暂无来源地址</span>
             </div>
             <div class="detail-badges">
               <span v-if="detailData.spiderName" class="meta-tag">{{ detailData.spiderName }}</span>
               <span v-if="detailData.spiderGroup" class="meta-tag group-tag">{{ detailData.spiderGroup }}</span>
+              <span v-if="detailData.sourceType" class="meta-tag source-tag">{{ detailData.sourceType }}</span>
             </div>
           </div>
 
@@ -813,7 +817,7 @@ onMounted(() => {
 .detail-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .detail-header {
@@ -821,20 +825,20 @@ onMounted(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 4px 0 16px;
+  border-bottom: 1px solid #edf0f3;
 }
 
-.detail-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #202124;
-  margin-bottom: 8px;
+.detail-dialog-title {
+  color: #172b4d;
+  font-size: 18px;
+  font-weight: 700;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .detail-url {
-  color: #006621;
+  color: #087f7d;
   font-size: 13px;
   word-break: break-all;
 }
@@ -848,20 +852,24 @@ onMounted(() => {
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 0 24px;
+  padding: 4px 0;
+  border-bottom: 1px solid #edf0f3;
 }
 
 .detail-card {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  background: #f7f8fa;
-  border-radius: 8px;
-  border: 1px solid #eef0f3;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 42px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f5f7;
+  color: #486581;
+  font-size: 13px;
 }
 
 .detail-label {
+  flex: 0 0 56px;
   font-size: 12px;
   color: #909399;
 }
@@ -870,11 +878,13 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  justify-content: center;
+  padding: 4px 0;
 }
 
 .detail-image {
-  width: 180px;
-  height: 120px;
+  width: clamp(160px, 22vw, 240px);
+  height: clamp(110px, 16vw, 160px);
   border-radius: 8px;
   border: 1px solid #eee;
   overflow: hidden;
@@ -888,14 +898,29 @@ onMounted(() => {
 
 .detail-body h4 {
   margin: 0;
-  font-size: 16px;
-  color: #303133;
+  font-size: 14px;
+  color: #486581;
+  font-weight: 700;
 }
 
 .detail-text {
   white-space: pre-wrap;
   line-height: 1.8;
   color: #303133;
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
+.source-tag { background: #e8f7f5; color: #087f7d; }
+
+:deep(.meta-tag) { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+
+@media (max-width: 720px) {
+  .detail-header { flex-direction: column; }
+  .detail-title { font-size: 21px; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .detail-images { gap: 8px; }
+  .detail-image { width: calc(50% - 4px); height: 120px; }
 }
 
 .dialog-header {

@@ -14,6 +14,7 @@ public class FileMetadata extends BaseEntity {
     private String bucket;
     private String objectName;
     private String fileName;
+    private String title;
     private String contentType;
     private Long fileSize;
     private String category;

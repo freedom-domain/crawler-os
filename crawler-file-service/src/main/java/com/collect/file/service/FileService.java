@@ -12,6 +12,11 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.StatObjectArgs;
+import io.minio.ListObjectsArgs;
+import io.minio.Result;
+import io.minio.messages.Item;
+import io.minio.errors.ErrorResponseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -80,20 +85,79 @@ public class FileService {
 
     public void delete(String bucket, String objectName) {
         try {
-            minioClient.removeObject(RemoveObjectArgs.builder()
-                    .bucket(bucket)
-                    .object(objectName)
-                    .build());
-                fileMetadataMapper.delete(new QueryWrapper<FileMetadata>()
-                        .eq("bucket", bucket)
-                        .eq("object_name", objectName));
+            deleteAllObjectVersions(bucket, objectName);
+            verifyObjectDeleted(bucket, objectName);
+            fileMetadataMapper.delete(new QueryWrapper<FileMetadata>()
+                    .eq("bucket", bucket)
+                    .eq("object_name", objectName));
         } catch (Exception e) {
             throw new BizException("文件删除失败: " + e.getMessage());
         }
     }
 
+    public int deleteByCondition(String category, Long spiderId, String title) {
+        QueryWrapper<FileMetadata> query = new QueryWrapper<>();
+        if (category != null && !category.isBlank()) {
+            query.eq("category", category);
+        }
+        if (spiderId != null) {
+            query.eq("spider_id", spiderId);
+        }
+        if (title != null && !title.isBlank()) {
+            query.like("title", title);
+        }
+        int deleted = 0;
+        for (FileMetadata metadata : fileMetadataMapper.selectList(query)) {
+            delete(metadata.getBucket(), metadata.getObjectName());
+            deleted++;
+        }
+        return deleted;
+    }
+
+    private void deleteAllObjectVersions(String bucket, String objectName) throws Exception {
+        boolean found = false;
+        for (Result<Item> result : minioClient.listObjects(ListObjectsArgs.builder()
+                .bucket(bucket)
+                .prefix(objectName)
+                .includeVersions(true)
+                .build())) {
+            Item item = result.get();
+            if (!objectName.equals(item.objectName())) {
+                continue;
+            }
+            found = true;
+            RemoveObjectArgs.Builder builder = RemoveObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName);
+            if (item.versionId() != null && !item.versionId().isBlank()) {
+                builder.versionId(item.versionId());
+            }
+            minioClient.removeObject(builder.build());
+        }
+        if (!found) {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .build());
+        }
+    }
+
+    private void verifyObjectDeleted(String bucket, String objectName) throws Exception {
+        try {
+            minioClient.statObject(StatObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .build());
+            throw new BizException("MinIO 文件删除校验失败");
+        } catch (ErrorResponseException e) {
+            if (e.response().code() != 404) {
+                throw e;
+            }
+        }
+    }
+
     @SuppressWarnings("null")
-    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId) {
-        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId);
+    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId, String title) {
+        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, title);
     }
 }

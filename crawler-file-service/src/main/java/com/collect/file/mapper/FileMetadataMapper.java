@@ -17,9 +17,11 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 	    + "WHERE f.deleted = 0 "
 			+ "<if test='category != null and category != \"\"'>AND f.category = #{category}</if> "
 	    + "<if test='spiderId != null'>AND f.spider_id = #{spiderId}</if> "
+			+ "<if test='title != null and title != \"\"'>AND f.title LIKE CONCAT('%', #{title}, '%')</if> "
 	    + "ORDER BY f.create_time DESC"
 	    + "</script>")
     IPage<FileMetadata> selectFilePage(Page<FileMetadata> page,
 				       @Param("category") String category,
-				       @Param("spiderId") Long spiderId);
+									   @Param("spiderId") Long spiderId,
+									   @Param("title") String title);
 }
