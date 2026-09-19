@@ -319,7 +319,7 @@ onMounted(() => {
 }
 
 .card-header { display: flex; justify-content: space-between; align-items: center; }
-.form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; }
+.form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
 
 :deep(.spider-dialog .el-dialog__body) {
