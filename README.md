@@ -142,3 +142,6 @@ npm run build      # 生产构建到 dist/
 杀掉全部服务进程
 
 pkill -9 -f 'Application'
+
+
+freedom.domain.email@gmail.com
