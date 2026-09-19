@@ -10,6 +10,11 @@ const router = createRouter({
       component: () => import('@/views/Login.vue')
     },
     {
+      path: '/image-preview',
+      name: 'ImagePreview',
+      component: () => import('@/views/ImagePreview.vue')
+    },
+    {
       path: '/',
       component: () => import('@/views/Layout.vue'),
       children: [

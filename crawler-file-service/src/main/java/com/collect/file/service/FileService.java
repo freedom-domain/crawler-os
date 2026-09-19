@@ -78,6 +78,25 @@ public class FileService {
                     .bucket(bucket)
                     .object(objectName)
                     .build());
+        } catch (ErrorResponseException e) {
+            if (e.response().code() != 404) {
+                throw new BizException("文件下载失败: " + e.getMessage());
+            }
+            // 请求的 bucket 中不存在该对象，回退到 file_metadata 中记录的 bucket
+            // （兼容图片 bucket 配置变化，如 crawler-images 与 crawler-images-local）
+            FileMetadata meta = fileMetadataMapper.selectByObjectName(objectName);
+            if (meta != null && meta.getBucket() != null && !meta.getBucket().equals(bucket)) {
+                log.info("对象在 {} 中不存在，回退到元数据记录的 bucket: {}", bucket, meta.getBucket());
+                try {
+                    return minioClient.getObject(GetObjectArgs.builder()
+                            .bucket(meta.getBucket())
+                            .object(objectName)
+                            .build());
+                } catch (Exception ex) {
+                    throw new BizException("文件下载失败: " + ex.getMessage());
+                }
+            }
+            throw new BizException("文件下载失败: 文件不存在 (bucket=" + bucket + ", object=" + objectName + ")");
         } catch (Exception e) {
             throw new BizException("文件下载失败: " + e.getMessage());
         }

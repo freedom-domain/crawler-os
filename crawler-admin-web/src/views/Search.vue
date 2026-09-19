@@ -41,16 +41,12 @@
         <h3 class="result-title" v-html="row.titleHl || row.title"></h3>
         <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
         <div v-if="row.images && row.images.length" class="result-images">
-          <el-image
+          <img
             v-for="(img, idx) in row.images.slice(0, 6)"
             :key="idx"
             :src="imageUrl(img)"
-            :preview-src-list="row.images.map(imageUrl)"
-            :initial-index="idx"
-            fit="cover"
             class="result-thumb"
-            preview-teleported
-            hide-on-click-modal
+            @click="openAllImages(row)"
           />
         </div>
         <div class="result-tags" v-if="row.tags && row.tags.length">
@@ -69,7 +65,6 @@
               <el-dropdown-menu>
                 <el-dropdown-item command="view">查看详情</el-dropdown-item>
                 <el-dropdown-item command="tag">标签</el-dropdown-item>
-                <el-dropdown-item command="previewImages">预览图片</el-dropdown-item>
                 <el-dropdown-item command="previewContent">预览内容</el-dropdown-item>
                 <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
                 <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
@@ -128,10 +123,10 @@
             :key="idx"
             :src="imageUrl(img)"
             :preview-src-list="previewImages.map(imageUrl)"
-            :initial-index="idx"
+            :initial-index="previewInitialIndex"
             fit="contain"
             class="preview-img"
-            :style="{ width: isFullscreen ? `${Math.round(30 * imgZoom)}%` : (imgWidths[idx] || '240px') }"
+            :style="{ width: isFullscreen ? `${Math.round(100 * imgZoom)}%` : (imgWidths[idx] || '240px') }"
             preview-teleported
             hide-on-click-modal
             @load="onPreviewImgLoad($event, idx)"
@@ -143,7 +138,7 @@
 
     <el-dialog v-model="previewContentVisible" :title="previewTitle + ' - 内容'" width="80%" top="5vh" destroy-on-close>
       <div v-loading="previewLoading">
-        <div class="preview-container detail-text">{{ previewHtml || '无正文内容' }}</div>
+        <div class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
       </div>
     </el-dialog>
 
@@ -262,17 +257,26 @@ const detailLoading = ref(false)
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewImages = ref<string[]>([])
+const previewInitialIndex = ref(0)
 const detailData = ref<any>(null)
 const imgWidths = ref<Record<number, string>>({})
 const isFullscreen = ref(false)
-const imgZoom = ref(1)
+const MIN_ZOOM = 0.25
+const DEFAULT_ZOOM = 1
+const normalizeZoom = (value: number) => Math.max(MIN_ZOOM, Number(value.toFixed(2)))
+const getDefaultPreviewZoom = () => Math.min(1.8, Math.max(0.8, (window.innerWidth || 1200) / 1000))
+const imgZoom = ref(getDefaultPreviewZoom())
 
 const zoomIn = () => {
-  imgZoom.value = Math.min(imgZoom.value + 0.25, 4)
+  imgZoom.value = normalizeZoom(imgZoom.value + 0.25)
 }
 
 const zoomOut = () => {
-  imgZoom.value = Math.max(imgZoom.value - 0.25, 0.25)
+  imgZoom.value = normalizeZoom(imgZoom.value - 0.25)
+}
+
+const resetPreviewZoom = () => {
+  imgZoom.value = getDefaultPreviewZoom()
 }
 
 const toggleFullscreen = async () => {
@@ -297,29 +301,36 @@ const toggleFullscreen = async () => {
   }
 }
 
-const MAX_IMG_WIDTH = 480
 const MIN_IMG_WIDTH = 160
+
+const getPreviewImageWidth = (naturalWidth?: number) => {
+  const fallback = 240
+  const width = naturalWidth && Number.isFinite(naturalWidth) ? naturalWidth : fallback
+  return Math.max(width, MIN_IMG_WIDTH)
+}
+
+const syncPreviewImageWidths = () => {
+  const imgs = document.querySelectorAll('.preview-img img')
+  if (!imgs.length) return
+
+  imgs.forEach((img, idx) => {
+    const el = img as HTMLImageElement
+    const baseW = getPreviewImageWidth(el.naturalWidth || undefined)
+    imgWidths.value[idx] = `${Math.round(baseW * imgZoom.value)}px`
+  })
+}
 
 const onPreviewImgLoad = (e: Event, idx: number) => {
   const img = e.target as HTMLImageElement
   if (!img.naturalWidth) return
-  const baseW = Math.min(Math.max(img.naturalWidth, MIN_IMG_WIDTH), MAX_IMG_WIDTH)
+  const baseW = getPreviewImageWidth(img.naturalWidth)
   imgWidths.value[idx] = Math.round(baseW * imgZoom.value) + 'px'
 }
 
-// 缩放变化时重新计算所有图片宽度
-watch(imgZoom, () => {
-  const keys = Object.keys(imgWidths.value)
-  if (keys.length === 0) return
-  // 重新触发 load 事件来更新宽度
-  const imgs = document.querySelectorAll('.preview-img img')
-  imgs.forEach((img, idx) => {
-    const el = img as HTMLImageElement
-    if (!el.naturalWidth) return
-    const baseW = Math.min(Math.max(el.naturalWidth, MIN_IMG_WIDTH), MAX_IMG_WIDTH)
-    imgWidths.value[idx] = Math.round(baseW * imgZoom.value) + 'px'
-  })
-})
+// 缩放/全屏变化时重新计算所有图片宽度，保证图片在弹窗中保持可见且不溢出
+watch([imgZoom, isFullscreen], () => {
+  syncPreviewImageWidths()
+}, { flush: 'post' })
 
 const tagVisible = ref(false)
 const tagSelection = ref<string[]>([])
@@ -385,6 +396,43 @@ const imageUrl = (objectName: string) => {
   return `/api/file/image?bucket=${encodeURIComponent(getImageBucket())}&objectName=${encodeURIComponent(objectName)}`
 }
 
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+}[char] || char))
+
+// 新窗口打开当前内容的全部图片（跳转到真实的图片预览页面）
+const openAllImages = async (row: any) => {
+  // 获取完整图片列表（优先从详情接口获取）
+  let images: string[] = row.images || []
+  try {
+    const res: any = await searchDetail(row.id)
+    if (res.data?.images?.length) {
+      images = res.data.images
+    }
+  } catch {
+    // 加载失败时使用列表中的图片
+  }
+
+  if (!images.length) {
+    ElMessage.info('该条内容暂无图片')
+    return
+  }
+
+  // 跳转到真实的图片预览页面（独立路由，非 JS 生成的页面）
+  const query: Record<string, string> = {
+    title: String(row.title || '图片预览'),
+    srcs: JSON.stringify(images.map(imageUrl))
+  }
+  const win = window.open(`/image-preview?${new URLSearchParams(query).toString()}`, '_blank')
+  if (!win) {
+    ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
+  }
+}
+
 const goToSpider = async (spiderId?: number, spiderName?: string) => {
   if (!spiderId) return
   await router.push({
@@ -411,13 +459,14 @@ const loadData = async () => {
   }
 }
 
-const showPreviewImages = async (row: any) => {
+const showPreviewImages = async (row: any, initialIndex = 0) => {
   previewImagesVisible.value = true
   previewLoading.value = true
-  imgZoom.value = 1
+  imgZoom.value = getDefaultPreviewZoom()
   previewTitle.value = row.title || '内容预览'
   previewImages.value = row.images || []
   imgWidths.value = {}
+  previewInitialIndex.value = initialIndex
   try {
     const res: any = await searchDetail(row.id)
     if (res.data?.images?.length) {
@@ -430,6 +479,46 @@ const showPreviewImages = async (row: any) => {
   }
 }
 
+/**
+ * 将 rawHtml 中的相对链接替换为基于爬虫源 URL 的绝对链接。
+ * 非 http(s) 开头的 href/src 会拼接源 URL；javascript:、mailto:、tel:、# 锚点等保持不变。
+ */
+const resolveHtmlLinks = (html: string, baseUrl: string): string => {
+  if (!html || !baseUrl) return html
+  const div = document.createElement('div')
+  div.innerHTML = html
+  const toAbsolute = (url: string): string => {
+    if (!url) return url
+    const trimmed = url.trim()
+    if (/^(https?:)?\/\//i.test(trimmed)) return trimmed
+    if (/^(javascript:|mailto:|tel:|data:|blob:|#)/i.test(trimmed)) return trimmed
+    try {
+      return new URL(trimmed, baseUrl).href
+    } catch {
+      return trimmed
+    }
+  }
+  div.querySelectorAll('a[href]').forEach((a) => {
+    a.setAttribute('href', toAbsolute(a.getAttribute('href') || ''))
+  })
+  div.querySelectorAll('img[src]').forEach((img) => {
+    img.setAttribute('src', toAbsolute(img.getAttribute('src') || ''))
+  })
+  div.querySelectorAll('script[src]').forEach((s) => {
+    s.setAttribute('src', toAbsolute(s.getAttribute('src') || ''))
+  })
+  div.querySelectorAll('link[href]').forEach((l) => {
+    l.setAttribute('href', toAbsolute(l.getAttribute('href') || ''))
+  })
+  div.querySelectorAll('source[src]').forEach((s) => {
+    s.setAttribute('src', toAbsolute(s.getAttribute('src') || ''))
+  })
+  div.querySelectorAll('video[src], audio[src]').forEach((m) => {
+    m.setAttribute('src', toAbsolute(m.getAttribute('src') || ''))
+  })
+  return div.innerHTML
+}
+
 const showPreviewContent = async (row: any) => {
   previewContentVisible.value = true
   previewLoading.value = true
@@ -437,7 +526,8 @@ const showPreviewContent = async (row: any) => {
   previewHtml.value = ''
   try {
     const res: any = await searchDetail(row.id)
-    previewHtml.value = stripHtml(res.data?.content || res.data?.rawHtml || '无原始内容') || '无正文内容'
+    const rawHtml = res.data?.rawHtml || res.data?.content || '无原始内容'
+    previewHtml.value = resolveHtmlLinks(rawHtml, res.data?.url || row.url || '')
   } catch {
     previewHtml.value = '加载失败'
   } finally {
@@ -464,8 +554,6 @@ const handleCommand = (command: string, row: any) => {
     showDetail(row)
   } else if (command === 'tag') {
     openTagEditor(row)
-  } else if (command === 'previewImages') {
-    showPreviewImages(row)
   } else if (command === 'previewContent') {
     showPreviewContent(row)
   } else if (command === 'rerun') {
@@ -719,12 +807,20 @@ onMounted(() => {
   margin: 0 0 10px 0;
 }
 
+.result-thumb-link {
+  display: inline-block;
+  line-height: 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
 .result-thumb {
   width: 72px;
   height: 72px;
   border-radius: 4px;
   border: 1px solid #eee;
   cursor: pointer;
+  display: block;
 }
 
 .result-tags {
@@ -782,24 +878,33 @@ onMounted(() => {
 
 .preview-images {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 16px;
   margin-bottom: 16px;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 8px;
 }
 
 .preview-img {
   display: block;
+  flex: 0 0 auto;
   height: auto;
-  max-width: 100%;
+  max-width: none;
   border-radius: 4px;
   border: 1px solid #eee;
   background: #fafafa;
   cursor: pointer;
-  transition: width 0.2s ease;
+  transition: width 0.2s ease, max-width 0.2s ease;
 }
-:deep(.preview-img .el-image__inner) { display: block; margin: 0 auto; }
+:deep(.preview-img .el-image__inner) {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+}
 
 .preview-container {
   max-height: 70vh;
@@ -909,6 +1014,21 @@ onMounted(() => {
   color: #303133;
   max-height: 42vh;
   overflow-y: auto;
+}
+
+.preview-html {
+  line-height: 1.8;
+  color: #303133;
+  word-break: break-word;
+}
+
+.preview-html img {
+  max-width: 100%;
+  height: auto;
+}
+
+.preview-html iframe {
+  max-width: 100%;
 }
 
 .source-tag { background: #e8f7f5; color: #087f7d; }

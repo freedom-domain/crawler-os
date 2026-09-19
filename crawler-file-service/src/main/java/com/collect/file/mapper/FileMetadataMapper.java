@@ -24,4 +24,7 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 				       @Param("category") String category,
 									   @Param("spiderId") Long spiderId,
 									   @Param("title") String title);
+
+    @Select("SELECT * FROM file_metadata WHERE object_name = #{objectName} AND deleted = 0 LIMIT 1")
+    FileMetadata selectByObjectName(@Param("objectName") String objectName);
 }
