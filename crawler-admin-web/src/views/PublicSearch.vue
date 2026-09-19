@@ -130,7 +130,7 @@
             :initial-index="previewInitialIndex"
             fit="contain"
             class="preview-img"
-            :style="{ width: isFullscreen ? `${Math.round(100 * imgZoom)}%` : (imgWidths[idx] || '240px') }"
+            :style="{ height: `${Math.round(88 * imgZoom)}vh` }"
             preview-teleported
             hide-on-click-modal
             @load="onPreviewImgLoad($event, idx)"
@@ -273,12 +273,9 @@ const toggleFullscreen = async () => {
   }
 }
 
-const MIN_IMG_WIDTH = 160
-
 const getPreviewImageWidth = (naturalWidth?: number) => {
-  const fallback = 240
-  const width = naturalWidth && Number.isFinite(naturalWidth) ? naturalWidth : fallback
-  return Math.max(width, MIN_IMG_WIDTH)
+  // 以图片原始宽度为基准，未加载完成时回退到 240px
+  return naturalWidth && Number.isFinite(naturalWidth) ? naturalWidth : 240
 }
 
 const syncPreviewImageWidths = () => {
@@ -812,19 +809,19 @@ onMounted(() => {
 .preview-img {
   display: block;
   flex: 0 0 auto;
-  height: auto;
+  width: auto;
   max-width: none;
   border-radius: 4px;
   border: 1px solid #eee;
   background: #fafafa;
   cursor: pointer;
-  transition: width 0.2s ease, max-width 0.2s ease;
+  transition: height 0.2s ease;
 }
 
 :deep(.preview-img .el-image__inner) {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 100%;
   margin: 0 auto;
   object-fit: contain;
 }

@@ -334,11 +334,13 @@ onBeforeUnmount(() => {
   display: grid;
   /* 列数由页面输入控制（gridTemplateColumns 通过内联样式设置） */
   gap: 14px;
+  justify-items: center;
 }
 .thumb {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 88vh;
+  object-fit: contain;
   border-radius: 10px;
   cursor: zoom-in;
   transition: transform 0.15s, box-shadow 0.15s;
