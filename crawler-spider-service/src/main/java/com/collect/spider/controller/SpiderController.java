@@ -38,7 +38,7 @@ public class SpiderController {
                                   @RequestParam(value = "size", defaultValue = "10") int size,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @RequestParam(value = "group", required = false) String group) {
-        requirePermission("spider:list");
+        requirePermissionIfLoggedIn("spider:list");
         return R.ok(spiderService.page(current, size, keyword, group));
     }
 
@@ -96,6 +96,22 @@ public class SpiderController {
     }
 
     private void requirePermission(String code) {
+        if (!LoginUtils.hasPermission(code)) {
+            throw new BizException("无权限执行该操作");
+        }
+    }
+
+    /**
+     * 仅当存在登录用户时校验权限；匿名访问（无登录用户）直接放行。
+     * 用于允许公开页面匿名读取，同时保证登录用户仍需具备相应权限。
+     */
+    private void requirePermissionIfLoggedIn(String code) {
+        try {
+            LoginUtils.getLoginUser();
+        } catch (Exception e) {
+            // 未登录（匿名访问），放行
+            return;
+        }
         if (!LoginUtils.hasPermission(code)) {
             throw new BizException("无权限执行该操作");
         }

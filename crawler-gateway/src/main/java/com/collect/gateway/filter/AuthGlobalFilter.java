@@ -38,6 +38,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/api/user/register",
             "/api/file/image",
             "/api/search",
+            "/api/dict",
+            "/api/spider",
             "/actuator"
     );
 
@@ -56,7 +58,9 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getPath().value();
 
+        log.debug("AuthFilter: path={}", path);
         if (WHITE_LIST.stream().anyMatch(path::startsWith)) {
+            log.debug("AuthFilter: path={} matched whitelist", path);
             return chain.filter(exchange);
         }
 

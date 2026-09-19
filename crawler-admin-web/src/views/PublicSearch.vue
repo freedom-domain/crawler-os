@@ -370,8 +370,10 @@ const loadData = async () => {
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
     const res: any = await searchContent(params)
-    list.value = res.data?.content || []
-    total.value = res.data?.totalElements || 0
+    if (res) {
+      list.value = res.data?.content || []
+      total.value = res.data?.totalElements || 0
+    }
   } finally {
     loading.value = false
   }
