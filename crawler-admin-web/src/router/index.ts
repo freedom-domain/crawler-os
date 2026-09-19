@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import('@/views/ImagePreview.vue')
     },
     {
+      path: '/public/search',
+      name: 'PublicSearch',
+      component: () => import('@/views/PublicSearch.vue')
+    },
+    {
       path: '/',
       component: () => import('@/views/Layout.vue'),
       children: [
@@ -33,9 +38,12 @@ const router = createRouter({
   ]
 })
 
+// 无需登录即可访问的公开页面
+const PUBLIC_PATHS = ['/login', '/image-preview', '/public/search']
+
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
-  if (to.path !== '/login' && !userStore.token) {
+  if (!PUBLIC_PATHS.includes(to.path) && !userStore.token) {
     next('/login')
   } else {
     next()

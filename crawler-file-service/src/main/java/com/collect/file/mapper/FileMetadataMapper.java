@@ -18,7 +18,7 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 			+ "<if test='category != null and category != \"\"'>AND f.category = #{category}</if> "
 	    + "<if test='spiderId != null'>AND f.spider_id = #{spiderId}</if> "
 			+ "<if test='title != null and title != \"\"'>AND f.title LIKE CONCAT('%', #{title}, '%')</if> "
-	    + "ORDER BY f.create_time DESC"
+	    + "ORDER BY f.create_time DESC, f.id DESC"
 	    + "</script>")
     IPage<FileMetadata> selectFilePage(Page<FileMetadata> page,
 				       @Param("category") String category,

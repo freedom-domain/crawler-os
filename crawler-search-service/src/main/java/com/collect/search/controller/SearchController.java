@@ -31,14 +31,16 @@ public class SearchController {
                                               @RequestParam(value = "tag", required = false) String tag,
                                               @RequestParam(value = "current", defaultValue = "1") int current,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
-        requirePermission("search:query");
+        // 只读查询允许匿名访问（公开搜索页），登录用户仍需具备 search:query 权限
+        requirePermissionIfLoggedIn("search:query");
         return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, current, size));
     }
 
     @Operation(summary = "数据详情")
     @GetMapping("/{id}")
     public R<SpiderContentDoc> detail(@PathVariable("id") String id) throws IOException {
-        requirePermission("search:query");
+        // 只读查询允许匿名访问（公开搜索页），登录用户仍需具备 search:query 权限
+        requirePermissionIfLoggedIn("search:query");
         return R.ok(searchService.getById(id));
     }
 
@@ -59,6 +61,22 @@ public class SearchController {
     }
 
     private void requirePermission(String code) {
+        if (!LoginUtils.hasPermission(code)) {
+            throw new BizException("无权限执行该操作");
+        }
+    }
+
+    /**
+     * 仅当存在登录用户时校验权限；匿名访问（无登录用户）直接放行。
+     * 用于允许公开页面匿名读取，同时保证登录用户仍需具备相应权限。
+     */
+    private void requirePermissionIfLoggedIn(String code) {
+        try {
+            LoginUtils.getLoginUser();
+        } catch (Exception e) {
+            // 未登录（匿名访问），放行
+            return;
+        }
         if (!LoginUtils.hasPermission(code)) {
             throw new BizException("无权限执行该操作");
         }
