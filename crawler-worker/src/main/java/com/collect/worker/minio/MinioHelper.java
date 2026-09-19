@@ -5,6 +5,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.StatObjectArgs;
+import io.minio.StatObjectResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -69,13 +70,17 @@ public class MinioHelper {
      */
     public boolean objectExists(String bucket, String objectName) {
         try {
-            minioClient.statObject(StatObjectArgs.builder()
-                    .bucket(bucket)
-                    .object(objectName)
-                    .build());
+            statObject(bucket, objectName);
             return true;
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public StatObjectResponse statObject(String bucket, String objectName) throws Exception {
+        return minioClient.statObject(StatObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectName)
+                .build());
     }
 }

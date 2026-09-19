@@ -1,21 +1,21 @@
 <template>
   <el-container class="layout">
-    <el-aside :width="collapsed ? '64px' : '220px'" class="aside">
+    <el-aside :width="collapsed ? '72px' : '236px'" :class="['aside', { 'is-collapsed': collapsed }]">
       <div class="logo">
-        <span v-if="!collapsed">爬虫平台</span>
-        <span v-else>爬</span>
+        <span class="logo-mark">C</span>
+        <span v-if="!collapsed" class="logo-copy">Crawler<span>OS</span></span>
       </div>
       <el-menu
         :default-active="route.path"
         :collapse="collapsed"
         router
-        background-color="#001529"
-        text-color="#fff"
-        active-text-color="#409EFF"
+        background-color="transparent"
+        text-color="#b7c9d9"
+        active-text-color="#ffffff"
       >
         <el-menu-item index="/dashboard">
           <el-icon><Odometer /></el-icon>
-          <template #title>Dashboard</template>
+          <span>Dashboard</span>
         </el-menu-item>
 
         <template v-for="item in menuList" :key="item.id">
@@ -30,12 +30,12 @@
           <Fold v-if="!collapsed" />
           <Expand v-else />
         </el-icon>
-        <span class="page-title">{{ currentTitle }}</span>
+        <div class="breadcrumb"><span>工作台</span><b>/</b><strong>{{ currentTitle || '概览' }}</strong></div>
         <div class="user-info">
           <el-dropdown @command="handleCommand">
             <span class="user-name">
-              <el-icon><UserFilled /></el-icon>
-              {{ userStore.nickname || userStore.username }}
+              <span class="user-avatar"><el-icon><UserFilled /></el-icon></span>
+              <span class="user-label">{{ userStore.nickname || userStore.username }}</span>
               <el-icon><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
@@ -59,7 +59,7 @@ import { ref, computed, onMounted, defineComponent, h } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMenu } from '@/api'
-import { ElSubMenu, ElMenuItem } from 'element-plus'
+import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -77,7 +77,7 @@ const MenuNode = defineComponent({
     return () => {
       const item = props.item
       const hasChildren = item.children && item.children.length > 0
-      const icon = h('el-icon', null, [h(getIcon(item.code))])
+      const icon = h(ElIcon, null, [h(getIcon(item))])
       if (hasChildren) {
         return h(ElSubMenu, { index: item.path || String(item.id) }, {
           title: () => [icon, h('span', item.name)],
@@ -94,17 +94,27 @@ const MenuNode = defineComponent({
 // 根据权限 code 映射图标
 const iconMap: Record<string, any> = {
   user: User,
+  User,
   role: Avatar,
+  Avatar,
   permission: Lock,
+  Lock,
   dict: PriceTag,
+  PriceTag,
   spider: Connection,
+  Connection,
   task: List,
+  List,
   search: Search,
-  file: Folder
+  Search,
+  file: Folder,
+  Folder,
+  system: Setting,
+  Setting
 }
 
-const getIcon = (code: string) => {
-  return iconMap[code] || MenuIcon
+const getIcon = (item: any) => {
+  return iconMap[item.icon] || iconMap[item.code] || MenuIcon
 }
 
 const loadMenu = async () => {
@@ -142,29 +152,113 @@ const handleCommand = (cmd: string) => {
 </script>
 
 <style scoped>
-.layout { height: 100vh; }
+.layout { height: 100vh; min-width: 960px; }
 .aside {
-  background: #001529;
-  transition: width 0.3s;
+  position: relative;
+  background: linear-gradient(180deg, #132b47 0%, #10243d 56%, #0d2037 100%);
+  transition: width 0.25s ease;
+  overflow: hidden;
+  box-shadow: 8px 0 24px rgba(16, 42, 67, .12);
 }
 .logo {
-  height: 60px;
+  height: 72px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 11px;
+  padding: 0 22px;
   color: #fff;
-  font-size: 18px;
-  font-weight: bold;
-  background: #002140;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  background: rgba(8, 25, 44, .24);
 }
+.logo-mark {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 9px;
+  color: #172b4d;
+  background: #72e0c8;
+  font-size: 17px;
+  font-weight: 900;
+  box-shadow: 0 5px 12px rgba(114, 224, 200, .18);
+}
+.logo-copy span { color: #72e0c8; }
+:deep(.el-menu) { border-right: 0; padding: 18px 12px; }
+:deep(.el-menu-item), :deep(.el-sub-menu__title) {
+  height: 46px;
+  line-height: 46px;
+  margin: 5px 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition: color .2s ease, background .2s ease, border-color .2s ease, transform .2s ease;
+}
+:deep(.el-menu--collapse .el-menu-item), :deep(.el-menu--collapse .el-sub-menu__title) {
+  width: 52px;
+  padding: 0 !important;
+  justify-content: center;
+}
+:deep(.el-menu--collapse .el-menu-item .el-icon), :deep(.el-menu--collapse .el-sub-menu__title .el-icon) {
+  margin: 0;
+}
+:deep(.el-menu-item:not(.is-active):hover), :deep(.el-sub-menu__title:hover) {
+  color: #fff !important;
+  border-color: rgba(114, 224, 200, .12);
+  background: rgba(114, 224, 200, .08);
+  transform: translateX(2px);
+}
+:deep(.el-menu-item.is-active) {
+  color: #fff;
+  border-color: rgba(114, 224, 200, .2);
+  background: #109f9a;
+  box-shadow: 0 7px 16px rgba(8, 123, 120, .2);
+  transform: none;
+}
+:deep(.el-menu-item.is-active:hover) {
+  color: #fff !important;
+  border-color: rgba(114, 224, 200, .2);
+  background: #109f9a;
+  transform: none;
+}
+:deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: #fff;
+  border-color: rgba(114, 224, 200, .14);
+  background: rgba(15, 159, 154, .24);
+}
+:deep(.el-menu--collapse .el-sub-menu.is-active > .el-sub-menu__title) {
+  background: rgba(15, 159, 154, .78);
+  box-shadow: 0 7px 16px rgba(8, 123, 120, .18);
+}
+:deep(.el-menu-item .el-icon), :deep(.el-sub-menu .el-icon) {
+  color: #72e0c8;
+  transition: color .2s ease;
+}
+:deep(.el-menu-item.is-active .el-icon), :deep(.el-sub-menu__title:hover .el-icon) { color: #fff; }
+.el-menu--collapse { padding: 18px 10px; }
+.aside.is-collapsed .logo { justify-content: center; padding: 0; }
 .header {
+  height: 72px;
   background: #fff;
   display: flex;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0,21,41,0.08);
+  border-bottom: 1px solid #e6e9ef;
+  box-shadow: 0 1px 8px rgba(23, 43, 77, .035);
 }
-.collapse-btn { font-size: 20px; cursor: pointer; margin-right: 20px; }
-.page-title { font-size: 16px; font-weight: 500; flex: 1; }
-.user-info { margin-right: 20px; }
-.user-name { cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.collapse-btn { font-size: 20px; cursor: pointer; margin: 0 22px; color: #486581; }
+.breadcrumb { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.breadcrumb span, .breadcrumb b { color: #9fb3c8; font-weight: 500; }
+.breadcrumb strong { color: #102a43; font-size: 16px; }
+.user-info { margin-left: auto; margin-right: 24px; }
+.user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
+.user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
+.user-label { color: #243b53; font-size: 14px; font-weight: 600; }
+:deep(.el-main) { padding: 30px; background: var(--canvas); overflow: auto; }
+@media (max-width: 1100px) {
+  .layout { min-width: 0; }
+  :deep(.el-main) { padding: 20px; }
+  .user-label { display: none; }
+}
 </style>

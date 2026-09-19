@@ -63,7 +63,14 @@
         node-key="id"
         default-expand-all
         :props="{ label: 'name', children: 'children' }"
-      />
+      >
+        <template #default="{ node, data }">
+          <span class="permission-tree-node">
+            <el-icon class="tree-icon"><component :is="getIcon(data)" /></el-icon>
+            <span>{{ node.label }}</span>
+          </span>
+        </template>
+      </el-tree>
       <template #footer>
         <el-button @click="assignVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveAssign">保存</el-button>
@@ -79,7 +86,7 @@ import {
   roleList, roleCreate, roleUpdate, roleDelete,
   rolePermissions, roleAssignPermissions, permissionTree
 } from '@/api'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -92,6 +99,29 @@ const assignVisible = ref(false)
 const permTree = ref<any[]>([])
 const currentRoleId = ref<number | null>(null)
 const treeRef = ref<any>()
+
+const iconMap: Record<string, any> = {
+  user: User,
+  User,
+  role: Avatar,
+  Avatar,
+  permission: Lock,
+  Lock,
+  dict: PriceTag,
+  PriceTag,
+  spider: Connection,
+  Connection,
+  task: List,
+  List,
+  search: Search,
+  Search,
+  file: Folder,
+  Folder,
+  system: Setting,
+  Setting
+}
+
+const getIcon = (item: any) => iconMap[item.icon] || iconMap[item.code] || MenuIcon
 
 const loadData = async () => {
   loading.value = true
@@ -170,3 +200,8 @@ const saveAssign = async () => {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.permission-tree-node { display: inline-flex; align-items: center; gap: 8px; color: #243b53; }
+.tree-icon { color: #16a6a3; font-size: 16px; }
+</style>

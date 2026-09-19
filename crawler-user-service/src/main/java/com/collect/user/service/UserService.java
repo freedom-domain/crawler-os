@@ -237,6 +237,7 @@ public class UserService {
             node.setPath(p.getPath());
             node.setType(p.getType());
             node.setSort(p.getSort());
+            node.setIcon(p.getIcon() != null && !p.getIcon().isBlank() ? p.getIcon() : defaultMenuIcon(p.getCode()));
             nodeMap.put(p.getId(), node);
         }
 
@@ -252,5 +253,20 @@ public class UserService {
             }
         }
         return roots;
+    }
+
+    private String defaultMenuIcon(String code) {
+        return switch (code) {
+            case "user" -> "User";
+            case "role" -> "Avatar";
+            case "permission" -> "Lock";
+            case "dict" -> "PriceTag";
+            case "spider" -> "Connection";
+            case "task" -> "List";
+            case "search" -> "Search";
+            case "file" -> "Folder";
+            case "system" -> "Setting";
+            default -> "Menu";
+        };
     }
 }

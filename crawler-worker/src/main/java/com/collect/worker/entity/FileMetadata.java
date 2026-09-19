@@ -1,7 +1,6 @@
-package com.collect.file.entity;
+package com.collect.worker.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.collect.common.entity.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -18,7 +17,5 @@ public class FileMetadata extends BaseEntity {
     private Long fileSize;
     private String category;
     private Long spiderId;
-    @TableField(exist = false)
-    private String crawlerName;
     private String source;
 }

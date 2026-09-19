@@ -1,6 +1,5 @@
 package com.collect.file.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
@@ -90,12 +89,7 @@ public class FileService {
     }
 
     @SuppressWarnings("null")
-    public IPage<FileMetadata> page(int current, int size, String category) {
-        LambdaQueryWrapper<FileMetadata> qw = new LambdaQueryWrapper<>();
-        if (category != null && !category.isBlank()) {
-            qw.eq(FileMetadata::getCategory, category);
-        }
-        qw.orderByDesc(FileMetadata::getCreateTime);
-        return fileMetadataMapper.selectPage(new Page<>(current, size), qw);
+    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId) {
+        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId);
     }
 }

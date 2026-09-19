@@ -201,7 +201,7 @@ public class SpiderService {
 
     @SuppressWarnings("null")
     public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size,
-                                             Integer status, String level, String keyword) {
+                                             Integer status, String level, String type, String keyword) {
         LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
         qw.eq(SpiderTaskLog::getTaskId, taskId);
         if (status != null) {
@@ -209,6 +209,9 @@ public class SpiderService {
         }
         if (level != null && !level.isBlank()) {
             qw.eq(SpiderTaskLog::getLevel, level);
+        }
+        if (type != null && !type.isBlank()) {
+            qw.eq(SpiderTaskLog::getType, type);
         }
         if (keyword != null && !keyword.isBlank()) {
             qw.and(w -> w.like(SpiderTaskLog::getUrl, keyword)

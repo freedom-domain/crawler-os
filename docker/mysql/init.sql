@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS sys_permission (
     parent_id BIGINT DEFAULT 0,
     type TINYINT DEFAULT 1 COMMENT '类型: 0=目录, 1=菜单, 2=按钮',
     path VARCHAR(255),
+    icon VARCHAR(64),
     sort INT DEFAULT 0,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS spider_task_log (
     url VARCHAR(1024),
     status TINYINT,
     level VARCHAR(16),
+    type VARCHAR(16) DEFAULT 'html',
     message VARCHAR(1024),
     cost_ms INT,
     deleted TINYINT DEFAULT 0,
@@ -129,6 +131,7 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     file_size BIGINT,
     category VARCHAR(32),
     spider_id BIGINT,
+    source VARCHAR(1024),
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
     update_time DATETIME
@@ -140,22 +143,22 @@ INSERT INTO sys_role (id, name, code, description, status) VALUES
 (2, '普通用户', 'user', '普通用户', 1);
 
 -- 初始化权限
-INSERT INTO sys_permission (id, name, code, parent_id, type, path, sort) VALUES
-(1, '用户管理', 'user', 0, 1, '/user', 1),
-(2, '爬虫管理', 'spider', 0, 1, '/spider', 2),
-(3, '任务管理', 'task', 0, 1, '/task', 3),
-(4, '数据搜索', 'search', 0, 1, '/search', 4),
-(5, '文件管理', 'file', 0, 1, '/file', 5),
+INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) VALUES
+(1, '用户管理', 'user', 0, 1, '/user', 'User', 1),
+(2, '爬虫管理', 'spider', 0, 1, '/spider', 'Connection', 2),
+(3, '任务管理', 'task', 0, 1, '/task', 'List', 3),
+(4, '数据搜索', 'search', 0, 1, '/search', 'Search', 4),
+(5, '文件管理', 'file', 0, 1, '/file', 'Folder', 5),
 (6, '查看用户', 'user:list', 1, 2, NULL, 1),
 (7, '创建用户', 'user:create', 1, 2, NULL, 2),
 (8, '查看爬虫', 'spider:list', 2, 2, NULL, 1),
 (9, '创建爬虫', 'spider:create', 2, 2, NULL, 2),
 (10, '执行爬虫', 'spider:run', 2, 2, NULL, 3),
 (11, '搜索数据', 'search:query', 4, 2, NULL, 1),
-(12, '系统管理', 'system', 0, 0, NULL, 6),
-(13, '角色管理', 'role', 12, 1, '/role', 1),
-(14, '权限管理', 'permission', 12, 1, '/permission', 2),
-(15, '字典管理', 'dict', 12, 1, '/dict', 3);
+(12, '系统管理', 'system', 0, 0, NULL, 'Setting', 6),
+(13, '角色管理', 'role', 12, 1, '/role', 'Avatar', 1),
+(14, '权限管理', 'permission', 12, 1, '/permission', 'Lock', 2),
+(15, '字典管理', 'dict', 12, 1, '/dict', 'PriceTag', 3);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES

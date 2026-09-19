@@ -410,6 +410,7 @@ const loadData = async () => {
 const showPreviewImages = async (row: any) => {
   previewImagesVisible.value = true
   previewLoading.value = true
+  imgZoom.value = 1
   previewTitle.value = row.title || '内容预览'
   previewImages.value = row.images || []
   imgWidths.value = {}
@@ -780,10 +781,12 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 16px;
+  justify-content: center;
   align-items: flex-start;
 }
 
 .preview-img {
+  display: block;
   height: auto;
   max-width: 100%;
   border-radius: 4px;
@@ -792,6 +795,7 @@ onMounted(() => {
   cursor: pointer;
   transition: width 0.2s ease;
 }
+:deep(.preview-img .el-image__inner) { display: block; margin: 0 auto; }
 
 .preview-container {
   max-height: 70vh;

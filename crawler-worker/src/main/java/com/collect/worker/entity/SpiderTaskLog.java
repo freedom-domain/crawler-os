@@ -15,6 +15,7 @@ public class SpiderTaskLog extends BaseEntity {
     private String url;
     private Integer status;
     private String level;
+    private String type;
     private String message;
     private Integer costMs;
 }

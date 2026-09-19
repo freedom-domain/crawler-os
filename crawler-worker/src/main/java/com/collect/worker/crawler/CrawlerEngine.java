@@ -2,8 +2,10 @@ package com.collect.worker.crawler;
 
 import com.collect.common.mq.TaskMessage;
 import com.collect.worker.es.SpiderContentDoc;
+import com.collect.worker.entity.FileMetadata;
 import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
+import com.collect.worker.mapper.FileMetadataMapper;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
 import com.collect.worker.minio.MinioHelper;
@@ -12,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import io.minio.StatObjectResponse;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -40,6 +43,7 @@ public class CrawlerEngine {
     private final ElasticsearchOperations elasticsearchOperations;
     private final UrlQueueService urlQueue;
     private final MinioHelper minioHelper;
+    private final FileMetadataMapper fileMetadataMapper;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
@@ -49,12 +53,13 @@ public class CrawlerEngine {
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
                          ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
-                         MinioHelper minioHelper) {
+                         MinioHelper minioHelper, FileMetadataMapper fileMetadataMapper) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
         this.elasticsearchOperations = elasticsearchOperations;
         this.urlQueue = urlQueue;
         this.minioHelper = minioHelper;
+        this.fileMetadataMapper = fileMetadataMapper;
     }
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
@@ -257,6 +262,7 @@ public class CrawlerEngine {
                     // 不覆盖时，若图片已存在则跳过下载
                     if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                         skipped++;
+                        saveExistingFileMetadata(objectName, msg.getSpiderId(), pageUrl);
                         uploadedUrls.add(objectName);
                         continue;
                     }
@@ -270,12 +276,14 @@ public class CrawlerEngine {
                         objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + realExt;
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skipped++;
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), pageUrl);
                             uploadedUrls.add(objectName);
                             continue;
                         }
                     }
                     // 覆盖模式下 putObject 会直接覆盖已存在的对象
                     minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
+                    saveFileMetadata(objectName, data.length, guessContentType(realExt), msg.getSpiderId(), pageUrl);
                     uploaded++;
                     // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
                     uploadedUrls.add(objectName);
@@ -289,12 +297,40 @@ public class CrawlerEngine {
                         ? "图片: 上传 " + uploaded + " 张, 已存在跳过 " + skipped + " 张, 耗时 " + imgCost + "ms"
                         : "图片上传: " + uploaded + " 张, 耗时 " + imgCost + "ms";
                 log.info("图片处理完成: url={}, uploaded={}, skipped={}, cost={}ms", pageUrl, uploaded, skipped, imgCost);
-                writeLog(task.getId(), msg.getSpiderId(), pageUrl, 1, "INFO", msg2, (int) imgCost);
+                writeLog(task.getId(), msg.getSpiderId(), pageUrl, skipped > 0 ? 2 : 1, "INFO", msg2, (int) imgCost, "image");
             }
         } catch (Exception e) {
             log.warn("图片提取失败: url={}", pageUrl, e);
         }
         return uploadedUrls;
+    }
+
+    private void saveFileMetadata(String objectName, long fileSize, String contentType, Long spiderId, String source) {
+        if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
+            return;
+        }
+        FileMetadata metadata = new FileMetadata();
+        metadata.setBucket(imageBucket);
+        metadata.setObjectName(objectName);
+        metadata.setFileName(objectName.substring(objectName.lastIndexOf('/') + 1));
+        metadata.setContentType(contentType);
+        metadata.setFileSize(fileSize);
+        metadata.setCategory("image");
+        metadata.setSpiderId(spiderId);
+        metadata.setSource(source);
+        fileMetadataMapper.insert(metadata);
+    }
+
+    private void saveExistingFileMetadata(String objectName, Long spiderId, String source) {
+        if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
+            return;
+        }
+        try {
+            StatObjectResponse stat = minioHelper.statObject(imageBucket, objectName);
+            saveFileMetadata(objectName, stat.size(), stat.contentType(), spiderId, source);
+        } catch (Exception e) {
+            log.warn("读取已有文件元数据失败: bucket={}, object={}", imageBucket, objectName, e);
+        }
     }
 
     private byte[] downloadImage(String src) throws Exception {
@@ -376,12 +412,18 @@ public class CrawlerEngine {
 
     private void writeLog(Long taskId, Long spiderId, String url, int status,
                           String level, String message, int costMs) {
+        writeLog(taskId, spiderId, url, status, level, message, costMs, "html");
+    }
+
+    private void writeLog(Long taskId, Long spiderId, String url, int status,
+                          String level, String message, int costMs, String type) {
         SpiderTaskLog logEntry = new SpiderTaskLog();
         logEntry.setTaskId(taskId);
         logEntry.setSpiderId(spiderId);
         logEntry.setUrl(url);
         logEntry.setStatus(status);
         logEntry.setLevel(level);
+        logEntry.setType(type);
         logEntry.setMessage(message != null && message.length() > 500 ? message.substring(0, 500) : message);
         logEntry.setCostMs(costMs);
         logMapper.insert(logEntry);

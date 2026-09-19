@@ -123,12 +123,13 @@ public class SpiderController {
                                               @RequestParam(value = "size", defaultValue = "50") int size,
                                               @RequestParam(value = "status", required = false) Integer status,
                                               @RequestParam(value = "level", required = false) String level,
+                                              @RequestParam(value = "type", required = false) String type,
                                               @RequestParam(value = "keyword", required = false) String keyword) {
         SpiderTask task = spiderService.taskDetail(id);
         if (task == null) {
             return R.ok();
         }
-        return R.ok(spiderService.taskLogPage(task.getId(), current, size, status, level, keyword));
+        return R.ok(spiderService.taskLogPage(task.getId(), current, size, status, level, type, keyword));
     }
 
     @Operation(summary = "取消任务")

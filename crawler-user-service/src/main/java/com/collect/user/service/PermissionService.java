@@ -67,6 +67,7 @@ public class PermissionService {
             exist.setType(perm.getType());
         }
         exist.setPath(perm.getPath());
+        exist.setIcon(perm.getIcon());
         if (perm.getSort() != null) {
             exist.setSort(perm.getSort());
         }

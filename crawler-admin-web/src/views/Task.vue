@@ -69,6 +69,10 @@
           <el-option label="失败" :value="0" />
           <el-option label="已存在" :value="2" />
         </el-select>
+        <el-select v-model="logType" placeholder="类型" clearable size="small" style="width: 100px" @change="reloadLogs">
+          <el-option label="HTML" value="html" />
+          <el-option label="图片" value="image" />
+        </el-select>
         <el-select v-model="logLevel" placeholder="级别" clearable size="small" style="width: 100px" @change="reloadLogs">
           <el-option label="INFO" value="INFO" />
           <el-option label="ERROR" value="ERROR" />
@@ -87,6 +91,11 @@
             <el-tag v-if="row.status === 1" type="success" size="small">成功</el-tag>
             <el-tag v-else-if="row.status === 0" type="danger" size="small">失败</el-tag>
             <el-tag v-else type="warning" size="small">已存在</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.type === 'image' ? 'warning' : 'info'" size="small">{{ row.type === 'image' ? '图片' : 'HTML' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="level" label="级别" width="70" align="center" />
@@ -134,6 +143,7 @@ const logTotal = ref(0)
 const currentTask = ref<any>(null)
 const logKeyword = ref('')
 const logStatus = ref<number | null>(null)
+const logType = ref('')
 const logLevel = ref('')
 
 const reloadLogs = () => {
@@ -205,6 +215,7 @@ const showLogs = async (row: any) => {
   logPage.value = 1
   logKeyword.value = ''
   logStatus.value = null
+  logType.value = ''
   logLevel.value = ''
   await loadLogs()
 }
@@ -215,6 +226,7 @@ const loadLogs = async () => {
   try {
     const params: any = { current: logPage.value, size: logSize.value }
     if (logStatus.value != null) params.status = logStatus.value
+    if (logType.value) params.type = logType.value
     if (logLevel.value) params.level = logLevel.value
     if (logKeyword.value) params.keyword = logKeyword.value
     const res: any = await taskLogs(currentTask.value.id, params)

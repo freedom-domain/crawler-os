@@ -76,7 +76,8 @@ public class FileController {
     @GetMapping("/page")
     public R<IPage<FileMetadata>> page(@RequestParam(value = "current", defaultValue = "1") int current,
                                         @RequestParam(value = "size", defaultValue = "10") int size,
-                                        @RequestParam(value = "category", required = false) String category) {
-        return R.ok(fileService.page(current, size, category));
+                                        @RequestParam(value = "category", required = false) String category,
+                                        @RequestParam(value = "spiderId", required = false) Long spiderId) {
+        return R.ok(fileService.page(current, size, category, spiderId));
     }
 }

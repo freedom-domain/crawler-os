@@ -14,5 +14,6 @@ public class MenuNode {
     private String path;
     private Integer type;
     private Integer sort;
+    private String icon;
     private List<MenuNode> children = new ArrayList<>();
 }

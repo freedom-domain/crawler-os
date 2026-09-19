@@ -19,6 +19,7 @@ public class SysPermission extends BaseEntity {
     private Long parentId;
     private Integer type;
     private String path;
+    private String icon;
     private Integer sort;
 
     /** 子权限（仅用于树形展示，非数据库字段） */

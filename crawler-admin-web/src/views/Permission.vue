@@ -10,6 +10,12 @@
 
     <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }">
       <el-table-column prop="name" label="权限名称" width="200" />
+      <el-table-column label="图标" width="90" align="center">
+        <template #default="{ row }">
+          <el-icon v-if="row.icon" class="permission-icon"><component :is="iconLibrary[row.icon]" /></el-icon>
+          <span v-else class="icon-empty">自动</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="code" label="权限编码" width="200" />
       <el-table-column prop="type" label="类型" width="100">
         <template #default="{ row }">
@@ -47,6 +53,13 @@
         <el-form-item label="路由路径" v-if="form.type === 1">
           <el-input v-model="form.path" placeholder="如 /user（仅菜单类型需要）" />
         </el-form-item>
+        <el-form-item label="菜单图标" v-if="form.type !== 2">
+          <el-select v-model="form.icon" placeholder="请选择菜单图标" clearable style="width: 100%">
+            <el-option v-for="item in iconOptions" :key="item.value" :label="item.label" :value="item.value">
+              <span class="icon-option"><el-icon><component :is="item.icon" /></el-icon>{{ item.label }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" />
         </el-form-item>
@@ -63,13 +76,31 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { permissionTree, permissionCreate, permissionUpdate, permissionDelete } from '@/api'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection } from '@element-plus/icons-vue'
 
 const tree = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const formVisible = ref(false)
-const form = ref<any>({ id: null, name: '', code: '', type: 1, path: '', sort: 0, parentId: 0 })
+const form = ref<any>({ id: null, name: '', code: '', type: 1, path: '', icon: '', sort: 0, parentId: 0 })
+
+const iconOptions = [
+  { value: 'User', label: '用户', icon: User },
+  { value: 'Avatar', label: '角色', icon: Avatar },
+  { value: 'Lock', label: '权限', icon: Lock },
+  { value: 'PriceTag', label: '标签', icon: PriceTag },
+  { value: 'Connection', label: '连接', icon: Connection },
+  { value: 'List', label: '列表', icon: List },
+  { value: 'Search', label: '搜索', icon: Search },
+  { value: 'Folder', label: '文件夹', icon: Folder },
+  { value: 'Setting', label: '设置', icon: Setting },
+  { value: 'Monitor', label: '监控', icon: Monitor },
+  { value: 'DataAnalysis', label: '数据分析', icon: DataAnalysis },
+  { value: 'Document', label: '文档', icon: Document },
+  { value: 'Collection', label: '集合', icon: Collection },
+  { value: 'Odometer', label: '仪表盘', icon: Odometer }
+]
+const iconLibrary = Object.fromEntries(iconOptions.map(item => [item.value, item.icon]))
 
 // 类型展示
 const typeLabel = (type: number) => (type === 0 ? '目录' : type === 1 ? '菜单' : '按钮')
@@ -93,6 +124,7 @@ const openCreate = (parent: any) => {
     // 顶级默认目录，子级默认菜单
     type: parent ? 1 : 0,
     path: '',
+    icon: '',
     sort: 0,
     parentId: parent ? parent.id : 0
   }
@@ -106,6 +138,7 @@ const openEdit = (row: any) => {
     code: row.code,
     type: row.type,
     path: row.path,
+    icon: row.icon || '',
     sort: row.sort,
     parentId: row.parentId
   }
@@ -145,3 +178,9 @@ const handleDelete = (row: any) => {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.permission-icon { color: #16a6a3; font-size: 18px; vertical-align: middle; }
+.icon-empty { color: #9fb3c8; font-size: 12px; }
+.icon-option { display: flex; align-items: center; gap: 8px; }
+</style>

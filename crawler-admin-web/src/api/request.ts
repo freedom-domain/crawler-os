@@ -18,6 +18,9 @@ request.interceptors.request.use((config) => {
 
 request.interceptors.response.use(
   (response) => {
+    if (response.config.responseType === 'blob') {
+      return response.data
+    }
     const res = response.data
     // 后端以 HTTP 200 + body code=401 表示未登录/登录过期，需在此处理跳转
     if (res.code === 401) {
