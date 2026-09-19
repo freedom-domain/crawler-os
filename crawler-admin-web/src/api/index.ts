@@ -10,6 +10,8 @@ export const userDetail = (id: number) => request.get(`/user/${id}`)
 export const userCreate = (data: any) => request.post('/user/register', data)
 export const userUpdate = (id: number, data: any) => request.put(`/user/${id}`, data)
 export const userDelete = (id: number) => request.delete(`/user/${id}`)
+export const userChangePassword = (data: { userId: number; oldPassword: string; newPassword: string }) =>
+  request.put('/user/password', data)
 
 export const roleList = () => request.get('/role')
 export const roleCreate = (data: any) => request.post('/role', data)

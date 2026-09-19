@@ -43,6 +43,9 @@
                 <el-dropdown-item command="profile">
                   <span class="dropdown-item-label">用户信息</span>
                 </el-dropdown-item>
+                <el-dropdown-item command="changePassword">
+                  <span class="dropdown-item-label">修改密码</span>
+                </el-dropdown-item>
                 <el-dropdown-item command="logout" divided>
                   <span class="dropdown-item-label">退出登录</span>
                 </el-dropdown-item>
@@ -56,6 +59,25 @@
         <router-view />
       </el-main>
     </el-container>
+
+    <!-- 修改密码弹窗 -->
+    <el-dialog v-model="passwordDialogVisible" title="修改密码" width="420px">
+      <el-form :model="passwordForm" label-width="100px">
+        <el-form-item label="当前密码">
+          <el-input v-model="passwordForm.oldPassword" type="password" placeholder="请输入当前密码" show-password />
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input v-model="passwordForm.newPassword" type="password" placeholder="请输入新密码" show-password />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input v-model="passwordForm.confirmPassword" type="password" placeholder="请再次输入新密码" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="passwordLoading" @click="handleChangePassword">确定</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
@@ -63,8 +85,8 @@
 import { ref, computed, onMounted, defineComponent, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { getMenu } from '@/api'
-import { ElIcon, ElSubMenu, ElMenuItem, ElMessageBox } from 'element-plus'
+import { getMenu, userChangePassword } from '@/api'
+import { ElIcon, ElSubMenu, ElMenuItem, ElMessageBox, ElMessage } from 'element-plus'
 import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -170,6 +192,51 @@ const handleCommand = (cmd: string) => {
     }).catch(() => {})
   } else if (cmd === 'profile') {
     router.push('/profile')
+  } else if (cmd === 'changePassword') {
+    passwordDialogVisible.value = true
+  }
+}
+
+// 修改密码
+const passwordDialogVisible = ref(false)
+const passwordLoading = ref(false)
+const passwordForm = ref({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const handleChangePassword = async () => {
+  if (!passwordForm.value.oldPassword) {
+    ElMessage.warning('请输入当前密码')
+    return
+  }
+  if (!passwordForm.value.newPassword) {
+    ElMessage.warning('请输入新密码')
+    return
+  }
+  if (passwordForm.value.newPassword.length < 6) {
+    ElMessage.warning('新密码长度不能少于6位')
+    return
+  }
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
+    return
+  }
+  passwordLoading.value = true
+  try {
+    await userChangePassword({
+      userId: userStore.userId,
+      oldPassword: passwordForm.value.oldPassword,
+      newPassword: passwordForm.value.newPassword
+    })
+    ElMessage.success('密码修改成功')
+    passwordDialogVisible.value = false
+    passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+  } catch (e: any) {
+    ElMessage.error(e.message || '密码修改失败')
+  } finally {
+    passwordLoading.value = false
   }
 }
 </script>

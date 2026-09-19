@@ -62,53 +62,109 @@
           <el-tag size="small" type="info">{{ userStore.permissions.length }} 项</el-tag>
         </div>
       </template>
-      <div v-if="userStore.permissions.length > 0" class="perm-list">
-        <el-tag
-          v-for="perm in userStore.permissions"
-          :key="perm"
-          class="perm-tag"
-          size="default"
-          effect="light"
-        >
-          {{ getPermName(perm) }}
-        </el-tag>
+      <div v-if="userStore.permissions.length > 0" class="perm-tree">
+        <div v-for="group in permGroups" :key="group.name" class="perm-group">
+          <div class="perm-group-header">
+            <el-icon><component :is="group.icon" /></el-icon>
+            <span class="perm-group-name">{{ group.name }}</span>
+            <el-tag size="small" type="info">{{ group.items.length }}</el-tag>
+          </div>
+          <div class="perm-group-items">
+            <el-tag
+              v-for="item in group.items"
+              :key="item.code"
+              class="perm-tag"
+              size="default"
+              effect="light"
+            >
+              {{ item.name }}
+            </el-tag>
+          </div>
+        </div>
       </div>
       <el-empty v-else description="暂无权限" :image-size="80" />
     </el-card>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { permissionTree } from '@/api'
-import { UserFilled, User, Avatar, ChatDotRound, Lock } from '@element-plus/icons-vue'
+import { UserFilled, User, Avatar, ChatDotRound, Lock, Connection, List, Search, Folder, Setting, PriceTag } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
-const permNameMap = ref<Record<string, string>>({})
+const permTree = ref<any[]>([])
 
-const loadPermNames = async () => {
+// 图标映射
+const iconMap: Record<string, any> = {
+  user: User,
+  role: Avatar,
+  permission: Lock,
+  spider: Connection,
+  task: List,
+  search: Search,
+  file: Folder,
+  dict: PriceTag,
+  system: Setting
+}
+
+const loadPermTree = async () => {
   try {
     const res: any = await permissionTree()
-    const map: Record<string, string> = {}
-    const buildMap = (nodes: any[]) => {
-      for (const node of nodes) {
-        if (node.code) map[node.code] = node.name
-        if (node.children && node.children.length > 0) {
-          buildMap(node.children)
-        }
-      }
-    }
-    buildMap(res.data || [])
-    permNameMap.value = map
+    permTree.value = res.data || []
   } catch {
-    // ignore
+    permTree.value = []
   }
 }
 
-onMounted(loadPermNames)
+onMounted(loadPermTree)
 
-const getPermName = (code: string) => permNameMap.value[code] || code
+// 按分组展示权限
+const permGroups = computed(() => {
+  const groups: { name: string; icon: any; items: { code: string; name: string }[] }[] = []
+  const userPerms = new Set(userStore.permissions)
+  
+  const processNode = (node: any) => {
+    // 如果当前节点在用户权限中，或者其子节点在用户权限中
+    const hasPerm = userPerms.has(node.code)
+    const childPerms: { code: string; name: string }[] = []
+    
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        if (userPerms.has(child.code)) {
+          childPerms.push({ code: child.code, name: child.name })
+        }
+        // 递归处理子节点
+        if (child.children && child.children.length > 0) {
+          const subGroup = processNode(child)
+          if (subGroup) {
+            groups.push(subGroup)
+          }
+        }
+      }
+    }
+    
+    if (hasPerm || childPerms.length > 0) {
+      return {
+        name: node.name,
+        icon: iconMap[node.code] || iconMap[node.icon] || Setting,
+        items: hasPerm ? [{ code: node.code, name: node.name }, ...childPerms] : childPerms
+      }
+    }
+    return null
+  }
+  
+  for (const node of permTree.value) {
+    const group = processNode(node)
+    if (group) {
+      groups.push(group)
+    }
+  }
+  
+  return groups
+})
 </script>
 
 <style scoped>
@@ -211,15 +267,47 @@ const getPermName = (code: string) => permNameMap.value[code] || code
 }
 
 /* 权限列表 */
-.perm-list {
+.perm-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.perm-group {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.perm-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.perm-group-header .el-icon {
+  color: #109f9a;
+}
+
+.perm-group-name {
+  font-weight: 600;
+  color: #303133;
+  flex: 1;
+}
+
+.perm-group-items {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  padding: 12px 16px;
 }
 
 .perm-tag {
   border-radius: 6px;
-  padding: 6px 12px;
+  padding: 4px 10px;
 }
 
 @media (max-width: 600px) {
