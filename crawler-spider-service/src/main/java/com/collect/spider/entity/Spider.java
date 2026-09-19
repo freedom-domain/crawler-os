@@ -25,6 +25,7 @@ public class Spider extends BaseEntity {
     private Integer maxDepth;
     private Integer timeout;
     private String headers;
+    private Integer followRobots;
     private Integer enabled;
     private Long creatorId;
     private Integer status;

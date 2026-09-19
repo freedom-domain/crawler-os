@@ -37,5 +37,7 @@ public class SpiderCreateReq {
 
     private String headers;
 
+    private Integer followRobots = 0;
+
     private Integer enabled = 1;
 }

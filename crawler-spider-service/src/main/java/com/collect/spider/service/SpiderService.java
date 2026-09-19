@@ -52,6 +52,7 @@ public class SpiderService {
         spider.setMaxDepth(req.getMaxDepth());
         spider.setTimeout(req.getTimeout());
         spider.setHeaders(req.getHeaders());
+        spider.setFollowRobots(req.getFollowRobots());
         spider.setEnabled(req.getEnabled());
         spider.setCreatorId(1L);
         spider.setStatus(0);
@@ -100,6 +101,7 @@ public class SpiderService {
         exist.setMaxDepth(req.getMaxDepth());
         exist.setTimeout(req.getTimeout());
         exist.setHeaders(req.getHeaders());
+        exist.setFollowRobots(req.getFollowRobots());
         spiderMapper.updateById(exist);
     }
 
@@ -267,6 +269,7 @@ public class SpiderService {
         msg.setMaxDepth(spider.getMaxDepth());
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());
+        msg.setFollowRobots(spider.getFollowRobots());
         return msg;
     }
 }

@@ -28,9 +28,12 @@ import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Component;
 
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -80,6 +83,7 @@ public class CrawlerEngine {
         int concurrency = 8;
         var semaphore = new java.util.concurrent.Semaphore(concurrency);
         var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        Map<String, RobotsRules> robotsCache = new ConcurrentHashMap<>();
 
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger fail = new AtomicInteger(0);
@@ -99,7 +103,8 @@ public class CrawlerEngine {
                     String[] parts = item.split("\t", 2);
                     String url = parts[0];
                     int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
-                    batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail, semaphore, executor));
+                        batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail, semaphore, executor,
+                            robotsCache));
                 }
                 if (batch.isEmpty()) break;
                 var futures = batch.stream().map(executor::submit).toList();
@@ -134,10 +139,15 @@ public class CrawlerEngine {
     private void crawlUrl(String url, int depth, int maxDepth, TaskMessage msg, SpiderTask task,
                           Long taskId, AtomicInteger success, AtomicInteger fail,
                           java.util.concurrent.Semaphore semaphore,
-                          java.util.concurrent.ExecutorService executor) {
+                          java.util.concurrent.ExecutorService executor,
+                          Map<String, RobotsRules> robotsCache) {
         try {
             semaphore.acquire();
             try {
+                if (!isAllowedByRobots(url, msg, robotsCache)) {
+                    log.info("robots.txt 禁止抓取: url={}", url);
+                    return;
+                }
                 long start = System.currentTimeMillis();
                 Document doc = fetch(url, msg.getTimeout());
                 long cost = System.currentTimeMillis() - start;
@@ -198,9 +208,10 @@ public class CrawlerEngine {
 
                 if (!msg.isSingleUrl() && depth < maxDepth) {
                     List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
-                    next.removeIf(u -> msg.getStartUrls().contains(u));
+                    next.removeIf(u -> msg.getStartUrls().contains(u) || !isSameDomain(u, msg.getStartUrls()));
                     int enqueued = 0;
                     for (String nextUrl : next) {
+                        if (!isAllowedByRobots(nextUrl, msg, robotsCache)) continue;
                         if (urlQueue.isVisited(taskId, nextUrl)) continue;
                         urlQueue.markVisited(taskId, nextUrl);
                         urlQueue.push(taskId, nextUrl + "\t" + (depth + 1));
@@ -217,6 +228,96 @@ public class CrawlerEngine {
             fail.incrementAndGet();
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
+        }
+    }
+
+    private boolean isSameDomain(String url, List<String> startUrls) {
+        try {
+            URI target = URI.create(url);
+            String targetHost = normalizeHost(target.getHost());
+            if (targetHost == null) return false;
+            for (String startUrl : startUrls) {
+                URI start = URI.create(startUrl);
+                if (targetHost.equals(normalizeHost(start.getHost()))) return true;
+            }
+        } catch (Exception e) {
+            log.debug("URL 域名解析失败: {}", url);
+        }
+        return false;
+    }
+
+    private String normalizeHost(String host) {
+        if (host == null || host.isBlank()) return null;
+        String normalized = host.toLowerCase(java.util.Locale.ROOT);
+        return normalized.startsWith("www.") ? normalized.substring(4) : normalized;
+    }
+
+    private boolean isAllowedByRobots(String url, TaskMessage msg, Map<String, RobotsRules> robotsCache) {
+        if (!Integer.valueOf(1).equals(msg.getFollowRobots())) return true;
+        try {
+            URI uri = URI.create(url);
+            if (uri.getHost() == null) return false;
+            String scheme = uri.getScheme() == null ? "https" : uri.getScheme();
+            String robotsUrl = scheme + "://" + uri.getAuthority() + "/robots.txt";
+            RobotsRules rules = robotsCache.computeIfAbsent(robotsUrl, this::loadRobotsRules);
+            return rules.isAllowed(uri.getRawPath());
+        } catch (Exception e) {
+            log.debug("robots.txt 检查失败，放行 URL: {}", url, e);
+            return true;
+        }
+    }
+
+    private RobotsRules loadRobotsRules(String robotsUrl) {
+        try {
+            Request request = new Request.Builder()
+                    .url(robotsUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
+                    .build();
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return RobotsRules.allowAll();
+                return RobotsRules.parse(response.body().string());
+            }
+        } catch (Exception e) {
+            log.debug("读取 robots.txt 失败，放行 URL: {}", robotsUrl);
+            return RobotsRules.allowAll();
+        }
+    }
+
+    private static final class RobotsRules {
+        private final List<String> disallowedPaths;
+
+        private RobotsRules(List<String> disallowedPaths) {
+            this.disallowedPaths = disallowedPaths;
+        }
+
+        static RobotsRules allowAll() {
+            return new RobotsRules(List.of());
+        }
+
+        static RobotsRules parse(String content) {
+            List<String> disallowed = new java.util.ArrayList<>();
+            boolean appliesToOurAgent = false;
+            boolean hasUserAgent = false;
+            for (String rawLine : content.split("\\R")) {
+                String line = rawLine.split("#", 2)[0].trim();
+                if (line.isEmpty() || !line.contains(":")) continue;
+                String[] pair = line.split(":", 2);
+                String key = pair[0].trim().toLowerCase(java.util.Locale.ROOT);
+                String value = pair[1].trim();
+                if ("user-agent".equals(key)) {
+                    hasUserAgent = true;
+                    appliesToOurAgent = "*".equals(value)
+                            || value.toLowerCase(java.util.Locale.ROOT).contains("collectx");
+                } else if ("disallow".equals(key) && appliesToOurAgent && !value.isEmpty()) {
+                    disallowed.add(value);
+                }
+            }
+            return hasUserAgent ? new RobotsRules(disallowed) : allowAll();
+        }
+
+        boolean isAllowed(String path) {
+            String normalizedPath = path == null || path.isEmpty() ? "/" : path;
+            return disallowedPaths.stream().noneMatch(normalizedPath::startsWith);
         }
     }
 

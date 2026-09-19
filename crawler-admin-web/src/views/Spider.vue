@@ -67,13 +67,10 @@
       @change="loadData"
     />
 
-    <el-dialog v-model="createVisible" :title="editingId ? '编辑爬虫' : '新建爬虫'" width="600px">
-      <el-form :model="form" label-width="100px">
+    <el-dialog v-model="createVisible" :title="editingId ? '编辑爬虫' : '新建爬虫'" width="700px" top="5vh" class="spider-dialog">
+      <el-form :model="form" label-width="110px">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" />
         </el-form-item>
         <el-form-item label="类型" required>
           <el-select v-model="form.type">
@@ -81,13 +78,16 @@
             <el-option label="JS渲染" value="playwright" />
           </el-select>
         </el-form-item>
+        <el-form-item label="起始URL" required>
+          <el-input v-model="startUrlsStr" placeholder="多个URL用逗号分隔" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="form.description" type="textarea" />
+        </el-form-item>
         <el-form-item label="分组">
           <el-select v-model="form.group" placeholder="选择分组" clearable style="width: 100%">
             <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="起始URL" required>
-          <el-input v-model="startUrlsStr" placeholder="多个URL用逗号分隔" />
         </el-form-item>
         <el-form-item label="内容选择器">
           <el-input v-model="form.contentSelector" placeholder="CSS选择器，如 .article-content 或 #content" />
@@ -104,11 +104,15 @@
           <el-switch v-model="form.overwriteImage" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
           <div class="form-tip">开启后重新爬取会重新下载并覆盖已存在的图片；关闭则已存在图片不重复下载</div>
         </el-form-item>
-        <el-form-item label="调度表达式">
-          <el-input v-model="form.schedule" placeholder="如: 0 */10 * * * ?" />
-        </el-form-item>
         <el-form-item label="最大深度">
           <el-input-number v-model="form.maxDepth" :min="0" :max="5" />
+        </el-form-item>
+        <el-form-item label="遵循 robots.txt">
+          <el-switch v-model="form.followRobots" :active-value="1" :inactive-value="0" active-text="是" inactive-text="否" />
+          <div class="form-tip">开启后，遵循目标站点 robots.txt 中的 Disallow 规则</div>
+        </el-form-item>
+        <el-form-item label="调度表达式">
+          <el-input v-model="form.schedule" placeholder="如: 0 */10 * * * ?" />
         </el-form-item>
         <el-form-item label="超时(ms)">
           <el-input-number v-model="form.timeout" :min="1000" :max="60000" :step="1000" />
@@ -146,7 +150,7 @@ const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
   name: '', description: '', type: 'http', group: '',
-  contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000
+  contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
 })
 
 const loadGroupOptions = async () => {
@@ -198,7 +202,7 @@ const loadData = async () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000 }
+  form.value = { name: '', description: '', type: 'http', group: '', contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -210,7 +214,7 @@ const showEdit = async (row: any) => {
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '',
     contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
-    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000
+    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0
   }
   try {
     const urls = JSON.parse(d.startUrls || '[]')
@@ -317,4 +321,13 @@ onMounted(() => {
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; }
 .text-muted { color: #c0c4cc; }
+
+:deep(.spider-dialog .el-dialog__body) {
+  height: 70vh;
+  overflow-y: auto;
+  padding-top: 10px;
+}
+:deep(.spider-dialog .el-form-item__label) {
+  white-space: nowrap;
+}
 </style>

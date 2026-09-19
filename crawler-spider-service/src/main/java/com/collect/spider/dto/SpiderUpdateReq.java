@@ -36,4 +36,6 @@ public class SpiderUpdateReq {
     private Integer timeout = 15000;
 
     private String headers;
+
+    private Integer followRobots = 0;
 }

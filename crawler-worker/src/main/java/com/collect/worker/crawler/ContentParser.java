@@ -70,10 +70,9 @@ public class ContentParser {
         if (remainingDepth <= 0) {
             return urls;
         }
-        int limit = 50;
+        // 每页链接无上限，仅做页内去重与协议过滤
         Set<String> seen = new HashSet<>();
         for (Element a : doc.select("a[href]")) {
-            if (urls.size() >= limit) break;
             String href = a.absUrl("href");
             if (!href.isEmpty() && !href.startsWith("javascript:") && !href.startsWith("mailto:")
                     && !href.startsWith("tel:") && !href.startsWith("#")
