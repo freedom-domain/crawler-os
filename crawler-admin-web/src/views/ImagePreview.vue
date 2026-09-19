@@ -4,8 +4,9 @@
     <button 
       type="button" 
       class="toolbar-trigger"
-      @mouseenter="showToolbar = true"
-      @mouseleave="showToolbar = false"
+      :style="triggerStyle"
+      @click="showToolbar = !showToolbar"
+      @mousedown="startDrag"
     >
       <el-icon><Setting /></el-icon>
     </button>
@@ -14,8 +15,7 @@
     <div 
       v-show="showToolbar" 
       class="toolbar-header"
-      @mouseenter="showToolbar = true"
-      @mouseleave="showToolbar = false"
+      :style="toolbarStyle"
     >
       <div class="toolbar-section">
         <span class="section-label">图片</span>
@@ -111,6 +111,87 @@ const viewerScale = ref(1)
 const stageRef = ref<HTMLElement | null>(null)
 const imgRef = ref<HTMLImageElement | null>(null)
 const showToolbar = ref(false)
+
+// 工具栏拖拽
+const triggerPos = ref({ x: 0, y: 0 })
+const isDragging = ref(false)
+const dragOffset = ref({ x: 0, y: 0 })
+
+const triggerStyle = computed(() => ({
+  position: 'fixed',
+  left: `${triggerPos.value.x}px`,
+  top: `${triggerPos.value.y}px`,
+  transform: 'none',
+  right: 'auto',
+  zIndex: 20
+}))
+
+const toolbarStyle = computed(() => {
+  const { x, y } = triggerPos.value
+  const vw = window.innerWidth
+  // 判断按钮在左边还是右边
+  const isLeft = x < vw / 2
+  return {
+    position: 'fixed',
+    left: isLeft ? `${x + 45}px` : `${x - 150}px`,
+    top: `${y - 80}px`,
+    right: 'auto',
+    transform: 'none',
+    zIndex: 20
+  }
+})
+
+const startDrag = (e: MouseEvent) => {
+  isDragging.value = true
+  dragOffset.value = {
+    x: e.clientX - triggerPos.value.x,
+    y: e.clientY - triggerPos.value.y
+  }
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', endDrag)
+}
+
+const onDrag = (e: MouseEvent) => {
+  if (!isDragging.value) return
+  triggerPos.value = {
+    x: e.clientX - dragOffset.value.x,
+    y: e.clientY - dragOffset.value.y
+  }
+}
+
+const endDrag = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', endDrag)
+  // 吸附到最近的边
+  const { x, y } = triggerPos.value
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const snapX = x < vw / 2 ? 0 : vw - 40
+  triggerPos.value = { x: snapX, y }
+}
+
+// 初始化位置：右侧居中
+onMounted(() => {
+  triggerPos.value = {
+    x: window.innerWidth - 40,
+    y: window.innerHeight / 2 - 20
+  }
+  // 点击其他地方隐藏工具栏
+  document.addEventListener('click', onDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+})
+
+const onDocumentClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement
+  // 如果点击的不是触发按钮或工具栏，则隐藏
+  if (!target.closest('.toolbar-trigger') && !target.closest('.toolbar-header')) {
+    showToolbar.value = false
+  }
+}
 
 // 窗口标题跟随内容标题
 watch(title, (t) => {
@@ -254,11 +335,6 @@ onBeforeUnmount(() => {
 
 /* ===== 工具栏 ===== */
 .toolbar-header {
-  position: fixed;
-  top: 50%;
-  right: 16px;
-  transform: translateY(-50%);
-  z-index: 20;
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -347,22 +423,24 @@ onBeforeUnmount(() => {
   border-color: #94a3b8;
 }
 .toolbar-trigger {
-  position: fixed;
-  top: 50%;
-  right: 20px;
-  transform: translateY(-50%);
-  z-index: 20;
   width: 40px;
   height: 40px;
-  border: 1px solid #e2e8f0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
   color: #64748b;
-  cursor: pointer;
+  cursor: grab;
   display: grid;
   place-items: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+  transition: background 0.2s, color 0.2s;
+}
+.toolbar-trigger:active {
+  cursor: grabbing;
+}
+.toolbar-trigger:hover {
+  background: rgba(255, 255, 255, 0.9);
+  color: #3b82f6;
 }
 .toolbar-trigger:hover {
   background: #fff;
