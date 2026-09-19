@@ -16,11 +16,11 @@
               v-model="keyword"
               class="search-input"
               placeholder="搜索爬取的内容…"
-              @keyup.enter="loadData"
+              @keyup.enter="doSearch"
             />
-            <button v-if="keyword" class="clear-btn" @click="keyword = ''; loadData()">&times;</button>
+            <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
           </div>
-          <el-button type="primary" class="search-btn" @click="loadData">搜索</el-button>
+          <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
         </div>
         <div class="search-row filter-row">
           <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="onGroupChange">
@@ -219,7 +219,7 @@ import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-
 const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
-const size = ref(20)
+const size = ref(10)
 const total = ref(0)
 const keyword = ref('')
 const filterSpider = ref<number | ''>('')
@@ -361,6 +361,12 @@ const openAllImages = async (row: any) => {
   if (!win) {
     ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
   }
+}
+
+// 点击搜索/回车：重置到第 1 页再查询
+const doSearch = () => {
+  page.value = 1
+  loadData()
 }
 
 const loadData = async () => {

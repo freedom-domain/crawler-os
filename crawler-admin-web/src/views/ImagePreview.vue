@@ -339,8 +339,9 @@ onBeforeUnmount(() => {
 .thumb {
   display: block;
   width: auto;
-  height: 88vh;
-  object-fit: contain;
+  height: auto;
+  max-width: 100%;
+  max-height: 88vh;
   border-radius: 10px;
   cursor: zoom-in;
   transition: transform 0.15s, box-shadow 0.15s;
