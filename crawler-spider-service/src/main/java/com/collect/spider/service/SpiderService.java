@@ -164,6 +164,7 @@ public class SpiderService {
         task.setFailCount(0);
         task.setTaskId(taskId);
         taskMapper.insert(task);
+        log.info("任务已创建: id={}, taskId={}", task.getId(), taskId);
 
         TaskMessage msg = buildMessage(spider, taskId, startUrls);
         if (maxDepthOverride != null) {

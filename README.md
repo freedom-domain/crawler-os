@@ -138,3 +138,7 @@ npm run build      # 生产构建到 dist/
 ## Swagger 文档
 
 各服务启动后访问 `http://127.0.0.1:端口/swagger-ui.html`。
+
+杀掉全部服务进程
+
+pkill -9 -f 'Application'
