@@ -187,19 +187,12 @@ public class SpiderService {
 
     @SuppressWarnings("null")
     public IPage<SpiderTask> taskPage(int current, int size, Long spiderId, String status) {
-        LambdaQueryWrapper<SpiderTask> qw = new LambdaQueryWrapper<>();
-        if (spiderId != null) {
-            qw.eq(SpiderTask::getSpiderId, spiderId);
-        }
-        if (status != null && !status.isBlank()) {
-            qw.eq(SpiderTask::getStatus, status);
-        }
-        qw.orderByDesc(SpiderTask::getCreateTime);
-        return taskMapper.selectPage(new Page<>(current, size), qw);
+        return taskMapper.selectTaskPage(new Page<>(current, size), spiderId, status);
     }
 
+    @SuppressWarnings("null")
     public SpiderTask taskDetail(Long id) {
-        return taskMapper.selectById(id);
+        return taskMapper.selectTaskById(id);
     }
 
     @SuppressWarnings("null")

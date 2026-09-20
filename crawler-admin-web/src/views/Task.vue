@@ -44,8 +44,16 @@
           {{ formatDuration(row.totalCostMs || 0) }}
         </template>
       </el-table-column>
-      <el-table-column prop="successCount" label="成功" width="70" align="center" />
-      <el-table-column prop="failCount" label="失败" width="70" align="center" />
+      <el-table-column label="HTML" align="center">
+        <el-table-column prop="htmlSuccessCount" label="成功" width="70" align="center" />
+        <el-table-column prop="htmlFailCount" label="失败" width="70" align="center" />
+        <el-table-column prop="htmlExistingCount" label="已存在" width="80" align="center" />
+      </el-table-column>
+      <el-table-column label="图片" align="center">
+        <el-table-column prop="imageSuccessCount" label="成功" width="70" align="center" />
+        <el-table-column prop="imageFailCount" label="失败" width="70" align="center" />
+        <el-table-column prop="imageExistingCount" label="已存在" width="80" align="center" />
+      </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
           <el-button v-if="row.status === 'RUNNING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>

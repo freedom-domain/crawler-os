@@ -71,6 +71,7 @@ public class CrawlerEngine {
             .followRedirects(true)
             .build();
 
+    @SuppressWarnings("null")
     public void execute(TaskMessage msg) {
         SpiderTask task = taskMapper.selectByTaskId(msg.getTaskId());
         if (task == null) {
@@ -135,14 +136,10 @@ public class CrawlerEngine {
         } else {
             task.setStatus("SUCCESS");
         }
-        taskMapper.setSuccess(task.getId(), success.get());
-        taskMapper.setFail(task.getId(), fail.get());
-        task.setSuccessCount(success.get());
-        task.setFailCount(fail.get());
         task.setEndTime(endTime);
         task.setTotalCostMs(task.getStartTime() == null ? 0L : java.time.Duration.between(task.getStartTime(), endTime).toMillis());
-        taskMapper.updateById(task);
-        log.info("任务完成: taskId={}, success={}, fail={}, totalCostMs={}", taskId, success.get(), fail.get(), task.getTotalCostMs());
+        taskMapper.updateCompletion(task.getId(), task.getStatus(), task.getErrorMessage(), endTime, task.getTotalCostMs());
+        log.info("任务完成: taskId={}, totalCostMs={}", taskId, task.getTotalCostMs());
     }
 
     private boolean awaitExecutorTermination(java.util.concurrent.ExecutorService executor,
@@ -177,6 +174,7 @@ public class CrawlerEngine {
             try {
                 if (!isAllowedByRobots(url, msg, robotsCache)) {
                     log.info("robots.txt 禁止抓取: url={}", url);
+                    writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "robots.txt 禁止抓取", 0);
                     fail.incrementAndGet();
                     return;
                 }
@@ -258,6 +256,7 @@ public class CrawlerEngine {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             fail.incrementAndGet();
+            writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "任务线程被中断", 0);
         } catch (Exception e) {
             fail.incrementAndGet();
             log.warn("抓取失败: {}", url, e);
