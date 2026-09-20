@@ -2,10 +2,14 @@ package com.collect.worker.redis;
 
 import com.collect.worker.crawler.ContentParser;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 class UrlQueueServiceTest {
 
@@ -29,5 +33,17 @@ class UrlQueueServiceTest {
 
         assertEquals(1, urls.size());
         assertEquals("https://example.com/path?a=1&b=2", urls.get(0));
+    }
+
+    @Test
+    void clear_shouldKeepVisitedUrlsForTaskIdempotency() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        UrlQueueService service = new UrlQueueService(redis);
+
+        service.clear(42L);
+
+        verify(redis).delete("crawler:urls:42");
+        verify(redis).delete("crawler:urls:42:processing");
+        verify(redis, never()).delete("crawler:urls:42:visited");
     }
 }

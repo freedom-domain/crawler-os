@@ -173,13 +173,14 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (12, '系统管理', 'system', 0, 0, NULL, 'Setting', 6),
 (13, '角色管理', 'role', 12, 1, '/role', 'Avatar', 1),
 (14, '权限管理', 'permission', 12, 1, '/permission', 'Lock', 2),
-(15, '字典管理', 'dict', 12, 1, '/dict', 'PriceTag', 3);
+(15, '字典管理', 'dict', 12, 1, '/dict', 'PriceTag', 3),
+(16, '我的收藏', 'favorite', 0, 1, '/favorite', 'Folder', 6);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

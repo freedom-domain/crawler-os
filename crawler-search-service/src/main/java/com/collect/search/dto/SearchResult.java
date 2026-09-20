@@ -20,6 +20,7 @@ public class SearchResult {
     private String updateTime;
     private List<String> images;
     private List<String> tags;
+    private boolean favorited;
 
     private String titleHl;
     private String contentHl;

@@ -40,7 +40,7 @@ public class SearchService {
 
     @SuppressWarnings("null")
     public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
-                                     int current, int size) {
+                                     boolean favoriteOnly, int current, int size) {
         PageRequest pageRequest = PageRequest.of(current - 1, size);
         Long userId = currentUserId();
         java.util.Map<String, List<String>> userTags = loadUserTags(userId);
@@ -73,12 +73,33 @@ public class SearchService {
             boolBuilder.must(m -> m.term(t -> t.field("spiderId").value(spiderId)));
         }
 
+        if (favoriteOnly) {
+            if (userId == null) {
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+            List<String> favoriteUrls = loadContentUrls(new java.util.ArrayList<>(userTags.keySet()));
+            if (favoriteUrls.isEmpty()) {
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+            List<co.elastic.clients.elasticsearch._types.FieldValue> urlValues = favoriteUrls.stream()
+                    .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
+                    .collect(Collectors.toList());
+            boolBuilder.must(m -> m.terms(t -> t.field("url").terms(tt -> tt.value(urlValues))));
+        }
+
         if (tag != null && !tag.isBlank()) {
             List<String> taggedContentIds = userTags.entrySet().stream()
                     .filter(entry -> entry.getValue().contains(tag))
                     .map(java.util.Map.Entry::getKey)
                     .toList();
-            boolBuilder.must(m -> m.ids(i -> i.values(taggedContentIds)));
+            List<String> taggedUrls = loadContentUrls(taggedContentIds);
+            if (taggedUrls.isEmpty()) {
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+            List<co.elastic.clients.elasticsearch._types.FieldValue> urlValues = taggedUrls.stream()
+                    .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
+                    .collect(Collectors.toList());
+            boolBuilder.must(m -> m.terms(t -> t.field("url").terms(tt -> tt.value(urlValues))));
         }
 
         Query query = Query.of(q -> q.bool(boolBuilder.build()));
@@ -141,6 +162,7 @@ public class SearchService {
                 sr.setUpdateTime(doc.getUpdateTime());
                 sr.setImages(doc.getImages());
                 sr.setTags(userTags.getOrDefault(doc.getId(), List.of()));
+                sr.setFavorited(userTags.containsKey(doc.getId()));
                 if (hit.highlight() != null) {
                     sr.setTitleHl(hit.highlight().get("title") != null ? String.join(" ", hit.highlight().get("title")) : doc.getTitle());
                     sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));
@@ -185,6 +207,26 @@ public class SearchService {
         return map;
     }
 
+    private List<String> loadContentUrls(List<String> contentIds) {
+        if (contentIds == null || contentIds.isEmpty()) {
+            return List.of();
+        }
+        List<String> urls = new java.util.ArrayList<>();
+        for (String contentId : contentIds) {
+            try {
+                SpiderContentDoc doc = elasticsearchClient
+                        .get(g -> g.index(indexName).id(contentId), SpiderContentDoc.class)
+                        .source();
+                if (doc != null && doc.getUrl() != null && !doc.getUrl().isBlank()) {
+                    urls.add(doc.getUrl());
+                }
+            } catch (Exception e) {
+                log.debug("读取标签对应内容 URL 失败: contentId={}", contentId, e);
+            }
+        }
+        return urls.stream().distinct().toList();
+    }
+
     private String snippet(String content) {
         if (content == null) return null;
         return content.length() > 200 ? content.substring(0, 200) + "..." : content;
@@ -218,6 +260,85 @@ public class SearchService {
         } else {
             favorite.setTags(JSON.toJSONString(tags != null ? tags : List.of()));
             userFavoriteMapper.updateById(favorite);
+        }
+    }
+
+    @SuppressWarnings("null")
+        public Page<SearchResult> favorites(int current, int size, String keyword) throws java.io.IOException {
+        Long userId = LoginUtils.getUserId();
+        PageRequest pageRequest = PageRequest.of(current - 1, size);
+        List<UserFavorite> favorites = userFavoriteMapper.selectList(new LambdaQueryWrapper<UserFavorite>()
+            .eq(UserFavorite::getUserId, userId)
+            .orderByDesc(UserFavorite::getCreateTime));
+
+        List<SearchResult> results = new java.util.ArrayList<>();
+        String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(java.util.Locale.ROOT);
+        for (UserFavorite favorite : favorites) {
+            SpiderContentDoc doc = elasticsearchClient
+                    .get(g -> g.index(indexName).id(favorite.getContentId()), SpiderContentDoc.class)
+                    .source();
+            if (doc == null) continue;
+
+            SearchResult result = new SearchResult();
+            result.setId(doc.getId());
+            result.setTitle(doc.getTitle());
+            result.setContent(doc.getContent());
+            result.setUrl(doc.getUrl());
+            result.setAuthor(doc.getAuthor());
+            result.setSpiderId(doc.getSpiderId());
+            result.setSpiderName(doc.getSpiderName());
+            result.setSourceType(doc.getSourceType());
+            result.setCrawlTime(doc.getCrawlTime());
+            result.setUpdateTime(doc.getUpdateTime());
+            result.setImages(doc.getImages());
+            result.setTags(parseTags(favorite.getTags()));
+            result.setFavorited(true);
+            if (!normalizedKeyword.isEmpty() && !matchesFavorite(result, normalizedKeyword)) {
+                continue;
+            }
+            results.add(result);
+        }
+        int fromIndex = Math.min((current - 1) * size, results.size());
+        int toIndex = Math.min(fromIndex + size, results.size());
+        return new PageImpl<>(results.subList(fromIndex, toIndex), pageRequest, results.size());
+    }
+
+    private boolean matchesFavorite(SearchResult result, String keyword) {
+        return containsIgnoreCase(result.getTitle(), keyword)
+                || containsIgnoreCase(result.getUrl(), keyword)
+                || containsIgnoreCase(result.getContent(), keyword)
+                || result.getTags().stream().anyMatch(tag -> containsIgnoreCase(tag, keyword));
+    }
+
+    private boolean containsIgnoreCase(String value, String keyword) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT).contains(keyword);
+    }
+
+    @SuppressWarnings("null")
+    public void deleteFavorite(String contentId) {
+        userFavoriteMapper.delete(new LambdaQueryWrapper<UserFavorite>()
+                .eq(UserFavorite::getUserId, LoginUtils.getUserId())
+                .eq(UserFavorite::getContentId, contentId));
+    }
+
+    @SuppressWarnings("null")
+    public void favorite(String contentId) throws java.io.IOException {
+        SpiderContentDoc doc = elasticsearchClient
+                .get(g -> g.index(indexName).id(contentId), SpiderContentDoc.class)
+                .source();
+        if (doc == null) {
+            throw new com.collect.common.exception.BizException("数据不存在");
+        }
+        Long userId = LoginUtils.getUserId();
+        UserFavorite favorite = userFavoriteMapper.selectOne(new LambdaQueryWrapper<UserFavorite>()
+                .eq(UserFavorite::getUserId, userId)
+                .eq(UserFavorite::getContentId, contentId));
+        if (favorite == null) {
+            favorite = new UserFavorite();
+            favorite.setUserId(userId);
+            favorite.setContentId(contentId);
+            favorite.setTags(JSON.toJSONString(List.of()));
+            userFavoriteMapper.insert(favorite);
         }
     }
 

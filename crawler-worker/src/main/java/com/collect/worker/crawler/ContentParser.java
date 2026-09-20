@@ -79,8 +79,6 @@ public class ContentParser {
             }
             String normalizedHref = com.collect.worker.redis.UrlQueueService.normalizeUrl(href);
             if (normalizedHref == null || normalizedHref.isBlank()
-                    || normalizedHref.startsWith("javascript:") || normalizedHref.startsWith("mailto:")
-                    || normalizedHref.startsWith("tel:") || normalizedHref.startsWith("#")
                     || !seen.add(normalizedHref)) {
                 continue;
             }

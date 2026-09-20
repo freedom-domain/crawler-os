@@ -28,6 +28,7 @@
         <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
           <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
         </el-select>
+        <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
       </div>
     </div>
 
@@ -67,6 +68,14 @@
             <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
             <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
             <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
+            <el-button
+              size="small"
+              text
+              :type="row.favorited ? 'warning' : 'primary'"
+              @click.stop="toggleFavorite(row, !row.favorited)"
+            >
+              {{ row.favorited ? '已收藏' : '收藏' }}
+            </el-button>
             <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
               <el-button size="small" text type="primary">
                 操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
@@ -147,7 +156,14 @@
 
     <el-dialog v-model="previewContentVisible" :title="previewTitle + ' - 内容'" width="80%" top="5vh" destroy-on-close>
       <div v-loading="previewLoading">
-        <div class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
+        <el-tabs v-model="previewTab" class="detail-tabs">
+          <el-tab-pane label="内容预览" name="preview">
+            <div class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
+          </el-tab-pane>
+          <el-tab-pane label="HTML 源码" name="source">
+            <pre class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </el-dialog>
 
@@ -188,9 +204,6 @@
               </div>
               <div class="preview-container detail-text">{{ detailData.content || '无正文内容' }}</div>
             </el-tab-pane>
-            <el-tab-pane label="HTML 源代码" name="source">
-              <pre class="preview-container detail-text">{{ detailData.rawHtml || detailData.content || '无正文内容' }}</pre>
-            </el-tab-pane>
           </el-tabs>
         </div>
         <div v-else class="empty">暂无详情</div>
@@ -227,7 +240,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SearchResultItem from '@/components/SearchResultItem.vue'
-import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun } from '@/api'
+import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -243,6 +256,7 @@ const spiderOptions = ref<any[]>([])
 const filterGroup = ref('')
 const groupOptions = ref<string[]>([])
 const filterTag = ref('')
+const favoriteOnly = ref(false)
 const previewImagesVisible = ref(false)
 const previewContentVisible = ref(false)
 const detailVisible = ref(false)
@@ -251,6 +265,8 @@ const detailLoading = ref(false)
 const detailTab = ref('content')
 const previewTitle = ref('')
 const previewHtml = ref('')
+const previewSource = ref('')
+const previewTab = ref('preview')
 const previewImages = ref<string[]>([])
 const previewInitialIndex = ref(0)
 const detailData = ref<any>(null)
@@ -356,6 +372,7 @@ const saveTags = async () => {
   try {
     await searchUpdateTags(tagCurrentRow.value.id, tagSelection.value)
     tagCurrentRow.value.tags = [...tagSelection.value]
+    tagCurrentRow.value.favorited = true
     ElMessage.success('标签已更新')
     tagVisible.value = false
   } catch {
@@ -452,6 +469,7 @@ const loadData = async () => {
     if (filterSpider.value) params.spiderId = filterSpider.value
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
+    if (favoriteOnly.value) params.favoriteOnly = true
     const res: any = await searchContent(params)
     list.value = res.data?.content || []
     total.value = res.data?.totalElements || 0
@@ -525,12 +543,16 @@ const showPreviewContent = async (row: any) => {
   previewLoading.value = true
   previewTitle.value = row.title || '内容预览'
   previewHtml.value = ''
+  previewSource.value = ''
+  previewTab.value = 'preview'
   try {
     const res: any = await searchDetail(row.id)
     const rawHtml = res.data?.rawHtml || res.data?.content || '无原始内容'
+    previewSource.value = rawHtml
     previewHtml.value = resolveHtmlLinks(rawHtml, res.data?.url || row.url || '')
   } catch {
     previewHtml.value = '加载失败'
+    previewSource.value = '加载失败'
   } finally {
     previewLoading.value = false
   }
@@ -551,7 +573,7 @@ const showDetail = async (row: any) => {
   }
 }
 
-const handleCommand = (command: string, row: any) => {
+const handleCommand = async (command: string, row: any) => {
   if (command === 'view') {
     showDetail(row)
   } else if (command === 'tag') {
@@ -562,6 +584,20 @@ const handleCommand = (command: string, row: any) => {
     handleRerun(row)
   } else if (command === 'delete') {
     handleDelete(row)
+  }
+}
+
+const toggleFavorite = async (row: any, shouldFavorite: boolean) => {
+  try {
+    if (shouldFavorite) {
+      await favoriteAdd(row.id)
+    } else {
+      await favoriteDelete(row.id)
+    }
+    row.favorited = shouldFavorite
+    ElMessage.success(shouldFavorite ? '已收藏' : '已取消收藏')
+  } catch {
+    ElMessage.error(shouldFavorite ? '收藏失败' : '取消收藏失败')
   }
 }
 

@@ -156,6 +156,8 @@ const iconMap: Record<string, any> = {
   List,
   search: Search,
   Search,
+  favorite: Folder,
+  Favorite: Folder,
   file: Folder,
   Folder,
   system: Setting,

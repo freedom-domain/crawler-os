@@ -35,7 +35,13 @@ public class UrlQueueService {
         try {
             URI uri = URI.create(url);
             String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!"http".equals(scheme) && !"https".equals(scheme)) {
+                return null;
+            }
             String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            if (host.isEmpty()) {
+                return null;
+            }
             if (host.startsWith("www.")) {
                 host = host.substring(4);
             }
@@ -105,7 +111,7 @@ public class UrlQueueService {
         }
     }
 
-    public void push(Long taskId, String url) {
+    private void push(Long taskId, String url) {
         String key = KEY_PREFIX + taskId;
         redis.opsForList().rightPush(key, url);
         redis.expire(key, TTL_HOURS, TimeUnit.HOURS);
@@ -124,21 +130,35 @@ public class UrlQueueService {
 
     public void clear(Long taskId) {
         redis.delete(KEY_PREFIX + taskId);
-        redis.delete(KEY_PREFIX + taskId + ":visited");
+        redis.delete(KEY_PREFIX + taskId + ":processing");
     }
 
-    public boolean isVisited(Long taskId, String url) {
+    public boolean enqueueIfAbsent(Long taskId, String url, int depth) {
         String normalized = normalizeUrl(url);
-        return normalized == null || Boolean.TRUE.equals(redis.opsForSet().isMember(KEY_PREFIX + taskId + ":visited", normalized));
-    }
-
-    public void markVisited(Long taskId, String url) {
-        String normalized = normalizeUrl(url);
-        if (normalized == null) {
-            return;
+        if (normalized == null || normalized.isBlank()) {
+            return false;
         }
         String key = KEY_PREFIX + taskId + ":visited";
-        redis.opsForSet().add(key, normalized);
+        Long added = redis.opsForSet().add(key, normalized);
         redis.expire(key, TTL_HOURS, TimeUnit.HOURS);
+        if (!Long.valueOf(1L).equals(added)) {
+            return false;
+        }
+        push(taskId, normalized + "\t" + depth);
+        return true;
+    }
+
+    /**
+     * 原子认领待处理 URL，兼容旧队列中已经存在的重复项。
+     */
+    public boolean claimForProcessing(Long taskId, String url) {
+        String normalized = normalizeUrl(url);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        String key = KEY_PREFIX + taskId + ":processing";
+        Long added = redis.opsForSet().add(key, normalized);
+        redis.expire(key, TTL_HOURS, TimeUnit.HOURS);
+        return Long.valueOf(1L).equals(added);
     }
 }

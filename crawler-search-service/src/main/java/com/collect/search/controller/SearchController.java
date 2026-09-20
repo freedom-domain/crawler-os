@@ -29,11 +29,12 @@ public class SearchController {
                                               @RequestParam(value = "spiderId", required = false) Long spiderId,
                                               @RequestParam(value = "spiderGroup", required = false) String spiderGroup,
                                               @RequestParam(value = "tag", required = false) String tag,
+                                              @RequestParam(value = "favoriteOnly", defaultValue = "false") boolean favoriteOnly,
                                               @RequestParam(value = "current", defaultValue = "1") int current,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
         // 只读查询允许匿名访问（公开搜索页），登录用户仍需具备 search:query 权限
         requirePermissionIfLoggedIn("search:query");
-        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, current, size));
+        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, current, size));
     }
 
     @Operation(summary = "数据详情")
@@ -49,6 +50,31 @@ public class SearchController {
     public R<Void> updateTags(@PathVariable("id") String id, @RequestBody List<String> tags) throws IOException {
         requirePermission("search:query");
         searchService.updateTags(id, tags);
+        return R.ok();
+    }
+
+    @Operation(summary = "我的收藏")
+    @GetMapping("/favorites")
+    public R<Page<SearchResult>> favorites(@RequestParam(value = "current", defaultValue = "1") int current,
+                                           @RequestParam(value = "size", defaultValue = "20") int size,
+                                           @RequestParam(value = "keyword", required = false) String keyword) throws IOException {
+        requirePermission("search:query");
+        return R.ok(searchService.favorites(current, size, keyword));
+    }
+
+    @Operation(summary = "取消收藏")
+    @DeleteMapping("/favorites/{contentId}")
+    public R<Void> deleteFavorite(@PathVariable String contentId) {
+        requirePermission("search:query");
+        searchService.deleteFavorite(contentId);
+        return R.ok();
+    }
+
+    @Operation(summary = "收藏数据")
+    @PostMapping("/favorites/{contentId}")
+    public R<Void> favorite(@PathVariable String contentId) throws IOException {
+        requirePermission("search:query");
+        searchService.favorite(contentId);
         return R.ok();
     }
 

@@ -87,14 +87,13 @@ public class CrawlerEngine {
 
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger fail = new AtomicInteger(0);
+        boolean executorTerminated = true;
 
         try {
             for (String startUrl : msg.getStartUrls()) {
                 String normalizedStartUrl = UrlQueueService.normalizeUrl(startUrl);
                 if (normalizedStartUrl == null || normalizedStartUrl.isBlank()) continue;
-                if (urlQueue.isVisited(taskId, normalizedStartUrl)) continue;
-                urlQueue.markVisited(taskId, normalizedStartUrl);
-                urlQueue.push(taskId, normalizedStartUrl + "\t0");
+                urlQueue.enqueueIfAbsent(taskId, normalizedStartUrl, 0);
             }
 
             while (urlQueue.size(taskId) > 0) {
@@ -104,6 +103,7 @@ public class CrawlerEngine {
                     if (item == null) break;
                     String[] parts = item.split("\t", 2);
                     String url = parts[0];
+                    if (!urlQueue.claimForProcessing(taskId, url)) continue;
                     int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
                         batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail, semaphore, executor,
                             robotsCache));
@@ -116,26 +116,55 @@ public class CrawlerEngine {
             }
         } finally {
             executor.shutdown();
-            try {
-                if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
-                    executor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
+            if (!awaitExecutorTermination(executor, 30, TimeUnit.SECONDS)) {
+                executorTerminated = false;
                 executor.shutdownNow();
+                // shutdownNow 只是发出中断请求，必须继续等待图片/页面线程真正退出。
+                awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             }
             urlQueue.clear(taskId);
         }
 
         LocalDateTime endTime = LocalDateTime.now();
+        SpiderTask latestTask = taskMapper.selectById(task.getId());
+        if (!executorTerminated) {
+            task.setStatus("FAILED");
+            task.setErrorMessage("任务线程未在超时时间内结束，可能仍有页面或图片处理未完成");
+        } else if (latestTask != null && "CANCELED".equals(latestTask.getStatus())) {
+            task.setStatus("CANCELED");
+        } else {
+            task.setStatus("SUCCESS");
+        }
         taskMapper.setSuccess(task.getId(), success.get());
         taskMapper.setFail(task.getId(), fail.get());
         task.setSuccessCount(success.get());
         task.setFailCount(fail.get());
-        task.setStatus("SUCCESS");
         task.setEndTime(endTime);
         task.setTotalCostMs(task.getStartTime() == null ? 0L : java.time.Duration.between(task.getStartTime(), endTime).toMillis());
         taskMapper.updateById(task);
         log.info("任务完成: taskId={}, success={}, fail={}, totalCostMs={}", taskId, success.get(), fail.get(), task.getTotalCostMs());
+    }
+
+    private boolean awaitExecutorTermination(java.util.concurrent.ExecutorService executor,
+                                             long timeout, TimeUnit unit) {
+        boolean waitIndefinitely = timeout == Long.MAX_VALUE;
+        long deadline = waitIndefinitely ? 0L : System.nanoTime() + unit.toNanos(timeout);
+        boolean interrupted = false;
+        while (!executor.isTerminated()) {
+            long remaining = waitIndefinitely ? TimeUnit.SECONDS.toNanos(1) : deadline - System.nanoTime();
+            if (!waitIndefinitely && remaining <= 0) {
+                if (interrupted) Thread.currentThread().interrupt();
+                return false;
+            }
+            try {
+                executor.awaitTermination(Math.min(remaining, TimeUnit.SECONDS.toNanos(1)), TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                interrupted = true;
+                executor.shutdownNow();
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt();
+        return true;
     }
 
     private void crawlUrl(String url, int depth, int maxDepth, TaskMessage msg, SpiderTask task,
@@ -148,6 +177,7 @@ public class CrawlerEngine {
             try {
                 if (!isAllowedByRobots(url, msg, robotsCache)) {
                     log.info("robots.txt 禁止抓取: url={}", url);
+                    fail.incrementAndGet();
                     return;
                 }
                 long start = System.currentTimeMillis();
@@ -179,6 +209,7 @@ public class CrawlerEngine {
                     writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
                     log.info("内容未变化，跳过: url={}", url);
+                    success.incrementAndGet();
                     return;
                 }
 
@@ -200,7 +231,6 @@ public class CrawlerEngine {
                 docObj.setImages(imageUrls);
 
                 saveToElasticsearchWithRetry(docObj);
-                success.incrementAndGet();
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                     (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
 
@@ -217,18 +247,17 @@ public class CrawlerEngine {
                         String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
                         if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
                         if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache)) continue;
-                        if (urlQueue.isVisited(taskId, normalizedNextUrl)) continue;
-                        urlQueue.markVisited(taskId, normalizedNextUrl);
-                        urlQueue.push(taskId, normalizedNextUrl + "\t" + (depth + 1));
-                        enqueued++;
+                        if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
                     }
                     log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
                 }
+                success.incrementAndGet();
             } finally {
                 semaphore.release();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            fail.incrementAndGet();
         } catch (Exception e) {
             fail.incrementAndGet();
             log.warn("抓取失败: {}", url, e);
