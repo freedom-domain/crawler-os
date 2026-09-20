@@ -36,43 +36,52 @@
     </div>
 
     <div v-loading="loading" class="result-list">
-      <div v-for="row in list" :key="row.id" class="result-item">
-        <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
-        <h3 class="result-title" v-html="row.titleHl || row.title"></h3>
-        <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
-        <div v-if="row.images && row.images.length" class="result-images">
-          <img
-            v-for="(img, idx) in row.images.slice(0, 6)"
-            :key="idx"
-            :src="imageUrl(img)"
-            class="result-thumb"
-            @click="openAllImages(row)"
-          />
-        </div>
-        <div class="result-tags" v-if="row.tags && row.tags.length">
-          <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item" @click="openTagEditor(row)">{{ t }}</el-tag>
-        </div>
-        <div class="result-meta">
-          <span v-if="row.spiderName" class="meta-tag spider-tag" @click="goToSpider(row.spiderId, row.spiderName)">{{ row.spiderName }}</span>
-          <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
-          <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
-          <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
-          <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
-            <el-button size="small" text type="primary">
-              操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="view">查看详情</el-dropdown-item>
-                <el-dropdown-item command="tag">标签</el-dropdown-item>
-                <el-dropdown-item command="previewContent">预览内容</el-dropdown-item>
-                <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
-                <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </div>
+      <SearchResultItem
+        v-for="row in list"
+        :key="row.id"
+        :row="row"
+        @preview="showPreviewContent"
+        @detail="showDetail"
+      >
+        <template #images>
+          <div v-if="row.images && row.images.length" class="result-images">
+            <img
+              v-for="(img, idx) in row.images.slice(0, 6)"
+              :key="idx"
+              :src="imageUrl(img)"
+              class="result-thumb"
+              @click="openAllImages(row)"
+            />
+          </div>
+        </template>
+
+        <template #tags>
+          <div class="result-tags" v-if="row.tags && row.tags.length">
+            <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item" @click="openTagEditor(row)">{{ t }}</el-tag>
+          </div>
+        </template>
+
+        <template #meta>
+          <div class="result-meta">
+            <span v-if="row.spiderName" class="meta-tag spider-tag" @click="goToSpider(row.spiderId, row.spiderName)">{{ row.spiderName }}</span>
+            <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
+            <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
+            <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
+            <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
+              <el-button size="small" text type="primary">
+                操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="tag">标签</el-dropdown-item>
+                  <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </template>
+      </SearchResultItem>
       <div v-if="!loading && list.length === 0" class="empty">
         未找到相关结果
       </div>
@@ -149,56 +158,40 @@
       <div v-loading="detailLoading" class="detail-dialog-body">
         <div v-if="detailData" class="detail-content">
           <div class="detail-header">
-            <div>
+            <div class="detail-url-row">
               <a v-if="detailData.url" class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
               <span v-else class="detail-url">暂无来源地址</span>
+              <span class="detail-time">抓取：{{ formatTime(detailData.crawlTime) || '未知' }} | 更新：{{ formatTime(detailData.updateTime) || '未更新' }}</span>
             </div>
             <div class="detail-badges">
               <span v-if="detailData.spiderName" class="meta-tag">{{ detailData.spiderName }}</span>
               <span v-if="detailData.spiderGroup" class="meta-tag group-tag">{{ detailData.spiderGroup }}</span>
-              <span v-if="detailData.sourceType" class="meta-tag source-tag">{{ detailData.sourceType }}</span>
+              <span class="detail-meta-item">来源：{{ detailData.sourceType || '未知' }}</span>
+              <span class="detail-meta-item">标签：{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
             </div>
           </div>
 
-          <div class="detail-grid">
-            <div class="detail-card">
-              <span class="detail-label">来源</span>
-              <span>{{ detailData.sourceType || '未知' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">抓取时间</span>
-              <span>{{ formatTime(detailData.crawlTime) || '未知' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">更新时间</span>
-              <span>{{ formatTime(detailData.updateTime) || '未更新' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">标签</span>
-              <span>{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
-            </div>
-          </div>
-
-          <div v-if="detailData.images && detailData.images.length" class="detail-images">
-            <el-image
-              v-for="(img, idx) in detailData.images"
-              :key="idx"
-              :src="imageUrl(img)"
-              :preview-src-list="detailData.images.map(imageUrl)"
-              :initial-index="idx"
-              fit="cover"
-              class="detail-image"
-              preview-teleported
-              hide-on-click-modal
-            />
-          </div>
-
-          <div class="detail-body">
-            <h4>正文内容</h4>
-            <div class="preview-container detail-text">
-              {{ stripHtml(detailData.content || detailData.rawHtml || '无正文内容') }}
-            </div>
-          </div>
+          <el-tabs v-model="detailTab" class="detail-tabs">
+            <el-tab-pane label="正文内容" name="content">
+              <div v-if="detailData.images && detailData.images.length" class="detail-images">
+                <el-image
+                  v-for="(img, idx) in detailData.images"
+                  :key="idx"
+                  :src="imageUrl(img)"
+                  :preview-src-list="detailData.images.map(imageUrl)"
+                  :initial-index="idx"
+                  fit="cover"
+                  class="detail-image"
+                  preview-teleported
+                  hide-on-click-modal
+                />
+              </div>
+              <div class="preview-container detail-text">{{ detailData.content || '无正文内容' }}</div>
+            </el-tab-pane>
+            <el-tab-pane label="HTML 源代码" name="source">
+              <pre class="preview-container detail-text">{{ detailData.rawHtml || detailData.content || '无正文内容' }}</pre>
+            </el-tab-pane>
+          </el-tabs>
         </div>
         <div v-else class="empty">暂无详情</div>
       </div>
@@ -233,6 +226,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import SearchResultItem from '@/components/SearchResultItem.vue'
 import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
@@ -254,6 +248,7 @@ const previewContentVisible = ref(false)
 const detailVisible = ref(false)
 const previewLoading = ref(false)
 const detailLoading = ref(false)
+const detailTab = ref('content')
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewImages = ref<string[]>([])
@@ -544,6 +539,7 @@ const showPreviewContent = async (row: any) => {
 const showDetail = async (row: any) => {
   detailVisible.value = true
   detailLoading.value = true
+  detailTab.value = 'content'
   detailData.value = null
   try {
     const res: any = await searchDetail(row.id)
@@ -786,6 +782,18 @@ onMounted(() => {
   font-weight: 400;
   margin: 0 0 6px 0;
   line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.2s ease, text-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.result-title:hover {
+  color: #0d47a1;
+  text-shadow: 0 1px 0 rgba(13, 71, 161, 0.08);
+}
+
+.result-title:active {
+  color: #0b3c8a;
+  transform: translateY(1px);
 }
 
 .result-title :deep(em) {
@@ -794,11 +802,28 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.result-content-line {
+  display: inline;
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
 .result-content {
   color: #545454;
   font-size: 14px;
   line-height: 1.6;
-  margin: 0 0 8px 0;
+  margin: 0;
+  display: inline;
+}
+
+.result-detail-link {
+  display: inline;
+  color: #1a73e8;
+  font-size: 13px;
+  cursor: pointer;
+  margin-left: 4px;
+  white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .result-content :deep(em) {
@@ -1001,6 +1026,10 @@ onMounted(() => {
   overflow: hidden;
 }
 
+.detail-tabs {
+  width: 100%;
+}
+
 .detail-body {
   display: flex;
   flex-direction: column;
@@ -1020,6 +1049,13 @@ onMounted(() => {
   color: #303133;
   max-height: 42vh;
   overflow-y: auto;
+}
+
+.code-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
 }
 
 .preview-html {

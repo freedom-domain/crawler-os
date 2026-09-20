@@ -108,5 +108,29 @@ button, input, textarea, select { font: inherit; }
 @media (max-width: 720px) {
   .el-card__body { padding: 16px; }
   .filter-bar { align-items: stretch; flex-wrap: wrap; }
+  .el-dialog { width: calc(100vw - 20px) !important; }
+  .el-form--inline {
+    display: block;
+  }
+  .el-form--inline .el-form-item {
+    display: block;
+    margin-right: 0;
+    width: 100%;
+  }
+  .el-form-item__content,
+  .el-input,
+  .el-select,
+  .el-date-editor,
+  .el-input-number,
+  .el-cascader,
+  .el-autocomplete {
+    width: 100% !important;
+  }
+  .el-table {
+    min-width: 700px;
+  }
+  .el-table__wrapper {
+    overflow-x: auto;
+  }
 }
 </style>

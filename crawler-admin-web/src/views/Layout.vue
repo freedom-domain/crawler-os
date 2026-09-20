@@ -1,9 +1,13 @@
 <template>
   <el-container class="layout">
-    <el-aside :width="collapsed ? '72px' : '236px'" :class="['aside', { 'is-collapsed': collapsed }]">
+    <div v-if="isMobile && mobileMenuOpen" class="mobile-mask" @click="mobileMenuOpen = false" />
+    <el-aside
+      :width="isMobile ? (mobileMenuOpen ? '220px' : '0px') : (collapsed ? '72px' : '236px')"
+      :class="['aside', { 'is-collapsed': collapsed || isMobile, 'mobile-open': mobileMenuOpen && isMobile }]"
+    >
       <div class="logo">
         <span class="logo-mark">C</span>
-        <span v-if="!collapsed" class="logo-copy">Crawler<span>OS</span></span>
+        <span v-if="!collapsed || isMobile" class="logo-copy">Crawler<span>OS</span></span>
       </div>
       <el-menu
         :default-active="route.path"
@@ -26,8 +30,8 @@
 
     <el-container>
       <el-header class="header">
-        <el-icon class="collapse-btn" @click="collapsed = !collapsed">
-          <Fold v-if="!collapsed" />
+        <el-icon class="collapse-btn" @click="toggleSidebar">
+          <Fold v-if="!collapsed && !isMobile" />
           <Expand v-else />
         </el-icon>
         <div class="breadcrumb"><span>工作台</span><b>/</b><strong>{{ currentTitle || '概览' }}</strong></div>
@@ -82,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, defineComponent, h } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMenu, userChangePassword } from '@/api'
@@ -93,7 +97,24 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const collapsed = ref(false)
+const isMobile = ref(false)
+const mobileMenuOpen = ref(false)
 const menuList = ref<any[]>([])
+
+const updateViewport = () => {
+  isMobile.value = window.innerWidth <= 860
+  if (!isMobile.value) {
+    mobileMenuOpen.value = false
+  }
+}
+
+const toggleSidebar = () => {
+  if (isMobile.value) {
+    mobileMenuOpen.value = !mobileMenuOpen.value
+    return
+  }
+  collapsed.value = !collapsed.value
+}
 
 // 递归菜单节点：目录/有子项渲染为子菜单，叶子渲染为菜单项
 const MenuNode = defineComponent({
@@ -163,7 +184,13 @@ const loadMenu = async () => {
 }
 
 onMounted(() => {
+  updateViewport()
   loadMenu()
+  window.addEventListener('resize', updateViewport)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateViewport)
 })
 
 const currentTitle = computed(() => {
@@ -242,13 +269,19 @@ const handleChangePassword = async () => {
 </script>
 
 <style scoped>
-.layout { height: 100vh; min-width: 960px; }
+.layout { height: 100vh; min-width: 0; width: 100%; }
 .aside {
   position: relative;
   background: linear-gradient(180deg, #132b47 0%, #10243d 56%, #0d2037 100%);
-  transition: width 0.25s ease;
+  transition: width 0.25s ease, transform 0.25s ease;
   overflow: hidden;
   box-shadow: 8px 0 24px rgba(16, 42, 67, .12);
+}
+.mobile-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 20;
 }
 .logo {
   height: 72px;
@@ -350,6 +383,47 @@ const handleChangePassword = async () => {
 .user-dropdown-row .label { color: #909399; }
 .user-dropdown-row .value { color: #303133; font-weight: 500; }
 :deep(.el-main) { padding: 30px; background: var(--canvas); overflow: auto; }
+@media (max-width: 860px) {
+  .layout {
+    min-width: 0;
+    width: 100%;
+  }
+  .aside {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 30;
+    box-shadow: 16px 0 32px rgba(15, 23, 42, 0.18);
+    transform: translateX(-100%);
+  }
+  .aside.mobile-open {
+    transform: translateX(0);
+  }
+  .header {
+    height: 60px;
+    padding: 0 12px;
+  }
+  .collapse-btn {
+    margin: 0 8px 0 0;
+    font-size: 18px;
+  }
+  .breadcrumb {
+    max-width: calc(100% - 110px);
+    overflow: hidden;
+  }
+  .breadcrumb span,
+  .breadcrumb b {
+    display: none;
+  }
+  .breadcrumb strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .user-label { display: none; }
+  :deep(.el-main) { padding: 14px; }
+}
 @media (max-width: 1100px) {
   .layout { min-width: 0; }
   :deep(.el-main) { padding: 20px; }

@@ -55,32 +55,40 @@
       </div>
 
       <div v-loading="loading" class="result-list">
-        <div v-for="row in list" :key="row.id" class="result-item">
-          <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
-          <a class="result-title" href="javascript:void(0)" @click.prevent="showPreviewContent(row)" v-html="row.titleHl || row.title"></a>
-          <div class="result-content-line">
-            <span class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></span>
-            <span class="result-detail-link" role="button" tabindex="0" @click="showDetail(row)" @keydown.enter.prevent="showDetail(row)" @keydown.space.prevent="showDetail(row)">详情</span>
-          </div>
-          <div v-if="row.images && row.images.length" class="result-images">
-            <img
-              v-for="(img, idx) in row.images.slice(0, 6)"
-              :key="idx"
-              :src="imageUrl(img)"
-              class="result-thumb"
-              @click="openAllImages(row)"
-            />
-          </div>
-          <div class="result-tags" v-if="row.tags && row.tags.length">
-            <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item">{{ t }}</el-tag>
-          </div>
-          <div class="result-meta">
-            <span v-if="row.spiderName" class="meta-tag spider-tag">{{ row.spiderName }}</span>
-            <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
-            <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
-            <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
-          </div>
-        </div>
+        <SearchResultItem
+          v-for="row in list"
+          :key="row.id"
+          :row="row"
+          @preview="showPreviewContent"
+          @detail="showDetail"
+        >
+          <template #images>
+            <div v-if="row.images && row.images.length" class="result-images">
+              <img
+                v-for="(img, idx) in row.images.slice(0, 6)"
+                :key="idx"
+                :src="imageUrl(img)"
+                class="result-thumb"
+                @click="openAllImages(row)"
+              />
+            </div>
+          </template>
+
+          <template #tags>
+            <div v-if="row.tags && row.tags.length" class="result-tags">
+              <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item">{{ t }}</el-tag>
+            </div>
+          </template>
+
+          <template #meta>
+            <div class="result-meta">
+              <span v-if="row.spiderName" class="meta-tag spider-tag">{{ row.spiderName }}</span>
+              <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
+              <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
+              <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
+            </div>
+          </template>
+        </SearchResultItem>
         <div v-if="!loading && list.length === 0" class="empty">
           未找到相关结果
         </div>
@@ -202,6 +210,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import SearchResultItem from '@/components/SearchResultItem.vue'
 import { searchContent, searchDetail, dictChildren, spiderPage } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
@@ -346,7 +355,6 @@ const openAllImages = async (row: any) => {
   }
 }
 
-// 点击搜索/回车：重置到第 1 页再查询
 const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -1093,8 +1101,55 @@ onMounted(() => {
 
 :deep(.meta-tag) { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
 
+@media (max-width: 860px) {
+  .ps-header {
+    min-height: auto;
+  }
+  .ps-header-inner {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px 16px 10px;
+    gap: 12px;
+  }
+  .brand-mark {
+    justify-content: center;
+  }
+  .header-search-wrap {
+    width: 100%;
+    padding: 0;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .header-search-box {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+  .search-btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .header-filter-panel {
+    padding: 12px 16px 14px;
+  }
+  .header-filter-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    transform: none;
+  }
+  .header-filter-row .el-select {
+    width: 100% !important;
+  }
+  .ps-main {
+    padding: 20px 16px 40px;
+  }
+  .result-list {
+    padding: 0 12px;
+  }
+}
+
 @media (max-width: 720px) {
-  .ps-header { height: 62px; }
+  .ps-header { height: auto; }
   .ps-header-inner { padding: 0 18px; }
   .header-caption { font-size: 11px; }
   .ps-main { padding: 26px 16px 40px; }
@@ -1107,7 +1162,6 @@ onMounted(() => {
   .filter-row :deep(.el-select) { width: calc(50% - 6px) !important; }
   .results-heading { align-items: flex-end; }
   .result-count { display: block; margin: 7px 0 0; }
-  .result-list { padding: 4px 18px; }
   .result-title { font-size: 17px; }
   .result-meta { flex-wrap: wrap; gap: 8px; }
   .detail-header { flex-direction: column; }
@@ -1121,6 +1175,21 @@ onMounted(() => {
   .search-btn { padding: 0 14px; }
   .filter-row :deep(.el-select) { width: 100% !important; }
   .result-page { display: none; }
+  .result-url,
+  .result-title,
+  .result-content,
+  .detail-url,
+  .detail-dialog-title {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .result-item {
+    padding: 16px 0;
+  }
+  .result-thumb {
+    width: 64px;
+    height: 64px;
+  }
 }
 
 .dialog-header {

@@ -35,9 +35,9 @@
       </div>
       <div class="toolbar-divider"></div>
       <div class="toolbar-section zoom-section">
-        <button type="button" class="tool-btn" @click="gridZoom(-0.1)" title="缩小">−</button>
+        <button type="button" class="tool-btn" @click="gridZoom(-0.1)" title="缩小"><el-icon><Minus /></el-icon></button>
         <span class="zoom-label">{{ Math.round(gridScale * 100) }}%</span>
-        <button type="button" class="tool-btn" @click="gridZoom(0.1)" title="放大">＋</button>
+        <button type="button" class="tool-btn" @click="gridZoom(0.1)" title="放大"><el-icon><Plus /></el-icon></button>
       </div>
       <button type="button" class="reset-btn" @click="gridScale = 1" title="重置">重置</button>
     </div>
@@ -72,18 +72,18 @@
 
         <!-- 顶部工具栏 -->
         <div class="viewer-topbar">
-          <button type="button" class="tool-btn" @click="viewerZoom(-0.15)" title="缩小">−</button>
+          <button type="button" class="tool-btn" @click="viewerZoom(-0.15)" title="缩小"><el-icon><Minus /></el-icon></button>
           <span class="zoom-label">{{ Math.round(viewerScale * 100) }}%</span>
-          <button type="button" class="tool-btn" @click="viewerZoom(0.15)" title="放大">＋</button>
+          <button type="button" class="tool-btn" @click="viewerZoom(0.15)" title="放大"><el-icon><Plus /></el-icon></button>
           <button type="button" class="tool-btn" @click="viewerScale = 1" title="重置缩放">重置</button>
         </div>
 
         <!-- 关闭按钮 -->
-        <button class="viewer-close" type="button" @click="closeViewer" aria-label="关闭">&times;</button>
+        <button class="viewer-close" type="button" @click="closeViewer" aria-label="关闭"><el-icon><Close /></el-icon></button>
 
         <!-- 左右导航 -->
-        <button v-if="images.length > 1" class="viewer-nav prev" type="button" @click="prevImage" aria-label="上一张">&#8249;</button>
-        <button v-if="images.length > 1" class="viewer-nav next" type="button" @click="nextImage" aria-label="下一张">&#8250;</button>
+        <button v-if="images.length > 1" class="viewer-nav prev" type="button" @click="prevImage" aria-label="上一张"><el-icon><ArrowLeft /></el-icon></button>
+        <button v-if="images.length > 1" class="viewer-nav next" type="button" @click="nextImage" aria-label="下一张"><el-icon><ArrowRight /></el-icon></button>
 
         <!-- 底部位置指示 -->
         <div class="viewer-position">{{ viewerIndex + 1 }} / {{ images.length }}</div>
@@ -93,9 +93,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
-import { Setting } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 
@@ -117,7 +117,7 @@ const triggerPos = ref({ x: 0, y: 0 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
-const triggerStyle = computed(() => ({
+const triggerStyle = computed<CSSProperties>(() => ({
   position: 'fixed',
   left: `${triggerPos.value.x}px`,
   top: `${triggerPos.value.y}px`,
@@ -126,7 +126,7 @@ const triggerStyle = computed(() => ({
   zIndex: 20
 }))
 
-const toolbarStyle = computed(() => {
+const toolbarStyle = computed<CSSProperties>(() => {
   const { x, y } = triggerPos.value
   const vw = window.innerWidth
   const vh = window.innerHeight
@@ -148,7 +148,7 @@ const toolbarStyle = computed(() => {
     right: 'auto',
     transform: 'none',
     zIndex: 20
-  }
+  } as CSSProperties
 })
 
 const startDrag = (e: MouseEvent) => {
@@ -240,7 +240,7 @@ const onColsChange = () => {
 }
 
 // 列宽 = (100% - 所有列间 gap) / 每行张数；不足一行的图片按实际数量铺满
-const gridStyle = computed(() => ({
+const gridStyle = computed<CSSProperties>(() => ({
   zoom: gridScale.value,
   gridTemplateColumns: `repeat(auto-fit, minmax(min(calc(100% / ${cols.value} - ${cols.value > 1 ? (cols.value - 1) * 14 / cols.value : 0}px), 100%), 1fr))`
 }))
