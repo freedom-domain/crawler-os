@@ -83,8 +83,10 @@ onMounted(async () => {
     recentTasks.value = taskRes?.data?.records || []
     stats.value.taskCount = taskRes?.data?.total || 0
     const all = taskRes?.data?.records || []
-    const total = all.reduce((s: number, t: any) => s + (t.successCount || 0) + (t.failCount || 0), 0)
-    const success = all.reduce((s: number, t: any) => s + (t.successCount || 0), 0)
+    const total = all.reduce((s: number, t: any) =>
+      s + (t.htmlSuccessCount || 0) + (t.htmlFailCount || 0) + (t.imageSuccessCount || 0) + (t.imageFailCount || 0), 0)
+    const success = all.reduce((s: number, t: any) =>
+      s + (t.htmlSuccessCount || 0) + (t.imageSuccessCount || 0), 0)
     stats.value.successRate = total > 0 ? Math.round(success / total * 100) : 0
 
     const searchRes: any = await searchContent({ current: 1, size: 1 })
