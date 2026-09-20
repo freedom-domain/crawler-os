@@ -43,6 +43,18 @@
 
     <el-dialog v-model="formVisible" :title="form.id ? '编辑权限' : '新增权限'" width="480px">
       <el-form :model="form" label-width="80px">
+        <el-form-item label="上级节点">
+          <el-tree-select
+            v-model="form.parentId"
+            :data="parentTreeOptions"
+            :props="{ label: 'name', value: 'id', children: 'children' }"
+            check-strictly
+            :render-after-expand="false"
+            placeholder="请选择上级节点（不选则为顶级）"
+            clearable
+            style="width: 100%"
+          />
+        </el-form-item>
         <el-form-item label="权限名称">
           <el-input v-model="form.name" placeholder="请输入权限名称" />
         </el-form-item>
@@ -79,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { permissionTree, permissionCreate, permissionUpdate, permissionDelete } from '@/api'
 import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection, Rank, ArrowRight } from '@element-plus/icons-vue'
@@ -160,6 +172,28 @@ const openEdit = (row: any) => {
   }
   formVisible.value = true
 }
+
+// 构建父级节点选项树（编辑时排除自身及其子节点，防止循环引用）
+const parentTreeOptions = computed(() => {
+  const excludeId = form.value.id
+  const isDescendant = (node: any, targetId: number): boolean => {
+    if (node.id === targetId) return true
+    if (node.children) {
+      return node.children.some((c: any) => isDescendant(c, targetId))
+    }
+    return false
+  }
+  const build = (nodes: any[]): any[] => {
+    return nodes
+      .filter(n => n.id !== excludeId && !(excludeId && isDescendant(n, excludeId)))
+      .map(n => ({
+        id: n.id,
+        name: n.name,
+        children: n.children ? build(n.children) : undefined
+      }))
+  }
+  return build(tree.value)
+})
 
 const saveForm = async () => {
   if (!form.value.name || !form.value.code) {
