@@ -1,9 +1,14 @@
 <template>
   <div class="public-search">
-    <main class="ps-main">
-      <div class="search-bar">
-        <div class="search-row">
-          <div class="search-box">
+    <header class="ps-header">
+      <div class="ps-header-inner">
+        <div class="brand-mark" aria-label="CrawlerOS">
+          <span class="brand-symbol"><el-icon><Search /></el-icon></span>
+          <span class="brand-name">Crawler<span>OS</span></span>
+        </div>
+
+        <div class="header-search-wrap">
+          <div class="search-box header-search-box">
             <el-icon class="search-icon"><Search /></el-icon>
             <input
               v-model="keyword"
@@ -12,10 +17,18 @@
               @keyup.enter="doSearch"
             />
             <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
+            <button class="more-conditions-btn" type="button" @click="showFilters = !showFilters" :aria-expanded="showFilters">
+              <svg class="toggle-chevron" viewBox="0 0 24 24" aria-hidden="true" :class="{ 'is-open': showFilters }">
+                <path d="M6 9.5 12 15.5 18 9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
           <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
         </div>
-        <div class="search-row filter-row">
+      </div>
+
+      <div v-if="showFilters" class="header-filter-panel">
+        <div class="header-filter-row">
           <el-select v-model="filterGroup" placeholder="分组" clearable style="width: 160px" @change="onGroupChange">
             <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
           </el-select>
@@ -29,16 +42,26 @@
           </el-select>
         </div>
       </div>
+    </header>
 
-      <div v-if="total > 0" class="result-count">
-        找到约 {{ total }} 条结果
+    <main class="ps-main">
+
+      <div class="results-heading">
+        <div>
+          <span class="section-kicker">SEARCH RESULTS</span>
+          <span v-if="total > 0" class="result-count">找到约 {{ total }} 条结果</span>
+        </div>
+        <span class="result-page">第 {{ page }} 页</span>
       </div>
 
       <div v-loading="loading" class="result-list">
         <div v-for="row in list" :key="row.id" class="result-item">
           <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
-          <h3 class="result-title" v-html="row.titleHl || row.title"></h3>
-          <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
+          <a class="result-title" href="javascript:void(0)" @click.prevent="showPreviewContent(row)" v-html="row.titleHl || row.title"></a>
+          <div class="result-content-line">
+            <span class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></span>
+            <span class="result-detail-link" role="button" tabindex="0" @click="showDetail(row)" @keydown.enter.prevent="showDetail(row)" @keydown.space.prevent="showDetail(row)">详情</span>
+          </div>
           <div v-if="row.images && row.images.length" class="result-images">
             <img
               v-for="(img, idx) in row.images.slice(0, 6)"
@@ -56,17 +79,6 @@
             <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
             <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
             <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
-            <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
-              <el-button size="small" text type="primary">
-                操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="view">查看详情</el-dropdown-item>
-                  <el-dropdown-item command="previewContent">预览内容</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
           </div>
         </div>
         <div v-if="!loading && list.length === 0" class="empty">
@@ -82,7 +94,7 @@
         :total="total"
         :page-sizes="[10, 20, 50]"
         layout="total, sizes, prev, pager, next"
-        @change="loadData"
+        @change="handlePageChange"
       />
     </main>
 
@@ -146,56 +158,40 @@
       <div v-loading="detailLoading" class="detail-dialog-body">
         <div v-if="detailData" class="detail-content">
           <div class="detail-header">
-            <div>
+            <div class="detail-url-row">
               <a v-if="detailData.url" class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
               <span v-else class="detail-url">暂无来源地址</span>
+              <span class="detail-time">抓取：{{ formatTime(detailData.crawlTime) || '未知' }} | 更新：{{ formatTime(detailData.updateTime) || '未更新' }}</span>
             </div>
             <div class="detail-badges">
               <span v-if="detailData.spiderName" class="meta-tag">{{ detailData.spiderName }}</span>
               <span v-if="detailData.spiderGroup" class="meta-tag group-tag">{{ detailData.spiderGroup }}</span>
-              <span v-if="detailData.sourceType" class="meta-tag source-tag">{{ detailData.sourceType }}</span>
+              <span class="detail-meta-item">来源：{{ detailData.sourceType || '未知' }}</span>
+              <span class="detail-meta-item">标签：{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
             </div>
           </div>
 
-          <div class="detail-grid">
-            <div class="detail-card">
-              <span class="detail-label">来源</span>
-              <span>{{ detailData.sourceType || '未知' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">抓取时间</span>
-              <span>{{ formatTime(detailData.crawlTime) || '未知' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">更新时间</span>
-              <span>{{ formatTime(detailData.updateTime) || '未更新' }}</span>
-            </div>
-            <div class="detail-card">
-              <span class="detail-label">标签</span>
-              <span>{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
-            </div>
-          </div>
-
-          <div v-if="detailData.images && detailData.images.length" class="detail-images">
-            <el-image
-              v-for="(img, idx) in detailData.images"
-              :key="idx"
-              :src="imageUrl(img)"
-              :preview-src-list="detailData.images.map(imageUrl)"
-              :initial-index="idx"
-              fit="cover"
-              class="detail-image"
-              preview-teleported
-              hide-on-click-modal
-            />
-          </div>
-
-          <div class="detail-body">
-            <h4>正文内容</h4>
-            <div class="preview-container detail-text">
-              {{ stripHtml(detailData.content || detailData.rawHtml || '无正文内容') }}
-            </div>
-          </div>
+          <el-tabs v-model="detailTab" class="detail-tabs">
+            <el-tab-pane label="正文内容" name="content">
+              <div v-if="detailData.images && detailData.images.length" class="detail-images">
+                <el-image
+                  v-for="(img, idx) in detailData.images"
+                  :key="idx"
+                  :src="imageUrl(img)"
+                  :preview-src-list="detailData.images.map(imageUrl)"
+                  :initial-index="idx"
+                  fit="cover"
+                  class="detail-image"
+                  preview-teleported
+                  hide-on-click-modal
+                />
+              </div>
+              <div class="preview-container detail-text">{{ detailData.content || '无正文内容' }}</div>
+            </el-tab-pane>
+            <el-tab-pane label="HTML 源代码" name="source">
+              <pre class="preview-container detail-text">{{ detailData.rawHtml || detailData.content || '无正文内容' }}</pre>
+            </el-tab-pane>
+          </el-tabs>
         </div>
         <div v-else class="empty">暂无详情</div>
       </div>
@@ -215,6 +211,7 @@ const page = ref(1)
 const size = ref(10)
 const total = ref(0)
 const keyword = ref('')
+const showFilters = ref(false)
 const filterSpider = ref<number | ''>('')
 const spiderOptions = ref<any[]>([])
 const filterGroup = ref('')
@@ -225,6 +222,7 @@ const previewContentVisible = ref(false)
 const detailVisible = ref(false)
 const previewLoading = ref(false)
 const detailLoading = ref(false)
+const detailTab = ref('content')
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewImages = ref<string[]>([])
@@ -311,14 +309,6 @@ const formatTime = (t: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-const stripHtml = (html: string) => {
-  if (!html) return ''
-  const div = document.createElement('div')
-  div.innerHTML = html
-  const text = div.textContent || div.innerText || ''
-  return text.replace(/\s+/g, ' ').trim()
-}
-
 const getImageBucket = () => {
   if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
   return import.meta.env.DEV ? 'crawler-images-local' : 'crawler-images'
@@ -357,8 +347,18 @@ const openAllImages = async (row: any) => {
 }
 
 // 点击搜索/回车：重置到第 1 页再查询
+const scrollToTop = () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 const doSearch = () => {
   page.value = 1
+  scrollToTop()
+  loadData()
+}
+
+const handlePageChange = () => {
+  scrollToTop()
   loadData()
 }
 
@@ -454,6 +454,7 @@ const showPreviewContent = async (row: any) => {
 const showDetail = async (row: any) => {
   detailVisible.value = true
   detailLoading.value = true
+  detailTab.value = 'content'
   detailData.value = null
   try {
     const res: any = await searchDetail(row.id)
@@ -538,25 +539,160 @@ onMounted(() => {
 <style scoped>
 .public-search {
   min-height: 100vh;
-  background: #f5f6f8;
+  background: #fff;
   display: flex;
   flex-direction: column;
+  color: #202124;
+}
+
+.ps-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  min-height: 88px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #f1f3f4;
+}
+
+.ps-header-inner {
+  width: 100%;
+  max-width: 1200px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-symbol {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #4285f4;
+  background: #f1f3f4;
+  font-size: 17px;
+}
+
+.brand-name {
+  color: #4285f4;
+  font-size: 20px;
+  letter-spacing: .02em;
+  font-weight: 800;
+}
+
+.brand-name span { color: #ea4335; }
+
+.header-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  justify-content: flex-start;
+  padding: 10px 0 10px 12px;
+  margin-left: -8px;
+}
+
+.header-search-box {
+  width: 100%;
+  max-width: 700px;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.more-conditions-btn {
+  border: none;
+  background: transparent;
+  color: #5f6368;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 6px;
+  height: 20px;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.more-conditions-btn:hover {
+  color: #1a73e8;
+}
+
+.toggle-chevron {
+  width: 16px;
+  height: 16px;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.toggle-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.more-conditions-btn:hover {
+  color: #1a73e8;
+}
+
+.header-filter-panel {
+  border-top: 1px solid #f1f3f4;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 12px 24px 16px;
+}
+
+.header-filter-row {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  transform: translateX(-50px);
+}
+
+.header-filter-row .el-select {
+  width: auto;
 }
 
 .ps-main {
   flex: 1;
   width: 100%;
-  max-width: 960px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 28px 24px 48px;
+  padding: 24px 24px 56px;
+}
+
+.search-hero {
+  display: block;
+  padding: 8px 0 20px;
+}
+
+.eyebrow,
+.section-kicker {
+  color: #4285f4;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
 }
 
 .search-bar {
-  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 700px;
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 .search-row {
@@ -574,16 +710,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   border: 1px solid #dfe1e5;
-  border-radius: 24px;
-  padding: 0 16px;
-  height: 44px;
+  border-radius: 999px;
+  padding: 0 18px;
+  height: 56px;
+  min-height: 56px;
   background: #fff;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
 }
 
 .search-box:focus-within {
-  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
-  border-color: transparent;
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.18);
+  border-color: #dfe1e5;
 }
 
 .search-icon {
@@ -597,7 +735,7 @@ onMounted(() => {
   flex: 1;
   border: none;
   outline: none;
-  font-size: 16px;
+  font-size: 15px;
   height: 100%;
   color: #202124;
 }
@@ -621,29 +759,48 @@ onMounted(() => {
 }
 
 .search-btn {
-  border-radius: 24px;
+  --el-button-bg-color: #1a73e8;
+  --el-button-border-color: #1a73e8;
+  --el-button-hover-bg-color: #1769d1;
+  --el-button-hover-border-color: #1769d1;
+  border-radius: 8px;
   padding: 0 24px;
-  height: 44px;
-  font-size: 15px;
+  height: 56px;
+  min-height: 56px;
+  font-size: 14px;
+}
+
+.results-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 42px;
+  margin: 3px 0 8px;
+  padding: 0 2px;
 }
 
 .result-count {
-  color: #999;
+  margin-left: 14px;
+  color: #5f6368;
   font-size: 13px;
-  margin-bottom: 16px;
+}
+
+.result-page {
+  color: #80868b;
+  font-size: 12px;
 }
 
 .result-list {
   min-height: 100px;
   background: #fff;
-  border-radius: 10px;
-  padding: 8px 20px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, .04);
+  border-top: 1px solid #f1f3f4;
+  border-bottom: 1px solid #f1f3f4;
+  padding: 0 28px;
 }
 
 .result-item {
-  padding: 16px 0;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 20px 0;
+  border-bottom: 1px solid #f1f3f4;
 }
 
 .result-item:last-child {
@@ -652,7 +809,7 @@ onMounted(() => {
 
 .result-url {
   display: block;
-  color: #006621;
+  color: #188038;
   font-size: 13px;
   margin-bottom: 4px;
   overflow: hidden;
@@ -666,11 +823,17 @@ onMounted(() => {
 }
 
 .result-title {
+  display: block;
   color: #1a0dab;
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 400;
   margin: 0 0 6px 0;
   line-height: 1.4;
+  text-decoration: none;
+}
+
+.result-title:hover {
+  text-decoration: underline;
 }
 
 .result-title :deep(em) {
@@ -679,15 +842,43 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.result-content-line {
+  display: inline;
+  margin: 0 0 8px;
+  max-width: 100%;
+  line-height: 1.6;
+}
+
 .result-content {
-  color: #545454;
+  color: #4d5156;
   font-size: 14px;
   line-height: 1.6;
-  margin: 0 0 8px 0;
+  margin: 0;
+  display: inline;
+}
+
+.result-detail-link {
+  display: inline;
+  color: #1a73e8;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.6;
+  vertical-align: baseline;
+  margin-left: 4px;
+}
+
+.result-detail-link:hover {
+  text-decoration: underline;
+}
+
+.result-detail-link:hover {
+  text-decoration: underline;
 }
 
 .result-content :deep(em) {
   font-style: normal;
+  color: #202124;
   font-weight: 700;
 }
 
@@ -702,7 +893,7 @@ onMounted(() => {
   width: 72px;
   height: 72px;
   border-radius: 4px;
-  border: 1px solid #eee;
+  border: 1px solid #dadce0;
   cursor: pointer;
   display: block;
 }
@@ -723,14 +914,14 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   font-size: 13px;
-  color: #999;
+  color: #70757a;
 }
 
 .meta-tag {
-  background: #f0f0f0;
+  background: #f1f3f4;
   padding: 2px 8px;
   border-radius: 3px;
-  color: #666;
+  color: #5f6368;
 }
 
 .spider-tag {
@@ -738,8 +929,8 @@ onMounted(() => {
 }
 
 .group-tag {
-  background: #e8f4fd;
-  color: #409eff;
+  background: #e8f0fe;
+  color: #1967d2;
 }
 
 .update-time {
@@ -813,6 +1004,13 @@ onMounted(() => {
   border-bottom: 1px solid #edf0f3;
 }
 
+.detail-url-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .detail-dialog-title {
   color: #172b4d;
   font-size: 18px;
@@ -827,35 +1025,16 @@ onMounted(() => {
   word-break: break-all;
 }
 
+.detail-time {
+  color: #909399;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .detail-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0 24px;
-  padding: 4px 0;
-  border-bottom: 1px solid #edf0f3;
-}
-
-.detail-card {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-height: 42px;
-  padding: 10px 0;
-  border-bottom: 1px solid #f3f5f7;
-  color: #486581;
-  font-size: 13px;
-}
-
-.detail-label {
-  flex: 0 0 56px;
-  font-size: 12px;
-  color: #909399;
 }
 
 .detail-images {
@@ -863,7 +1042,7 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
-  padding: 4px 0;
+  margin-bottom: 12px;
 }
 
 .detail-image {
@@ -915,10 +1094,33 @@ onMounted(() => {
 :deep(.meta-tag) { padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
 
 @media (max-width: 720px) {
+  .ps-header { height: 62px; }
+  .ps-header-inner { padding: 0 18px; }
+  .header-caption { font-size: 11px; }
+  .ps-main { padding: 26px 16px 40px; }
+  .search-hero { display: block; padding: 12px 0 24px; }
+  .hero-copy { padding-bottom: 24px; }
+  .hero-copy h1 { font-size: 32px; }
+  .search-row { align-items: stretch; }
+  .search-btn { padding: 0 18px; }
+  .filter-row { flex-wrap: wrap; }
+  .filter-row :deep(.el-select) { width: calc(50% - 6px) !important; }
+  .results-heading { align-items: flex-end; }
+  .result-count { display: block; margin: 7px 0 0; }
+  .result-list { padding: 4px 18px; }
+  .result-title { font-size: 17px; }
+  .result-meta { flex-wrap: wrap; gap: 8px; }
   .detail-header { flex-direction: column; }
-  .detail-grid { grid-template-columns: 1fr; }
   .detail-images { gap: 8px; }
   .detail-image { width: calc(50% - 4px); height: 120px; }
+}
+
+@media (max-width: 460px) {
+  .search-row { gap: 8px; }
+  .search-box { min-width: 0; }
+  .search-btn { padding: 0 14px; }
+  .filter-row :deep(.el-select) { width: 100% !important; }
+  .result-page { display: none; }
 }
 
 .dialog-header {

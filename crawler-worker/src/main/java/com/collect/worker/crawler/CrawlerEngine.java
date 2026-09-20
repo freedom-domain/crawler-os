@@ -90,9 +90,11 @@ public class CrawlerEngine {
 
         try {
             for (String startUrl : msg.getStartUrls()) {
-                if (urlQueue.isVisited(taskId, startUrl)) continue;
-                urlQueue.markVisited(taskId, startUrl);
-                urlQueue.push(taskId, startUrl + "\t0");
+                String normalizedStartUrl = UrlQueueService.normalizeUrl(startUrl);
+                if (normalizedStartUrl == null || normalizedStartUrl.isBlank()) continue;
+                if (urlQueue.isVisited(taskId, normalizedStartUrl)) continue;
+                urlQueue.markVisited(taskId, normalizedStartUrl);
+                urlQueue.push(taskId, normalizedStartUrl + "\t0");
             }
 
             while (urlQueue.size(taskId) > 0) {
@@ -193,28 +195,31 @@ public class CrawlerEngine {
                 docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
                 docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
                 docObj.setRawHtml(newHtml);
-                if (existingDoc != null) {
-                    docObj.setTags(existingDoc.getTags());
-                }
-
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
                 List<String> imageUrls = extractAndUploadImages(doc, url, parsed.getTitle(), msg, task, overwriteImage);
                 docObj.setImages(imageUrls);
 
-                elasticsearchOperations.save(docObj, IndexCoordinates.of(contentIndex));
+                saveToElasticsearchWithRetry(docObj);
                 success.incrementAndGet();
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                     (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
 
                 if (!msg.isSingleUrl() && depth < maxDepth) {
                     List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
-                    next.removeIf(u -> msg.getStartUrls().contains(u) || !isSameDomain(u, msg.getStartUrls()));
+                    next.removeIf(u -> {
+                        String normalized = UrlQueueService.normalizeUrl(u);
+                        return normalized == null || msg.getStartUrls().stream()
+                                .map(UrlQueueService::normalizeUrl)
+                                .anyMatch(normalized::equals) || !isSameDomain(normalized, msg.getStartUrls());
+                    });
                     int enqueued = 0;
                     for (String nextUrl : next) {
-                        if (!isAllowedByRobots(nextUrl, msg, robotsCache)) continue;
-                        if (urlQueue.isVisited(taskId, nextUrl)) continue;
-                        urlQueue.markVisited(taskId, nextUrl);
-                        urlQueue.push(taskId, nextUrl + "\t" + (depth + 1));
+                        String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
+                        if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
+                        if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache)) continue;
+                        if (urlQueue.isVisited(taskId, normalizedNextUrl)) continue;
+                        urlQueue.markVisited(taskId, normalizedNextUrl);
+                        urlQueue.push(taskId, normalizedNextUrl + "\t" + (depth + 1));
                         enqueued++;
                     }
                     log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
@@ -229,6 +234,31 @@ public class CrawlerEngine {
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
         }
+    }
+
+    private void saveToElasticsearchWithRetry(SpiderContentDoc document) throws InterruptedException {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                elasticsearchOperations.save(document, IndexCoordinates.of(contentIndex));
+                return;
+            } catch (org.springframework.dao.DataAccessResourceFailureException exception) {
+                if (!isClosedConnection(exception) || attempt == 3) {
+                    throw exception;
+                }
+                log.warn("Elasticsearch 连接已关闭，准备重试写入: id={}, attempt={}", document.getId(), attempt);
+                Thread.sleep(attempt * 500L);
+            }
+        }
+    }
+
+    private boolean isClosedConnection(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof org.apache.http.ConnectionClosedException
+                    || cause.getMessage() != null && cause.getMessage().contains("Connection closed unexpectedly")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isSameDomain(String url, List<String> startUrls) {

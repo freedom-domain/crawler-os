@@ -114,13 +114,16 @@ public class FileService {
         }
     }
 
-    public int deleteByCondition(String category, Long spiderId, String title) {
+    public int deleteByCondition(String category, Long spiderId, String fileName, String title) {
         QueryWrapper<FileMetadata> query = new QueryWrapper<>();
         if (category != null && !category.isBlank()) {
             query.eq("category", category);
         }
         if (spiderId != null) {
             query.eq("spider_id", spiderId);
+        }
+        if (fileName != null && !fileName.isBlank()) {
+            query.like("file_name", fileName);
         }
         if (title != null && !title.isBlank()) {
             query.like("title", title);
@@ -176,7 +179,7 @@ public class FileService {
     }
 
     @SuppressWarnings("null")
-    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId, String title) {
-        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, title);
+    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId, String fileName, String title) {
+        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, fileName, title);
     }
 }

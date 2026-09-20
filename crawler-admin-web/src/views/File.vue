@@ -5,7 +5,8 @@
         <div class="card-header">
           <span>文件管理</span>
           <div>
-            <el-input v-model="filterTitle" placeholder="搜索标题" clearable style="width: 180px; margin-right: 12px" @keyup.enter="refresh" @clear="refresh" />
+            <el-input v-model="filterTitle" placeholder="搜索标题" clearable style="width: 200px; margin-right: 12px" @keyup.enter="refresh" @clear="refresh" />
+            <el-input v-model="filterFileName" placeholder="搜索文件名" clearable style="width: 200px; margin-right: 12px" @keyup.enter="refresh" @clear="refresh" />
             <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 140px; margin-right: 12px" @change="refresh">
               <el-option label="文件" value="file" />
               <el-option label="图片" value="image" />
@@ -107,6 +108,7 @@ const tableData = ref<any[]>([])
 const selectedRows = ref<any[]>([])
 const filterCategory = ref('')
 const filterSpider = ref<number | null>(null)
+const filterFileName = ref('')
 const filterTitle = ref('')
 const spiders = ref<any[]>([])
 const page = reactive({ current: 1, size: 10, total: 0 })
@@ -116,7 +118,7 @@ const previewUrl = ref('')
 const previewRow = ref<any>(null)
 const previewError = ref(false)
 const deleting = ref(false)
-const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterTitle.value.trim()))
+const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterFileName.value.trim() || filterTitle.value.trim()))
 
 const formatSize = (bytes: number) => {
   if (!bytes && bytes !== 0) return '-'
@@ -132,6 +134,7 @@ const loadData = async () => {
     const params: any = { current: page.current, size: page.size }
     if (filterCategory.value) params.category = filterCategory.value
     if (filterSpider.value) params.spiderId = filterSpider.value
+    if (filterFileName.value.trim()) params.fileName = filterFileName.value.trim()
     if (filterTitle.value.trim()) params.title = filterTitle.value.trim()
     const res: any = await filePage(params)
     tableData.value = res?.data?.records || []
@@ -228,6 +231,7 @@ const removeByCondition = async () => {
       params: {
         category: filterCategory.value || undefined,
         spiderId: filterSpider.value || undefined,
+        fileName: filterFileName.value.trim() || undefined,
         title: filterTitle.value.trim() || undefined
       }
     })

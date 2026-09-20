@@ -70,15 +70,21 @@ public class ContentParser {
         if (remainingDepth <= 0) {
             return urls;
         }
-        // 每页链接无上限，仅做页内去重与协议过滤
+        // 每页链接无上限，仅做页内去重与协议过滤；同一任务内还会在队列层统一规范化再次去重
         Set<String> seen = new HashSet<>();
         for (Element a : doc.select("a[href]")) {
             String href = a.absUrl("href");
-            if (!href.isEmpty() && !href.startsWith("javascript:") && !href.startsWith("mailto:")
-                    && !href.startsWith("tel:") && !href.startsWith("#")
-                    && seen.add(href)) {
-                urls.add(href);
+            if (href == null || href.isBlank()) {
+                continue;
             }
+            String normalizedHref = com.collect.worker.redis.UrlQueueService.normalizeUrl(href);
+            if (normalizedHref == null || normalizedHref.isBlank()
+                    || normalizedHref.startsWith("javascript:") || normalizedHref.startsWith("mailto:")
+                    || normalizedHref.startsWith("tel:") || normalizedHref.startsWith("#")
+                    || !seen.add(normalizedHref)) {
+                continue;
+            }
+            urls.add(normalizedHref);
         }
         return urls;
     }

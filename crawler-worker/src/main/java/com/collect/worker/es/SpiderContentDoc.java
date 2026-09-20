@@ -18,16 +18,16 @@ public class SpiderContentDoc {
     @Id
     private String id;
 
-    @Field(type = FieldType.Text)
+    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
     private String title;
 
-    @Field(type = FieldType.Text)
+    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
     private String content;
 
     @Field(type = FieldType.Keyword)
     private String url;
 
-    @Field(type = FieldType.Text)
+    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
     private String author;
 
     @Field(type = FieldType.Long)
@@ -47,9 +47,6 @@ public class SpiderContentDoc {
 
     @Field(type = FieldType.Keyword)
     private List<String> images;
-
-    @Field(type = FieldType.Keyword)
-    private List<String> tags;
 
     @Field(type = FieldType.Text, index = false)
     private String rawHtml;

@@ -3,14 +3,18 @@ package com.collect.search.service;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
+import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.collect.search.dto.SearchResult;
 import com.collect.search.entity.Spider;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.mapper.SpiderMapper;
+import com.collect.search.entity.UserFavorite;
+import com.collect.search.mapper.UserFavoriteMapper;
+import com.collect.common.security.LoginUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +33,7 @@ public class SearchService {
 
     private final ElasticsearchClient elasticsearchClient;
     private final SpiderMapper spiderMapper;
+    private final UserFavoriteMapper userFavoriteMapper;
 
     @Value("${app.es.content-index:spider_content}")
     private String indexName;
@@ -37,6 +42,8 @@ public class SearchService {
     public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
                                      int current, int size) {
         PageRequest pageRequest = PageRequest.of(current - 1, size);
+        Long userId = currentUserId();
+        java.util.Map<String, List<String>> userTags = loadUserTags(userId);
 
         BoolQuery.Builder boolBuilder = new BoolQuery.Builder();
 
@@ -67,8 +74,11 @@ public class SearchService {
         }
 
         if (tag != null && !tag.isBlank()) {
-            // tags 字段为 text 类型（带 keyword 子字段），需查询 tags.keyword 才能精确匹配
-            boolBuilder.must(m -> m.term(t -> t.field("tags.keyword").value(tag)));
+            List<String> taggedContentIds = userTags.entrySet().stream()
+                    .filter(entry -> entry.getValue().contains(tag))
+                    .map(java.util.Map.Entry::getKey)
+                    .toList();
+            boolBuilder.must(m -> m.ids(i -> i.values(taggedContentIds)));
         }
 
         Query query = Query.of(q -> q.bool(boolBuilder.build()));
@@ -130,7 +140,7 @@ public class SearchService {
                 sr.setCrawlTime(doc.getCrawlTime());
                 sr.setUpdateTime(doc.getUpdateTime());
                 sr.setImages(doc.getImages());
-                sr.setTags(doc.getTags());
+                sr.setTags(userTags.getOrDefault(doc.getId(), List.of()));
                 if (hit.highlight() != null) {
                     sr.setTitleHl(hit.highlight().get("title") != null ? String.join(" ", hit.highlight().get("title")) : doc.getTitle());
                     sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));
@@ -181,23 +191,69 @@ public class SearchService {
     }
 
     public SpiderContentDoc getById(String id) throws java.io.IOException {
-        return elasticsearchClient
+        SpiderContentDoc doc = elasticsearchClient
                 .get(g -> g.index(indexName).id(id), SpiderContentDoc.class)
                 .source();
+        if (doc != null) {
+            doc.setTags(loadUserTags(currentUserId()).getOrDefault(id, List.of()));
+        }
+        return doc;
     }
 
+    @SuppressWarnings("null")
     public void updateTags(String id, List<String> tags) throws java.io.IOException {
-        SpiderContentDoc doc = getById(id);
-        if (doc == null) {
+        if (elasticsearchClient.get(g -> g.index(indexName).id(id), SpiderContentDoc.class).source() == null) {
             throw new com.collect.common.exception.BizException("数据不存在");
         }
-        doc.setTags(tags != null ? tags : List.of());
-        doc.setUpdateTime(java.time.LocalDateTime.now()
-            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-        elasticsearchClient.index(i -> i.index(indexName).id(id).document(doc));
+        Long userId = LoginUtils.getUserId();
+        UserFavorite favorite = userFavoriteMapper.selectOne(new LambdaQueryWrapper<UserFavorite>()
+                .eq(UserFavorite::getUserId, userId)
+                .eq(UserFavorite::getContentId, id));
+        if (favorite == null) {
+            favorite = new UserFavorite();
+            favorite.setUserId(userId);
+            favorite.setContentId(id);
+            favorite.setTags(JSON.toJSONString(tags != null ? tags : List.of()));
+            userFavoriteMapper.insert(favorite);
+        } else {
+            favorite.setTags(JSON.toJSONString(tags != null ? tags : List.of()));
+            userFavoriteMapper.updateById(favorite);
+        }
     }
 
     public void delete(String id) throws java.io.IOException {
         elasticsearchClient.delete(d -> d.index(indexName).id(id));
+    }
+
+    private Long currentUserId() {
+        try {
+            return LoginUtils.getUserId();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    @SuppressWarnings("null")
+    private java.util.Map<String, List<String>> loadUserTags(Long userId) {
+        if (userId == null) {
+            return java.util.Collections.emptyMap();
+        }
+        return userFavoriteMapper.selectList(new LambdaQueryWrapper<UserFavorite>()
+                        .eq(UserFavorite::getUserId, userId))
+                .stream()
+                .collect(Collectors.toMap(UserFavorite::getContentId,
+                        favorite -> parseTags(favorite.getTags()),
+                        (left, right) -> right));
+    }
+
+    private List<String> parseTags(String tags) {
+        if (tags == null || tags.isBlank()) {
+            return List.of();
+        }
+        try {
+            return JSON.parseArray(tags, String.class);
+        } catch (Exception ignored) {
+            return List.of();
+        }
     }
 }

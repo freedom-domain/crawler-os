@@ -139,6 +139,19 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     update_time DATETIME
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 用户收藏及标签
+CREATE TABLE IF NOT EXISTS user_favorite (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    content_id VARCHAR(128) NOT NULL,
+    tags TEXT,
+    deleted TINYINT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    UNIQUE KEY uk_user_content (user_id, content_id),
+    KEY idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 初始化角色
 INSERT INTO sys_role (id, name, code, description, status) VALUES
 (1, '管理员', 'admin', '系统管理员', 1),

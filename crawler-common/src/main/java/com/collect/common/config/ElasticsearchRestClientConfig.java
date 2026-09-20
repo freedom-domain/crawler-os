@@ -43,14 +43,18 @@ public class ElasticsearchRestClientConfig {
                 .setConnectTimeout((int) Duration.ofSeconds(10).toMillis())
                 .setSocketTimeout((int) Duration.ofSeconds(30).toMillis()));
 
-        if (username != null && !username.isBlank()) {
+        builder.setHttpClientConfigCallback(httpClientBuilder -> {
+            if (username != null && !username.isBlank()) {
             BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
             credsProvider.setCredentials(
-                    new AuthScope(hosts[0].getHostName(), hosts[0].getPort()),
-                    new UsernamePasswordCredentials(username, password));
-            builder.setHttpClientConfigCallback(httpClientBuilder ->
-                    httpClientBuilder.setDefaultCredentialsProvider(credsProvider));
-        }
+                new AuthScope(hosts[0].getHostName(), hosts[0].getPort()),
+                new UsernamePasswordCredentials(username, password));
+            httpClientBuilder.setDefaultCredentialsProvider(credsProvider);
+            }
+            return httpClientBuilder
+                .setMaxConnTotal(50)
+                    .setMaxConnPerRoute(20);
+        });
 
         return builder.build();
     }

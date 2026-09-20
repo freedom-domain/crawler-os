@@ -83,8 +83,9 @@ public class FileController {
     @DeleteMapping("/condition")
     public R<Integer> deleteByCondition(@RequestParam(value = "category", required = false) String category,
                                          @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                         @RequestParam(value = "fileName", required = false) String fileName,
                                          @RequestParam(value = "title", required = false) String title) {
-        return R.ok(fileService.deleteByCondition(category, spiderId, title));
+        return R.ok(fileService.deleteByCondition(category, spiderId, fileName, title));
     }
 
     @Operation(summary = "文件分页列表")
@@ -93,7 +94,8 @@ public class FileController {
                                         @RequestParam(value = "size", defaultValue = "10") int size,
                                         @RequestParam(value = "category", required = false) String category,
                                         @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                        @RequestParam(value = "fileName", required = false) String fileName,
                                         @RequestParam(value = "title", required = false) String title) {
-        return R.ok(fileService.page(current, size, category, spiderId, title));
+        return R.ok(fileService.page(current, size, category, spiderId, fileName, title));
     }
 }
