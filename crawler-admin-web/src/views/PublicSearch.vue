@@ -37,7 +37,7 @@
               <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
             </el-option-group>
           </el-select>
-          <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
+          <el-select v-if="isLoggedIn" v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
             <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
           </el-select>
           <el-checkbox v-if="isLoggedIn" v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
@@ -325,7 +325,9 @@ const tagOptions = ref<any[]>([])
 const loadTagOptions = async () => {
   try {
     const res: any = await dictChildren('tag')
-    tagOptions.value = res.data || []
+    if (res) {
+      tagOptions.value = res.data || []
+    }
   } catch {
     tagOptions.value = []
   }
