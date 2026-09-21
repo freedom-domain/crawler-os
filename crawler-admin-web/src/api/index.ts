@@ -44,6 +44,8 @@ export const taskCancel = (id: number) => request.put(`/spider/task/${id}/cancel
 export const taskDelete = (id: number) => request.delete(`/spider/task/${id}`)
 
 export const searchContent = (params: any) => request.get('/search', { params })
+export const searchHistory = () => request.get('/search/history')
+export const clearSearchHistory = () => request.delete('/search/history')
 export const searchDetail = (id: string) => request.get(`/search/${id}`)
 export const searchDelete = (id: string) => request.delete(`/search/${id}`)
 export const searchUpdateTags = (id: string, tags: string[]) => request.put(`/search/${id}/tags`, tags)

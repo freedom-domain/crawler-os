@@ -152,6 +152,17 @@ CREATE TABLE IF NOT EXISTS user_favorite (
     KEY idx_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 用户搜索历史
+CREATE TABLE IF NOT EXISTS search_history (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    keyword VARCHAR(512) NOT NULL,
+    deleted TINYINT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    KEY idx_search_history_user_time (user_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 初始化角色
 INSERT INTO sys_role (id, name, code, description, status) VALUES
 (1, '管理员', 'admin', '系统管理员', 1),

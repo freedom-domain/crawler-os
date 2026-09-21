@@ -14,6 +14,8 @@ import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.mapper.SpiderMapper;
 import com.collect.search.entity.UserFavorite;
 import com.collect.search.mapper.UserFavoriteMapper;
+import com.collect.search.entity.SearchHistory;
+import com.collect.search.mapper.SearchHistoryMapper;
 import com.collect.common.security.LoginUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,13 +36,14 @@ public class SearchService {
     private final ElasticsearchClient elasticsearchClient;
     private final SpiderMapper spiderMapper;
     private final UserFavoriteMapper userFavoriteMapper;
+    private final SearchHistoryMapper searchHistoryMapper;
 
     @Value("${app.es.content-index:spider_content}")
     private String indexName;
 
     @SuppressWarnings("null")
     public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
-                                     boolean favoriteOnly, int current, int size) {
+                                     boolean favoriteOnly, boolean hasImages, int current, int size) {
         PageRequest pageRequest = PageRequest.of(current - 1, size);
         Long userId = currentUserId();
         java.util.Map<String, List<String>> userTags = loadUserTags(userId);
@@ -71,6 +74,10 @@ public class SearchService {
             boolBuilder.must(m -> m.terms(t -> t.field("spiderId").terms(tt -> tt.value(idValues))));
         } else if (spiderId != null) {
             boolBuilder.must(m -> m.term(t -> t.field("spiderId").value(spiderId)));
+        }
+
+        if (hasImages) {
+            boolBuilder.must(m -> m.exists(e -> e.field("images")));
         }
 
         if (favoriteOnly) {
@@ -352,6 +359,34 @@ public class SearchService {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    public void recordHistory(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+        Long userId = currentUserId();
+        if (userId == null) {
+            return;
+        }
+        SearchHistory history = new SearchHistory();
+        history.setUserId(userId);
+        history.setKeyword(keyword.trim());
+        searchHistoryMapper.insert(history);
+    }
+
+    @SuppressWarnings("null")
+    public List<SearchHistory> history() {
+        return searchHistoryMapper.selectList(new LambdaQueryWrapper<SearchHistory>()
+                .eq(SearchHistory::getUserId, LoginUtils.getUserId())
+                .orderByDesc(SearchHistory::getCreateTime)
+                .last("LIMIT 20"));
+    }
+
+    @SuppressWarnings("null")
+    public void clearHistory() {
+        searchHistoryMapper.delete(new LambdaQueryWrapper<SearchHistory>()
+                .eq(SearchHistory::getUserId, LoginUtils.getUserId()));
     }
 
     @SuppressWarnings("null")

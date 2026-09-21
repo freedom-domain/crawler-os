@@ -1,6 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
             "type": "java",
             "name": "Run Java SpiderServiceApplication",
@@ -42,6 +43,21 @@
             "request": "launch",
             "mainClass": "com.collect.gateway.GatewayApplication",
             "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "node",
+            "name": "Run Node.js Admin Web",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/crawler-admin-web",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev"
+            ],
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
         }
     ]
 }

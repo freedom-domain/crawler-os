@@ -4,6 +4,7 @@ import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
 import com.collect.search.dto.SearchResult;
+import com.collect.search.entity.SearchHistory;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.service.SearchService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +24,21 @@ public class SearchController {
 
     private final SearchService searchService;
 
+    @Operation(summary = "搜索历史")
+    @GetMapping("/history")
+    public R<List<SearchHistory>> history() {
+        requirePermission("search:query");
+        return R.ok(searchService.history());
+    }
+
+    @Operation(summary = "清空搜索历史")
+    @DeleteMapping("/history")
+    public R<Void> clearHistory() {
+        requirePermission("search:query");
+        searchService.clearHistory();
+        return R.ok();
+    }
+
     @Operation(summary = "搜索爬取的数据")
     @GetMapping
     public R<Page<SearchResult>> search(@RequestParam(value = "keyword", required = false) String keyword,
@@ -30,11 +46,13 @@ public class SearchController {
                                               @RequestParam(value = "spiderGroup", required = false) String spiderGroup,
                                               @RequestParam(value = "tag", required = false) String tag,
                                               @RequestParam(value = "favoriteOnly", defaultValue = "false") boolean favoriteOnly,
+                                              @RequestParam(value = "hasImages", defaultValue = "false") boolean hasImages,
                                               @RequestParam(value = "current", defaultValue = "1") int current,
                                               @RequestParam(value = "size", defaultValue = "20") int size) {
         // 只读查询允许匿名访问（公开搜索页），登录用户仍需具备 search:query 权限
         requirePermissionIfLoggedIn("search:query");
-        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, current, size));
+        searchService.recordHistory(keyword);
+        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, current, size));
     }
 
     @Operation(summary = "数据详情")

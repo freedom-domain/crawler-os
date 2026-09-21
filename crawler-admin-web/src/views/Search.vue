@@ -6,12 +6,21 @@
       <div class="search-row">
         <div class="search-box">
           <el-icon class="search-icon"><Search /></el-icon>
-          <input
-            v-model="keyword"
-            class="search-input"
-            placeholder="搜索爬取的内容…"
-            @keyup.enter="doSearch"
-          />
+          <SearchHistoryDropdown
+            :open="historyOpen"
+            :keyword="keyword"
+            @select="selectHistory"
+            @close="historyOpen = false"
+          >
+            <input
+              v-model="keyword"
+              class="search-input"
+              placeholder="搜索爬取的内容…"
+              @focus="historyOpen = !keyword"
+              @input="historyOpen = !keyword"
+              @keyup.enter="doSearch"
+            />
+          </SearchHistoryDropdown>
           <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
         </div>
         <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
@@ -29,14 +38,24 @@
           <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
         </el-select>
         <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
+        <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
       </div>
     </div>
 
-    <div v-if="total > 0" class="result-count">
-      找到约 {{ total }} 条结果
-    </div>
+    <SearchResultsFrame
+      v-model:current-page="page"
+      v-model:page-size="size"
+      :loading="loading"
+      :total="total"
+      :page-sizes="[10, 20, 50]"
+      @change="loadData"
+    >
+      <template #heading>
+        <div v-if="total > 0" class="result-count">
+          找到约 {{ total }} 条结果
+        </div>
+      </template>
 
-    <div v-loading="loading" class="result-list">
       <SearchResultItem
         v-for="row in list"
         :key="row.id"
@@ -91,21 +110,7 @@
           </div>
         </template>
       </SearchResultItem>
-      <div v-if="!loading && list.length === 0" class="empty">
-        未找到相关结果
-      </div>
-    </div>
-
-    <el-pagination
-      v-if="total > 0"
-      style="margin-top: 24px; justify-content: center"
-      v-model:current-page="page"
-      v-model:page-size="size"
-      :total="total"
-      :page-sizes="[10, 20, 50]"
-      layout="total, sizes, prev, pager, next"
-      @change="loadData"
-    />
+    </SearchResultsFrame>
 
     <el-dialog
       v-model="previewImagesVisible"
@@ -154,16 +159,16 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="previewContentVisible" :title="previewTitle + ' - 内容'" width="80%" top="5vh" destroy-on-close>
+    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" destroy-on-close>
+      <template #header>
+        <div class="preview-content-header">
+          <span>{{ previewTitle }} - 内容</span>
+          <el-switch v-model="showPreviewSource" inactive-text="内容预览" active-text="HTML 源码" />
+        </div>
+      </template>
       <div v-loading="previewLoading">
-        <el-tabs v-model="previewTab" class="detail-tabs">
-          <el-tab-pane label="内容预览" name="preview">
-            <div class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
-          </el-tab-pane>
-          <el-tab-pane label="HTML 源码" name="source">
-            <pre class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
-          </el-tab-pane>
-        </el-tabs>
+        <div v-if="!showPreviewSource" class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
+        <pre v-else class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
       </div>
     </el-dialog>
 
@@ -240,6 +245,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SearchResultItem from '@/components/SearchResultItem.vue'
+import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
+import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
@@ -257,6 +264,8 @@ const filterGroup = ref('')
 const groupOptions = ref<string[]>([])
 const filterTag = ref('')
 const favoriteOnly = ref(false)
+const hasImages = ref(false)
+const historyOpen = ref(false)
 const previewImagesVisible = ref(false)
 const previewContentVisible = ref(false)
 const detailVisible = ref(false)
@@ -266,7 +275,7 @@ const detailTab = ref('content')
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewSource = ref('')
-const previewTab = ref('preview')
+const showPreviewSource = ref(false)
 const previewImages = ref<string[]>([])
 const previewInitialIndex = ref(0)
 const detailData = ref<any>(null)
@@ -459,7 +468,13 @@ const goToSpider = async (spiderId?: number, spiderName?: string) => {
 // 点击搜索/回车：重置到第 1 页再查询
 const doSearch = () => {
   page.value = 1
+  historyOpen.value = false
   loadData()
+}
+
+const selectHistory = (value: string) => {
+  keyword.value = value
+  doSearch()
 }
 
 const loadData = async () => {
@@ -470,6 +485,7 @@ const loadData = async () => {
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
     if (favoriteOnly.value) params.favoriteOnly = true
+    if (hasImages.value) params.hasImages = true
     const res: any = await searchContent(params)
     list.value = res.data?.content || []
     total.value = res.data?.totalElements || 0
@@ -544,7 +560,7 @@ const showPreviewContent = async (row: any) => {
   previewTitle.value = row.title || '内容预览'
   previewHtml.value = ''
   previewSource.value = ''
-  previewTab.value = 'preview'
+  showPreviewSource.value = false
   try {
     const res: any = await searchDetail(row.id)
     const rawHtml = res.data?.rawHtml || res.data?.content || '无原始内容'
@@ -980,6 +996,16 @@ onMounted(() => {
   border-radius: 4px;
   padding: 16px;
   background: #fff;
+}
+
+.preview-content-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  color: #172b4d;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .detail-dialog-body {

@@ -10,7 +10,24 @@
         <div class="header-search-wrap">
           <div class="search-box header-search-box">
             <el-icon class="search-icon"><Search /></el-icon>
+            <SearchHistoryDropdown
+              v-if="isLoggedIn"
+              :open="historyOpen"
+              :keyword="keyword"
+              @select="selectHistory"
+              @close="historyOpen = false"
+            >
+              <input
+                v-model="keyword"
+                class="search-input"
+                placeholder="输入关键词"
+                @focus="historyOpen = !keyword"
+                @input="historyOpen = !keyword"
+                @keyup.enter="doSearch"
+              />
+            </SearchHistoryDropdown>
             <input
+              v-else
               v-model="keyword"
               class="search-input"
               placeholder="输入关键词"
@@ -41,21 +58,30 @@
             <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
           </el-select>
           <el-checkbox v-if="isLoggedIn" v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
+          <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
         </div>
       </div>
     </header>
 
     <main class="ps-main">
+      <SearchResultsFrame
+        v-model:current-page="page"
+        v-model:page-size="size"
+        :loading="loading"
+        :total="total"
+        :page-sizes="[10, 20, 50]"
+        @change="handlePageChange"
+      >
+        <template #heading>
+          <div class="results-heading">
+            <div>
+              <span class="section-kicker">SEARCH RESULTS</span>
+              <span v-if="total > 0" class="result-count">找到约 {{ total }} 条结果</span>
+            </div>
+            <span class="result-page">第 {{ page }} 页</span>
+          </div>
+        </template>
 
-      <div class="results-heading">
-        <div>
-          <span class="section-kicker">SEARCH RESULTS</span>
-          <span v-if="total > 0" class="result-count">找到约 {{ total }} 条结果</span>
-        </div>
-        <span class="result-page">第 {{ page }} 页</span>
-      </div>
-
-      <div v-loading="loading" class="result-list">
         <SearchResultItem
           v-for="row in list"
           :key="row.id"
@@ -99,21 +125,7 @@
             </div>
           </template>
         </SearchResultItem>
-        <div v-if="!loading && list.length === 0" class="empty">
-          未找到相关结果
-        </div>
-      </div>
-
-      <el-pagination
-        v-if="total > 0"
-        style="margin-top: 24px; justify-content: center"
-        v-model:current-page="page"
-        v-model:page-size="size"
-        :total="total"
-        :page-sizes="[10, 20, 50]"
-        layout="total, sizes, prev, pager, next"
-        @change="handlePageChange"
-      />
+      </SearchResultsFrame>
     </main>
 
     <el-dialog
@@ -163,26 +175,24 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="previewContentVisible" :title="previewTitle + ' - 内容'" width="80%" top="5vh" destroy-on-close>
+    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" destroy-on-close>
+      <template #header>
+        <div class="preview-content-header">
+          <span>{{ previewTitle }} - 内容</span>
+          <el-switch v-model="showPreviewSource" inactive-text="内容预览" active-text="HTML 源码" />
+        </div>
+      </template>
       <div v-loading="previewLoading">
-        <el-tabs v-model="previewTab" class="detail-tabs">
-          <el-tab-pane label="内容预览" name="preview">
-            <div class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
-          </el-tab-pane>
-          <el-tab-pane label="HTML 源码" name="source">
-            <pre class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
-          </el-tab-pane>
-        </el-tabs>
+        <div v-if="!showPreviewSource" class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
+        <pre v-else class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
       </div>
     </el-dialog>
 
     <el-dialog v-model="detailVisible" title="搜索结果详情" width="90%" top="5vh" destroy-on-close>
       <template #header>
-        <div class="detail-dialog-title">{{ detailData?.title || '搜索结果详情' }}</div>
-      </template>
-      <div v-loading="detailLoading" class="detail-dialog-body">
-        <div v-if="detailData" class="detail-content">
-          <div class="detail-header">
+        <div class="detail-title-row">
+          <div class="detail-dialog-title">{{ detailData?.title || '搜索结果详情' }}</div>
+          <div v-if="detailData" class="detail-header-meta">
             <div class="detail-url-row">
               <a v-if="detailData.url" class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
               <span v-else class="detail-url">暂无来源地址</span>
@@ -195,25 +205,24 @@
               <span class="detail-meta-item">标签：{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
             </div>
           </div>
-
-          <el-tabs v-model="detailTab" class="detail-tabs">
-            <el-tab-pane label="正文内容" name="content">
-              <div v-if="detailData.images && detailData.images.length" class="detail-images">
-                <el-image
-                  v-for="(img, idx) in detailData.images"
-                  :key="idx"
-                  :src="imageUrl(img)"
-                  :preview-src-list="detailData.images.map(imageUrl)"
-                  :initial-index="idx"
-                  fit="cover"
-                  class="detail-image"
-                  preview-teleported
-                  hide-on-click-modal
-                />
-              </div>
-              <div class="preview-container detail-text">{{ detailData.content || '无正文内容' }}</div>
-            </el-tab-pane>
-          </el-tabs>
+        </div>
+      </template>
+      <div v-loading="detailLoading" class="detail-dialog-body">
+        <div v-if="detailData" class="detail-content">
+          <div class="detail-text detail-content-preview">{{ detailData.content || '无正文内容' }}</div>
+          <div v-if="detailData.images && detailData.images.length" class="detail-images">
+            <el-image
+              v-for="(img, idx) in detailData.images"
+              :key="idx"
+              :src="imageUrl(img)"
+              :preview-src-list="detailData.images.map(imageUrl)"
+              :initial-index="idx"
+              fit="cover"
+              class="detail-image"
+              preview-teleported
+              hide-on-click-modal
+            />
+          </div>
         </div>
         <div v-else class="empty">暂无详情</div>
       </div>
@@ -226,6 +235,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import SearchResultItem from '@/components/SearchResultItem.vue'
+import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
+import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import { searchContent, searchDetail, dictChildren, spiderPage, favoriteAdd, favoriteDelete } from '@/api'
 import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
@@ -244,16 +255,17 @@ const filterGroup = ref('')
 const groupOptions = ref<string[]>([])
 const filterTag = ref('')
 const favoriteOnly = ref(false)
+const hasImages = ref(false)
+const historyOpen = ref(false)
 const previewImagesVisible = ref(false)
 const previewContentVisible = ref(false)
 const detailVisible = ref(false)
 const previewLoading = ref(false)
 const detailLoading = ref(false)
-const detailTab = ref('content')
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewSource = ref('')
-const previewTab = ref('preview')
+const showPreviewSource = ref(false)
 const previewImages = ref<string[]>([])
 const previewInitialIndex = ref(0)
 const detailData = ref<any>(null)
@@ -383,8 +395,14 @@ const scrollToTop = () => {
 
 const doSearch = () => {
   page.value = 1
+  historyOpen.value = false
   scrollToTop()
   loadData()
+}
+
+const selectHistory = (value: string) => {
+  keyword.value = value
+  doSearch()
 }
 
 const handlePageChange = () => {
@@ -400,6 +418,7 @@ const loadData = async () => {
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
     if (favoriteOnly.value && isLoggedIn.value) params.favoriteOnly = true
+    if (hasImages.value) params.hasImages = true
     const res: any = await searchContent(params)
     if (res) {
       list.value = res.data?.content || []
@@ -486,7 +505,7 @@ const showPreviewContent = async (row: any) => {
   previewTitle.value = row.title || '内容预览'
   previewHtml.value = ''
   previewSource.value = ''
-  previewTab.value = 'preview'
+  showPreviewSource.value = false
   try {
     const res: any = await searchDetail(row.id)
     const rawHtml = res.data?.rawHtml || res.data?.content || '无原始内容'
@@ -503,7 +522,6 @@ const showPreviewContent = async (row: any) => {
 const showDetail = async (row: any) => {
   detailVisible.value = true
   detailLoading.value = true
-  detailTab.value = 'content'
   detailData.value = null
   try {
     const res: any = await searchDetail(row.id)
@@ -1034,6 +1052,16 @@ onMounted(() => {
   background: #fff;
 }
 
+.preview-content-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  color: #172b4d;
+  font-size: 16px;
+  font-weight: 600;
+}
+
 .detail-dialog-body {
   min-height: 220px;
 }
@@ -1044,28 +1072,45 @@ onMounted(() => {
   gap: 18px;
 }
 
-.detail-header {
+.detail-title-row {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  padding: 4px 0 16px;
-  border-bottom: 1px solid #edf0f3;
+  gap: 12px;
+  padding: 0;
+}
+
+.detail-header-meta {
+  display: flex;
+  flex: 1 1 58%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  min-width: 0;
+  color: #627d98;
+  font-size: 12px;
+  letter-spacing: 0.01em;
 }
 
 .detail-url-row {
   display: flex;
+  flex: 1 1 320px;
   align-items: baseline;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
 }
 
 .detail-dialog-title {
-  color: #172b4d;
-  font-size: 18px;
+  flex: 1 1 42%;
+  min-width: 0;
+  color: #102a43;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.4;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .detail-url {
@@ -1083,7 +1128,15 @@ onMounted(() => {
 .detail-badges {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.detail-meta-item {
+  color: #486581;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .detail-images {
@@ -1119,6 +1172,10 @@ onMounted(() => {
   white-space: pre-wrap;
   line-height: 1.8;
   color: #303133;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   max-height: 42vh;
   overflow-y: auto;
 }
@@ -1127,6 +1184,10 @@ onMounted(() => {
   line-height: 1.8;
   color: #303133;
   word-break: break-word;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
 }
 
 .preview-html img {
@@ -1205,7 +1266,9 @@ onMounted(() => {
   .result-count { display: block; margin: 7px 0 0; }
   .result-title { font-size: 17px; }
   .result-meta { flex-wrap: wrap; gap: 8px; }
-  .detail-header { flex-direction: column; }
+  .detail-title-row { flex-direction: column; }
+  .detail-dialog-title { flex-basis: auto; width: 100%; }
+  .detail-header-meta { justify-content: flex-start; }
   .detail-images { gap: 8px; }
   .detail-image { width: calc(50% - 4px); height: 120px; }
 }
