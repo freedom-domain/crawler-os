@@ -1,30 +1,41 @@
 <template>
   <div class="file-page">
     <el-card v-loading="deleting" element-loading-text="正在删除文件及 MinIO 对象...">
-      <template #header>
-        <div class="card-header">
-          <span>文件管理</span>
-          <div>
-            <el-input v-model="filterTitle" placeholder="搜索标题" clearable style="width: 200px; margin-right: 12px" @keyup.enter="refresh" @clear="refresh" />
-            <el-input v-model="filterFileName" placeholder="搜索文件名" clearable style="width: 200px; margin-right: 12px" @keyup.enter="refresh" @clear="refresh" />
-            <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 140px; margin-right: 12px" @change="refresh">
-              <el-option label="文件" value="file" />
-              <el-option label="图片" value="image" />
-              <el-option label="其他" value="other" />
-            </el-select>
-            <el-select v-model="filterSpider" placeholder="全部爬虫" clearable filterable style="width: 160px; margin-right: 12px" @change="refresh">
-              <el-option v-for="spider in spiders" :key="spider.id" :label="spider.name" :value="spider.id" />
-            </el-select>
-            <el-button type="danger" plain size="small" :disabled="deleting || selectedRows.length === 0" @click="removeSelected">
-              批量删除<span v-if="selectedRows.length">（{{ selectedRows.length }}）</span>
-            </el-button>
-            <el-button type="danger" plain size="small" :disabled="deleting || !hasFilters" @click="removeByCondition">删除筛选结果</el-button>
-            <el-button type="primary" size="small" :disabled="deleting" @click="refresh">
-              <el-icon><Refresh /></el-icon>刷新
-            </el-button>
-          </div>
-        </div>
-      </template>
+      <template #header><span>文件管理</span></template>
+
+      <el-form :inline="true" @submit.prevent>
+        <el-form-item>
+          <el-input v-model="filterTitle" placeholder="搜索标题" clearable style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
+        </el-form-item>
+        <el-form-item>
+          <el-input v-model="filterFileName" placeholder="搜索文件名" clearable style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
+        </el-form-item>
+        <el-form-item>
+          <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 140px" @change="refresh">
+            <el-option label="文件" value="file" />
+            <el-option label="图片" value="image" />
+            <el-option label="其他" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-select v-model="filterSpider" placeholder="全部爬虫" clearable filterable style="width: 160px" @change="refresh">
+            <el-option v-for="spider in spiders" :key="spider.id" :label="spider.name" :value="spider.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :disabled="deleting" @click="refresh">
+            <el-icon><Refresh /></el-icon>刷新
+          </el-button>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="danger" plain :disabled="deleting || selectedRows.length === 0" @click="removeSelected">
+            批量删除<span v-if="selectedRows.length">（{{ selectedRows.length }}）</span>
+          </el-button>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="danger" plain :disabled="deleting || !hasFilters" @click="removeByCondition">删除筛选结果</el-button>
+        </el-form-item>
+      </el-form>
 
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event">
         <el-table-column type="selection" width="48" />
@@ -258,7 +269,6 @@ onUnmounted(clearPreview)
 </script>
 
 <style scoped>
-.card-header { display: flex; justify-content: space-between; align-items: center; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 .preview-body { min-height: 240px; display: flex; align-items: center; justify-content: center; }
 .preview-image { display: block; width: 100%; height: min(62vh, 620px); }

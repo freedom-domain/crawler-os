@@ -4,6 +4,7 @@
     <button 
       type="button" 
       class="toolbar-trigger"
+      :class="{ open: showToolbar }"
       :style="triggerStyle"
       @click="showToolbar = !showToolbar"
       @mousedown="startDrag"
@@ -14,47 +15,73 @@
     <!-- 工具栏 -->
     <div 
       v-show="showToolbar" 
+      ref="toolbarRef"
       class="toolbar-header"
+      :class="{ open: showToolbar }"
       :style="toolbarStyle"
     >
-      <div class="toolbar-section">
+      <div class="toolbar-section inline-section">
         <span class="section-label">图片</span>
         <span class="img-count">{{ images.length }}</span>
       </div>
       <div class="toolbar-divider"></div>
-      <div class="toolbar-section">
+      <div class="toolbar-section inline-section">
+        <span class="section-label">每页</span>
+        <div class="stepper">
+          <button type="button" class="icon-btn" :disabled="pageSize <= 1" @click="stepPageSize(-1)" title="减少每页张数"><el-icon><Minus /></el-icon></button>
+          <span class="stepper-value">{{ pageSize }}</span>
+          <button type="button" class="icon-btn" :disabled="pageSize >= maxPageSize" @click="stepPageSize(1)" title="增加每页张数"><el-icon><Plus /></el-icon></button>
+        </div>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-section inline-section">
         <span class="section-label">每行</span>
-        <input
-          v-model.number="colsInput"
-          type="number"
-          min="1"
-          max="20"
-          class="cols-input"
-          @change="onColsChange"
-        />
+        <div class="stepper">
+          <button type="button" class="icon-btn" :disabled="cols <= 1" @click="stepCols(-1)" title="减少每行张数"><el-icon><Minus /></el-icon></button>
+          <span class="stepper-value">{{ cols }}</span>
+          <button type="button" class="icon-btn" :disabled="cols >= pageSize" @click="stepCols(1)" title="增加每行张数"><el-icon><Plus /></el-icon></button>
+        </div>
       </div>
       <div class="toolbar-divider"></div>
       <div class="toolbar-section zoom-section">
-        <button type="button" class="tool-btn" @click="gridZoom(-0.1)" title="缩小"><el-icon><Minus /></el-icon></button>
+        <button type="button" class="icon-btn" @click="gridZoom(-0.1)" title="缩小"><el-icon><Minus /></el-icon></button>
         <span class="zoom-label">{{ Math.round(gridScale * 100) }}%</span>
-        <button type="button" class="tool-btn" @click="gridZoom(0.1)" title="放大"><el-icon><Plus /></el-icon></button>
+        <button type="button" class="icon-btn" @click="gridZoom(0.1)" title="放大"><el-icon><Plus /></el-icon></button>
       </div>
-      <button type="button" class="reset-btn" @click="gridScale = 1" title="重置">重置</button>
+      <button type="button" class="reset-btn" @click="resetToInitial" title="重置">重置</button>
     </div>
 
-    <!-- 图片列表：直接显示图片，无卡片容器，每行张数可输入 -->
-    <div class="grid-wrapper">
+    <!-- 加载动画 -->
+    <div v-if="loading" class="loading-state">
+      <div class="loading-spinner"></div>
+      <span class="loading-text">图片加载中…</span>
+    </div>
+
+    <!-- 加载失败 -->
+    <div v-else-if="loadError" class="empty-state">
+      {{ loadError }}
+    </div>
+
+    <!-- 图片列表：直接显示图片，无卡片容器，每行张数可输入，支持分页 -->
+    <div v-else class="grid-wrapper">
       <div class="grid" :style="gridStyle">
         <img
-          v-for="(img, idx) in images"
+          v-for="(img, idx) in pageImages"
           :key="idx"
           class="thumb"
           :src="img"
-          :alt="`图片 ${idx + 1}`"
+          :alt="`图片 ${pageStart + idx + 1}`"
           loading="lazy"
-          @click="openViewer(idx)"
+          @click="openViewer(pageStart + idx)"
         />
         <div v-if="!images.length" class="empty-state">暂无图片</div>
+      </div>
+
+      <!-- 分页控件 -->
+      <div v-if="totalPages > 1" class="pagination">
+        <button type="button" class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
+        <span class="page-info">第 {{ page }} / {{ totalPages }} 页</span>
+        <button type="button" class="page-btn" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
       </div>
     </div>
 
@@ -72,10 +99,10 @@
 
         <!-- 顶部工具栏 -->
         <div class="viewer-topbar">
-          <button type="button" class="tool-btn" @click="viewerZoom(-0.15)" title="缩小"><el-icon><Minus /></el-icon></button>
+          <button type="button" class="icon-btn" @click="viewerZoom(-0.15)" title="缩小"><el-icon><Minus /></el-icon></button>
           <span class="zoom-label">{{ Math.round(viewerScale * 100) }}%</span>
-          <button type="button" class="tool-btn" @click="viewerZoom(0.15)" title="放大"><el-icon><Plus /></el-icon></button>
-          <button type="button" class="tool-btn" @click="viewerScale = 1" title="重置缩放">重置</button>
+          <button type="button" class="icon-btn" @click="viewerZoom(0.15)" title="放大"><el-icon><Plus /></el-icon></button>
+          <button type="button" class="reset-btn" @click="viewerScale = 1" title="重置缩放">重置</button>
         </div>
 
         <!-- 关闭按钮 -->
@@ -96,18 +123,23 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
+import { searchDetail } from '@/api'
 
 const route = useRoute()
 
 const title = ref('图片预览')
 const images = ref<string[]>([])
+const loading = ref(false)
+const loadError = ref('')
 const gridScale = ref(1)
-// 每行显示的图片张数（可在页面输入）
+// 每行显示的图片张数（+− 步进调整）
 const cols = ref(4)
-const colsInput = ref(4)
 const viewerOpen = ref(false)
 const viewerIndex = ref(0)
 const viewerScale = ref(1)
+// 分页：每页显示的图片张数与当前页码
+const pageSize = ref(4)
+const page = ref(1)
 const stageRef = ref<HTMLElement | null>(null)
 const imgRef = ref<HTMLImageElement | null>(null)
 const showToolbar = ref(false)
@@ -126,26 +158,34 @@ const triggerStyle = computed<CSSProperties>(() => ({
   zIndex: 20
 }))
 
+const toolbarRef = ref<HTMLElement | null>(null)
+
 const toolbarStyle = computed<CSSProperties>(() => {
   const { x, y } = triggerPos.value
   const vw = window.innerWidth
   const vh = window.innerHeight
   // 判断按钮在左边还是右边
   const isLeft = x < vw / 2
-  // 工具栏高度约 200px，确保不超出顶部
-  const toolbarHeight = 200
-  let top = y - 80
-  if (top < 10) {
-    top = 10
-  }
-  if (top + toolbarHeight > vh - 10) {
-    top = vh - 10 - toolbarHeight
-  }
+  // 横向工具栏尺寸（固定宽度 460px，高度取实际渲染值）
+  const toolbarWidth = 460
+  const toolbarHeight = toolbarRef.value?.offsetHeight || 64
+  // 按钮尺寸 40px，面板与按钮间距 12px
+  const triggerSize = 40
+  const gap = 12
+  // 垂直方向：面板与按钮中心精确对齐，再向上偏移 5px，确保不超出上下边界
+  let top = y + triggerSize / 2 - toolbarHeight / 3 - 5
+  if (top < 10) top = 10
+  if (top + toolbarHeight > vh - 10) top = vh - 10 - toolbarHeight
+  // 水平方向：按钮在左半屏时面板向右展开，否则向左展开，并夹取在窗口内
+  let left = isLeft ? x + triggerSize + gap : x - gap - toolbarWidth
+  if (left < 10) left = 10
+  if (left + toolbarWidth > vw - 10) left = vw - 10 - toolbarWidth
   return {
     position: 'fixed',
-    left: isLeft ? `${x + 45}px` : `${x - 150}px`,
+    left: `${left}px`,
     top: `${top}px`,
     right: 'auto',
+    width: `${toolbarWidth}px`,
     transform: 'none',
     zIndex: 20
   } as CSSProperties
@@ -182,6 +222,16 @@ const endDrag = () => {
   triggerPos.value = { x: snapX, y }
 }
 
+// 移动端（竖屏）判断
+const isMobile = () => window.matchMedia('(max-width: 640px)').matches
+
+// 移动端默认每页 1 张、每行 1 张
+const applyMobileDefaults = () => {
+  if (!isMobile()) return
+  pageSize.value = 1
+  cols.value = 1
+}
+
 // 初始化位置：右侧居中
 onMounted(() => {
   triggerPos.value = {
@@ -190,11 +240,20 @@ onMounted(() => {
   }
   // 点击其他地方隐藏工具栏
   document.addEventListener('click', onDocumentClick)
+  // 移动端默认每页竖屏显示一张图片
+  applyMobileDefaults()
+  window.addEventListener('resize', onResize)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocumentClick)
+  window.removeEventListener('resize', onResize)
 })
+
+// 窗口尺寸变化时：进入移动端竖屏则应用每页 1 张
+const onResize = () => {
+  if (isMobile()) applyMobileDefaults()
+}
 
 const onDocumentClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement
@@ -209,19 +268,60 @@ watch(title, (t) => {
   document.title = t || '图片预览'
 })
 
-// 从路由参数解析图片列表
+// 获取 MinIO bucket 名称
+const getImageBucket = () => {
+  if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
+  return import.meta.env.DEV ? 'crawler-images-local' : 'crawler-images'
+}
+
+// ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
+const imageUrl = (objectName: string) => {
+  if (!objectName) return ''
+  // 兼容旧数据：若已是完整 URL 则直接返回
+  if (/^https?:\/\//i.test(objectName)) return objectName
+  return `/api/file/image?bucket=${encodeURIComponent(getImageBucket())}&objectName=${encodeURIComponent(objectName)}`
+}
+
+// 通过内容 id（含爬虫信息与 url）从后端获取图片列表
+const loadImages = async () => {
+  const id = route.query.id as string
+  if (!id) {
+    loadError.value = '缺少内容标识，无法加载图片'
+    return
+  }
+
+  loading.value = true
+  loadError.value = ''
+  try {
+    const res: any = await searchDetail(id)
+    const doc = res.data
+    // 加载前保持传递过来的 title 不变，仅在未传递 title 时才使用文档中的 title
+    if (!title.value && doc?.title) title.value = doc.title
+    const rawImages: string[] = doc?.images || []
+    images.value = rawImages.map(imageUrl).filter(Boolean)
+    // 移动端竖屏默认每页 1 张；桌面端超过 4 张时每页显示 3 张，否则每页 4 张
+    const size = isMobile() ? 1 : (images.value.length > 4 ? 3 : 4)
+    pageSize.value = size
+    if (isMobile()) {
+      cols.value = 1
+    }
+    page.value = 1
+    if (!images.value.length) {
+      loadError.value = '该条内容暂无图片'
+    }
+  } catch {
+    loadError.value = '图片加载失败，请稍后重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+// 从路由参数获取内容 id 并加载图片
 onMounted(() => {
   const t = route.query.title as string
   if (t) title.value = t
 
-  const srcs = route.query.srcs as string
-  if (srcs) {
-    try {
-      images.value = JSON.parse(decodeURIComponent(srcs))
-    } catch {
-      images.value = []
-    }
-  }
+  loadImages()
 
   // 绑定键盘事件
   document.addEventListener('keydown', onKeydown)
@@ -232,11 +332,47 @@ onBeforeUnmount(() => {
   document.title = '图片预览'
 })
 
-// ===== 每行张数 =====
-const onColsChange = () => {
-  const n = Math.round(Number(colsInput.value))
-  cols.value = Number.isFinite(n) ? Math.min(20, Math.max(1, n)) : 4
-  colsInput.value = cols.value
+// 每页张数上限：不超过图片总数（无图片时退化为 200）
+const maxPageSize = computed(() => (images.value.length ? Math.min(200, images.value.length) : 200))
+
+// ===== 每页张数（+− 步进，1~图片总数）=====
+const stepPageSize = (delta: number) => {
+  const next = Math.min(maxPageSize.value, Math.max(1, pageSize.value + delta))
+  if (next === pageSize.value) return
+  pageSize.value = next
+  // 每行张数不能超过每页张数
+  if (cols.value > pageSize.value) cols.value = pageSize.value
+  page.value = 1
+}
+
+// ===== 每行张数（+− 步进，1~每页张数）=====
+const stepCols = (delta: number) => {
+  const next = Math.min(pageSize.value, Math.max(1, cols.value + delta))
+  if (next === cols.value) return
+  cols.value = next
+}
+
+// ===== 分页 =====
+const totalPages = computed(() => Math.max(1, Math.ceil(images.value.length / pageSize.value)))
+const pageStart = computed(() => (page.value - 1) * pageSize.value)
+const pageImages = computed(() => images.value.slice(pageStart.value, pageStart.value + pageSize.value))
+
+const changePage = (p: number) => {
+  page.value = Math.min(totalPages.value, Math.max(1, p))
+  // 切换页码后回到顶部
+  window.scrollTo({ top: 0 })
+}
+
+// 重置：走页面初始化逻辑（重新加载图片，所有页面参数恢复初始默认值）
+const resetToInitial = () => {
+  gridScale.value = 1
+  page.value = 1
+  // 移动端竖屏默认每页 1 张，桌面端默认每页 4 张
+  const size = isMobile() ? 1 : 4
+  pageSize.value = size
+  cols.value = size
+  loadImages()
+  window.scrollTo({ top: 0 })
 }
 
 // 列宽 = (100% - 所有列间 gap) / 每行张数；不足一行的图片按实际数量铺满
@@ -291,7 +427,15 @@ const nextImage = () => {
 // ===== 键盘快捷键 =====
 const onKeydown = (event: KeyboardEvent) => {
   if (!viewerOpen.value) {
-    // 网格模式：仅保留 0 重置缩放（缩放使用 Ctrl+滚轮）
+    // 网格模式：左右方向键切换上一页/下一页，0 重置缩放（缩放使用 Ctrl+滚轮）
+    if (event.key === 'ArrowLeft') {
+      changePage(page.value - 1)
+      return
+    }
+    if (event.key === 'ArrowRight') {
+      changePage(page.value + 1)
+      return
+    }
     if (event.key === '0') gridScale.value = 1
     return
   }
@@ -349,78 +493,114 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 16px 12px;
+  padding: 10px 14px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 16px;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 10px;
+  width: 460px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(8px);
+  /* 点击图标后渐进展开：从按钮侧滑入 + 淡入 */
+  transform-origin: left center;
+  transform: translateX(-12px) scale(0.96);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+}
+.toolbar-header.open {
+  transform: translateX(0) scale(1);
+  opacity: 1;
 }
 .toolbar-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.inline-section {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
 }
 .section-label {
   font-size: 11px;
   color: #94a3b8;
   font-weight: 500;
+  white-space: nowrap;
 }
 .img-count {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #334155;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 .toolbar-divider {
-  width: 24px;
-  height: 1px;
+  width: 1px;
+  height: 24px;
   background: #e2e8f0;
 }
-.cols-input {
-  width: 40px;
-  height: 28px;
-  text-align: center;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 13px;
-  color: #334155;
-  outline: none;
-  transition: border-color 0.2s;
+/* +− 步进器（每页/每行张数） */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
-.cols-input:focus {
-  border-color: #3b82f6;
+.stepper-value {
+  min-width: 24px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+.icon-btn:disabled:hover {
+  background: #f1f5f9;
+  color: #475569;
 }
 .zoom-section {
   flex-direction: row;
-  gap: 8px;
+  align-items: center;
+  gap: 5px;
 }
-.tool-btn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
+.icon-btn {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: #f1f5f9;
   color: #475569;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   display: grid;
   place-items: center;
   transition: all 0.2s;
 }
-.tool-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+.icon-btn:hover {
+  background: #3b82f6;
+  color: #fff;
+  transform: scale(1.08);
+}
+.icon-btn:active {
+  transform: scale(0.94);
 }
 .zoom-label {
   font-size: 12px;
   color: #64748b;
-  min-width: 36px;
+  min-width: 38px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .reset-btn {
-  padding: 6px 12px;
+  padding: 5px 10px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #fff;
@@ -428,6 +608,8 @@ onBeforeUnmount(() => {
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .reset-btn:hover {
   background: #f1f5f9;
@@ -459,35 +641,16 @@ onBeforeUnmount(() => {
   border-color: #94a3b8;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+.toolbar-trigger.open {
+  background: #fff;
+  color: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
 .img-count {
   font-size: 13px;
   color: #64748b;
   white-space: nowrap;
-}
-.cols-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: #64748b;
-  white-space: nowrap;
-}
-.cols-input {
-  width: 56px;
-  height: 30px;
-  padding: 0 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #f1f5f9;
-  color: #1e293b;
-  font-size: 13px;
-  text-align: center;
-  outline: none;
-  transition: border-color 0.15s, background 0.15s;
-}
-.cols-input:focus {
-  border-color: #94a3b8;
-  background: #fff;
 }
 
 /* ===== 工具栏按钮 ===== */
@@ -553,6 +716,73 @@ onBeforeUnmount(() => {
   padding: 60px 0;
   color: #64748b;
   font-size: 15px;
+}
+
+/* ===== 分页控件（悬浮于页面底部） ===== */
+.pagination {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+}
+.page-btn {
+  padding: 5px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.page-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.page-info {
+  font-size: 13px;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 加载动画 ===== */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 100px 0;
+}
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.loading-text {
+  color: #64748b;
+  font-size: 14px;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ===== 全屏查看器 ===== */
@@ -674,10 +904,29 @@ onBeforeUnmount(() => {
 
 /* 响应式 */
 @media (max-width: 640px) {
-  .page-header { padding: 12px 16px; }
-  .page-title { max-width: 50%; font-size: 15px; }
   .grid-wrapper { padding: 16px; }
   .grid { gap: 10px; }
+  /* 移动端分页：贴底通栏，按钮加大便于点按 */
+  .pagination {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    transform: none;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 14px;
+  }
+  .page-btn {
+    flex: 1;
+    padding: 10px 0;
+    font-size: 14px;
+    border-radius: 8px;
+  }
+  .page-info {
+    flex-shrink: 0;
+    font-size: 13px;
+  }
   .viewer-stage img { max-width: calc(100vw - 60px); max-height: calc(100vh - 100px); }
   .viewer-nav.prev { left: 10px; }
   .viewer-nav.next { right: 10px; }

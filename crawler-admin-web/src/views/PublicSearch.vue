@@ -122,8 +122,21 @@
                 :type="row.favorited ? 'warning' : 'primary'"
                 @click.stop="toggleFavorite(row, !row.favorited)"
               >
-                {{ row.favorited ? '已收藏' : '收藏' }}
+                <el-icon :size="16" :color="row.favorited ? '#f56c6c' : ''"><StarFilled v-if="row.favorited" /><Star v-else /></el-icon>
+                <span style="margin-left: 2px">{{ row.favorited ? '已收藏' : '收藏' }}</span>
               </el-button>
+              <el-dropdown v-if="isLoggedIn" trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
+                <el-button size="small" text type="primary">
+                  操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="tag">标签</el-dropdown-item>
+                    <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </SearchResultItem>
@@ -230,6 +243,32 @@
       </div>
     </el-dialog>
 
+    <el-dialog v-model="tagVisible" title="编辑标签" width="480px" destroy-on-close>
+      <div style="padding: 10px 0">
+        <el-select
+          v-model="tagSelection"
+          multiple
+          filterable
+          allow-create
+          default-first-option
+          placeholder="选择或输入标签"
+          style="width: 100%"
+          :teleported="false"
+        >
+          <el-option
+            v-for="child in tagOptions"
+            :key="child.id"
+            :label="child.label"
+            :value="child.label"
+          />
+        </el-select>
+      </div>
+      <template #footer>
+        <el-button @click="tagVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTags">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="loginVisible" title="登录" width="400px" class="login-dialog" :close-on-click-modal="false" destroy-on-close>
       <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef" @submit.prevent="handleLogin">
         <el-form-item prop="username">
@@ -253,8 +292,9 @@ import { useUserStore } from '@/stores/user'
 import SearchResultItem from '@/components/SearchResultItem.vue'
 import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
 import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
-import { searchContent, searchDetail, dictChildren, spiderPage, favoriteAdd, favoriteDelete } from '@/api'
-import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { searchContent, searchDetail, dictChildren, spiderPage, favoriteAdd, favoriteDelete, searchDelete, spiderRerun, searchUpdateTags } from '@/api'
+import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut, Star, StarFilled } from '@element-plus/icons-vue'
+import router from '@/router'
 
 const list = ref<any[]>([])
 const userStore = useUserStore()
@@ -416,25 +456,16 @@ const imageUrl = (objectName: string) => {
   return `/api/file/image?bucket=${encodeURIComponent(getImageBucket())}&objectName=${encodeURIComponent(objectName)}`
 }
 
-const openAllImages = async (row: any) => {
-  let images: string[] = row.images || []
-  try {
-    const res: any = await searchDetail(row.id)
-    if (res.data?.images?.length) {
-      images = res.data.images
-    }
-  } catch {
-    // 加载失败时使用列表中的图片
-  }
-
-  if (!images.length) {
+// 不再传递图片列表，仅传递内容 id（含爬虫信息与 url），由预览页自行从后端获取图片
+const openAllImages = (row: any) => {
+  if (!row.id) {
     ElMessage.info('该条内容暂无图片')
     return
   }
 
   const query: Record<string, string> = {
-    title: String(row.title || '图片预览'),
-    srcs: JSON.stringify(images.map(imageUrl))
+    id: String(row.id),
+    title: String(row.title || '图片预览')
   }
   const win = window.open(`/image-preview?${new URLSearchParams(query).toString()}`, '_blank')
   if (!win) {
@@ -605,11 +636,76 @@ const showDetail = async (row: any) => {
   }
 }
 
+const tagVisible = ref(false)
+const tagSelection = ref<string[]>([])
+const tagCurrentRow = ref<any>(null)
+
+const openTagEditor = (row: any) => {
+  tagCurrentRow.value = row
+  tagSelection.value = [...(row.tags || [])]
+  tagVisible.value = true
+  if (tagOptions.value.length === 0) {
+    loadTagOptions()
+  }
+}
+
+const saveTags = async () => {
+  if (!tagCurrentRow.value) return
+  try {
+    await searchUpdateTags(tagCurrentRow.value.id, tagSelection.value)
+    tagCurrentRow.value.tags = [...tagSelection.value]
+    ElMessage.success('标签已更新')
+    tagVisible.value = false
+  } catch {
+    ElMessage.error('标签更新失败')
+  }
+}
+
+const handleRerun = async (row: any) => {
+  if (!row.spiderId || !row.url) return
+  try {
+    await ElMessageBox.confirm(`确定重新爬取该记录？\n${row.url}`, '重新爬取', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    await spiderRerun(row.spiderId, row.url)
+    ElMessage.success('重新爬取任务已创建')
+  } catch (error: any) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error?.message || '重新爬取失败')
+  }
+}
+
+const handleDelete = async (row: any) => {
+  try {
+    await ElMessageBox.confirm('确定删除该条数据?', '警告', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await searchDelete(row.id)
+    ElMessage.success('删除成功')
+  } catch {
+    ElMessage.error('删除失败')
+  }
+  if (list.value.length === 1 && page.value > 1) {
+    page.value--
+  }
+  loadData()
+}
+
 const handleCommand = (command: string, row: any) => {
   if (command === 'view') {
     showDetail(row)
+  } else if (command === 'tag') {
+    openTagEditor(row)
   } else if (command === 'previewContent') {
     showPreviewContent(row)
+  } else if (command === 'rerun') {
+    handleRerun(row)
+  } else if (command === 'delete') {
+    handleDelete(row)
   }
 }
 

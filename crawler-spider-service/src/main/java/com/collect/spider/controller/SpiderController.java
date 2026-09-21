@@ -38,14 +38,12 @@ public class SpiderController {
                                   @RequestParam(value = "size", defaultValue = "10") int size,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @RequestParam(value = "group", required = false) String group) {
-        requirePermissionIfLoggedIn("spider:list");
         return R.ok(spiderService.page(current, size, keyword, group));
     }
 
     @Operation(summary = "爬虫详情")
     @GetMapping("/{id}")
     public R<Spider> detail(@PathVariable("id") Long id) {
-        requirePermission("spider:list");
         return R.ok(spiderService.getById(id));
     }
 

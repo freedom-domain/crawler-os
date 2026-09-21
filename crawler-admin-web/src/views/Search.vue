@@ -27,10 +27,10 @@
         </SearchHistoryDropdown>
       </div>
       <div class="search-row filter-row">
-        <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="onGroupChange">
+        <el-select v-model="filterGroup" placeholder="分组" clearable style="width: 160px" @change="onGroupChange">
           <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
         </el-select>
-        <el-select v-model="filterSpider" placeholder="爬虫" clearable filterable style="width: 200px" @change="onSpiderChange">
+        <el-select v-model="filterSpider" placeholder="站点" clearable filterable style="width: 200px" @change="onSpiderChange">
           <el-option-group v-for="sec in spiderGroupedOptions" :key="sec.key" :label="sec.label">
             <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
           </el-option-group>
@@ -94,7 +94,8 @@
               :type="row.favorited ? 'warning' : 'primary'"
               @click.stop="toggleFavorite(row, !row.favorited)"
             >
-              {{ row.favorited ? '已收藏' : '收藏' }}
+              <el-icon :size="16" :color="row.favorited ? '#f56c6c' : ''"><StarFilled v-if="row.favorited" /><Star v-else /></el-icon>
+              <span style="margin-left: 2px">{{ row.favorited ? '已收藏' : '收藏' }}</span>
             </el-button>
             <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
               <el-button size="small" text type="primary">
@@ -249,7 +250,7 @@ import SearchResultItem from '@/components/SearchResultItem.vue'
 import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
 import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
-import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut, Star, StarFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -427,27 +428,17 @@ const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
 }[char] || char))
 
 // 新窗口打开当前内容的全部图片（跳转到真实的图片预览页面）
-const openAllImages = async (row: any) => {
-  // 获取完整图片列表（优先从详情接口获取）
-  let images: string[] = row.images || []
-  try {
-    const res: any = await searchDetail(row.id)
-    if (res.data?.images?.length) {
-      images = res.data.images
-    }
-  } catch {
-    // 加载失败时使用列表中的图片
-  }
-
-  if (!images.length) {
+// 不再传递图片列表，仅传递内容 id（含爬虫信息与 url），由预览页自行从后端获取图片
+const openAllImages = (row: any) => {
+  if (!row.id) {
     ElMessage.info('该条内容暂无图片')
     return
   }
 
   // 跳转到真实的图片预览页面（独立路由，非 JS 生成的页面）
   const query: Record<string, string> = {
-    title: String(row.title || '图片预览'),
-    srcs: JSON.stringify(images.map(imageUrl))
+    id: String(row.id),
+    title: String(row.title || '图片预览')
   }
   const win = window.open(`/image-preview?${new URLSearchParams(query).toString()}`, '_blank')
   if (!win) {
