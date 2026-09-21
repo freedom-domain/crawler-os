@@ -28,33 +28,33 @@
       </el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange">
-      <el-table-column type="selection" width="50" />
-      <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip />
-      <el-table-column prop="spiderName" label="爬虫名称" width="160" />
-      <el-table-column label="状态" width="100">
+    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable>
+      <el-table-column type="selection" width="50"  resizable />
+      <el-table-column prop="taskId" label="任务ID" min-width="200" show-overflow-tooltip  resizable />
+      <el-table-column prop="spiderName" label="爬虫名称" min-width="160"  resizable />
+      <el-table-column label="状态" min-width="100" resizable>
         <template #default="{ row }">
           <el-tag :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="startTime" label="开始时间" width="180" />
-      <el-table-column prop="endTime" label="结束时间" width="180" />
-      <el-table-column label="总耗时" width="110" align="center">
+      <el-table-column prop="startTime" label="开始时间" min-width="180"  resizable />
+      <el-table-column prop="endTime" label="结束时间" min-width="180"  resizable />
+      <el-table-column label="总耗时" min-width="110" align="center" resizable>
         <template #default="{ row }">
           {{ formatDuration(row.totalCostMs || 0) }}
         </template>
       </el-table-column>
-      <el-table-column label="HTML" align="center">
-        <el-table-column prop="htmlSuccessCount" label="成功" width="70" align="center" />
-        <el-table-column prop="htmlFailCount" label="失败" width="70" align="center" />
-        <el-table-column prop="htmlExistingCount" label="已存在" width="80" align="center" />
+      <el-table-column label="HTML" align="center" resizable>
+        <el-table-column prop="htmlSuccessCount" label="成功" min-width="70" align="center"  resizable />
+        <el-table-column prop="htmlFailCount" label="失败" min-width="70" align="center"  resizable />
+        <el-table-column prop="htmlExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="图片" align="center">
-        <el-table-column prop="imageSuccessCount" label="成功" width="70" align="center" />
-        <el-table-column prop="imageFailCount" label="失败" width="70" align="center" />
-        <el-table-column prop="imageExistingCount" label="已存在" width="80" align="center" />
+      <el-table-column label="图片" align="center" resizable>
+        <el-table-column prop="imageSuccessCount" label="成功" min-width="70" align="center"  resizable />
+        <el-table-column prop="imageFailCount" label="失败" min-width="70" align="center"  resizable />
+        <el-table-column prop="imageExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right" resizable>
         <template #default="{ row }">
           <el-button v-if="row.status === 'RUNNING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>
           <el-button size="small" type="primary" text @click="showLogs(row)">日志</el-button>
@@ -92,28 +92,28 @@
         <el-button size="small" :icon="Search" @click="reloadLogs">查询</el-button>
       </div>
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
-      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh">
-        <el-table-column label="URL" show-overflow-tooltip>
+      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh" resizable>
+        <el-table-column label="URL" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <a class="log-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" min-width="80" align="center" resizable>
           <template #default="{ row }">
             <el-tag v-if="row.status === 1" type="success" size="small">成功</el-tag>
             <el-tag v-else-if="row.status === 0" type="danger" size="small">失败</el-tag>
             <el-tag v-else type="warning" size="small">已存在</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="80" align="center">
+        <el-table-column label="类型" min-width="80" align="center" resizable>
           <template #default="{ row }">
             <el-tag :type="row.type === 'image' ? 'warning' : 'info'" size="small">{{ row.type === 'image' ? '图片' : 'HTML' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="level" label="级别" width="70" align="center" />
-        <el-table-column prop="message" label="信息" show-overflow-tooltip />
-        <el-table-column prop="costMs" label="耗时(ms)" width="90" align="center" />
-        <el-table-column prop="createTime" label="时间" width="180" />
+        <el-table-column prop="level" label="级别" min-width="70" align="center"  resizable />
+        <el-table-column prop="message" label="信息" show-overflow-tooltip  resizable />
+        <el-table-column prop="costMs" label="耗时(ms)" min-width="90" align="center"  resizable />
+        <el-table-column prop="createTime" label="时间" min-width="180"  resizable />
       </el-table>
       <el-pagination
         v-show="logs.length > 0"

@@ -117,14 +117,13 @@ public class UserService {
 
     @SuppressWarnings("null")
     public IPage<SysUser> page(int current, int size, String keyword) {
-        LambdaQueryWrapper<SysUser> qw = new LambdaQueryWrapper<>();
-        if (keyword != null && !keyword.isBlank()) {
-            qw.like(SysUser::getUsername, keyword)
-                    .or().like(SysUser::getNickname, keyword);
-        }
-        qw.orderByDesc(SysUser::getCreateTime);
-        IPage<SysUser> result = userMapper.selectPage(new Page<>(current, size), qw);
-        result.getRecords().forEach(u -> u.setPassword(null));
+        String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
+        List<SysUser> all = userMapper.selectPageWithRole(kw);
+        all.forEach(u -> u.setPassword(null));
+        int from = Math.min((current - 1) * size, all.size());
+        int to = Math.min(from + size, all.size());
+        Page<SysUser> result = new Page<>(current, size, all.size());
+        result.setRecords(all.subList(from, to));
         return result;
     }
 

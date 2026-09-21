@@ -14,25 +14,25 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" stripe>
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="username" label="用户名" width="140" />
-      <el-table-column prop="nickname" label="昵称" width="140" />
-      <el-table-column prop="email" label="邮箱" />
-      <el-table-column prop="phone" label="手机" width="140" />
-      <el-table-column prop="roleName" label="角色" width="120">
+    <el-table :data="list" v-loading="loading" stripe resizable>
+      <el-table-column prop="id" label="ID" min-width="60"  resizable />
+      <el-table-column prop="username" label="用户名" min-width="140"  resizable />
+      <el-table-column prop="nickname" label="昵称" min-width="140"  resizable />
+      <el-table-column prop="email" label="邮箱"  resizable />
+      <el-table-column prop="phone" label="手机" min-width="140"  resizable />
+      <el-table-column prop="roleName" label="角色" min-width="120" resizable>
         <template #default="{ row }">
           <el-tag>{{ row.roleName || '-' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="状态" width="80">
+      <el-table-column prop="status" label="状态" min-width="80" resizable>
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'danger'">
             {{ row.status === 1 ? '启用' : '禁用' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right" resizable>
         <template #default="{ row }">
           <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
           <el-button type="danger" link @click="handleDelete(row)">删除</el-button>

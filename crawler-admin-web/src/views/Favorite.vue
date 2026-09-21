@@ -10,27 +10,27 @@
       </div>
     </template>
 
-    <el-table :data="list" v-loading="loading" stripe>
-      <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip>
+    <el-table :data="list" v-loading="loading" stripe resizable>
+      <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip resizable>
         <template #default="{ row }">{{ row.title || '无标题' }}</template>
       </el-table-column>
-      <el-table-column label="来源 URL" min-width="300" show-overflow-tooltip>
+      <el-table-column label="来源 URL" min-width="300" show-overflow-tooltip resizable>
         <template #default="{ row }">
           <a v-if="row.url" class="source-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="spiderName" label="爬虫" width="160" show-overflow-tooltip>
+      <el-table-column prop="spiderName" label="爬虫" min-width="160" show-overflow-tooltip resizable>
         <template #default="{ row }">{{ row.spiderName || '-' }}</template>
       </el-table-column>
-      <el-table-column label="标签" min-width="180">
+      <el-table-column label="标签" min-width="180" resizable>
         <template #default="{ row }">
           <el-tag v-for="tag in row.tags || []" :key="tag" size="small" class="tag">{{ tag }}</el-tag>
           <span v-if="!row.tags || !row.tags.length">-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="crawlTime" label="抓取时间" width="180" />
-      <el-table-column label="操作" width="110" fixed="right">
+      <el-table-column prop="crawlTime" label="抓取时间" min-width="180"  resizable />
+      <el-table-column label="操作" width="110" fixed="right" resizable>
         <template #default="{ row }">
           <el-button type="danger" link @click="remove(row)">取消收藏</el-button>
         </template>

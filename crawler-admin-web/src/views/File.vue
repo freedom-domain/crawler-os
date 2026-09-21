@@ -37,15 +37,15 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event">
-        <el-table-column type="selection" width="48" />
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="crawlerName" label="所属爬虫" min-width="140" show-overflow-tooltip>
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable>
+        <el-table-column type="selection" width="48"  resizable />
+        <el-table-column prop="id" label="ID" min-width="70"  resizable />
+        <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip  resizable />
+        <el-table-column prop="crawlerName" label="所属爬虫" min-width="140" show-overflow-tooltip resizable>
           <template #default="{ row }">{{ row.crawlerName || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="category" label="分类" width="100" />
-        <el-table-column label="来源" min-width="220" show-overflow-tooltip>
+        <el-table-column prop="category" label="分类" min-width="100"  resizable />
+        <el-table-column label="来源" min-width="220" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <el-link v-if="row.source" :href="row.source" target="_blank" rel="noopener noreferrer" type="primary">
               {{ row.source }}
@@ -53,15 +53,15 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="fileSize" label="大小" width="110">
+        <el-table-column prop="fileSize" label="大小" min-width="110" resizable>
           <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
         </el-table-column>
-        <el-table-column prop="contentType" label="类型" width="160" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="上传时间" width="170" />
-        <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="bucket" label="存储桶" width="120" />
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column prop="contentType" label="类型" min-width="160" show-overflow-tooltip  resizable />
+        <el-table-column prop="createTime" label="上传时间" min-width="170"  resizable />
+        <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip  resizable />
+        <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip  resizable />
+        <el-table-column prop="bucket" label="存储桶" min-width="120"  resizable />
+        <el-table-column label="操作" width="190" fixed="right" resizable>
           <template #default="{ row }">
             <el-button v-if="canPreview(row)" type="primary" link size="small" @click="preview(row)">预览</el-button>
             <el-button type="primary" link size="small" @click="download(row)">下载</el-button>

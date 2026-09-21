@@ -8,25 +8,25 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }">
-      <el-table-column prop="name" label="权限名称" min-width="200" />
-      <el-table-column label="图标" width="90" align="center">
+    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" resizable>
+      <el-table-column prop="name" label="权限名称" min-width="200"  resizable />
+      <el-table-column label="图标" min-width="90" align="center" resizable>
         <template #default="{ row }">
           <el-icon v-if="row.icon" class="permission-icon"><component :is="iconLibrary[row.icon]" /></el-icon>
           <span v-else class="icon-empty">自动</span>
         </template>
       </el-table-column>
-      <el-table-column prop="code" label="权限编码" width="200" />
-      <el-table-column prop="type" label="类型" width="100">
+      <el-table-column prop="code" label="权限编码" min-width="200"  resizable />
+      <el-table-column prop="type" label="类型" min-width="100" resizable>
         <template #default="{ row }">
           <el-tag :type="typeTag(row.type)">
             {{ typeLabel(row.type) }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="path" label="路由路径" width="160" />
-      <el-table-column prop="sort" label="排序" width="80" />
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column prop="path" label="路由路径" min-width="160"  resizable />
+      <el-table-column prop="sort" label="排序" min-width="80"  resizable />
+      <el-table-column label="操作" width="260" fixed="right" resizable>
         <template #default="{ row }">
           <div class="action-buttons">
             <el-button type="primary" link @click="openCreate(row)">新增子项</el-button>

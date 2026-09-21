@@ -26,16 +26,16 @@
       <el-col :xs="24" :lg="16">
         <el-card>
           <template #header><div class="section-heading"><span>最近任务</span><small>LAST 5 RUNS</small></div></template>
-          <el-table :data="recentTasks" size="small">
-            <el-table-column prop="spiderName" label="爬虫名称" />
-            <el-table-column prop="status" label="状态" width="100">
+          <el-table :data="recentTasks" size="small" resizable>
+            <el-table-column prop="spiderName" label="爬虫名称"  resizable />
+            <el-table-column prop="status" label="状态" min-width="100" resizable>
               <template #default="{ row }">
                 <el-tag :type="statusTag(row.status)">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="successCount" label="成功" width="80" />
-            <el-table-column prop="failCount" label="失败" width="80" />
-            <el-table-column prop="createTime" label="创建时间" width="180" />
+            <el-table-column prop="successCount" label="成功" min-width="80"  resizable />
+            <el-table-column prop="failCount" label="失败" min-width="80"  resizable />
+            <el-table-column prop="createTime" label="创建时间" min-width="180"  resizable />
           </el-table>
         </el-card>
       </el-col>

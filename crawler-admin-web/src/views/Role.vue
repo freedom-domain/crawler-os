@@ -8,19 +8,19 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" stripe>
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="name" label="角色名称" width="140" />
-      <el-table-column prop="code" label="角色编码" width="140" />
-      <el-table-column prop="description" label="描述" />
-      <el-table-column prop="status" label="状态" width="80">
+    <el-table :data="list" v-loading="loading" stripe resizable>
+      <el-table-column prop="id" label="ID" min-width="60"  resizable />
+      <el-table-column prop="name" label="角色名称" min-width="140"  resizable />
+      <el-table-column prop="code" label="角色编码" min-width="140"  resizable />
+      <el-table-column prop="description" label="描述"  resizable />
+      <el-table-column prop="status" label="状态" min-width="80" resizable>
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'danger'">
             {{ row.status === 1 ? '启用' : '禁用' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right" resizable>
         <template #default="{ row }">
           <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
           <el-button type="warning" link @click="openAssign(row)">分配权限</el-button>
