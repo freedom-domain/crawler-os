@@ -117,7 +117,8 @@ public class SearchService {
                 .index(indexName)
                 .from(pageRequest.getPageNumber() * pageRequest.getPageSize())
                 .size(pageRequest.getPageSize())
-                .query(query);
+                .query(query)
+                .trackTotalHits(t -> t.enabled(true));
 
         if (!hasKeyword) {
             reqBuilder.sort(s -> s.field(f -> f
@@ -361,6 +362,7 @@ public class SearchService {
         }
     }
 
+    @SuppressWarnings("null")
     public void recordHistory(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return;
@@ -369,24 +371,59 @@ public class SearchService {
         if (userId == null) {
             return;
         }
+        String normalizedKeyword = keyword.trim();
+        searchHistoryMapper.delete(new LambdaQueryWrapper<SearchHistory>()
+            .eq(SearchHistory::getUserId, userId)
+            .eq(SearchHistory::getKeyword, normalizedKeyword));
+
         SearchHistory history = new SearchHistory();
         history.setUserId(userId);
-        history.setKeyword(keyword.trim());
+        history.setKeyword(normalizedKeyword);
         searchHistoryMapper.insert(history);
     }
 
     @SuppressWarnings("null")
+    public void syncHistory(List<String> keywords) {
+        if (keywords == null) {
+            return;
+        }
+        java.util.List<String> uniqueKeywords = new java.util.ArrayList<>(keywords.stream()
+                .filter(keyword -> keyword != null && !keyword.isBlank())
+                .map(String::trim)
+                .distinct()
+            .toList());
+        java.util.Collections.reverse(uniqueKeywords);
+        uniqueKeywords.forEach(this::recordHistory);
+    }
+
+    @SuppressWarnings("null")
     public List<SearchHistory> history() {
-        return searchHistoryMapper.selectList(new LambdaQueryWrapper<SearchHistory>()
+        List<SearchHistory> records = searchHistoryMapper.selectList(new LambdaQueryWrapper<SearchHistory>()
                 .eq(SearchHistory::getUserId, LoginUtils.getUserId())
-                .orderByDesc(SearchHistory::getCreateTime)
-                .last("LIMIT 20"));
+            .orderByDesc(SearchHistory::getCreateTime));
+        return new java.util.ArrayList<>(records.stream()
+            .collect(Collectors.toMap(SearchHistory::getKeyword, item -> item,
+                (first, duplicate) -> first, java.util.LinkedHashMap::new))
+            .values())
+            .stream()
+            .limit(20)
+            .toList();
     }
 
     @SuppressWarnings("null")
     public void clearHistory() {
         searchHistoryMapper.delete(new LambdaQueryWrapper<SearchHistory>()
                 .eq(SearchHistory::getUserId, LoginUtils.getUserId()));
+    }
+
+    @SuppressWarnings("null")
+    public void deleteHistory(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return;
+        }
+        searchHistoryMapper.delete(new LambdaQueryWrapper<SearchHistory>()
+                .eq(SearchHistory::getUserId, LoginUtils.getUserId())
+                .eq(SearchHistory::getKeyword, keyword.trim()));
     }
 
     @SuppressWarnings("null")

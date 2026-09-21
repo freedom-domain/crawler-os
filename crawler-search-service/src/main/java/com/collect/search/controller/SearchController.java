@@ -31,11 +31,27 @@ public class SearchController {
         return R.ok(searchService.history());
     }
 
+    @Operation(summary = "同步本地搜索历史")
+    @PostMapping("/history/sync")
+    public R<Void> syncHistory(@RequestBody List<String> keywords) {
+        requirePermission("search:query");
+        searchService.syncHistory(keywords);
+        return R.ok();
+    }
+
     @Operation(summary = "清空搜索历史")
     @DeleteMapping("/history")
     public R<Void> clearHistory() {
         requirePermission("search:query");
         searchService.clearHistory();
+        return R.ok();
+    }
+
+    @Operation(summary = "删除单条搜索历史")
+    @DeleteMapping("/history/item")
+    public R<Void> deleteHistory(@RequestParam("keyword") String keyword) {
+        requirePermission("search:query");
+        searchService.deleteHistory(keyword);
         return R.ok();
     }
 

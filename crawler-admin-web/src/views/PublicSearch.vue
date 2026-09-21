@@ -8,15 +8,16 @@
         </div>
 
         <div class="header-search-wrap">
-          <div class="search-box header-search-box">
-            <el-icon class="search-icon"><Search /></el-icon>
-            <SearchHistoryDropdown
-              v-if="isLoggedIn"
-              :open="historyOpen"
-              :keyword="keyword"
-              @select="selectHistory"
-              @close="historyOpen = false"
-            >
+          <SearchHistoryDropdown
+            class="history-search-wrapper"
+            :open="historyOpen"
+            :keyword="keyword"
+            :authenticated="isLoggedIn"
+            @select="selectHistory"
+            @close="historyOpen = false"
+          >
+            <div class="search-box header-search-box" :class="{ 'history-search-open': historyOpen && !keyword }">
+              <el-icon class="search-icon"><Search /></el-icon>
               <input
                 v-model="keyword"
                 class="search-input"
@@ -25,22 +26,23 @@
                 @input="historyOpen = !keyword"
                 @keyup.enter="doSearch"
               />
-            </SearchHistoryDropdown>
-            <input
-              v-else
-              v-model="keyword"
-              class="search-input"
-              placeholder="输入关键词"
-              @keyup.enter="doSearch"
-            />
-            <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
-            <button class="more-conditions-btn" type="button" @click="showFilters = !showFilters" :aria-expanded="showFilters">
-              <svg class="toggle-chevron" viewBox="0 0 24 24" aria-hidden="true" :class="{ 'is-open': showFilters }">
-                <path d="M6 9.5 12 15.5 18 9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-          </div>
-          <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
+              <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
+              <button class="more-conditions-btn" type="button" @click="showFilters = !showFilters" :aria-expanded="showFilters">
+                <svg class="toggle-chevron" viewBox="0 0 24 24" aria-hidden="true" :class="{ 'is-open': showFilters }">
+                  <path d="M6 9.5 12 15.5 18 9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button class="search-btn" type="button" @click="doSearch">搜索</button>
+            </div>
+          </SearchHistoryDropdown>
+        </div>
+
+        <div class="header-user">
+          <template v-if="isLoggedIn">
+            <span class="user-nickname">{{ userStore.nickname || userStore.username }}</span>
+            <el-button size="small" @click="handleLogout">登出</el-button>
+          </template>
+          <el-button v-else type="primary" size="small" @click="loginVisible = true">登录</el-button>
         </div>
       </div>
 
@@ -69,7 +71,7 @@
         v-model:page-size="size"
         :loading="loading"
         :total="total"
-        :page-sizes="[10, 20, 50]"
+        :page-sizes="[10, 20, 50, 100, 200, 500]"
         @change="handlePageChange"
       >
         <template #heading>
@@ -227,12 +229,26 @@
         <div v-else class="empty">暂无详情</div>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="loginVisible" title="登录" width="400px" class="login-dialog" :close-on-click-modal="false" destroy-on-close>
+      <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef" @submit.prevent="handleLogin">
+        <el-form-item prop="username">
+          <el-input v-model="loginForm.username" prefix-icon="User" placeholder="用户名" />
+        </el-form-item>
+        <el-form-item prop="password">
+          <el-input v-model="loginForm.password" prefix-icon="Lock" type="password" placeholder="密码" show-password @keyup.enter="handleLogin" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" style="width:100%" :loading="loginLoading" @click="handleLogin">登录</el-button>
+        </el-form-item>
+      </el-form>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ElMessage, ElMessageBox, FormInstance } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import SearchResultItem from '@/components/SearchResultItem.vue'
 import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
@@ -243,6 +259,43 @@ import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-
 const list = ref<any[]>([])
 const userStore = useUserStore()
 const isLoggedIn = computed(() => Boolean(userStore.token))
+
+const loginVisible = ref(false)
+const loginLoading = ref(false)
+const loginFormRef = ref<FormInstance>()
+const loginForm = reactive({ username: '', password: '' })
+const loginRules = {
+  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+}
+
+const handleLogin = async () => {
+  await loginFormRef.value?.validate()
+  loginLoading.value = true
+  try {
+    await userStore.login(loginForm.username, loginForm.password)
+    ElMessage.success('登录成功')
+    loginVisible.value = false
+    loginForm.username = ''
+    loginForm.password = ''
+  } finally {
+    loginLoading.value = false
+  }
+}
+
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('确定要登出吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    userStore.logout()
+    ElMessage.success('已登出')
+  } catch {
+    // 用户取消
+  }
+}
 const loading = ref(false)
 const page = ref(1)
 const size = ref(10)
@@ -396,6 +449,25 @@ const scrollToTop = () => {
 const doSearch = () => {
   page.value = 1
   historyOpen.value = false
+  if (!isLoggedIn.value && keyword.value.trim()) {
+    const raw = JSON.parse(localStorage.getItem('crawler-search-history') || '[]')
+    const values: { keyword: string; time: number }[] = Array.isArray(raw)
+      ? raw
+          .map((value: unknown): { keyword: string; time: number } | null => {
+            if (typeof value === 'string' && value.trim()) {
+              return { keyword: value.trim(), time: Date.now() }
+            }
+            if (value && typeof value === 'object' && typeof (value as any).keyword === 'string' && (value as any).keyword.trim()) {
+              return { keyword: (value as any).keyword.trim(), time: typeof (value as any).time === 'number' ? (value as any).time : Date.now() }
+            }
+            return null
+          })
+          .filter((item): item is { keyword: string; time: number } => item !== null)
+      : []
+    const newEntry = { keyword: keyword.value.trim(), time: Date.now() }
+    const merged = [newEntry, ...values.filter(item => item.keyword !== newEntry.keyword)].slice(0, 20)
+    localStorage.setItem('crawler-search-history', JSON.stringify(merged))
+  }
   scrollToTop()
   loadData()
 }
@@ -670,11 +742,33 @@ onMounted(() => {
   margin-left: -8px;
 }
 
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 10px 0;
+}
+
+.user-nickname {
+  font-size: 14px;
+  color: #3c4043;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .header-search-box {
   width: 100%;
   max-width: 700px;
   margin-right: 0;
   margin-left: 0;
+}
+
+.history-search-wrapper {
+  width: 100%;
+  max-width: 700px;
 }
 
 .more-conditions-btn {
@@ -684,6 +778,7 @@ onMounted(() => {
   cursor: pointer;
   padding: 0;
   margin-left: 6px;
+  margin-right: 12px;
   height: 20px;
   width: 20px;
   display: flex;
@@ -776,9 +871,11 @@ onMounted(() => {
   flex: 1;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
+  width: 100%;
   border: 1px solid #dfe1e5;
   border-radius: 999px;
-  padding: 0 18px;
+  padding: 0 6px 0 18px;
   height: 56px;
   min-height: 56px;
   background: #fff;
@@ -789,6 +886,12 @@ onMounted(() => {
 .search-box:focus-within {
   box-shadow: 0 1px 6px rgba(32, 33, 36, 0.18);
   border-color: #dfe1e5;
+}
+
+.history-search-open {
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
+  border-color: #dadce0;
 }
 
 .search-icon {
@@ -826,15 +929,22 @@ onMounted(() => {
 }
 
 .search-btn {
-  --el-button-bg-color: #1a73e8;
-  --el-button-border-color: #1a73e8;
-  --el-button-hover-bg-color: #1769d1;
-  --el-button-hover-border-color: #1769d1;
-  border-radius: 8px;
-  padding: 0 24px;
-  height: 56px;
-  min-height: 56px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: #1a73e8;
+  color: #fff;
   font-size: 14px;
+  font-weight: 500;
+  padding: 0 22px;
+  height: 44px;
+  min-height: 44px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.search-btn:hover {
+  background: #1769d1;
 }
 
 .results-heading {
@@ -1227,8 +1337,17 @@ onMounted(() => {
     flex: 1 1 100%;
   }
   .search-btn {
-    flex: 1 1 100%;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 18px;
+  }
+  .header-user {
     width: 100%;
+    justify-content: flex-end;
+    padding: 4px 0 0;
+  }
+  .user-nickname {
+    max-width: 140px;
   }
   .header-filter-panel {
     padding: 12px 16px 14px;
@@ -1259,7 +1378,32 @@ onMounted(() => {
   .hero-copy { padding-bottom: 24px; }
   .hero-copy h1 { font-size: 32px; }
   .search-row { align-items: stretch; }
-  .search-btn { padding: 0 18px; }
+  .search-box {
+    height: 48px;
+    min-height: 48px;
+    padding: 0 5px 0 14px;
+  }
+  .search-btn {
+    height: 38px;
+    min-height: 38px;
+    padding: 0 16px;
+  }
+  .search-icon {
+    font-size: 18px;
+    margin-right: 10px;
+  }
+  .search-input {
+    font-size: 16px;
+  }
+  .clear-btn {
+    font-size: 20px;
+    padding: 0 6px;
+  }
+  .more-conditions-btn {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
+  }
   .filter-row { flex-wrap: wrap; }
   .filter-row :deep(.el-select) { width: calc(50% - 6px) !important; }
   .results-heading { align-items: flex-end; }
@@ -1277,6 +1421,13 @@ onMounted(() => {
   .search-row { gap: 8px; }
   .search-box { min-width: 0; }
   .search-btn { padding: 0 14px; }
+  .header-user {
+    gap: 8px;
+  }
+  .user-nickname {
+    max-width: 100px;
+    font-size: 13px;
+  }
   .filter-row :deep(.el-select) { width: 100% !important; }
   .result-page { display: none; }
   .result-url,
@@ -1317,5 +1468,16 @@ onMounted(() => {
 :deep(.fullscreen-dialog .el-dialog__body) {
   height: calc(100vh - 54px);
   overflow-y: auto;
+}
+
+:deep(.login-dialog) {
+  width: calc(100vw - 32px) !important;
+  max-width: 400px;
+}
+
+@media (max-width: 460px) {
+  :deep(.login-dialog) {
+    width: calc(100vw - 24px) !important;
+  }
 }
 </style>

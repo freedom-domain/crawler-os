@@ -4,14 +4,15 @@
 
     <div class="search-bar">
       <div class="search-row">
-        <div class="search-box">
-          <el-icon class="search-icon"><Search /></el-icon>
-          <SearchHistoryDropdown
-            :open="historyOpen"
-            :keyword="keyword"
-            @select="selectHistory"
-            @close="historyOpen = false"
-          >
+        <SearchHistoryDropdown
+          :open="historyOpen"
+          :keyword="keyword"
+          authenticated
+          @select="selectHistory"
+          @close="historyOpen = false"
+        >
+          <div class="search-box" :class="{ 'history-search-open': historyOpen && !keyword }">
+            <el-icon class="search-icon"><Search /></el-icon>
             <input
               v-model="keyword"
               class="search-input"
@@ -20,10 +21,10 @@
               @input="historyOpen = !keyword"
               @keyup.enter="doSearch"
             />
-          </SearchHistoryDropdown>
-          <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
-        </div>
-        <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
+            <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
+            <button class="search-btn" type="button" @click="doSearch">搜索</button>
+          </div>
+        </SearchHistoryDropdown>
       </div>
       <div class="search-row filter-row">
         <el-select v-model="filterGroup" placeholder="爬虫分组" clearable style="width: 160px" @change="onGroupChange">
@@ -47,7 +48,7 @@
       v-model:page-size="size"
       :loading="loading"
       :total="total"
-      :page-sizes="[10, 20, 50]"
+      :page-sizes="[10, 20, 50, 100, 200, 500]"
       @change="loadData"
     >
       <template #heading>
@@ -740,17 +741,26 @@ onMounted(() => {
   flex: 1;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
+  width: 100%;
   border: 1px solid #dfe1e5;
-  border-radius: 24px;
-  padding: 0 16px;
-  height: 44px;
+  border-radius: 999px;
+  padding: 0 6px 0 16px;
+  height: 48px;
   background: #fff;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
 }
 
 .search-box:focus-within {
+  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.18);
+  border-color: #dfe1e5;
+}
+
+.history-search-open {
+  border-radius: 24px 24px 0 0;
   box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
-  border-color: transparent;
+  border-color: #dadce0;
 }
 
 .search-icon {
@@ -764,7 +774,7 @@ onMounted(() => {
   flex: 1;
   border: none;
   outline: none;
-  font-size: 16px;
+  font-size: 15px;
   height: 100%;
   color: #202124;
 }
@@ -788,10 +798,22 @@ onMounted(() => {
 }
 
 .search-btn {
-  border-radius: 24px;
-  padding: 0 24px;
-  height: 44px;
-  font-size: 15px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 22px;
+  height: 36px;
+  min-height: 36px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.search-btn:hover {
+  background: #1769d1;
 }
 
 .result-count {

@@ -46,8 +46,24 @@ public class ElasticsearchIndexInitializer {
                 ops.putMapping(ops.createMapping(SpiderContentDoc.class));
                 log.info("已创建 ES 索引: {}", contentIndex);
             }
+            // 去掉 ES 默认 10000 条最大返回限制
+            ensureMaxResultWindow();
         } catch (Exception e) {
             log.error("初始化 ES 索引失败: {}", contentIndex, e);
+        }
+    }
+
+    private void ensureMaxResultWindow() {
+        try {
+            elasticsearchClient.indices().putSettings(s -> s
+                    .index(contentIndex)
+                    .settings(set -> set
+                            .maxResultWindow(Integer.MAX_VALUE)
+                    )
+            );
+            log.info("已设置索引 {} 的 max_result_window 为 Integer.MAX_VALUE", contentIndex);
+        } catch (Exception e) {
+            log.warn("设置索引 {} 的 max_result_window 失败: {}", contentIndex, e.getMessage());
         }
     }
 
