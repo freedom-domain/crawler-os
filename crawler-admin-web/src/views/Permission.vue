@@ -8,7 +8,7 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" resizable border>
+    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" stripe resizable border>
       <el-table-column prop="name" label="权限名称" min-width="200"  resizable />
       <el-table-column label="图标" min-width="90" align="center" resizable>
         <template #default="{ row }">
@@ -26,14 +26,12 @@
       </el-table-column>
       <el-table-column prop="path" label="路由路径" min-width="160"  resizable />
       <el-table-column prop="sort" label="排序" min-width="80"  resizable />
-      <el-table-column label="操作" width="260" fixed="right" resizable>
+      <el-table-column label="操作" width="360" fixed="right" resizable>
         <template #default="{ row }">
           <div class="action-buttons">
             <el-button type="primary" link @click="openCreate(row)">新增子项</el-button>
             <el-button type="warning" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-          </div>
-          <div class="action-buttons">
             <el-button link @click="moveUp(row)" :disabled="isFirst(row)">上移</el-button>
             <el-button link @click="moveDown(row)" :disabled="isLast(row)">下移</el-button>
           </div>
@@ -298,5 +296,5 @@ onMounted(loadData)
 .permission-icon { color: #16a6a3; font-size: 18px; vertical-align: middle; }
 .icon-empty { color: #9fb3c8; font-size: 12px; }
 .icon-option { display: flex; align-items: center; gap: 8px; }
-.action-buttons { display: flex; gap: 4px; margin: 2px 0; }
+.action-buttons { display: flex; flex-wrap: nowrap; gap: 4px; margin: 2px 0; }
 </style>
