@@ -28,7 +28,7 @@
       </el-button>
     </div>
 
-    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable>
+    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable border>
       <el-table-column type="selection" width="50"  resizable />
       <el-table-column prop="taskId" label="任务ID" min-width="200" show-overflow-tooltip  resizable />
       <el-table-column prop="spiderName" label="爬虫名称" min-width="160"  resizable />
@@ -73,7 +73,23 @@
       @change="loadData"
     />
 
-    <el-dialog v-model="logVisible" title="任务日志" width="900px" top="5vh" destroy-on-close>
+    <el-dialog
+      v-model="logVisible"
+      :width="logFullscreen ? '100%' : '900px'"
+      :top="logFullscreen ? '0' : '5vh'"
+      :class="{ 'log-fullscreen-dialog': logFullscreen }"
+      destroy-on-close
+      @closed="logFullscreen = false"
+    >
+      <template #header>
+        <div class="log-dialog-header">
+          <span>任务日志</span>
+          <el-button size="small" text type="primary" @click="logFullscreen = !logFullscreen">
+            <el-icon><component :is="logFullscreen ? 'Minus' : 'FullScreen'" /></el-icon>
+            {{ logFullscreen ? '退出放大' : '放大' }}
+          </el-button>
+        </div>
+      </template>
       <div class="log-filter">
         <el-input v-model="logKeyword" placeholder="搜索 URL / 信息" clearable size="small" style="width: 220px" @clear="reloadLogs" @keyup.enter="reloadLogs" />
         <el-select v-model="logStatus" placeholder="状态" clearable size="small" style="width: 100px" @change="reloadLogs">
@@ -81,9 +97,11 @@
           <el-option label="失败" :value="0" />
           <el-option label="已存在" :value="2" />
         </el-select>
-        <el-select v-model="logType" placeholder="类型" clearable size="small" style="width: 100px" @change="reloadLogs">
+        <el-select v-model="logType" placeholder="类型" clearable size="small" style="width: 130px" @change="reloadLogs">
           <el-option label="HTML" value="html" />
           <el-option label="图片" value="image" />
+          <el-option label="JavaScript" value="js" />
+          <el-option label="CSS" value="css" />
         </el-select>
         <el-select v-model="logLevel" placeholder="级别" clearable size="small" style="width: 100px" @change="reloadLogs">
           <el-option label="INFO" value="INFO" />
@@ -92,7 +110,7 @@
         <el-button size="small" :icon="Search" @click="reloadLogs">查询</el-button>
       </div>
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
-      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" max-height="60vh" resizable>
+      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" :max-height="logFullscreen ? 'calc(100vh - 190px)' : '60vh'" resizable border>
         <el-table-column label="URL" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <a class="log-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
@@ -107,7 +125,7 @@
         </el-table-column>
         <el-table-column label="类型" min-width="80" align="center" resizable>
           <template #default="{ row }">
-            <el-tag :type="row.type === 'image' ? 'warning' : 'info'" size="small">{{ row.type === 'image' ? '图片' : 'HTML' }}</el-tag>
+            <el-tag :type="logTypeTag(row.type)" size="small">{{ logTypeLabel(row.type) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="level" label="级别" min-width="70" align="center"  resizable />
@@ -147,6 +165,7 @@ const autoRefresh = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 
 const logVisible = ref(false)
+const logFullscreen = ref(false)
 const logLoading = ref(false)
 const logs = ref<any[]>([])
 const logPage = ref(1)
@@ -204,6 +223,20 @@ const statusLabel = (status: string) => {
     PENDING: '等待中', CANCELED: '已取消'
   }
   return map[status] || status
+}
+
+const logTypeLabel = (type: string) => {
+  const map: Record<string, string> = {
+    html: 'HTML', image: '图片', js: 'JavaScript', css: 'CSS'
+  }
+  return map[type] || type || '未知'
+}
+
+const logTypeTag = (type: string) => {
+  const map: Record<string, string> = {
+    html: 'info', image: 'warning', js: 'primary', css: 'success'
+  }
+  return map[type] || 'info'
 }
 
 const formatDuration = (ms: number) => {
@@ -331,6 +364,10 @@ onUnmounted(stopTimer)
 </script>
 
 <style scoped>
+.log-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.log-dialog-header .el-button { margin-right: 8px; }
+:deep(.log-fullscreen-dialog) { margin: 0 auto !important; height: 100vh; }
+:deep(.log-fullscreen-dialog .el-dialog__body) { height: calc(100vh - 72px); overflow: auto; }
 .card-header {
   display: flex;
   justify-content: space-between;

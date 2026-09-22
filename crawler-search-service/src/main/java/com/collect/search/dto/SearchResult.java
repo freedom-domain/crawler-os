@@ -26,7 +26,7 @@ public class SearchResult {
     private String contentHl;
 
     /**
-     * search_after 游标值（updateTime 毫秒值 + _id），前端下一页时原样回传最后一条的该值。
+     * search_after 游标值，保留 ES 返回的原始类型，前端下一页时原样回传最后一条的该值。
      */
-    private List<String> sortValues;
+    private List<Object> sortValues;
 }

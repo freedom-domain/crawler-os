@@ -21,7 +21,6 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Criteria;
@@ -33,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -94,6 +94,7 @@ public class CrawlerEngine {
 
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger fail = new AtomicInteger(0);
+        Set<String> processedResourceUrls = ConcurrentHashMap.newKeySet();
         boolean executorTerminated = true;
 
         try {
@@ -119,7 +120,7 @@ public class CrawlerEngine {
                     if (!urlQueue.claimForProcessing(taskId, url)) continue;
                     int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
                         batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail, semaphore, executor,
-                            robotsCache));
+                            robotsCache, processedResourceUrls));
                 }
                 if (batch.isEmpty()) break;
                 var futures = batch.stream().map(executor::submit).toList();
@@ -180,7 +181,8 @@ public class CrawlerEngine {
                           Long taskId, AtomicInteger success, AtomicInteger fail,
                           java.util.concurrent.Semaphore semaphore,
                           java.util.concurrent.ExecutorService executor,
-                          Map<String, RobotsRules> robotsCache) {
+                          Map<String, RobotsRules> robotsCache,
+                          Set<String> processedResourceUrls) {
         try {
             semaphore.acquire();
             try {
@@ -247,7 +249,7 @@ public class CrawlerEngine {
                 docObj.setImages(imageUrls);
 
                 // HTML 原文存入 html 目录，页面引用的 JS 存入 js 目录
-                saveHtmlAndJs(doc, url, newHtml, msg, task);
+                saveHtmlAndJs(doc, url, newHtml, msg, task, overwriteHtml, processedResourceUrls);
 
                 saveToElasticsearchWithRetry(docObj);
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
@@ -464,7 +466,8 @@ public class CrawlerEngine {
                     }
                     // 覆盖模式下 putObject 会直接覆盖已存在的对象
                     minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
-                    saveFileMetadata(objectName, data.length, guessContentType(realExt), msg.getSpiderId(), title, pageUrl);
+                        saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
+                            msg.getSpiderId(), title, pageUrl);
                     uploaded++;
                     // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
                     uploadedUrls.add(objectName);
@@ -487,17 +490,18 @@ public class CrawlerEngine {
     }
 
     /**
-     * 将页面 HTML 原文上传到 html 目录，页面引用的 JS 文件上传到 js 目录。
-     * 对象名基于 URL 的 MD5，重复抓取时直接覆盖。
+     * 将页面 HTML 原文上传到 html 目录，页面引用的 JS/CSS 文件分别上传到 js/css 目录。
+    * 对象名基于 URL 的 MD5；资源是否覆盖与 HTML 使用同一个覆盖开关。
      */
-    private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task) {
+    private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task,
+                         boolean overwriteResources, Set<String> processedResourceUrls) {
         try {
             String urlHash = md5(url);
             // HTML 原文
             String htmlObject = "html/" + urlHash + ".html";
             minioHelper.putHtml(htmlBucket, htmlObject, html);
-            saveFileMetadata(htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
-                    "text/html; charset=utf-8", msg.getSpiderId(), parsedTitle(doc, url), url);
+                saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
+                    "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
             // 页面引用的 JS 文件
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (Element script : doc.select("script[src]")) {
@@ -505,27 +509,94 @@ public class CrawlerEngine {
                 if (jsUrl.isBlank() || !seen.add(jsUrl)) {
                     continue;
                 }
+                long resourceStart = System.currentTimeMillis();
+                String resourceKey = "js:" + jsUrl;
+                if (!processedResourceUrls.add(resourceKey)) {
+                    writeLog(task.getId(), msg.getSpiderId(), jsUrl, 2, "INFO", "JS URL 已处理，跳过: " + jsUrl,
+                            resourceCost(resourceStart), "js");
+                    continue;
+                }
                 try {
                     byte[] data = downloadBytes(jsUrl);
                     if (data == null || data.length == 0) {
+                        processedResourceUrls.remove(resourceKey);
+                        writeLog(task.getId(), msg.getSpiderId(), jsUrl, 0, "ERROR", "JS 下载为空", resourceCost(resourceStart), "js");
                         continue;
                     }
                     String jsObject = "js/" + md5(jsUrl) + guessExt(jsUrl, data);
+                    if (!overwriteResources && minioHelper.objectExists(jsBucket, jsObject)) {
+                        writeLog(task.getId(), msg.getSpiderId(), jsUrl, 2, "INFO", "JS 已存在，跳过上传: " + jsObject,
+                                resourceCost(resourceStart), "js");
+                        continue;
+                    }
                     minioHelper.putJs(jsBucket, jsObject, data);
-                    saveFileMetadata(jsObject, data.length, "application/javascript",
+                        saveFileMetadata(jsBucket, jsObject, data.length, "application/javascript", "js",
                             msg.getSpiderId(), parsedTitle(doc, url), jsUrl);
+                    writeLog(task.getId(), msg.getSpiderId(), jsUrl, 1, "INFO", "JS 上传成功: " + jsObject,
+                            resourceCost(resourceStart), "js");
                 } catch (Exception e) {
+                    processedResourceUrls.remove(resourceKey);
                     log.warn("JS 下载/上传失败: src={}", jsUrl, e);
+                    writeLog(task.getId(), msg.getSpiderId(), jsUrl, 0, "ERROR", "JS 下载/上传失败: " + e.getMessage(),
+                            resourceCost(resourceStart), "js");
+                }
+            }
+            // 页面引用的 CSS 文件，与 JS 使用相同的资源桶但使用独立的 css/ 前缀
+            seen.clear();
+            for (Element stylesheet : doc.select("link[href]")) {
+                String rel = stylesheet.attr("rel");
+                if (java.util.Arrays.stream(rel.split("\\s+"))
+                        .noneMatch(value -> "stylesheet".equalsIgnoreCase(value))) {
+                    continue;
+                }
+                String cssUrl = stylesheet.absUrl("href");
+                if (cssUrl.isBlank() || !seen.add(cssUrl)) {
+                    continue;
+                }
+                long resourceStart = System.currentTimeMillis();
+                String resourceKey = "css:" + cssUrl;
+                if (!processedResourceUrls.add(resourceKey)) {
+                    writeLog(task.getId(), msg.getSpiderId(), cssUrl, 2, "INFO", "CSS URL 已处理，跳过: " + cssUrl,
+                            resourceCost(resourceStart), "css");
+                    continue;
+                }
+                try {
+                    byte[] data = downloadBytes(cssUrl);
+                    if (data == null || data.length == 0) {
+                        processedResourceUrls.remove(resourceKey);
+                        writeLog(task.getId(), msg.getSpiderId(), cssUrl, 0, "ERROR", "CSS 下载为空", resourceCost(resourceStart), "css");
+                        continue;
+                    }
+                    String cssObject = "css/" + md5(cssUrl) + ".css";
+                    if (!overwriteResources && minioHelper.objectExists(jsBucket, cssObject)) {
+                        writeLog(task.getId(), msg.getSpiderId(), cssUrl, 2, "INFO", "CSS 已存在，跳过上传: " + cssObject,
+                                resourceCost(resourceStart), "css");
+                        continue;
+                    }
+                    minioHelper.putCss(jsBucket, cssObject, data);
+                        saveFileMetadata(jsBucket, cssObject, data.length, "text/css", "css",
+                            msg.getSpiderId(), parsedTitle(doc, url), cssUrl);
+                    writeLog(task.getId(), msg.getSpiderId(), cssUrl, 1, "INFO", "CSS 上传成功: " + cssObject,
+                            resourceCost(resourceStart), "css");
+                } catch (Exception e) {
+                    processedResourceUrls.remove(resourceKey);
+                    log.warn("CSS 下载/上传失败: href={}", cssUrl, e);
+                    writeLog(task.getId(), msg.getSpiderId(), cssUrl, 0, "ERROR", "CSS 下载/上传失败: " + e.getMessage(),
+                            resourceCost(resourceStart), "css");
                 }
             }
         } catch (Exception e) {
-            log.warn("HTML/JS 上传失败: url={}", url, e);
+            log.warn("HTML/JS/CSS 上传失败: url={}", url, e);
         }
     }
 
     private String parsedTitle(Document doc, String url) {
         String title = doc.title();
         return title.isBlank() ? url : title;
+    }
+
+    private int resourceCost(long startTime) {
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(0, System.currentTimeMillis() - startTime));
     }
 
     /**
@@ -556,30 +627,31 @@ public class CrawlerEngine {
         }
     }
 
-    private void saveFileMetadata(String objectName, long fileSize, String contentType, Long spiderId,
-                                  String title, String source) {
-        if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
+    private void saveFileMetadata(String bucket, String objectName, long fileSize, String contentType,
+                                  String category, Long spiderId, String title, String source) {
+        if (fileMetadataMapper.selectByObject(bucket, objectName) != null) {
             return;
         }
         FileMetadata metadata = new FileMetadata();
-        metadata.setBucket(imageBucket);
+        metadata.setBucket(bucket);
         metadata.setObjectName(objectName);
         metadata.setFileName(objectName.substring(objectName.lastIndexOf('/') + 1));
         metadata.setTitle(title);
         metadata.setContentType(contentType);
         metadata.setFileSize(fileSize);
-        metadata.setCategory(inferCategory(objectName));
+        metadata.setCategory(category);
         metadata.setSpiderId(spiderId);
         metadata.setSource(source);
         fileMetadataMapper.insert(metadata);
     }
 
     /**
-     * 根据对象路径前缀推断文件类别：images → image，html → html，js → js。
+    * 根据对象路径前缀推断文件类别：images → image，html → html，js → js，css → css。
      */
     private String inferCategory(String objectName) {
         if (objectName.startsWith("html/")) return "html";
         if (objectName.startsWith("js/")) return "js";
+        if (objectName.startsWith("css/")) return "css";
         if (objectName.startsWith("images/")) return "image";
         return "file";
     }
@@ -590,7 +662,8 @@ public class CrawlerEngine {
         }
         try {
             StatObjectResponse stat = minioHelper.statObject(imageBucket, objectName);
-            saveFileMetadata(objectName, stat.size(), stat.contentType(), spiderId, title, source);
+                saveFileMetadata(imageBucket, objectName, stat.size(), stat.contentType(), inferCategory(objectName),
+                    spiderId, title, source);
         } catch (Exception e) {
             log.warn("读取已有文件元数据失败: bucket={}, object={}", imageBucket, objectName, e);
         }

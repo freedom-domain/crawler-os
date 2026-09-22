@@ -7,6 +7,7 @@ import com.collect.common.security.LoginUtils;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderRerunReq;
 import com.collect.spider.dto.SpiderUpdateReq;
+import com.collect.spider.dto.TaskStatsResponse;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
 import com.collect.spider.entity.SpiderTaskLog;
@@ -16,6 +17,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Tag(name = "爬虫管理")
 @RestController
@@ -122,6 +125,18 @@ public class SpiderController {
                                           @RequestParam(value = "spiderId", required = false) Long spiderId,
                                           @RequestParam(value = "status", required = false) String status) {
         return R.ok(spiderService.taskPage(current, size, spiderId, status));
+    }
+
+    @Operation(summary = "最近任务列表")
+    @GetMapping("/task/recent")
+    public R<List<SpiderTask>> recentTasks(@RequestParam(value = "size", defaultValue = "5") int size) {
+        return R.ok(spiderService.recentTasks(size));
+    }
+
+    @Operation(summary = "今日任务统计")
+    @GetMapping("/task/stats")
+    public R<TaskStatsResponse> todayTaskStats() {
+        return R.ok(spiderService.todayTaskStats());
     }
 
     @Operation(summary = "任务详情")

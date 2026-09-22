@@ -30,6 +30,12 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -49,6 +55,9 @@ public class SearchService {
 
     @Value("${minio.html-bucket:crawler}")
     private String htmlBucket;
+
+    @Value("${minio.js-bucket:crawler}")
+    private String jsBucket;
 
     /** 排序字段数量（updateTime + url），用于截断 PIT 追加的 shard 路由值 */
     private static final int SORT_FIELD_COUNT = 2;
@@ -231,12 +240,12 @@ public class SearchService {
                     sr.setTitleHl(doc.getTitle());
                     sr.setContentHl(snippet(doc.getContent()));
                 }
-                // PIT 会在 sort 值末尾追加 shard 路由值，只取前 N 个（N = 排序字段数）
-                if (hit.sort() != null && hit.sort().size() > SORT_FIELD_COUNT) {
-                    sr.setSortValues(hit.sort().subList(0, SORT_FIELD_COUNT).stream().map(Object::toString).toList());
-                } else {
-                    sr.setSortValues(hit.sort() != null ? hit.sort().stream().map(Object::toString).toList() : List.of());
-                }
+                // PIT 会在 sort 值末尾追加 shard 路由值，只取前 N 个（N = 排序字段数）。
+                // 保留日期/数值排序值的原始类型，否则下一页的 search_after 会被 ES 按字符串解析。
+                List<FieldValue> sortValues = hit.sort() != null && hit.sort().size() > SORT_FIELD_COUNT
+                        ? hit.sort().subList(0, SORT_FIELD_COUNT)
+                        : (hit.sort() != null ? hit.sort() : List.of());
+                sr.setSortValues(sortValues.stream().map(this::toSortValue).toList());
                 results.add(sr);
             }
             var totalObj = response.hits().total();
@@ -269,6 +278,17 @@ public class SearchService {
         }
     }
 
+    private Object toSortValue(FieldValue value) {
+        return switch (value._kind()) {
+            case Double -> value.doubleValue();
+            case Long -> value.longValue();
+            case Boolean -> value.booleanValue();
+            case String -> value.stringValue();
+            case Null -> null;
+            default -> value.toString();
+        };
+    }
+
     /**
      * 携带 PIT ID 的 Page 实现，序列化后前端可从 pitId 字段读取游标上下文。
      */
@@ -280,6 +300,13 @@ public class SearchService {
         public PagedSearchResult(List<SearchResult> content, PageRequest pageRequest, long total, String pitId) {
             super(content, pageRequest, total);
             this.pitId = pitId;
+        }
+
+        /**
+         * 使用稳定的字段名返回命中总数，避免不同 Page 序列化配置导致前端读取不一致。
+         */
+        public long getTotal() {
+            return getTotalElements();
         }
     }
 
@@ -333,10 +360,57 @@ public class SearchService {
             doc.setTags(loadUserTags(currentUserId()).getOrDefault(id, List.of()));
             // HTML 原文存储在 MinIO（对象名 = html/{md5(url)}.html），详情时按需读取
             if (doc.getUrl() != null && !doc.getUrl().isBlank()) {
-                doc.setRawHtml(minioHelper.readHtml(htmlBucket, "html/" + md5(doc.getUrl()) + ".html"));
+                String rawHtml = minioHelper.readHtml(htmlBucket, "html/" + md5(doc.getUrl()) + ".html");
+                doc.setRawHtml(rewriteStaticResourceUrls(rawHtml, doc.getUrl()));
             }
         }
         return doc;
+    }
+
+    private String rewriteStaticResourceUrls(String html, String baseUrl) {
+        if (html == null || baseUrl == null || baseUrl.isBlank()) return html;
+        String rewritten = rewriteResourceAttribute(html, baseUrl, "script", "src", false);
+        return rewriteResourceAttribute(rewritten, baseUrl, "link", "href", true);
+    }
+
+    private String rewriteResourceAttribute(String html, String baseUrl, String tag, String attribute, boolean stylesheet) {
+        Pattern pattern = Pattern.compile("(<" + tag + "\\b[^>]*\\s" + attribute + "\\s*=\\s*[\\\"'])([^\\\"']+)([\\\"'])", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(html);
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String tagText = matcher.group(0);
+            if (stylesheet && !tagText.toLowerCase().matches(".*\\brel\\s*=\\s*[\\\"'][^\\\"']*stylesheet[^\\\"']*[\\\"'].*")) {
+                continue;
+            }
+            String source = matcher.group(2).trim();
+            String absolute = resolveUrl(baseUrl, source);
+            if (absolute == null || absolute.startsWith("data:") || absolute.startsWith("javascript:")) continue;
+            String extension = stylesheet ? ".css" : resourceExtension(absolute, ".js");
+            String objectName = (stylesheet ? "css/" : "js/") + md5(absolute) + extension;
+            String resourceUrl = "/api/file/resource?bucket=" +
+                    java.net.URLEncoder.encode(jsBucket, StandardCharsets.UTF_8) +
+                    "&objectName=" + java.net.URLEncoder.encode(objectName, StandardCharsets.UTF_8);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(1) + resourceUrl + matcher.group(3)));
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    private String resolveUrl(String baseUrl, String source) {
+        try {
+            return new URI(baseUrl).resolve(source).toString();
+        } catch (URISyntaxException e) {
+            return null;
+        }
+    }
+
+    private String resourceExtension(String url, String fallback) {
+        String path = url;
+        int queryIndex = path.indexOf('?');
+        if (queryIndex >= 0) path = path.substring(0, queryIndex);
+        int dot = path.lastIndexOf('.');
+        int slash = path.lastIndexOf('/');
+        return dot > slash && dot < path.length() - 1 ? path.substring(dot) : fallback;
     }
 
     private String md5(String input) {
@@ -375,7 +449,8 @@ public class SearchService {
     }
 
     @SuppressWarnings("null")
-        public Page<SearchResult> favorites(int current, int size, String keyword) throws java.io.IOException {
+        public Page<SearchResult> favorites(int current, int size, String title, String url,
+                            String spiderName, String tag) throws java.io.IOException {
         Long userId = LoginUtils.getUserId();
         PageRequest pageRequest = PageRequest.of(current - 1, size);
         List<UserFavorite> favorites = userFavoriteMapper.selectList(new LambdaQueryWrapper<UserFavorite>()
@@ -383,7 +458,10 @@ public class SearchService {
             .orderByDesc(UserFavorite::getCreateTime));
 
         List<SearchResult> results = new java.util.ArrayList<>();
-        String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(java.util.Locale.ROOT);
+        String normalizedTitle = normalizeFilter(title);
+        String normalizedUrl = normalizeFilter(url);
+        String normalizedSpiderName = normalizeFilter(spiderName);
+        String normalizedTag = normalizeFilter(tag);
         for (UserFavorite favorite : favorites) {
             SpiderContentDoc doc = elasticsearchClient
                     .get(g -> g.index(indexName).id(favorite.getContentId()), SpiderContentDoc.class)
@@ -404,7 +482,7 @@ public class SearchService {
             result.setImages(doc.getImages());
             result.setTags(parseTags(favorite.getTags()));
             result.setFavorited(true);
-            if (!normalizedKeyword.isEmpty() && !matchesFavorite(result, normalizedKeyword)) {
+            if (!matchesFavorite(result, normalizedTitle, normalizedUrl, normalizedSpiderName, normalizedTag)) {
                 continue;
             }
             results.add(result);
@@ -414,11 +492,15 @@ public class SearchService {
         return new PageImpl<>(results.subList(fromIndex, toIndex), pageRequest, results.size());
     }
 
-    private boolean matchesFavorite(SearchResult result, String keyword) {
-        return containsIgnoreCase(result.getTitle(), keyword)
-                || containsIgnoreCase(result.getUrl(), keyword)
-                || containsIgnoreCase(result.getContent(), keyword)
-                || result.getTags().stream().anyMatch(tag -> containsIgnoreCase(tag, keyword));
+    private boolean matchesFavorite(SearchResult result, String title, String url, String spiderName, String tag) {
+        return (title.isEmpty() || containsIgnoreCase(result.getTitle(), title))
+                && (url.isEmpty() || containsIgnoreCase(result.getUrl(), url))
+                && (spiderName.isEmpty() || containsIgnoreCase(result.getSpiderName(), spiderName))
+                && (tag.isEmpty() || result.getTags().stream().anyMatch(value -> containsIgnoreCase(value, tag)));
+    }
+
+    private String normalizeFilter(String value) {
+        return value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private boolean containsIgnoreCase(String value, String keyword) {

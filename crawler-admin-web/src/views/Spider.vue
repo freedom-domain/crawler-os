@@ -21,9 +21,11 @@
       </el-form-item>
     </el-form>
 
-    <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable>
+    <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border>
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
       <el-table-column prop="name" label="名称" min-width="160"  resizable />
+      <el-table-column prop="startUrls" label="起始URL" min-width="320" show-overflow-tooltip resizable />
+      <el-table-column prop="schedule" label="调度" min-width="160"  resizable />
       <el-table-column prop="group" label="分组" min-width="120" resizable>
         <template #default="{ row }">
           <el-tag v-if="row.group" size="small">{{ row.group }}</el-tag>
@@ -35,8 +37,6 @@
           <el-tag>{{ row.type }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="startUrls" label="起始URL" show-overflow-tooltip  resizable />
-      <el-table-column prop="schedule" label="调度" min-width="160"  resizable />
       <el-table-column prop="createTime" label="创建时间" min-width="180"  resizable />
       <el-table-column prop="updateTime" label="更新时间" min-width="180"  resizable />
       <el-table-column prop="status" label="状态" min-width="100" resizable>

@@ -292,8 +292,9 @@ onMounted(loadData)
   width: 280px;
   min-width: 240px;
   background: #fff;
-  border-radius: 8px;
-  border: 1px solid #ebeef5;
+  border-radius: 12px;
+  border: 1px solid #dfe9eb;
+  box-shadow: 0 6px 20px rgba(23, 43, 77, .05);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -304,7 +305,8 @@ onMounted(loadData)
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid #e5eef0;
+  background: #f8fbfb;
 }
 
 .panel-title {
@@ -340,8 +342,9 @@ onMounted(loadData)
 }
 
 .category-item.active {
-  background: #ecf5ff;
-  border: 1px solid #b3d8ff;
+  background: #e2f6f3;
+  border: 1px solid #a9e0d7;
+  color: #087f7d;
 }
 
 .cat-info {

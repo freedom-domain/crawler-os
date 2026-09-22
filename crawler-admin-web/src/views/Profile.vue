@@ -173,16 +173,16 @@ const permGroups = computed(() => {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* 用户卡片 */
 .profile-card {
-  background: linear-gradient(135deg, #132b47 0%, #10243d 100%);
+  background: linear-gradient(135deg, #132b47 0%, #1b4965 100%);
   border-radius: 16px;
   padding: 32px;
   color: #fff;
-  box-shadow: 0 8px 32px rgba(16, 36, 61, 0.15);
+  box-shadow: 0 14px 34px rgba(16, 36, 61, 0.18);
 }
 
 .avatar-section {
@@ -220,8 +220,6 @@ const permGroups = computed(() => {
 /* 信息卡片 */
 .info-card, .perm-card {
   border-radius: 12px;
-  border: none;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
 .card-header {
@@ -246,6 +244,10 @@ const permGroups = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 14px;
+  border: 1px solid #e7eff0;
+  border-radius: 10px;
+  background: #f8fbfb;
 }
 
 .info-label {

@@ -8,6 +8,7 @@ import com.collect.common.mq.MqConstants;
 import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderUpdateReq;
+import com.collect.spider.dto.TaskStatsResponse;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
 import com.collect.spider.entity.SpiderTaskLog;
@@ -188,6 +189,16 @@ public class SpiderService {
     @SuppressWarnings("null")
     public IPage<SpiderTask> taskPage(int current, int size, Long spiderId, String status) {
         return taskMapper.selectTaskPage(new Page<>(current, size), spiderId, status);
+    }
+
+    @SuppressWarnings("null")
+    public List<SpiderTask> recentTasks(int limit) {
+        return taskMapper.selectRecentTasks(Math.max(1, Math.min(limit, 20)));
+    }
+
+    @SuppressWarnings("null")
+    public TaskStatsResponse todayTaskStats() {
+        return taskMapper.selectTodayTaskStats();
     }
 
     @SuppressWarnings("null")

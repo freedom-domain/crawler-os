@@ -8,7 +8,7 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" resizable>
+    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" resizable border>
       <el-table-column prop="name" label="权限名称" min-width="200"  resizable />
       <el-table-column label="图标" min-width="90" align="center" resizable>
         <template #default="{ row }">

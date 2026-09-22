@@ -24,3 +24,4 @@ minio:
   accessKey: ${MINIO_ACCESS:minio_ZzhWQ2}
   secretKey: ${MINIO_SECRET:minio_DhYfdD}
   html-bucket: ${MINIO_HTML_BUCKET:crawler}
+  js-bucket: ${MINIO_JS_BUCKET:crawler}

@@ -14,7 +14,7 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" stripe resizable>
+    <el-table :data="list" v-loading="loading" stripe resizable border>
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
       <el-table-column prop="username" label="用户名" min-width="140"  resizable />
       <el-table-column prop="nickname" label="昵称" min-width="140"  resizable />

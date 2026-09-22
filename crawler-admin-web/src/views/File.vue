@@ -12,8 +12,11 @@
         </el-form-item>
         <el-form-item>
           <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 140px" @change="refresh">
-            <el-option label="文件" value="file" />
+            <el-option label="HTML" value="html" />
+            <el-option label="JavaScript" value="js" />
+            <el-option label="CSS" value="css" />
             <el-option label="图片" value="image" />
+            <el-option label="文件" value="file" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>
@@ -37,14 +40,16 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable>
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable border>
         <el-table-column type="selection" width="48"  resizable />
         <el-table-column prop="id" label="ID" min-width="70"  resizable />
         <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="crawlerName" label="所属爬虫" min-width="140" show-overflow-tooltip resizable>
           <template #default="{ row }">{{ row.crawlerName || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="category" label="分类" min-width="100"  resizable />
+        <el-table-column prop="category" label="分类" min-width="100" resizable>
+          <template #default="{ row }">{{ categoryLabel(row.category) }}</template>
+        </el-table-column>
         <el-table-column label="来源" min-width="220" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <el-link v-if="row.source" :href="row.source" target="_blank" rel="noopener noreferrer" type="primary">
@@ -130,6 +135,15 @@ const previewRow = ref<any>(null)
 const previewError = ref(false)
 const deleting = ref(false)
 const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterFileName.value.trim() || filterTitle.value.trim()))
+
+const categoryLabel = (category: string) => ({
+  html: 'HTML',
+  js: 'JavaScript',
+  css: 'CSS',
+  image: '图片',
+  file: '文件',
+  other: '其他'
+}[category] || category || '-')
 
 const formatSize = (bytes: number) => {
   if (!bytes && bytes !== 0) return '-'

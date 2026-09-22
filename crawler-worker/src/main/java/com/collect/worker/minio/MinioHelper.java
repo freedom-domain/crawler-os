@@ -89,6 +89,22 @@ public class MinioHelper {
         }
     }
 
+    public String putCss(String bucket, String objectName, byte[] data) {
+        try {
+            ensureBucket(bucket);
+            ByteArrayInputStream in = new ByteArrayInputStream(data);
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .stream(in, data.length, -1)
+                    .contentType("text/css")
+                    .build());
+            return objectName;
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO CSS 上传失败: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * 判断对象是否已存在（用于跳过重复下载）。
      */

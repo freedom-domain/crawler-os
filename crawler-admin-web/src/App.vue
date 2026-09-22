@@ -11,6 +11,10 @@
   padding: 0;
   box-sizing: border-box;
 }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #c8d8dc; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: #9fbcc0; background-clip: padding-box; }
 body {
   font-family: Avenir Next, Avenir, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #102a43;
@@ -19,26 +23,36 @@ body {
 }
 :root {
   --ink-950: #172b4d;
+  --ink-900: #243b53;
   --ink-700: #5e6c84;
   --ink-500: #8993a4;
-  --line: #e6e9ef;
-  --canvas: #f7f8fa;
+  --line: #dfe7ee;
+  --canvas: #f3f7f8;
+  --surface: #ffffff;
+  --surface-soft: #f8fbfb;
   --teal: #0f9f9a;
   --teal-dark: #087b78;
   --coral: #ed765f;
-  --shadow: 0 4px 16px rgba(23, 43, 77, 0.055);
+  --shadow: 0 8px 24px rgba(23, 43, 77, 0.06);
+  --shadow-soft: 0 2px 8px rgba(23, 43, 77, 0.04);
 }
 html, body, #app { min-height: 100%; }
+body {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(114, 224, 200, .12), transparent 28rem),
+    var(--canvas);
+}
 button, input, textarea, select { font: inherit; }
 .el-card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid rgba(223, 231, 238, .9);
+  border-radius: 12px;
   box-shadow: var(--shadow);
+  background: var(--surface);
   transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
-.el-card:hover { border-color: #d6dde8; box-shadow: 0 8px 24px rgba(23, 43, 77, .08); }
-.el-card__header { padding: 17px 20px; border-bottom-color: #edf0f4; color: var(--ink-950); font-weight: 700; }
-.el-card__body { padding: 20px; }
+.el-card:hover { border-color: #cbdde1; box-shadow: 0 12px 30px rgba(23, 43, 77, .09); }
+.el-card__header { padding: 18px 22px; border-bottom-color: #edf2f4; color: var(--ink-950); font-weight: 700; }
+.el-card__body { padding: 22px; }
 .el-button { border-radius: 7px; font-weight: 600; }
 .el-button--small { border-radius: 6px; }
 .el-button.is-link { font-weight: 600; }
@@ -49,14 +63,19 @@ button, input, textarea, select { font: inherit; }
   --el-button-hover-border-color: var(--teal-dark);
 }
 .el-button--primary:not(.is-text):not(.is-link) { box-shadow: 0 4px 10px rgba(15, 159, 154, .16); }
-.el-input__wrapper, .el-select__wrapper { border-radius: 7px; box-shadow: 0 0 0 1px var(--line) inset; }
+.el-button:not(.is-text):not(.is-link):hover { transform: translateY(-1px); }
+.el-input__wrapper, .el-select__wrapper { border-radius: 8px; background: var(--surface-soft); box-shadow: 0 0 0 1px var(--line) inset; }
 .el-input__wrapper.is-focus, .el-select__wrapper.is-focused { box-shadow: 0 0 0 1px var(--teal) inset, 0 0 0 3px rgba(22, 166, 163, .12); }
-.el-table { --el-table-header-bg-color: #fafbfc; --el-table-row-hover-bg-color: #f5fbfa; color: #243b53; }
+.el-table { --el-table-header-bg-color: #f5f9fa; --el-table-row-hover-bg-color: #eef9f7; color: #243b53; border-radius: 8px; overflow: hidden; }
 .el-table th.el-table__cell { color: var(--ink-700); font-weight: 700; }
 .el-table td.el-table__cell, .el-table th.el-table__cell { border-bottom-color: #edf0f4; }
-.el-table .cell { line-height: 22px; }
+.el-table .cell { line-height: 22px; padding-top: 2px; padding-bottom: 2px; }
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: #fbfcfd; }
-.el-tag { border-radius: 5px; }
+.el-tag { border-radius: 6px; font-weight: 600; }
+.el-pagination { margin-top: 18px; padding: 4px 0; }
+.el-pagination button, .el-pagination li { border-radius: 6px !important; }
+.el-empty { padding: 44px 0; }
+.el-loading-mask { background: rgba(255, 255, 255, .72); backdrop-filter: blur(2px); }
 .el-table__inner-wrapper::before { display: none; }
 
 /* ===== 移动端适配 ===== */
@@ -155,9 +174,10 @@ button, input, textarea, select { font: inherit; }
   gap: 10px;
   padding: 14px 16px;
   margin-bottom: 18px;
-  border: 1px solid #e8eef3;
-  border-radius: 8px;
-  background: #f8fafc;
+  border: 1px solid #e1ecee;
+  border-radius: 10px;
+  background: #f6fbfa;
+  box-shadow: var(--shadow-soft);
 }
 .filter-label { color: var(--ink-700); font-size: 13px; font-weight: 700; }
 @media (max-width: 720px) {

@@ -32,7 +32,7 @@ public class MinioPathMigrator implements CommandLineRunner {
 
     private static final String BUCKET = "crawler";
     /** 需要去掉前缀的目录列表 */
-    private static final String[] DIRS = {"html", "images", "js", "file"};
+    private static final String[] DIRS = {"html", "images", "js", "css", "file"};
 
     private final MinioHelper minioHelper;
     private final FileMetadataMapper fileMetadataMapper;

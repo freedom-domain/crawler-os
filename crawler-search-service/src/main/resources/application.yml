@@ -29,6 +29,7 @@ minio:
   accessKey: ${MINIO_ACCESS:admin}
   secretKey: ${MINIO_SECRET:admin123}
   html-bucket: ${MINIO_HTML_BUCKET:crawler}
+  js-bucket: ${MINIO_JS_BUCKET:crawler}
 
 jwt:
   secret: crawler-platform-jwt-secret-key-must-be-long-enough-256

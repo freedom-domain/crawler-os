@@ -38,6 +38,8 @@ export const spiderRun = (id: number) => request.post(`/spider/${id}/run`)
 export const spiderRerun = (id: number, url: string) => request.post(`/spider/${id}/rerun`, { url })
 
 export const taskPage = (params: any) => request.get('/spider/task/page', { params })
+export const recentTaskList = (size = 5) => request.get('/spider/task/recent', { params: { size } })
+export const taskStats = () => request.get('/spider/task/stats')
 export const taskDetail = (id: number) => request.get(`/spider/task/${id}`)
 export const taskLogs = (id: number, params: any) => request.get(`/spider/task/${id}/logs`, { params })
 export const taskCancel = (id: number) => request.put(`/spider/task/${id}/cancel`)

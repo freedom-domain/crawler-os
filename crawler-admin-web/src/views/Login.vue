@@ -94,7 +94,9 @@ const handleLogin = async () => {
   padding: 5vw 9vw;
   position: relative;
   overflow: hidden;
-  background: #172b4d;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(114, 224, 200, .14), transparent 22rem),
+    linear-gradient(135deg, #102644 0%, #193b5c 100%);
 }
 .login-aside { color: white; height: min(650px, 80vh); display: flex; flex-direction: column; justify-content: space-between; position: relative; z-index: 1; }
 .brand-lockup, .mobile-brand { display: flex; align-items: center; gap: 11px; font-size: 20px; font-weight: 800; letter-spacing: .4px; }
@@ -109,7 +111,7 @@ const handleLogin = async () => {
 .ambient { position: absolute; border-radius: 50%; border: 1px solid rgba(114, 224, 200, .16); }
 .ambient-one { width: 520px; height: 520px; left: 38%; top: -170px; }
 .ambient-two { width: 760px; height: 760px; left: 15%; bottom: -570px; }
-.login-box { position: relative; z-index: 1; width: 100%; padding: 44px; background: #fff; border: 1px solid #e6e9ef; border-radius: 9px; box-shadow: 0 16px 36px rgba(23, 43, 77, .16); }
+.login-box { position: relative; z-index: 1; width: 100%; padding: 44px; background: rgba(255, 255, 255, .98); border: 1px solid rgba(255, 255, 255, .72); border-radius: 14px; box-shadow: 0 24px 60px rgba(7, 24, 48, .28); }
 .mobile-brand { display: none; color: #172b4d; margin-bottom: 32px; }
 .welcome { color: #16a6a3; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
 .title { color: #172b4d; font-size: 25px; letter-spacing: -.4px; }

@@ -61,61 +61,19 @@
         </div>
       </template>
 
-      <SearchResultItem
-        v-for="row in list"
-        :key="row.id"
-        :row="row"
+      <SearchResultList
+        :rows="list"
+        authenticated
+        :image-url="imageUrl"
+        :format-time="formatTime"
         @preview="showPreviewContent"
         @detail="showDetail"
-      >
-        <template #images>
-          <div v-if="row.images && row.images.length" class="result-images">
-            <img
-              v-for="(img, idx) in row.images.slice(0, 6)"
-              :key="idx"
-              :src="imageUrl(img)"
-              class="result-thumb"
-              @click="openAllImages(row)"
-            />
-          </div>
-        </template>
-
-        <template #tags>
-          <div class="result-tags" v-if="row.tags && row.tags.length">
-            <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-item" @click="openTagEditor(row)">{{ t }}</el-tag>
-          </div>
-        </template>
-
-        <template #meta>
-          <div class="result-meta">
-            <span v-if="row.spiderName" class="meta-tag spider-tag" @click="goToSpider(row.spiderId, row.spiderName)">{{ row.spiderName }}</span>
-            <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
-            <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
-            <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
-            <el-button
-              size="small"
-              text
-              :type="row.favorited ? 'warning' : 'primary'"
-              @click.stop="toggleFavorite(row, !row.favorited)"
-            >
-              <el-icon :size="16" :color="row.favorited ? '#f56c6c' : ''"><StarFilled v-if="row.favorited" /><Star v-else /></el-icon>
-              <span style="margin-left: 2px">{{ row.favorited ? '已收藏' : '收藏' }}</span>
-            </el-button>
-            <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
-              <el-button size="small" text type="primary">
-                操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="tag">标签</el-dropdown-item>
-                  <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </template>
-      </SearchResultItem>
+        @images="openAllImages"
+        @tag="openTagEditor"
+        @spider="row => goToSpider(row.spiderId, row.spiderName)"
+        @favorite="toggleFavorite"
+        @command="handleCommand"
+      />
     </SearchResultsFrame>
 
     <el-dialog
@@ -173,76 +131,26 @@
         </div>
       </template>
       <div v-loading="previewLoading">
-        <div v-if="!showPreviewSource" class="preview-container preview-html" v-html="previewHtml || '无正文内容'"></div>
+        <iframe
+          v-if="!showPreviewSource"
+          class="preview-container preview-html"
+          :srcdoc="previewHtml || '<p>无正文内容</p>'"
+          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+          title="内容预览"
+        ></iframe>
         <pre v-else class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
       </div>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" title="搜索结果详情" width="90%" top="5vh" destroy-on-close>
-      <template #header>
-        <div class="detail-dialog-title">{{ detailData?.title || '搜索结果详情' }}</div>
-      </template>
-      <div v-loading="detailLoading" class="detail-dialog-body">
-        <div v-if="detailData" class="detail-content">
-          <div class="detail-header">
-            <div class="detail-url-row">
-              <a v-if="detailData.url" class="detail-url" :href="detailData.url" target="_blank" rel="noopener noreferrer">{{ detailData.url }}</a>
-              <span v-else class="detail-url">暂无来源地址</span>
-              <span class="detail-time">抓取：{{ formatTime(detailData.crawlTime) || '未知' }} | 更新：{{ formatTime(detailData.updateTime) || '未更新' }}</span>
-            </div>
-            <div class="detail-badges">
-              <span v-if="detailData.spiderName" class="meta-tag">{{ detailData.spiderName }}</span>
-              <span v-if="detailData.spiderGroup" class="meta-tag group-tag">{{ detailData.spiderGroup }}</span>
-              <span class="detail-meta-item">来源：{{ detailData.sourceType || '未知' }}</span>
-              <span class="detail-meta-item">标签：{{ detailData.tags && detailData.tags.length ? detailData.tags.join(' / ') : '无' }}</span>
-            </div>
-          </div>
+    <SearchDetailDialog
+      v-model="detailVisible"
+      :loading="detailLoading"
+      :detail="detailData"
+      :image-url="imageUrl"
+      :format-time="formatTime"
+    />
 
-          <el-tabs v-model="detailTab" class="detail-tabs">
-            <el-tab-pane label="正文内容" name="content">
-              <div v-if="detailData.images && detailData.images.length" class="detail-images">
-                <el-image
-                  v-for="(img, idx) in detailData.images"
-                  :key="idx"
-                  :src="imageUrl(img)"
-                  :preview-src-list="detailData.images.map(imageUrl)"
-                  :initial-index="idx"
-                  fit="cover"
-                  class="detail-image"
-                  preview-teleported
-                  hide-on-click-modal
-                />
-              </div>
-              <div class="preview-container detail-text">{{ detailData.content || '无正文内容' }}</div>
-            </el-tab-pane>
-          </el-tabs>
-        </div>
-        <div v-else class="empty">暂无详情</div>
-      </div>
-    </el-dialog>
-
-    <el-dialog v-model="tagVisible" title="编辑标签" width="480px" destroy-on-close>
-      <el-select
-        v-model="tagSelection"
-        multiple
-        filterable
-        allow-create
-        default-first-option
-        placeholder="选择或输入标签"
-        style="width: 100%"
-      >
-        <el-option
-          v-for="child in tagOptions"
-          :key="child.id"
-          :label="child.label"
-          :value="child.label"
-        />
-      </el-select>
-      <template #footer>
-        <el-button @click="tagVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveTags">保存</el-button>
-      </template>
-    </el-dialog>
+    <TagEditorDialog v-model="tagVisible" :row="tagCurrentRow" :tag-options="tagOptions" @saved="handleTagsSaved" />
   </el-card>
 </template>
 
@@ -250,11 +158,13 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import SearchResultItem from '@/components/SearchResultItem.vue'
+import SearchResultList from '@/components/SearchResultList.vue'
 import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
 import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
-import { searchContent, searchDetail, searchDelete, searchUpdateTags, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
-import { Search, ArrowDown, FullScreen, Minus, ZoomIn, ZoomOut, Star, StarFilled } from '@element-plus/icons-vue'
+import SearchDetailDialog from '@/components/SearchDetailDialog.vue'
+import TagEditorDialog from '@/components/TagEditorDialog.vue'
+import { searchContent, searchDetail, searchDelete, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
+import { Search, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -281,7 +191,6 @@ const previewContentVisible = ref(false)
 const detailVisible = ref(false)
 const previewLoading = ref(false)
 const detailLoading = ref(false)
-const detailTab = ref('content')
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewSource = ref('')
@@ -363,7 +272,6 @@ watch([imgZoom, isFullscreen], () => {
 }, { flush: 'post' })
 
 const tagVisible = ref(false)
-const tagSelection = ref<string[]>([])
 const tagCurrentRow = ref<any>(null)
 const tagOptions = ref<any[]>([])
 
@@ -379,23 +287,13 @@ const loadTagOptions = async () => {
 
 const openTagEditor = (row: any) => {
   tagCurrentRow.value = row
-  tagSelection.value = [...(row.tags || [])]
   tagVisible.value = true
-  if (tagOptions.value.length === 0) {
-    loadTagOptions()
-  }
 }
 
-const saveTags = async () => {
-  if (!tagCurrentRow.value) return
-  try {
-    await searchUpdateTags(tagCurrentRow.value.id, tagSelection.value)
-    tagCurrentRow.value.tags = [...tagSelection.value]
+const handleTagsSaved = (tags: string[]) => {
+  if (tagCurrentRow.value) {
+    tagCurrentRow.value.tags = tags
     tagCurrentRow.value.favorited = true
-    ElMessage.success('标签已更新')
-    tagVisible.value = false
-  } catch {
-    ElMessage.error('标签更新失败')
   }
 }
 
@@ -494,12 +392,8 @@ const loadData = async () => {
     const res: any = await searchContent(params)
     const data = res.data
     const content: any[] = data?.content || []
-    if (page.value === 1) {
-      list.value = content
-    } else {
-      list.value = [...list.value, ...content]
-    }
-    total.value = data?.totalElements || 0
+    list.value = content
+    total.value = data?.total ?? data?.totalElements ?? content.length
     pitId.value = data?.pitId || ''
     // 取最后一条的 sortValues 作为下一页游标
     const last = content[content.length - 1]
@@ -514,6 +408,7 @@ const loadData = async () => {
 const loadNextPage = () => {
   if (loading.value || !hasMore.value) return
   page.value += 1
+  document.querySelector('.el-main')?.scrollTo({ top: 0, behavior: 'smooth' })
   loadData()
 }
 
@@ -534,7 +429,8 @@ const loadPrevPage = () => {
   let after = ''
   let guard = 0
   const finish = () => {
-    list.value = collected.slice(0, targetCount)
+    const pageStart = (page.value - 1) * size.value
+    list.value = collected.slice(pageStart, targetCount)
     pitId.value = pit
     searchAfter.value = after
     hasMore.value = collected.length >= targetCount
@@ -591,7 +487,7 @@ const showPreviewImages = async (row: any, initialIndex = 0) => {
 
 /**
  * 将 rawHtml 中的相对链接替换为基于爬虫源 URL 的绝对链接。
- * 非 http(s) 开头的 href/src 会拼接源 URL；javascript:、mailto:、tel:、# 锚点等保持不变。
+ * MinIO 静态资源通过当前应用的 /api/file/resource 代理访问，不能拼接到爬虫源站。
  */
 const resolveHtmlLinks = (html: string, baseUrl: string): string => {
   if (!html || !baseUrl) return html
@@ -602,6 +498,7 @@ const resolveHtmlLinks = (html: string, baseUrl: string): string => {
     const trimmed = url.trim()
     if (/^(https?:)?\/\//i.test(trimmed)) return trimmed
     if (/^(javascript:|mailto:|tel:|data:|blob:|#)/i.test(trimmed)) return trimmed
+    if (/^\/api\/file\/resource(?:[/?#]|$)/i.test(trimmed)) return trimmed
     try {
       return new URL(trimmed, baseUrl).href
     } catch {
@@ -652,7 +549,6 @@ const showPreviewContent = async (row: any) => {
 const showDetail = async (row: any) => {
   detailVisible.value = true
   detailLoading.value = true
-  detailTab.value = 'content'
   detailData.value = null
   try {
     const res: any = await searchDetail(row.id)
@@ -1223,6 +1119,10 @@ onMounted(() => {
 }
 
 .preview-html {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  padding: 0;
   line-height: 1.8;
   color: #303133;
   word-break: break-word;

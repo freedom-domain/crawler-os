@@ -5,6 +5,7 @@ import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
 import com.collect.search.dto.SearchResult;
+import com.collect.search.dto.SearchPageResponse;
 import com.collect.search.entity.SearchHistory;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.service.SearchService;
@@ -58,7 +59,7 @@ public class SearchController {
 
     @Operation(summary = "搜索爬取的数据（PIT + search_after 游标分页）")
     @GetMapping
-    public R<Page<SearchResult>> search(@RequestParam(value = "keyword", required = false) String keyword,
+    public R<SearchPageResponse> search(@RequestParam(value = "keyword", required = false) String keyword,
                                               @RequestParam(value = "spiderId", required = false) Long spiderId,
                                               @RequestParam(value = "spiderGroup", required = false) String spiderGroup,
                                               @RequestParam(value = "tag", required = false) String tag,
@@ -88,7 +89,9 @@ public class SearchController {
                         .collect(java.util.stream.Collectors.toList());
             }
         }
-        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, size, pitId, after));
+        Page<SearchResult> result = searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, size, pitId, after);
+        String nextPitId = result instanceof SearchService.PagedSearchResult paged ? paged.getPitId() : null;
+        return R.ok(new SearchPageResponse(result.getContent(), result.getTotalElements(), nextPitId));
     }
 
     @Operation(summary = "数据详情")
@@ -111,9 +114,12 @@ public class SearchController {
     @GetMapping("/favorites")
     public R<Page<SearchResult>> favorites(@RequestParam(value = "current", defaultValue = "1") int current,
                                            @RequestParam(value = "size", defaultValue = "20") int size,
-                                           @RequestParam(value = "keyword", required = false) String keyword) throws IOException {
+                                           @RequestParam(value = "title", required = false) String title,
+                                           @RequestParam(value = "url", required = false) String url,
+                                           @RequestParam(value = "spiderName", required = false) String spiderName,
+                                           @RequestParam(value = "tag", required = false) String tag) throws IOException {
         requirePermission("search:query");
-        return R.ok(searchService.favorites(current, size, keyword));
+        return R.ok(searchService.favorites(current, size, title, url, spiderName, tag));
     }
 
     @Operation(summary = "取消收藏")

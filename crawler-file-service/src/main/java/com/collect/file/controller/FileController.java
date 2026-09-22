@@ -72,6 +72,22 @@ public class FileController {
                 .body(new InputStreamResource(in));
     }
 
+    @Operation(summary = "内联访问静态资源")
+    @GetMapping("/resource")
+    public ResponseEntity<InputStreamResource> resource(@RequestParam("bucket") String bucket,
+                                                         @RequestParam("objectName") String objectName) {
+        InputStream in = fileService.download(bucket, objectName);
+        MediaType mediaType = switch (objectName.substring(objectName.lastIndexOf('.') + 1).toLowerCase()) {
+            case "js", "mjs" -> MediaType.parseMediaType("application/javascript");
+            case "css" -> MediaType.parseMediaType("text/css");
+            default -> MediaType.APPLICATION_OCTET_STREAM;
+        };
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .contentType(mediaType)
+                .body(new InputStreamResource(in));
+    }
+
     @Operation(summary = "删除文件")
     @DeleteMapping
     public R<Void> delete(@RequestParam("bucket") String bucket, @RequestParam("objectName") String objectName) {

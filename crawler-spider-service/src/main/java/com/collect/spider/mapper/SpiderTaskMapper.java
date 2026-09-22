@@ -3,6 +3,7 @@ package com.collect.spider.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.collect.spider.entity.SpiderTask;
+import com.collect.spider.dto.TaskStatsResponse;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -40,6 +41,15 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
     IPage<SpiderTask> selectTaskPage(IPage<SpiderTask> page,
                       @Param("spiderId") Long spiderId,
                       @Param("status") String status);
+
+            @Select("SELECT t.spider_name, t.status, t.success_count, t.fail_count, t.create_time "
+                + "FROM spider_task t WHERE t.deleted = 0 ORDER BY t.create_time DESC LIMIT #{limit}")
+        java.util.List<SpiderTask> selectRecentTasks(@Param("limit") int limit);
+
+        @Select("SELECT COUNT(*) AS total, "
+                + "COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) AS success "
+                + "FROM spider_task WHERE deleted = 0 AND create_time >= CURDATE()")
+        TaskStatsResponse selectTodayTaskStats();
 
         @Select("SELECT t.*, "
             + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 1) AS html_success_count, "
