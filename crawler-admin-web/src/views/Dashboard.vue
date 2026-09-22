@@ -99,12 +99,21 @@ onMounted(async () => {
 
 <style scoped>
 .dashboard-intro { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; }
+@media (max-width: 767px) {
+  .dashboard-intro { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .dashboard-intro h1 { font-size: 20px; }
+  .stat-value { font-size: 22px; }
+  .stat-icon { width: 44px; height: 44px; border-radius: 10px; }
+  .stat-card { justify-content: center; width: 100%; }
+  :deep(.el-card__body) { display: flex; justify-content: center; }
+}
 .eyebrow { margin-bottom: 8px; color: #16a6a3; font-size: 11px; font-weight: 800; letter-spacing: 1.8px; }
 .dashboard-intro h1 { color: #172b4d; font-size: 25px; letter-spacing: -.4px; }
 .intro-copy { margin-top: 8px; color: #829ab1; font-size: 14px; }
 .intro-mark { display: flex; align-items: center; gap: 8px; color: #16a6a3; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; }
 .intro-mark span { padding: 5px 8px; border-radius: 5px; background: #d9f5ef; }
-.stat-card { display: flex; align-items: center; gap: 16px; min-height: 76px; }
+.stat-card { display: flex; align-items: center; justify-content: center; gap: 16px; min-height: 76px; width: 100%; }
+:deep(.el-card__body) { display: flex; justify-content: center; }
 .stat-icon {
   width: 56px; height: 56px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;

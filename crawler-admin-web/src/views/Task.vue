@@ -350,6 +350,13 @@ onUnmounted(stopTimer)
   white-space: nowrap;
 }
 
+@media (max-width: 767px) {
+  .filter-bar { flex-wrap: wrap; gap: 8px; }
+  .filter-bar .el-select { width: 100% !important; }
+  .filter-bar .el-button { margin-left: 0 !important; }
+  .card-header { flex-wrap: wrap; gap: 8px; }
+}
+
 .log-filter {
   display: flex;
   align-items: center;

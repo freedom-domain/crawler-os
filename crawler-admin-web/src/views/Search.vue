@@ -811,6 +811,12 @@ onMounted(() => {
   gap: 12px;
 }
 
+@media (max-width: 767px) {
+  .search-bar { max-width: 100%; }
+  .search-row { flex-wrap: wrap; }
+  .search-row .el-select { width: 100% !important; }
+}
+
 .search-box {
   flex: 1;
   display: flex;

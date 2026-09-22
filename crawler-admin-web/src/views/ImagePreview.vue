@@ -20,35 +20,42 @@
       :class="{ open: showToolbar }"
       :style="toolbarStyle"
     >
-      <div class="toolbar-section inline-section">
-        <span class="section-label">图片</span>
-        <span class="img-count">{{ images.length }}</span>
-      </div>
-      <div class="toolbar-divider"></div>
-      <div class="toolbar-section inline-section">
-        <span class="section-label">每页</span>
-        <div class="stepper">
-          <button type="button" class="icon-btn" :disabled="pageSize <= 1" @click="stepPageSize(-1)" title="减少每页张数"><el-icon><Minus /></el-icon></button>
-          <span class="stepper-value">{{ pageSize }}</span>
-          <button type="button" class="icon-btn" :disabled="pageSize >= maxPageSize" @click="stepPageSize(1)" title="增加每页张数"><el-icon><Plus /></el-icon></button>
+      <div class="toolbar-controls">
+        <!-- 图片数量 -->
+        <div class="control-item">
+          <span class="section-label">图片</span>
+          <span class="img-count">{{ images.length }}</span>
         </div>
-      </div>
-      <div class="toolbar-divider"></div>
-      <div class="toolbar-section inline-section">
-        <span class="section-label">每行</span>
-        <div class="stepper">
-          <button type="button" class="icon-btn" :disabled="cols <= 1" @click="stepCols(-1)" title="减少每行张数"><el-icon><Minus /></el-icon></button>
-          <span class="stepper-value">{{ cols }}</span>
-          <button type="button" class="icon-btn" :disabled="cols >= pageSize" @click="stepCols(1)" title="增加每行张数"><el-icon><Plus /></el-icon></button>
+        <!-- 每页张数 -->
+        <div class="control-item">
+          <span class="section-label">每页</span>
+          <div class="stepper">
+            <button type="button" class="icon-btn" :disabled="pageSize <= 1" @click="stepPageSize(-1)" title="减少每页张数"><el-icon><Minus /></el-icon></button>
+            <span class="stepper-value">{{ pageSize }}</span>
+            <button type="button" class="icon-btn" :disabled="pageSize >= maxPageSize" @click="stepPageSize(1)" title="增加每页张数"><el-icon><Plus /></el-icon></button>
+          </div>
         </div>
+        <!-- 每行张数 -->
+        <div class="control-item">
+          <span class="section-label">每行</span>
+          <div class="stepper">
+            <button type="button" class="icon-btn" :disabled="cols <= 1" @click="stepCols(-1)" title="减少每行张数"><el-icon><Minus /></el-icon></button>
+            <span class="stepper-value">{{ cols }}</span>
+            <button type="button" class="icon-btn" :disabled="cols >= pageSize" @click="stepCols(1)" title="增加每行张数"><el-icon><Plus /></el-icon></button>
+          </div>
+        </div>
+        <!-- 缩放 -->
+        <div class="control-item">
+          <span class="section-label">缩放</span>
+          <div class="zoom-section">
+            <button type="button" class="icon-btn" @click="gridZoom(-0.1)" title="缩小"><el-icon><Minus /></el-icon></button>
+            <span class="zoom-label">{{ Math.round(gridScale * 100) }}%</span>
+            <button type="button" class="icon-btn" @click="gridZoom(0.1)" title="放大"><el-icon><Plus /></el-icon></button>
+          </div>
+        </div>
+        <!-- 重置按钮 -->
+        <button type="button" class="reset-btn" @click="resetToInitial" title="重置">重置</button>
       </div>
-      <div class="toolbar-divider"></div>
-      <div class="toolbar-section zoom-section">
-        <button type="button" class="icon-btn" @click="gridZoom(-0.1)" title="缩小"><el-icon><Minus /></el-icon></button>
-        <span class="zoom-label">{{ Math.round(gridScale * 100) }}%</span>
-        <button type="button" class="icon-btn" @click="gridZoom(0.1)" title="放大"><el-icon><Plus /></el-icon></button>
-      </div>
-      <button type="button" class="reset-btn" @click="resetToInitial" title="重置">重置</button>
     </div>
 
     <!-- 加载动画 -->
@@ -120,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, type CSSProperties } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
 import { searchDetail } from '@/api'
@@ -149,6 +156,16 @@ const triggerPos = ref({ x: 0, y: 0 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
+// 工具栏显示时重新计算位置
+watch(showToolbar, (val) => {
+  if (val) {
+    nextTick(() => {
+      // 触发重新计算
+      triggerPos.value = { ...triggerPos.value }
+    })
+  }
+})
+
 const triggerStyle = computed<CSSProperties>(() => ({
   position: 'fixed',
   left: `${triggerPos.value.x}px`,
@@ -166,14 +183,14 @@ const toolbarStyle = computed<CSSProperties>(() => {
   const vh = window.innerHeight
   // 判断按钮在左边还是右边
   const isLeft = x < vw / 2
-  // 横向工具栏尺寸（固定宽度 460px，高度取实际渲染值）
-  const toolbarWidth = 460
+  // 横向工具栏尺寸（自适应宽度，最大 480px，高度取实际渲染值）
+  const toolbarWidth = toolbarRef.value?.offsetWidth || 480
   const toolbarHeight = toolbarRef.value?.offsetHeight || 64
   // 按钮尺寸 40px，面板与按钮间距 12px
   const triggerSize = 40
   const gap = 12
-  // 垂直方向：面板与按钮中心精确对齐，再向上偏移 5px，确保不超出上下边界
-  let top = y + triggerSize / 2 - toolbarHeight / 3 - 5
+  // 垂直方向：面板与按钮中心精确对齐，确保不超出上下边界
+  let top = y + triggerSize / 2 - toolbarHeight / 2
   if (top < 10) top = 10
   if (top + toolbarHeight > vh - 10) top = vh - 10 - toolbarHeight
   // 水平方向：按钮在左半屏时面板向右展开，否则向左展开，并夹取在窗口内
@@ -300,8 +317,9 @@ const loadImages = async () => {
     const rawImages: string[] = doc?.images || []
     images.value = rawImages.map(imageUrl).filter(Boolean)
     // 移动端竖屏默认每页 1 张；桌面端超过 4 张时每页显示 3 张，否则每页 4 张
+    // 每页数量不能超过图片总数
     const size = isMobile() ? 1 : (images.value.length > 4 ? 3 : 4)
-    pageSize.value = size
+    pageSize.value = Math.min(size, images.value.length)
     if (isMobile()) {
       cols.value = 1
     }
@@ -493,14 +511,13 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
-  gap: 10px;
-  width: 460px;
+  flex-direction: column;
+  gap: 12px;
+  width: auto;
+  max-width: 640px;
+  min-width: 0;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(8px);
   /* 点击图标后渐进展开：从按钮侧滑入 + 淡入 */
@@ -512,6 +529,62 @@ onBeforeUnmount(() => {
 .toolbar-header.open {
   transform: translateX(0) scale(1);
   opacity: 1;
+}
+.toolbar-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.control-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.control-item .section-label {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.control-item .img-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  line-height: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.control-item .stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.control-item .zoom-section {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.reset-btn {
+  padding: 8px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  align-self: center;
+  flex-shrink: 0;
 }
 .toolbar-section {
   display: flex;
@@ -567,9 +640,12 @@ onBeforeUnmount(() => {
   color: #475569;
 }
 .zoom-section {
+  display: flex;
   flex-direction: row;
   align-items: center;
   gap: 5px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 .icon-btn {
   width: 26px;
@@ -600,7 +676,7 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 .reset-btn {
-  padding: 5px 10px;
+  padding: 5px 12px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   background: #fff;
@@ -610,6 +686,7 @@ onBeforeUnmount(() => {
   transition: all 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
+  align-self: center;
 }
 .reset-btn:hover {
   background: #f1f5f9;
@@ -906,6 +983,43 @@ onBeforeUnmount(() => {
 @media (max-width: 640px) {
   .grid-wrapper { padding: 16px; }
   .grid { gap: 10px; }
+  /* 移动端工具栏：全宽显示，控制项换行 */
+  .toolbar-header {
+    max-width: calc(100vw - 32px);
+    padding: 10px 12px;
+  }
+  .toolbar-controls {
+    gap: 8px;
+  }
+  .control-item {
+    padding: 5px 8px;
+    flex: 1;
+    min-width: 70px;
+  }
+  .control-item .section-label {
+    font-size: 10px;
+  }
+  .control-item .img-count {
+    font-size: 13px;
+  }
+  .icon-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+  }
+  .stepper-value {
+    min-width: 20px;
+    font-size: 12px;
+  }
+  .zoom-label {
+    min-width: 32px;
+    font-size: 11px;
+  }
+  .reset-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    width: 100%;
+  }
   /* 移动端分页：贴底通栏，按钮加大便于点按 */
   .pagination {
     left: 16px;

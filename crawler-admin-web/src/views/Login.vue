@@ -123,4 +123,9 @@ const handleLogin = async () => {
   .login-box { max-width: 440px; padding: 34px 28px; }
   .mobile-brand { display: flex; }
 }
+@media (max-width: 480px) {
+  .login-container { padding: 16px; }
+  .login-box { padding: 28px 20px; }
+  .title { font-size: 21px; }
+}
 </style>

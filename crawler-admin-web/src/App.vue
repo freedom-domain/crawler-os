@@ -58,6 +58,61 @@ button, input, textarea, select { font: inherit; }
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: #fbfcfd; }
 .el-tag { border-radius: 5px; }
 .el-table__inner-wrapper::before { display: none; }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 767px) {
+  /* 弹窗：近全屏 */
+  .el-dialog {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px);
+    margin: 12vh auto !important;
+  }
+  .el-dialog__body { padding: 16px !important; }
+  /* 表单：标签置顶，避免 label-width 挤压输入框 */
+  .el-form--label-left .el-form-item__label,
+  .el-form--label-top .el-form-item__label {
+    float: none;
+    display: block;
+    width: auto !important;
+    text-align: left;
+    padding: 0 0 6px;
+    line-height: 1.4;
+  }
+  .el-form--label-left .el-form-item__content {
+    margin-left: 0 !important;
+    line-height: 1.4;
+  }
+  /* 行内筛选表单：纵向排列 */
+  .el-form--inline .el-form-item {
+    display: block;
+    margin-right: 0;
+    margin-bottom: 10px;
+  }
+  .el-form--inline .el-form-item .el-select,
+  .el-form--inline .el-form-item .el-input {
+    width: 100% !important;
+  }
+  /* 表格：缩小内边距，允许横向滚动 */
+  .el-table .cell { padding-left: 8px; padding-right: 8px; }
+  .el-table th.el-table__cell,
+  .el-table td.el-table__cell { padding: 6px 0; }
+  /* 分页：居中、可换行 */
+  .el-pagination {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .el-pagination .el-select__wrapper { min-width: 90px; }
+  /* 下拉菜单：贴边显示，避免溢出 */
+  .el-dropdown__popper.el-popper {
+    max-width: calc(100vw - 24px);
+  }
+  /* 卡片 */
+  .el-card__header { padding: 12px 14px; }
+  .el-card__body { padding: 14px; }
+  /* 消息提示 */
+  .el-message { min-width: 0; margin-left: auto; margin-right: auto; width: max-content; max-width: calc(100vw - 32px); }
+}
 .el-menu--popup {
   min-width: 190px;
   padding: 8px;
