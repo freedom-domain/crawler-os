@@ -8,7 +8,7 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" stripe resizable border>
+    <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" stripe :row-class-name="permissionRowClassName" resizable border>
       <el-table-column prop="name" label="权限名称" min-width="200"  resizable />
       <el-table-column label="图标" min-width="90" align="center" resizable>
         <template #default="{ row }">
@@ -121,6 +121,8 @@ const iconLibrary = Object.fromEntries(iconOptions.map(item => [item.value, item
 // 类型展示
 const typeLabel = (type: number) => (type === 0 ? '目录' : type === 1 ? '菜单' : '按钮')
 const typeTag = (type: number) => (type === 0 ? 'warning' : type === 1 ? 'primary' : 'info')
+const permissionRowClassName = ({ row }: { row: any }) =>
+  row.children?.length ? 'permission-parent-row' : 'permission-child-row'
 
 const setLevel = (nodes: any[], level = 0) => {
   for (const node of nodes) {
@@ -297,4 +299,12 @@ onMounted(loadData)
 .icon-empty { color: #9fb3c8; font-size: 12px; }
 .icon-option { display: flex; align-items: center; gap: 8px; }
 .action-buttons { display: flex; flex-wrap: nowrap; gap: 4px; margin: 2px 0; }
+:deep(.permission-parent-row td:first-child .cell) {
+  border-left: 3px solid #16a6a3;
+  color: #1f4f5a;
+  font-weight: 700;
+}
+:deep(.permission-child-row td:first-child .cell) {
+  color: #526779;
+}
 </style>
