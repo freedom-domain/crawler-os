@@ -1,17 +1,25 @@
 package com.collect.worker.minio;
 
 import io.minio.BucketExistsArgs;
+import io.minio.CopyObjectArgs;
+import io.minio.GetObjectArgs;
+import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.Result;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
+import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Component
@@ -65,6 +73,22 @@ public class MinioHelper {
         }
     }
 
+    public String putJs(String bucket, String objectName, byte[] data) {
+        try {
+            ensureBucket(bucket);
+            ByteArrayInputStream in = new ByteArrayInputStream(data);
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .stream(in, data.length, -1)
+                    .contentType("application/javascript")
+                    .build());
+            return objectName;
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO JS 上传失败: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * 判断对象是否已存在（用于跳过重复下载）。
      */
@@ -79,6 +103,55 @@ public class MinioHelper {
 
     public StatObjectResponse statObject(String bucket, String objectName) throws Exception {
         return minioClient.statObject(StatObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectName)
+                .build());
+    }
+
+    /**
+     * 读取对象内容（调用方负责关闭返回的流）。
+     */
+    public java.io.InputStream getObject(String bucket, String objectName) throws Exception {
+        return minioClient.getObject(GetObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectName)
+                .build());
+    }
+
+    /**
+     * 列出 bucket 中指定前缀下的所有对象名。
+     */
+    public List<String> listObjectNames(String bucket, String prefix) throws Exception {
+        List<String> names = new ArrayList<>();
+        for (Result<Item> result : minioClient.listObjects(ListObjectsArgs.builder()
+                .bucket(bucket)
+                .prefix(prefix)
+                .recursive(true)
+                .build())) {
+            names.add(result.get().objectName());
+        }
+        return names;
+    }
+
+    /**
+     * 同 bucket 内复制对象（服务端 copy，不经过本地）。
+     */
+    public void copyObject(String bucket, String srcObject, String dstObject) throws Exception {
+        minioClient.copyObject(CopyObjectArgs.builder()
+                .bucket(bucket)
+                .object(dstObject)
+                .source(io.minio.CopySource.builder()
+                        .bucket(bucket)
+                        .object(srcObject)
+                        .build())
+                .build());
+    }
+
+    /**
+     * 删除对象。
+     */
+    public void removeObject(String bucket, String objectName) throws Exception {
+        minioClient.removeObject(RemoveObjectArgs.builder()
                 .bucket(bucket)
                 .object(objectName)
                 .build());

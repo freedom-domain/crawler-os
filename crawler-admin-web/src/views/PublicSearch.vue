@@ -72,7 +72,11 @@
         :loading="loading"
         :total="total"
         :page-sizes="[10, 20, 50, 100, 200, 500]"
-        @change="handlePageChange"
+        cursor-mode
+        :has-more="hasMore"
+        @prev="loadPrevPage"
+        @next="loadNextPage"
+        @change="onPageSizeChange"
       >
         <template #heading>
           <div class="results-heading">
@@ -340,6 +344,10 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(10)
 const total = ref(0)
+// PIT + search_after 游标式分页状态
+const pitId = ref('')
+const searchAfter = ref('')
+const hasMore = ref(false)
 const keyword = ref('')
 const showFilters = ref(false)
 const filterSpider = ref<number | ''>('')
@@ -447,7 +455,7 @@ const formatTime = (t: string) => {
 
 const getImageBucket = () => {
   if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
-  return import.meta.env.DEV ? 'crawler-images-local' : 'crawler-images'
+  return 'crawler'
 }
 
 const imageUrl = (objectName: string) => {
@@ -479,6 +487,9 @@ const scrollToTop = () => {
 
 const doSearch = () => {
   page.value = 1
+  pitId.value = ''
+  searchAfter.value = ''
+  hasMore.value = false
   historyOpen.value = false
   if (!isLoggedIn.value && keyword.value.trim()) {
     const raw = JSON.parse(localStorage.getItem('crawler-search-history') || '[]')
@@ -508,28 +519,96 @@ const selectHistory = (value: string) => {
   doSearch()
 }
 
-const handlePageChange = () => {
-  scrollToTop()
-  loadData()
-}
-
 const loadData = async () => {
   loading.value = true
   try {
-    const params: any = { current: page.value, size: size.value, keyword: keyword.value }
+    const params: any = { size: size.value, keyword: keyword.value }
     if (filterSpider.value) params.spiderId = filterSpider.value
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
     if (favoriteOnly.value && isLoggedIn.value) params.favoriteOnly = true
     if (hasImages.value) params.hasImages = true
+    if (pitId.value) params.pitId = pitId.value
+    if (searchAfter.value) params.searchAfter = searchAfter.value
     const res: any = await searchContent(params)
     if (res) {
-      list.value = res.data?.content || []
-      total.value = res.data?.totalElements || 0
+      const data = res.data
+      const content: any[] = data?.content || []
+      if (page.value === 1) {
+        list.value = content
+      } else {
+        list.value = [...list.value, ...content]
+      }
+      total.value = data?.totalElements || 0
+      pitId.value = data?.pitId || ''
+      const last = content[content.length - 1]
+      searchAfter.value = last?.sortValues ? JSON.stringify(last.sortValues) : ''
+      hasMore.value = content.length === size.value
     }
   } finally {
     loading.value = false
   }
+}
+
+// 下一页：基于游标追加加载
+const loadNextPage = () => {
+  if (loading.value || !hasMore.value) return
+  page.value += 1
+  scrollToTop()
+  loadData()
+}
+
+// 上一页：游标式分页无法直接回退，重新从第 1 页加载并截取到目标页
+const loadPrevPage = () => {
+  if (loading.value || page.value <= 1) return
+  page.value -= 1
+  const targetCount = page.value * size.value
+  loading.value = true
+  const params: any = { size: size.value, keyword: keyword.value }
+  if (filterSpider.value) params.spiderId = filterSpider.value
+  if (filterGroup.value) params.spiderGroup = filterGroup.value
+  if (filterTag.value) params.tag = filterTag.value
+  if (favoriteOnly.value && isLoggedIn.value) params.favoriteOnly = true
+  if (hasImages.value) params.hasImages = true
+  const collected: any[] = []
+  let pit = ''
+  let after = ''
+  let guard = 0
+  const finish = () => {
+    list.value = collected.slice(0, targetCount)
+    pitId.value = pit
+    searchAfter.value = after
+    hasMore.value = collected.length >= targetCount
+    loading.value = false
+    scrollToTop()
+  }
+  const step = async (): Promise<void> => {
+    if (collected.length >= targetCount || guard >= 50) {
+      finish()
+      return
+    }
+    if (pit) params.pitId = pit
+    if (after) params.searchAfter = after
+    const res: any = await searchContent(params)
+    const data = res.data
+    const content: any[] = data?.content || []
+    collected.push(...content)
+    pit = data?.pitId || ''
+    const last = content[content.length - 1]
+    after = last?.sortValues ? JSON.stringify(last.sortValues) : ''
+    guard++
+    if (content.length < size.value) {
+      finish()
+      return
+    }
+    step()
+  }
+  step()
+}
+
+// 修改每页条数：重置游标重新查询
+const onPageSizeChange = () => {
+  doSearch()
 }
 
 const toggleFavorite = async (row: any, shouldFavorite: boolean) => {

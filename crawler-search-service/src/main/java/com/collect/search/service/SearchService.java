@@ -1,13 +1,17 @@
 package com.collect.search.service;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import co.elastic.clients.elasticsearch.core.OpenPointInTimeRequest;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.PointInTimeReference;
+import co.elastic.clients.elasticsearch._types.Time;
 import com.collect.search.dto.SearchResult;
 import com.collect.search.entity.Spider;
 import com.collect.search.es.SpiderContentDoc;
@@ -16,6 +20,7 @@ import com.collect.search.entity.UserFavorite;
 import com.collect.search.mapper.UserFavoriteMapper;
 import com.collect.search.entity.SearchHistory;
 import com.collect.search.mapper.SearchHistoryMapper;
+import com.collect.search.minio.MinioHelper;
 import com.collect.common.security.LoginUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,14 +42,28 @@ public class SearchService {
     private final SpiderMapper spiderMapper;
     private final UserFavoriteMapper userFavoriteMapper;
     private final SearchHistoryMapper searchHistoryMapper;
+    private final MinioHelper minioHelper;
 
     @Value("${app.es.content-index:spider_content}")
     private String indexName;
 
+    @Value("${minio.html-bucket:crawler}")
+    private String htmlBucket;
+
+    /** 排序字段数量（updateTime + url），用于截断 PIT 追加的 shard 路由值 */
+    private static final int SORT_FIELD_COUNT = 2;
+
+    /**
+     * 搜索爬取的数据（PIT + search_after 游标式分页）。
+     *
+     * @param pitId       上一次查询返回的 PIT ID，首页传 null
+     * @param searchAfter 上一次查询返回的游标值（updateTime 毫秒值 + _id），首页传 null
+     */
     @SuppressWarnings("null")
     public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
-                                     boolean favoriteOnly, boolean hasImages, int current, int size) {
-        PageRequest pageRequest = PageRequest.of(current - 1, size);
+                                     boolean favoriteOnly, boolean hasImages, int size,
+                                     String pitId, List<Object> searchAfter) {
+        PageRequest pageRequest = PageRequest.of(0, size);
         Long userId = currentUserId();
         java.util.Map<String, List<String>> userTags = loadUserTags(userId);
 
@@ -113,18 +132,52 @@ public class SearchService {
 
         boolean hasKeyword = keyword != null && !keyword.isBlank();
 
+        // 打开或复用 PIT（Point In Time），保证翻页期间快照一致
+        final String pit;
+        if (pitId == null || pitId.isBlank()) {
+            try {
+                pit = elasticsearchClient.openPointInTime(
+                        OpenPointInTimeRequest.of(o -> o
+                                .index(indexName)
+                                .keepAlive(Time.of(t -> t.time("5m")))))
+                        .id();
+            } catch (java.io.IOException e) {
+                log.error("打开 PIT 失败", e);
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+        } else {
+            pit = pitId;
+        }
+
+        // 使用 PIT 时不能同时指定 index（ES 校验：[indices] cannot be used with point in time）
         SearchRequest.Builder reqBuilder = new SearchRequest.Builder()
-                .index(indexName)
-                .from(pageRequest.getPageNumber() * pageRequest.getPageSize())
+                .pit(PointInTimeReference.of(p -> p.id(pit)))
                 .size(pageRequest.getPageSize())
                 .query(query)
                 .trackTotalHits(t -> t.enabled(true));
 
-        if (!hasKeyword) {
-            reqBuilder.sort(s -> s.field(f -> f
+        // search_after 必须配合排序使用：updateTime 降序 + url 降序（url 为 keyword 且唯一，作为 tiebreaker）
+        reqBuilder.sort(s -> s.field(f -> f
                 .field("updateTime")
                 .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
                 .missing("_last")));
+        reqBuilder.sort(s -> s.field(f -> f
+                .field("url")
+                .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
+                .missing("_last")));
+
+        if (searchAfter != null && !searchAfter.isEmpty()) {
+            List<FieldValue> afterValues = searchAfter.stream()
+                    .limit(SORT_FIELD_COUNT)
+                    .map(v -> v instanceof Number
+                            ? FieldValue.of(((Number) v).longValue())
+                            : FieldValue.of(String.valueOf(v)))
+                    .collect(Collectors.toList());
+            if (afterValues.size() == SORT_FIELD_COUNT) {
+                reqBuilder.searchAfter(afterValues);
+            } else {
+                log.warn("Ignoring invalid search_after cursor with {} values", afterValues.size());
+            }
         }
 
         if (hasKeyword) {
@@ -178,11 +231,19 @@ public class SearchService {
                     sr.setTitleHl(doc.getTitle());
                     sr.setContentHl(snippet(doc.getContent()));
                 }
+                // PIT 会在 sort 值末尾追加 shard 路由值，只取前 N 个（N = 排序字段数）
+                if (hit.sort() != null && hit.sort().size() > SORT_FIELD_COUNT) {
+                    sr.setSortValues(hit.sort().subList(0, SORT_FIELD_COUNT).stream().map(Object::toString).toList());
+                } else {
+                    sr.setSortValues(hit.sort() != null ? hit.sort().stream().map(Object::toString).toList() : List.of());
+                }
                 results.add(sr);
             }
             var totalObj = response.hits().total();
             long total = totalObj != null ? totalObj.value() : 0L;
-            return new PageImpl<>(results, pageRequest, total);
+            // 返回自定义 Page 子类，携带 PIT ID 供前端下一页使用
+            String nextPit = response.pitId() != null ? response.pitId() : pit;
+            return new PagedSearchResult(results, pageRequest, total, nextPit);
         } catch (co.elastic.clients.elasticsearch._types.ElasticsearchException e) {
             if (e.response() != null
                     && e.response().error() != null
@@ -190,11 +251,35 @@ public class SearchService {
                 log.warn("ES 索引不存在，返回空结果: {}", indexName);
                 return new PageImpl<>(List.of(), pageRequest, 0);
             }
-            log.error("ES search failed", e);
+                var error = e.response() != null ? e.response().error() : null;
+                String rootCause = error != null && error.rootCause() != null && !error.rootCause().isEmpty()
+                    ? error.rootCause().stream()
+                    .map(cause -> cause.type() + ": " + cause.reason())
+                    .collect(Collectors.joining("; "))
+                    : error != null && error.causedBy() != null
+                    ? error.causedBy().type() + ": " + error.causedBy().reason()
+                    : null;
+                log.error("ES search failed: type={}, reason={}, rootCause={}",
+                    error != null ? error.type() : null,
+                    error != null ? error.reason() : e.getMessage(), rootCause, e);
             return new PageImpl<>(List.of(), pageRequest, 0);
         } catch (Exception e) {
             log.error("ES search failed", e);
             return new PageImpl<>(List.of(), pageRequest, 0);
+        }
+    }
+
+    /**
+     * 携带 PIT ID 的 Page 实现，序列化后前端可从 pitId 字段读取游标上下文。
+     */
+    @lombok.Getter
+    @lombok.EqualsAndHashCode(callSuper = true)
+    public static class PagedSearchResult extends PageImpl<SearchResult> {
+        private final String pitId;
+
+        public PagedSearchResult(List<SearchResult> content, PageRequest pageRequest, long total, String pitId) {
+            super(content, pageRequest, total);
+            this.pitId = pitId;
         }
     }
 
@@ -246,8 +331,26 @@ public class SearchService {
                 .source();
         if (doc != null) {
             doc.setTags(loadUserTags(currentUserId()).getOrDefault(id, List.of()));
+            // HTML 原文存储在 MinIO（对象名 = html/{md5(url)}.html），详情时按需读取
+            if (doc.getUrl() != null && !doc.getUrl().isBlank()) {
+                doc.setRawHtml(minioHelper.readHtml(htmlBucket, "html/" + md5(doc.getUrl()) + ".html"));
+            }
         }
         return doc;
+    }
+
+    private String md5(String input) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("MD5")
+                    .digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @SuppressWarnings("null")

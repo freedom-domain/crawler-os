@@ -1,5 +1,6 @@
 package com.collect.search.controller;
 
+import com.alibaba.fastjson2.JSON;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
@@ -55,7 +56,7 @@ public class SearchController {
         return R.ok();
     }
 
-    @Operation(summary = "搜索爬取的数据")
+    @Operation(summary = "搜索爬取的数据（PIT + search_after 游标分页）")
     @GetMapping
     public R<Page<SearchResult>> search(@RequestParam(value = "keyword", required = false) String keyword,
                                               @RequestParam(value = "spiderId", required = false) Long spiderId,
@@ -63,12 +64,31 @@ public class SearchController {
                                               @RequestParam(value = "tag", required = false) String tag,
                                               @RequestParam(value = "favoriteOnly", defaultValue = "false") boolean favoriteOnly,
                                               @RequestParam(value = "hasImages", defaultValue = "false") boolean hasImages,
-                                              @RequestParam(value = "current", defaultValue = "1") int current,
-                                              @RequestParam(value = "size", defaultValue = "20") int size) {
+                                              @RequestParam(value = "size", defaultValue = "20") int size,
+                                              @RequestParam(value = "pitId", required = false) String pitId,
+                                              @RequestParam(value = "searchAfter", required = false) String searchAfter) {
         // 只读查询允许匿名访问（公开搜索页），登录用户仍需具备 search:query 权限
         requirePermissionIfLoggedIn("search:query");
         searchService.recordHistory(keyword);
-        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, current, size));
+        java.util.List<Object> after = null;
+        if (searchAfter != null && !searchAfter.isBlank()) {
+            if (searchAfter.trim().startsWith("[")) {
+                try {
+                    after = JSON.parseArray(searchAfter).stream()
+                            .map(value -> value)
+                            .collect(java.util.stream.Collectors.toList());
+                } catch (RuntimeException ignored) {
+                    // Fall back to the legacy comma-separated cursor below.
+                }
+            }
+            if (after == null) {
+                after = java.util.Arrays.stream(searchAfter.split(","))
+                    .map(value -> value.trim())
+                        .filter(s -> !s.isEmpty())
+                        .collect(java.util.stream.Collectors.toList());
+            }
+        }
+        return R.ok(searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, size, pitId, after));
     }
 
     @Operation(summary = "数据详情")

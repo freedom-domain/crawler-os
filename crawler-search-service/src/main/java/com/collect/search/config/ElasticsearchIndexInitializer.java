@@ -11,6 +11,7 @@ import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -30,9 +31,9 @@ public class ElasticsearchIndexInitializer {
             var ops = elasticsearchOperations.indexOps(IndexCoordinates.of(contentIndex));
             if (ops.exists()) {
                 Map<String, Object> mappings = ops.getMapping();
-                String crawlTimeType = extractFieldType(mappings, "crawlTime");
-                if (crawlTimeType != null && !"date".equals(crawlTimeType)) {
-                    log.warn("索引 {} 的 crawlTime 字段类型为 {}，需要删除重建", contentIndex, crawlTimeType);
+                String invalidDateField = findInvalidDateField(mappings);
+                if (invalidDateField != null) {
+                    log.warn("索引 {} 的 {} 字段不是 date 类型，需要删除重建", contentIndex, invalidDateField);
                     ops.delete();
                     ops.create();
                     ops.putMapping(ops.createMapping(SpiderContentDoc.class));
@@ -95,6 +96,16 @@ public class ElasticsearchIndexInitializer {
                 log.warn("添加日期字段 {} 失败: {}", field, e.getMessage());
             }
         }
+    }
+
+    private String findInvalidDateField(Map<String, Object> mappings) {
+        for (String field : List.of("crawlTime", "updateTime")) {
+            String type = extractFieldType(mappings, field);
+            if (type != null && !"date".equals(type)) {
+                return field;
+            }
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

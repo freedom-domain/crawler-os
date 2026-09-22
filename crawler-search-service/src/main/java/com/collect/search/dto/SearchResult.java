@@ -24,4 +24,9 @@ public class SearchResult {
 
     private String titleHl;
     private String contentHl;
+
+    /**
+     * search_after 游标值（updateTime 毫秒值 + _id），前端下一页时原样回传最后一条的该值。
+     */
+    private List<String> sortValues;
 }

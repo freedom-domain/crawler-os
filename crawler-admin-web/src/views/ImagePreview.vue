@@ -271,7 +271,7 @@ watch(title, (t) => {
 // 获取 MinIO bucket 名称
 const getImageBucket = () => {
   if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
-  return import.meta.env.DEV ? 'crawler-images-local' : 'crawler-images'
+  return 'crawler'
 }
 
 // ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据

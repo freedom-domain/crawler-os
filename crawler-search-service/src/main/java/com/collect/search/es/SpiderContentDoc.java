@@ -50,6 +50,9 @@ public class SpiderContentDoc {
     @Transient
     private List<String> tags;
 
-    @Field(type = FieldType.Text, index = false)
+    /**
+     * HTML 原文（不存入 ES，详情查询时从 MinIO 读取）。
+     */
+    @Transient
     private String rawHtml;
 }

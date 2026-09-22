@@ -51,8 +51,14 @@ public class CrawlerEngine {
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
 
-    @Value("${minio.image-bucket:crawler-images}")
+    @Value("${minio.image-bucket:crawler}")
     private String imageBucket;
+
+    @Value("${minio.html-bucket:crawler}")
+    private String htmlBucket;
+
+    @Value("${minio.js-bucket:crawler}")
+    private String jsBucket;
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
                          ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
@@ -98,6 +104,12 @@ public class CrawlerEngine {
             }
 
             while (urlQueue.size(taskId) > 0) {
+                // 任务状态不是运行中（如被取消）时停止爬取
+                SpiderTask latest = taskMapper.selectById(task.getId());
+                if (latest == null || !"RUNNING".equals(latest.getStatus())) {
+                    log.info("任务状态不是运行中，停止爬取: taskId={}, status={}", taskId, latest == null ? null : latest.getStatus());
+                    break;
+                }
                 List<Runnable> batch = new java.util.ArrayList<>();
                 for (int i = 0; i < concurrency; i++) {
                     String item = urlQueue.pop(taskId);
@@ -172,6 +184,12 @@ public class CrawlerEngine {
         try {
             semaphore.acquire();
             try {
+                // 任务状态不是运行中（如被取消）时停止爬取
+                SpiderTask latest = taskMapper.selectById(task.getId());
+                if (latest == null || !"RUNNING".equals(latest.getStatus())) {
+                    log.info("任务状态不是运行中，停止爬取: taskId={}, url={}", taskId, url);
+                    return;
+                }
                 if (!isAllowedByRobots(url, msg, robotsCache)) {
                     log.info("robots.txt 禁止抓取: url={}", url);
                     writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "robots.txt 禁止抓取", 0);
@@ -194,11 +212,11 @@ public class CrawlerEngine {
                         criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
                 SpiderContentDoc existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
                 boolean contentUnchanged = false;
-                for (SearchHit<SpiderContentDoc> hit : existing) {
-                    SpiderContentDoc d = hit.getContent();
-                    if (newHtmlHash.equals(md5(d.getRawHtml() != null ? d.getRawHtml() : ""))) {
+                if (existingDoc != null) {
+                    // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
+                    String oldHtml = readHtmlFromMinio(url);
+                    if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
                         contentUnchanged = true;
-                        break;
                     }
                 }
 
@@ -223,10 +241,13 @@ public class CrawlerEngine {
                 DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
                 docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
                 docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
-                docObj.setRawHtml(newHtml);
+                // HTML 原文不再写入 ES，统一存入 MinIO（见 saveHtmlAndJs）
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
                 List<String> imageUrls = extractAndUploadImages(doc, url, parsed.getTitle(), msg, task, overwriteImage);
                 docObj.setImages(imageUrls);
+
+                // HTML 原文存入 html 目录，页面引用的 JS 存入 js 目录
+                saveHtmlAndJs(doc, url, newHtml, msg, task);
 
                 saveToElasticsearchWithRetry(docObj);
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
@@ -416,9 +437,9 @@ public class CrawlerEngine {
                     continue;
                 }
                 try {
-                    // 先用 URL 的 MD5 推算对象名
+                    // 先用 URL 的 MD5 推算对象名（统一存入 images 前缀下）
                     String ext = guessExt(src, null);
-                    String objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + ext;
+                    String objectName = "images/" + md5(src) + ext;
                     // 不覆盖时，若图片已存在则跳过下载
                     if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                         skipped++;
@@ -433,7 +454,7 @@ public class CrawlerEngine {
                     // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
                     String realExt = guessExt(src, data);
                     if (!realExt.equals(ext)) {
-                        objectName = "spider/" + msg.getSpiderId() + "/" + md5(src) + realExt;
+                        objectName = "images/" + md5(src) + realExt;
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skipped++;
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, pageUrl);
@@ -465,6 +486,76 @@ public class CrawlerEngine {
         return uploadedUrls;
     }
 
+    /**
+     * 将页面 HTML 原文上传到 html 目录，页面引用的 JS 文件上传到 js 目录。
+     * 对象名基于 URL 的 MD5，重复抓取时直接覆盖。
+     */
+    private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task) {
+        try {
+            String urlHash = md5(url);
+            // HTML 原文
+            String htmlObject = "html/" + urlHash + ".html";
+            minioHelper.putHtml(htmlBucket, htmlObject, html);
+            saveFileMetadata(htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
+                    "text/html; charset=utf-8", msg.getSpiderId(), parsedTitle(doc, url), url);
+            // 页面引用的 JS 文件
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (Element script : doc.select("script[src]")) {
+                String jsUrl = script.absUrl("src");
+                if (jsUrl.isBlank() || !seen.add(jsUrl)) {
+                    continue;
+                }
+                try {
+                    byte[] data = downloadBytes(jsUrl);
+                    if (data == null || data.length == 0) {
+                        continue;
+                    }
+                    String jsObject = "js/" + md5(jsUrl) + guessExt(jsUrl, data);
+                    minioHelper.putJs(jsBucket, jsObject, data);
+                    saveFileMetadata(jsObject, data.length, "application/javascript",
+                            msg.getSpiderId(), parsedTitle(doc, url), jsUrl);
+                } catch (Exception e) {
+                    log.warn("JS 下载/上传失败: src={}", jsUrl, e);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("HTML/JS 上传失败: url={}", url, e);
+        }
+    }
+
+    private String parsedTitle(Document doc, String url) {
+        String title = doc.title();
+        return title.isBlank() ? url : title;
+    }
+
+    /**
+     * 从 MinIO 读取已存储的 HTML 原文（用于变更比对）。对象不存在或读取失败时返回 null。
+     */
+    private String readHtmlFromMinio(String url) {
+        try {
+            String objectName = "html/" + md5(url) + ".html";
+            try (java.io.InputStream in = minioHelper.getObject(htmlBucket, objectName)) {
+                return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            log.debug("从 MinIO 读取 HTML 失败: url={}", url, e);
+            return null;
+        }
+    }
+
+    private byte[] downloadBytes(String src) throws Exception {
+        Request request = new Request.Builder()
+                .url(src)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
+                .build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful() || response.body() == null) {
+                return null;
+            }
+            return response.body().bytes();
+        }
+    }
+
     private void saveFileMetadata(String objectName, long fileSize, String contentType, Long spiderId,
                                   String title, String source) {
         if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
@@ -477,10 +568,20 @@ public class CrawlerEngine {
         metadata.setTitle(title);
         metadata.setContentType(contentType);
         metadata.setFileSize(fileSize);
-        metadata.setCategory("image");
+        metadata.setCategory(inferCategory(objectName));
         metadata.setSpiderId(spiderId);
         metadata.setSource(source);
         fileMetadataMapper.insert(metadata);
+    }
+
+    /**
+     * 根据对象路径前缀推断文件类别：images → image，html → html，js → js。
+     */
+    private String inferCategory(String objectName) {
+        if (objectName.startsWith("html/")) return "html";
+        if (objectName.startsWith("js/")) return "js";
+        if (objectName.startsWith("images/")) return "image";
+        return "file";
     }
 
     private void saveExistingFileMetadata(String objectName, Long spiderId, String title, String source) {

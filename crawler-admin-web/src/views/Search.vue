@@ -49,7 +49,11 @@
       :loading="loading"
       :total="total"
       :page-sizes="[10, 20, 50, 100, 200, 500]"
-      @change="loadData"
+      cursor-mode
+      :has-more="hasMore"
+      @prev="loadPrevPage"
+      @next="loadNextPage"
+      @change="onPageSizeChange"
     >
       <template #heading>
         <div v-if="total > 0" class="result-count">
@@ -259,6 +263,10 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(10)
 const total = ref(0)
+// PIT + search_after 游标式分页状态
+const pitId = ref('')
+const searchAfter = ref('')
+const hasMore = ref(false)
 const keyword = ref('')
 const filterSpider = ref<number | ''>('')
 const spiderOptions = ref<any[]>([])
@@ -408,7 +416,7 @@ const stripHtml = (html: string) => {
 
 const getImageBucket = () => {
   if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
-  return import.meta.env.DEV ? 'crawler-images-local' : 'crawler-images'
+  return 'crawler'
 }
 
 // ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
@@ -457,9 +465,12 @@ const goToSpider = async (spiderId?: number, spiderName?: string) => {
   })
 }
 
-// 点击搜索/回车：重置到第 1 页再查询
+// 点击搜索/回车：重置游标再查询
 const doSearch = () => {
   page.value = 1
+  pitId.value = ''
+  searchAfter.value = ''
+  hasMore.value = false
   historyOpen.value = false
   loadData()
 }
@@ -472,18 +483,90 @@ const selectHistory = (value: string) => {
 const loadData = async () => {
   loading.value = true
   try {
-    const params: any = { current: page.value, size: size.value, keyword: keyword.value }
+    const params: any = { size: size.value, keyword: keyword.value }
     if (filterSpider.value) params.spiderId = filterSpider.value
     if (filterGroup.value) params.spiderGroup = filterGroup.value
     if (filterTag.value) params.tag = filterTag.value
     if (favoriteOnly.value) params.favoriteOnly = true
     if (hasImages.value) params.hasImages = true
+    if (pitId.value) params.pitId = pitId.value
+    if (searchAfter.value) params.searchAfter = searchAfter.value
     const res: any = await searchContent(params)
-    list.value = res.data?.content || []
-    total.value = res.data?.totalElements || 0
+    const data = res.data
+    const content: any[] = data?.content || []
+    if (page.value === 1) {
+      list.value = content
+    } else {
+      list.value = [...list.value, ...content]
+    }
+    total.value = data?.totalElements || 0
+    pitId.value = data?.pitId || ''
+    // 取最后一条的 sortValues 作为下一页游标
+    const last = content[content.length - 1]
+    searchAfter.value = last?.sortValues ? JSON.stringify(last.sortValues) : ''
+    hasMore.value = content.length === size.value
   } finally {
     loading.value = false
   }
+}
+
+// 下一页：基于游标追加加载
+const loadNextPage = () => {
+  if (loading.value || !hasMore.value) return
+  page.value += 1
+  loadData()
+}
+
+// 上一页：游标式分页无法直接回退，重新从第 1 页加载并截取到目标页
+const loadPrevPage = () => {
+  if (loading.value || page.value <= 1) return
+  page.value -= 1
+  const targetCount = page.value * size.value
+  loading.value = true
+  const params: any = { size: size.value, keyword: keyword.value }
+  if (filterSpider.value) params.spiderId = filterSpider.value
+  if (filterGroup.value) params.spiderGroup = filterGroup.value
+  if (filterTag.value) params.tag = filterTag.value
+  if (favoriteOnly.value) params.favoriteOnly = true
+  if (hasImages.value) params.hasImages = true
+  const collected: any[] = []
+  let pit = ''
+  let after = ''
+  let guard = 0
+  const finish = () => {
+    list.value = collected.slice(0, targetCount)
+    pitId.value = pit
+    searchAfter.value = after
+    hasMore.value = collected.length >= targetCount
+    loading.value = false
+  }
+  const step = async (): Promise<void> => {
+    if (collected.length >= targetCount || guard >= 50) {
+      finish()
+      return
+    }
+    if (pit) params.pitId = pit
+    if (after) params.searchAfter = after
+    const res: any = await searchContent(params)
+    const data = res.data
+    const content: any[] = data?.content || []
+    collected.push(...content)
+    pit = data?.pitId || ''
+    const last = content[content.length - 1]
+    after = last?.sortValues ? JSON.stringify(last.sortValues) : ''
+    guard++
+    if (content.length < size.value) {
+      finish()
+      return
+    }
+    step()
+  }
+  step()
+}
+
+// 修改每页条数：重置游标重新查询
+const onPageSizeChange = () => {
+  doSearch()
 }
 
 const showPreviewImages = async (row: any, initialIndex = 0) => {
