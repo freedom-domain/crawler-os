@@ -3,8 +3,6 @@ name: Build and publish Docker images
 on:
   pull_request:
   push:
-    branches:
-      - main
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -23,13 +21,35 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - crawler-gateway
-          - crawler-user-service
-          - crawler-spider-service
-          - crawler-search-service
-          - crawler-file-service
-          - crawler-worker
+        include:
+          - service: crawler-gateway
+            context: .
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-gateway
+          - service: crawler-user-service
+            context: .
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-user-service
+          - service: crawler-spider-service
+            context: .
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-spider-service
+          - service: crawler-search-service
+            context: .
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-search-service
+          - service: crawler-file-service
+            context: .
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-file-service
+          - service: crawler-worker
+            context: .
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-worker
+          - service: crawler-admin-web
+            context: ./crawler-admin-web
+            dockerfile: ./crawler-admin-web/Dockerfile
+            build_arg: ""
 
     steps:
       - name: Check out source
@@ -60,11 +80,10 @@ jobs:
       - name: Build and publish image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./docker/Dockerfile-app
-          build-args: |
-            SERVICE=${{ matrix.service }}
-          push: ${{ github.event_name != 'pull_request' }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_arg }}
+          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}

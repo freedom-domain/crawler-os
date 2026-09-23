@@ -30,6 +30,14 @@
         "/^mvn -pl crawler-search-service -am -DskipTests package$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^node -e \"const fs=require\\('fs'\\); const yaml=require\\('\\./crawler-admin-web/node_modules/js-yaml'\\); yaml\\.load\\(fs\\.readFileSync\\('docker-compose\\.yml','utf8'\\)\\); yaml\\.load\\(fs\\.readFileSync\\('\\.github/workflows/docker-publish\\.yml','utf8'\\)\\); console\\.log\\('YAML OK'\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^command -v docker-compose \\|\\| true; docker --version 2>/dev/null \\|\\| true; git diff --stat$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }
