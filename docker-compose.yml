@@ -233,6 +233,19 @@ services:
     networks:
       - crawler-net
 
+  crawler-admin-web:
+    build:
+      context: ./crawler-admin-web
+      dockerfile: Dockerfile
+    container_name: crawler-admin-web
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - crawler-gateway
+    networks:
+      - crawler-net
+
 networks:
   crawler-net:
     driver: bridge

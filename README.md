@@ -89,7 +89,14 @@ mvn -pl crawler-worker spring-boot:run
 
 ```bash
 docker-compose up -d crawler-gateway crawler-user-service crawler-spider-service \
-  crawler-search-service crawler-file-service crawler-worker
+  crawler-search-service crawler-file-service crawler-worker crawler-admin-web
+```
+
+前端容器使用 Nginx 提供生产构建文件，并将 `/api` 请求转发到网关：
+
+```bash
+docker-compose up -d crawler-admin-web
+# http://127.0.0.1:5173
 ```
 
 ### 3. 启动前端
