@@ -7,16 +7,16 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        server-addr: ${NACOS_ADDR:192.168.31.2:8848}
         namespace: ${NACOS_NAMESPACE:public}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB:crawler_platform}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${MYSQL_HOST:192.168.31.2}:${MYSQL_PORT:3306}/${MYSQL_DB:crawler_platform}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root123}
   data:
     elasticsearch:
-      uris: ${ES_URLS:http://127.0.0.1:9200}
+      uris: ${ES_URLS:http://192.168.31.2:9200}
       username: ${ES_USER:}
       password: ${ES_PASSWORD:}
 
@@ -25,7 +25,7 @@ app:
     content-index: ${ES_CONTENT_INDEX:spider_content}
 
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+  endpoint: ${MINIO_ENDPOINT:http://192.168.31.2:9000}
   accessKey: ${MINIO_ACCESS:admin}
   secretKey: ${MINIO_SECRET:admin123}
   html-bucket: ${MINIO_HTML_BUCKET:crawler}

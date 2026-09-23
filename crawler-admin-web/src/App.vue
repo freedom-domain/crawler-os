@@ -36,7 +36,15 @@ body {
   --shadow: 0 8px 24px rgba(23, 43, 77, 0.06);
   --shadow-soft: 0 2px 8px rgba(23, 43, 77, 0.04);
 }
-html, body, #app { min-height: 100%; }
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+body { overflow: hidden; }
+@supports (min-height: 100dvh) {
+  html, body, #app { height: 100dvh; }
+}
 body {
   background:
     radial-gradient(circle at 92% 0%, rgba(114, 224, 200, .12), transparent 28rem),
@@ -85,6 +93,10 @@ button, input, textarea, select { font: inherit; }
     width: calc(100vw - 24px) !important;
     max-width: calc(100vw - 24px);
     margin: 12vh auto !important;
+  }
+  .el-dialog.content-preview-dialog {
+    top: 4px !important;
+    margin: 0 auto !important;
   }
   .el-dialog__body { padding: 16px !important; }
   /* 表单：标签置顶，避免 label-width 挤压输入框 */
@@ -184,6 +196,7 @@ button, input, textarea, select { font: inherit; }
   .el-card__body { padding: 16px; }
   .filter-bar { align-items: stretch; flex-wrap: wrap; }
   .el-dialog { width: calc(100vw - 20px) !important; }
+  .el-dialog.content-preview-dialog { top: 4px !important; margin: 0 auto !important; }
   .el-form--inline {
     display: block;
   }

@@ -150,7 +150,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" destroy-on-close>
+    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" class="content-preview-dialog" destroy-on-close>
       <template #header>
         <div class="preview-content-header">
           <span>{{ previewTitle }} - 内容</span>
@@ -745,11 +745,13 @@ onMounted(() => {
 
 <style scoped>
 .public-search {
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   background: #fff;
   display: flex;
   flex-direction: column;
   color: #202124;
+  overflow: auto;
 }
 
 .ps-header {
@@ -1389,10 +1391,13 @@ onMounted(() => {
 @media (max-width: 860px) {
   .ps-header {
     min-height: auto;
+    height: auto;
   }
   .ps-header-inner {
     flex-direction: column;
     align-items: stretch;
+    height: auto;
+    flex: none;
     padding: 14px 16px 10px;
     gap: 12px;
   }
@@ -1423,6 +1428,8 @@ onMounted(() => {
     max-width: 140px;
   }
   .header-filter-panel {
+    height: auto;
+    flex: none;
     padding: 12px 16px 14px;
   }
   .header-filter-row {
@@ -1443,8 +1450,9 @@ onMounted(() => {
 }
 
 @media (max-width: 720px) {
-  .ps-header { height: auto; }
-  .ps-header-inner { padding: 0 18px; }
+  .public-search { height: 100%; min-height: 0; }
+  .ps-header { height: auto; min-height: 0; }
+  .ps-header-inner { height: auto; padding: 12px 18px 10px; }
   .header-caption { font-size: 11px; }
   .ps-main { padding: 26px 16px 40px; }
   .search-hero { display: block; padding: 12px 0 24px; }
@@ -1477,6 +1485,25 @@ onMounted(() => {
     height: 24px;
     margin-right: 8px;
   }
+  .header-filter-panel {
+    padding: 10px 18px 12px;
+  }
+  .header-filter-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    transform: none;
+  }
+  .header-filter-row .el-select,
+  .header-filter-row :deep(.el-select),
+  .header-filter-row :deep(.el-checkbox) {
+    width: 100% !important;
+    margin-right: 0;
+  }
+  .header-filter-row :deep(.el-select__wrapper) {
+    width: 100%;
+  }
   .filter-row { flex-wrap: wrap; }
   .filter-row :deep(.el-select) { width: calc(50% - 6px) !important; }
   .results-heading { align-items: flex-end; }
@@ -1488,6 +1515,7 @@ onMounted(() => {
   .detail-header-meta { justify-content: flex-start; }
   .detail-images { gap: 8px; }
   .detail-image { width: calc(50% - 4px); height: 120px; }
+  :deep(.content-preview-dialog) { top: 4px !important; margin: 0 auto !important; }
 }
 
 @media (max-width: 460px) {

@@ -500,10 +500,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .image-preview-page {
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   background: #f0f2f5;
   color: #1e293b;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  overflow: auto;
+}
+
+@supports (min-height: 100dvh) {
+  .image-preview-page { height: 100%; min-height: 0; }
 }
 
 /* ===== 工具栏 ===== */
@@ -1041,7 +1047,8 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
     font-size: 13px;
   }
-  .viewer-stage img { max-width: calc(100vw - 60px); max-height: calc(100vh - 100px); }
+  .thumb { height: calc(100dvh - 32px); }
+  .viewer-stage img { max-width: calc(100vw - 60px); max-height: calc(100dvh - 100px); }
   .viewer-nav.prev { left: 10px; }
   .viewer-nav.next { right: 10px; }
   .viewer-nav { width: 38px; height: 38px; font-size: 22px; }

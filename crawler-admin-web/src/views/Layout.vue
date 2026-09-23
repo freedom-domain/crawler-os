@@ -352,7 +352,8 @@ const handleCommand = (cmd: string) => {
 </script>
 
 <style scoped>
-.layout { height: 100vh; min-width: 960px; }
+.layout { width: 100%; height: 100%; min-width: 960px; }
+.layout > :deep(.el-container) { height: 100%; min-height: 0; overflow: hidden; }
 .aside {
   background: linear-gradient(180deg, #142a4c 0%, #193556 100%);
   transition: width 0.25s ease;
@@ -454,14 +455,14 @@ const handleCommand = (cmd: string) => {
 .user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
 .user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
 .user-label { color: #243b53; font-size: 14px; font-weight: 600; }
-:deep(.el-main) { padding: 32px; background: transparent; overflow: auto; }
+:deep(.el-main) { flex: 1 1 auto; min-height: 0; padding: 32px; background: transparent; overflow: auto; }
 @media (max-width: 1100px) {
   .layout { min-width: 0; }
   :deep(.el-main) { padding: 20px; }
   .user-label { display: none; }
 }
 @media (max-width: 767px) {
-  .layout { min-width: 0; }
+  .layout { min-width: 0; height: 100dvh; }
   .aside {
     position: fixed;
     top: 0;

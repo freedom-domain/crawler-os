@@ -87,7 +87,7 @@ const handleLogin = async () => {
 
 <style scoped>
 .login-container {
-  height: 100vh;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(420px, 1fr) 480px;
   align-items: center;

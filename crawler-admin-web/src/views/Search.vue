@@ -123,7 +123,7 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" destroy-on-close>
+    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" class="content-preview-dialog" destroy-on-close>
       <template #header>
         <div class="preview-content-header">
           <span>{{ previewTitle }} - 内容</span>
@@ -711,6 +711,7 @@ onMounted(() => {
   .search-bar { max-width: 100%; }
   .search-row { flex-wrap: wrap; }
   .search-row .el-select { width: 100% !important; }
+  :deep(.content-preview-dialog) { top: 4px !important; margin: 0 auto !important; }
 }
 
 .search-box {
