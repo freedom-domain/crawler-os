@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS sys_user (
     role_id BIGINT,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_user_query (deleted, create_time, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 权限
@@ -40,14 +41,17 @@ CREATE TABLE IF NOT EXISTS sys_permission (
     sort INT DEFAULT 0,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_permission_tree (deleted, parent_id, type, sort, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 角色-权限
 CREATE TABLE IF NOT EXISTS sys_role_permission (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     role_id BIGINT NOT NULL,
-    permission_id BIGINT NOT NULL
+    permission_id BIGINT NOT NULL,
+    UNIQUE KEY uk_role_permission (role_id, permission_id),
+    KEY idx_role_permission_permission (permission_id, role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 爬虫
@@ -72,7 +76,9 @@ CREATE TABLE IF NOT EXISTS spider (
     status TINYINT DEFAULT 0,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_spider_query (deleted, `group`, create_time, id),
+    KEY idx_spider_schedule (deleted, enabled, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 爬虫任务
@@ -122,7 +128,8 @@ CREATE TABLE IF NOT EXISTS sys_dict (
     status TINYINT DEFAULT 1,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_dict_tree (deleted, status, parent_id, sort, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 文件元数据
@@ -139,7 +146,9 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     source VARCHAR(1024),
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_file_query (deleted, category, spider_id, create_time, id),
+    KEY idx_file_object (deleted, object_name(191))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 用户收藏及标签
@@ -163,7 +172,7 @@ CREATE TABLE IF NOT EXISTS search_history (
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
     update_time DATETIME,
-    KEY idx_search_history_user_time (user_id, create_time)
+    KEY idx_search_history_user_time (user_id, deleted, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 初始化角色

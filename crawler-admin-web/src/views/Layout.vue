@@ -118,6 +118,7 @@ const tabs = ref<Array<{ key: string; path: string; title: string; name?: string
   { key: '/dashboard', path: '/dashboard', title: '首页', name: 'Dashboard' }
 ])
 const TAB_STORAGE_KEY = 'crawler-open-tabs'
+const MENU_CACHE_TTL = 5 * 60 * 1000
 const draggedTab = ref('')
 const contextMenu = ref({ visible: false, x: 0, y: 0, key: '' })
 const activeTab = computed({
@@ -304,9 +305,29 @@ const getIcon = (item: any) => {
 }
 
 const loadMenu = async () => {
+  const cacheKey = `crawler-menu:${userStore.userId}`
+  let shouldRefresh = true
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null')
+    if (cached && Array.isArray(cached.data)) {
+      menuList.value = cached.data
+      tabs.value.forEach(tab => {
+        tab.title = titleForPath(tab.path)
+      })
+      shouldRefresh = Date.now() - Number(cached.cachedAt) > MENU_CACHE_TTL
+    }
+  } catch {
+    sessionStorage.removeItem(cacheKey)
+  }
+  if (!shouldRefresh) return
+
   try {
     const res: any = await getMenu()
     menuList.value = res.data || []
+    sessionStorage.setItem(cacheKey, JSON.stringify({
+      cachedAt: Date.now(),
+      data: menuList.value
+    }))
     tabs.value.forEach(tab => {
       tab.title = titleForPath(tab.path)
     })

@@ -63,6 +63,8 @@ public class SpiderService {
 
     @SuppressWarnings("null")
     public IPage<Spider> page(int current, int size, String keyword, String group) {
+        current = Math.max(1, current);
+        size = Math.min(Math.max(1, size), 100);
         LambdaQueryWrapper<Spider> qw = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
             qw.like(Spider::getName, keyword);
@@ -70,7 +72,7 @@ public class SpiderService {
         if (group != null && !group.isBlank()) {
             qw.eq(Spider::getGroup, group);
         }
-        qw.orderByDesc(Spider::getCreateTime);
+        qw.orderByDesc(Spider::getCreateTime).orderByDesc(Spider::getId);
         return spiderMapper.selectPage(new Page<>(current, size), qw);
     }
 
@@ -188,6 +190,8 @@ public class SpiderService {
 
     @SuppressWarnings("null")
     public IPage<SpiderTask> taskPage(int current, int size, Long spiderId, String status) {
+        current = Math.max(1, current);
+        size = Math.min(Math.max(1, size), 100);
         return taskMapper.selectTaskPage(new Page<>(current, size), spiderId, status);
     }
 
@@ -209,6 +213,8 @@ public class SpiderService {
     @SuppressWarnings("null")
     public IPage<SpiderTaskLog> taskLogPage(Long taskId, int current, int size,
                                              Integer status, String level, String type, String keyword) {
+        current = Math.max(1, current);
+        size = Math.min(Math.max(1, size), 100);
         LambdaQueryWrapper<SpiderTaskLog> qw = new LambdaQueryWrapper<>();
         qw.eq(SpiderTaskLog::getTaskId, taskId);
         if (status != null) {

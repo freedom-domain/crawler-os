@@ -34,7 +34,7 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
         "WHERE t.deleted = 0",
         "<if test='spiderId != null'>AND t.spider_id = #{spiderId}</if>",
         "<if test=\"status != null and status != ''\">AND t.status = #{status}</if>",
-        "ORDER BY t.create_time DESC",
+        "ORDER BY t.create_time DESC, t.id DESC",
         "</script>"
     })
         @Results({
@@ -58,14 +58,19 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
                 + "FROM spider_task WHERE deleted = 0 AND create_time >= CURDATE()")
         TaskStatsResponse selectTodayTaskStats();
 
-        @Select("SELECT t.*, "
-            + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 1) AS html_success_count, "
-            + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 0) AS html_fail_count, "
-            + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 2) AS html_existing_count, "
-            + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'image' AND l.status = 1) AS image_success_count, "
-            + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'image' AND l.status = 0) AS image_fail_count, "
-            + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'image' AND l.status = 2) AS image_existing_count "
-        + "FROM spider_task t WHERE t.id = #{id} AND t.deleted = 0")
+        @Select("SELECT t.*, stats.html_success_count, stats.html_fail_count, stats.html_existing_count, "
+            + "stats.image_success_count, stats.image_fail_count, stats.image_existing_count "
+        + "FROM spider_task t LEFT JOIN ("
+            + "SELECT l.task_id, "
+            + "SUM(CASE WHEN l.type = 'html' AND l.status = 1 THEN 1 ELSE 0 END) AS html_success_count, "
+            + "SUM(CASE WHEN l.type = 'html' AND l.status = 0 THEN 1 ELSE 0 END) AS html_fail_count, "
+            + "SUM(CASE WHEN l.type = 'html' AND l.status = 2 THEN 1 ELSE 0 END) AS html_existing_count, "
+            + "SUM(CASE WHEN l.type = 'image' AND l.status = 1 THEN 1 ELSE 0 END) AS image_success_count, "
+            + "SUM(CASE WHEN l.type = 'image' AND l.status = 0 THEN 1 ELSE 0 END) AS image_fail_count, "
+            + "SUM(CASE WHEN l.type = 'image' AND l.status = 2 THEN 1 ELSE 0 END) AS image_existing_count "
+            + "FROM spider_task_log l WHERE l.task_id = #{id} AND l.deleted = 0 GROUP BY l.task_id"
+        + ") stats ON stats.task_id = t.id "
+        + "WHERE t.id = #{id} AND t.deleted = 0")
         @Results({
             @Result(column = "html_success_count", property = "htmlSuccessCount"),
             @Result(column = "html_fail_count", property = "htmlFailCount"),

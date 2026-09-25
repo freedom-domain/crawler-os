@@ -180,6 +180,8 @@ public class FileService {
 
     @SuppressWarnings("null")
     public IPage<FileMetadata> page(int current, int size, String category, Long spiderId, String fileName, String title) {
+        current = Math.max(1, current);
+        size = Math.min(Math.max(1, size), 100);
         return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, fileName, title);
     }
 }

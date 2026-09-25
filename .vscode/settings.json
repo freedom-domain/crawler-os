@@ -46,6 +46,14 @@
         "/^mvn -q -Dmaven\\.repo\\.local=/tmp/crawler-platform-m2 -DskipTests package$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^git status --short && printf '\\\\nTop-level:\\\\n' && find \\. -maxdepth 2 -type d \\| sort$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^mvn -q -Dmaven\\.repo\\.local=/tmp/crawler-platform-m2 -pl crawler-user-service -am -DskipTests package$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

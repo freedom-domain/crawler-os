@@ -119,6 +119,7 @@ services:
     restart: always
     environment:
       NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
     ports:
       - "8080:8080"
     depends_on:
@@ -136,6 +137,7 @@ services:
     restart: always
     environment:
       NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
@@ -155,6 +157,7 @@ services:
     restart: always
     environment:
       NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
@@ -176,9 +179,16 @@ services:
     restart: always
     environment:
       NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
       ES_URLS: http://elasticsearch:9200
+      ES_USER: ""
+      ES_PASSWORD: ""
     depends_on:
       - nacos
+      - mysql
       - elasticsearch
     networks:
       - crawler-net
@@ -193,6 +203,7 @@ services:
     restart: always
     environment:
       NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
@@ -216,6 +227,7 @@ services:
     restart: always
     environment:
       NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123

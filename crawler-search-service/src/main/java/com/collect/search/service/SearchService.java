@@ -585,7 +585,9 @@ public class SearchService {
     public List<SearchHistory> history() {
         List<SearchHistory> records = searchHistoryMapper.selectList(new LambdaQueryWrapper<SearchHistory>()
                 .eq(SearchHistory::getUserId, LoginUtils.getUserId())
-            .orderByDesc(SearchHistory::getCreateTime));
+                .eq(SearchHistory::getDeleted, 0)
+                .orderByDesc(SearchHistory::getCreateTime)
+                .last("LIMIT 200"));
         return new java.util.ArrayList<>(records.stream()
             .collect(Collectors.toMap(SearchHistory::getKeyword, item -> item,
                 (first, duplicate) -> first, java.util.LinkedHashMap::new))

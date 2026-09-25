@@ -117,13 +117,11 @@ public class UserService {
 
     @SuppressWarnings("null")
     public IPage<SysUser> page(int current, int size, String keyword) {
+        current = Math.max(1, current);
+        size = Math.min(Math.max(1, size), 100);
         String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
-        List<SysUser> all = userMapper.selectPageWithRole(kw);
-        all.forEach(u -> u.setPassword(null));
-        int from = Math.min((current - 1) * size, all.size());
-        int to = Math.min(from + size, all.size());
-        Page<SysUser> result = new Page<>(current, size, all.size());
-        result.setRecords(all.subList(from, to));
+        IPage<SysUser> result = userMapper.selectPageWithRole(new Page<>(current, size), kw);
+        result.getRecords().forEach(u -> u.setPassword(null));
         return result;
     }
 
@@ -215,19 +213,11 @@ public class UserService {
      */
     public List<MenuNode> getMenu() {
         LoginUser loginUser = com.collect.common.security.LoginUtils.getLoginUser();
-        SysUser user = userMapper.selectById(loginUser.getUserId());
-        if (user == null) {
-            return List.of();
-        }
-        List<SysPermission> perms = permissionMapper.selectByRoleId(user.getRoleId());
-        // 取 type=0（目录）和 type=1（菜单），按钮 type=2 不展示
-        List<SysPermission> menus = perms.stream()
-                .filter(p -> p.getType() != null && (p.getType() == 0 || p.getType() == 1))
-                .sorted((a, b) -> (a.getSort() != null ? a.getSort() : 0) - (b.getSort() != null ? b.getSort() : 0))
-                .collect(Collectors.toList());
+        List<SysPermission> menus = permissionMapper.selectMenusByUserId(loginUser.getUserId());
 
         // 构建树形结构
         Map<Long, MenuNode> nodeMap = new java.util.LinkedHashMap<>();
+        Map<Long, Long> parentMap = new java.util.HashMap<>();
         for (SysPermission p : menus) {
             MenuNode node = new MenuNode();
             node.setId(p.getId());
@@ -238,13 +228,12 @@ public class UserService {
             node.setSort(p.getSort());
             node.setIcon(p.getIcon() != null && !p.getIcon().isBlank() ? p.getIcon() : defaultMenuIcon(p.getCode()));
             nodeMap.put(p.getId(), node);
+            parentMap.put(p.getId(), p.getParentId());
         }
 
         List<MenuNode> roots = new java.util.ArrayList<>();
         for (MenuNode node : nodeMap.values()) {
-            SysPermission perm = menus.stream().filter(p -> p.getId().equals(node.getId())).findFirst().orElse(null);
-            if (perm == null) continue;
-            Long parentId = perm.getParentId();
+            Long parentId = parentMap.get(node.getId());
             if (parentId == null || parentId == 0 || !nodeMap.containsKey(parentId)) {
                 roots.add(node);
             } else {
