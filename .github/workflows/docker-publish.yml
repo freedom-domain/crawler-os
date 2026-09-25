@@ -3,6 +3,8 @@ name: Build and publish Docker images
 on:
   pull_request:
   push:
+    branches:
+      - release
     tags:
       - "v*.*.*"
   release:
