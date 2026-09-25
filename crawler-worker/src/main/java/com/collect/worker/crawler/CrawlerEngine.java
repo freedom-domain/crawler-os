@@ -208,21 +208,24 @@ public class CrawlerEngine {
                 boolean overwriteHtml = msg.getOverwriteHtml() != null && msg.getOverwriteHtml() == 1;
                 boolean overwriteImage = msg.getOverwriteImage() != null && msg.getOverwriteImage() == 1;
 
-                // 查询该 URL 是否已存在
-                CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
-                SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
-                        criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
-                SpiderContentDoc existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
                 boolean contentUnchanged = false;
-                if (existingDoc != null) {
-                    // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
-                    String oldHtml = readHtmlFromMinio(url);
-                    if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
-                        contentUnchanged = true;
+                SpiderContentDoc existingDoc = null;
+                if (depth > 0) {
+                    // 起始页始终抓取；仅对后续页面检查已有内容是否需要跳过。
+                    CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
+                    SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
+                            criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+                    existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
+                    if (existingDoc != null) {
+                        // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
+                        String oldHtml = readHtmlFromMinio(url);
+                        if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
+                            contentUnchanged = true;
+                        }
                     }
                 }
 
-                // 不覆盖HTML 且 内容未变化 → 跳过
+                // 后续页面不覆盖 HTML 且内容未变化 → 跳过
                 if (!overwriteHtml && contentUnchanged) {
                     writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                             "已存在，跳过: " + parsed.getTitle(), (int) cost);
