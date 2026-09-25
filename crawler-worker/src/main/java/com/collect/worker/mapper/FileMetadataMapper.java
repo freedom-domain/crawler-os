@@ -10,4 +10,7 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 
     @Select("SELECT * FROM file_metadata WHERE bucket = #{bucket} AND object_name = #{objectName} AND deleted = 0 LIMIT 1")
     FileMetadata selectByObject(String bucket, String objectName);
+
+    @Select("SELECT * FROM file_metadata WHERE source = #{source} AND deleted = 0 LIMIT 1")
+    FileMetadata selectBySource(String source);
 }

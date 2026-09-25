@@ -34,6 +34,8 @@ spring:
       database: 5
 
 app:
+  kafka:
+    spider-task-topic: spider_task_topic-default
   es:
     content-index: ${ES_CONTENT_INDEX:spider_content}
 

@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
-import com.collect.common.mq.MqConstants;
 import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderUpdateReq;
@@ -17,15 +16,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SpiderService {
+
+    @Value("${app.kafka.spider-task-topic}")
+    private String spiderTaskTopic;
 
     private final com.collect.spider.mapper.SpiderMapper spiderMapper;
     private final com.collect.spider.mapper.SpiderTaskMapper taskMapper;
@@ -179,7 +183,7 @@ public class SpiderService {
             msg.setOverwriteImage(1);
         }
         String payload = JSON.toJSONString(msg);
-        kafkaTemplate.send(MqConstants.SPIDER_TASK_TOPIC, payload);
+        kafkaTemplate.send(Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured"), payload);
         log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
         return task;
     }

@@ -44,8 +44,14 @@ public class FileService {
         }
     }
 
-    public FileMetadata upload(String bucket, MultipartFile file, String category, Long spiderId) {
+    public FileMetadata upload(String bucket, MultipartFile file, String category, Long spiderId, String source) {
         try {
+            if (source != null && !source.isBlank()) {
+                FileMetadata existing = fileMetadataMapper.selectBySource(source);
+                if (existing != null) {
+                    return existing;
+                }
+            }
             ensureBucket(bucket);
             String objectName = category + "/" + UUID.randomUUID().toString().replace("-", "") + "_" + file.getOriginalFilename();
             try (InputStream in = file.getInputStream()) {
@@ -65,6 +71,7 @@ public class FileService {
             meta.setFileSize(file.getSize());
             meta.setCategory(category);
             meta.setSpiderId(spiderId);
+            meta.setSource(source);
             fileMetadataMapper.insert(meta);
             return meta;
         } catch (Exception e) {

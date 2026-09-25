@@ -69,6 +69,9 @@ docker-compose up -d mysql redis elasticsearch minio nacos kafka
 - Nacos: `127.0.0.1:8848`
 - Kafka: `127.0.0.1:9092`
 
+Kafka 任务 topic 按环境隔离：默认环境使用 `spider_task_topic-default`，本地环境使用
+`spider_task_topic-local`，避免本地和 Docker 环境互相消费爬虫任务。
+
 > IK 分词器：需手动将 IK 插件放入 ES 的 plugins 目录后重启，否则搜索退回标准分词。
 
 ### 2. 启动后端服务

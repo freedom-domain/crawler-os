@@ -13,3 +13,7 @@ spring:
     producer:
       properties:
         max.request.size: 524288000
+
+app:
+  kafka:
+    spider-task-topic: spider_task_topic-local

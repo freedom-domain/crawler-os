@@ -33,11 +33,12 @@ public class FileController {
     public R<FileMetadata> upload(@RequestParam("file") MultipartFile file,
                                    @RequestParam(value = "bucket", required = false) String bucket,
                                    @RequestParam(value = "category", defaultValue = "file") String category,
-                                   @RequestParam(value = "spiderId", required = false) Long spiderId) {
+                                   @RequestParam(value = "spiderId", required = false) Long spiderId,
+                                   @RequestParam(value = "source", required = false) String source) {
         if (bucket == null || bucket.isBlank()) {
             bucket = fileBucket;
         }
-        return R.ok(fileService.upload(bucket, file, category, spiderId));
+        return R.ok(fileService.upload(bucket, file, category, spiderId, source));
     }
 
     @Operation(summary = "下载文件")

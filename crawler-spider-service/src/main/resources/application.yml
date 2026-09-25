@@ -45,3 +45,7 @@ springdoc:
 logging:
   level:
     com.collect: INFO
+
+app:
+  kafka:
+    spider-task-topic: spider_task_topic-default

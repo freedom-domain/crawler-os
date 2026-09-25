@@ -33,6 +33,8 @@ spring:
           max-wait: 5s
 
 app:
+  kafka:
+    spider-task-topic: spider_task_topic-local
   es:
     content-index: ${ES_CONTENT_INDEX:spider_content_local}
 

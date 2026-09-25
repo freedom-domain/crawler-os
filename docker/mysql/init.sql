@@ -149,7 +149,8 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     create_time DATETIME,
     update_time DATETIME,
     KEY idx_file_query (deleted, category, spider_id, create_time, id),
-    KEY idx_file_object (deleted, object_name(191))
+    KEY idx_file_object (deleted, object_name(191)),
+    UNIQUE KEY uk_file_source (source(768))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 用户收藏及标签

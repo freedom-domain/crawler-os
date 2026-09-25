@@ -445,7 +445,7 @@ public class CrawlerEngine {
                     // 不覆盖时，若图片已存在则跳过下载
                     if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                         skipped++;
-                        saveExistingFileMetadata(objectName, msg.getSpiderId(), title, pageUrl);
+                        saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
                         uploadedUrls.add(objectName);
                         continue;
                     }
@@ -459,7 +459,7 @@ public class CrawlerEngine {
                         objectName = "images/" + md5(src) + realExt;
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skipped++;
-                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, pageUrl);
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
                             uploadedUrls.add(objectName);
                             continue;
                         }
@@ -629,7 +629,8 @@ public class CrawlerEngine {
 
     private void saveFileMetadata(String bucket, String objectName, long fileSize, String contentType,
                                   String category, Long spiderId, String title, String source) {
-        if (fileMetadataMapper.selectByObject(bucket, objectName) != null) {
+        if (fileMetadataMapper.selectByObject(bucket, objectName) != null
+                || (source != null && !source.isBlank() && fileMetadataMapper.selectBySource(source) != null)) {
             return;
         }
         FileMetadata metadata = new FileMetadata();
