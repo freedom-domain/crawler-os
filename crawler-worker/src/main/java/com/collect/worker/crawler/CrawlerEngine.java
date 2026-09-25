@@ -210,8 +210,8 @@ public class CrawlerEngine {
 
                 boolean contentUnchanged = false;
                 SpiderContentDoc existingDoc = null;
-                if (depth > 0) {
-                    // 起始页始终抓取；仅对后续页面检查已有内容是否需要跳过。
+                if (!isConfiguredStartUrl(url, msg.getStartUrls())) {
+                    // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
                     CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
                     SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                             criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
@@ -330,6 +330,13 @@ public class CrawlerEngine {
             log.debug("URL 域名解析失败: {}", url);
         }
         return false;
+    }
+
+    private boolean isConfiguredStartUrl(String url, List<String> startUrls) {
+        String normalizedUrl = UrlQueueService.normalizeUrl(url);
+        return normalizedUrl != null && startUrls != null && startUrls.stream()
+                .map(UrlQueueService::normalizeUrl)
+                .anyMatch(normalizedUrl::equals);
     }
 
     private String normalizeHost(String host) {

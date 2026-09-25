@@ -77,8 +77,10 @@ CREATE TABLE IF NOT EXISTS spider (
     creator_id BIGINT,
     status TINYINT DEFAULT 0,
     deleted TINYINT DEFAULT 0,
+    active_name VARCHAR(128) GENERATED ALWAYS AS (IF(COALESCE(deleted, 0) = 0, name, NULL)) STORED,
     create_time DATETIME,
     update_time DATETIME,
+    UNIQUE KEY uk_spider_active_name (active_name),
     KEY idx_spider_query (deleted, `group`, create_time, id),
     KEY idx_spider_schedule (deleted, enabled, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

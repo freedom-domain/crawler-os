@@ -3,7 +3,7 @@
     <template #header>
       <div class="card-header">
         <span>爬虫管理</span>
-        <div>
+        <div class="header-actions">
           <el-button @click="handleExport">导出配置</el-button>
           <el-upload :show-file-list="false" :before-upload="handleImport" accept=".json">
             <el-button>导入配置</el-button>
@@ -30,7 +30,15 @@
     <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border>
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
       <el-table-column prop="name" label="名称" min-width="160"  resizable />
-      <el-table-column prop="startUrls" label="起始URL" min-width="320" show-overflow-tooltip resizable />
+      <el-table-column label="起始URL" min-width="320" show-overflow-tooltip resizable>
+        <template #default="{ row }">
+          <template v-for="(url, index) in parseStartUrls(row.startUrls)" :key="`${url}-${index}`">
+            <a v-if="isHttpUrl(url)" :href="url" target="_blank" rel="noopener noreferrer">{{ url }}</a>
+            <span v-else>{{ url }}</span>
+            <span v-if="index < parseStartUrls(row.startUrls).length - 1">, </span>
+          </template>
+        </template>
+      </el-table-column>
       <el-table-column prop="schedule" label="调度" min-width="160"  resizable />
       <el-table-column prop="group" label="分组" min-width="120" resizable>
         <template #default="{ row }">
@@ -193,6 +201,30 @@ const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
 const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
+const parseStartUrls = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter((url): url is string => typeof url === 'string' && Boolean(url.trim()))
+  }
+  if (typeof value !== 'string' || !value.trim()) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (Array.isArray(parsed)) {
+      return parsed.filter((url): url is string => typeof url === 'string' && Boolean(url.trim()))
+    }
+  } catch {
+    // Older records may store URLs as a comma-separated string.
+  }
+  return value.split(',').map(url => url.trim()).filter(Boolean)
+}
+
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const protocol = new URL(value).protocol
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 const form = ref({
   name: '', description: '', type: 'http', group: '',
   contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
@@ -339,8 +371,10 @@ const handleSubmit = async () => {
       await spiderCreate({ ...form.value, startUrls })
       ElMessage.success('创建成功')
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === '爬虫名称已存在') return
     ElMessage.error('操作失败')
+    return
   }
   createVisible.value = false
   loadData()
@@ -427,7 +461,9 @@ onMounted(() => {
   box-shadow: inset 0 0 0 2px #f59e0b;
 }
 
-.card-header { display: flex; justify-content: space-between; align-items: center; }
+.card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+:deep(.header-actions .el-upload) { display: inline-flex; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
 

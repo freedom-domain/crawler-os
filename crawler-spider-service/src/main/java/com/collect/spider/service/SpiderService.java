@@ -15,6 +15,7 @@ import com.collect.spider.entity.SpiderTaskLog;
 import com.alibaba.fastjson2.JSON;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,13 +41,14 @@ public class SpiderService {
 
     @SuppressWarnings("null")
     public Spider create(SpiderCreateReq req) {
+        String name = req.getName().trim();
         Spider exist = spiderMapper.selectOne(
-                new LambdaQueryWrapper<Spider>().eq(Spider::getName, req.getName()));
+                new LambdaQueryWrapper<Spider>().eq(Spider::getName, name));
         if (exist != null) {
             throw new BizException("爬虫名称已存在");
         }
         Spider spider = new Spider();
-        spider.setName(req.getName());
+        spider.setName(name);
         spider.setDescription(req.getDescription());
         spider.setType(req.getType());
         spider.setStartUrls(JSON.toJSONString(req.getStartUrls()));
@@ -65,7 +67,11 @@ public class SpiderService {
         spider.setEnabled(req.getEnabled());
         spider.setCreatorId(1L);
         spider.setStatus(0);
-        spiderMapper.insert(spider);
+        try {
+            spiderMapper.insert(spider);
+        } catch (DuplicateKeyException e) {
+            throw new BizException("爬虫名称已存在");
+        }
         return spider;
     }
 
@@ -129,6 +135,7 @@ public class SpiderService {
                 failed++;
                 continue;
             }
+            config.setName(config.getName().trim());
             Spider existing = spiderMapper.selectOne(
                     new LambdaQueryWrapper<Spider>().eq(Spider::getName, config.getName()));
             if (existing != null) {
@@ -151,13 +158,14 @@ public class SpiderService {
         if (exist == null) {
             throw new BizException("爬虫不存在");
         }
+        String name = req.getName().trim();
         @SuppressWarnings("null")
         Spider other = spiderMapper.selectOne(
-                new LambdaQueryWrapper<Spider>().eq(Spider::getName, req.getName()).ne(Spider::getId, id));
+                new LambdaQueryWrapper<Spider>().eq(Spider::getName, name).ne(Spider::getId, id));
         if (other != null) {
             throw new BizException("爬虫名称已存在");
         }
-        exist.setName(req.getName());
+        exist.setName(name);
         exist.setDescription(req.getDescription());
         exist.setType(req.getType());
         exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
@@ -173,7 +181,11 @@ public class SpiderService {
         exist.setTimeout(req.getTimeout());
         exist.setHeaders(req.getHeaders());
         exist.setFollowRobots(req.getFollowRobots());
-        spiderMapper.updateById(exist);
+        try {
+            spiderMapper.updateById(exist);
+        } catch (DuplicateKeyException e) {
+            throw new BizException("爬虫名称已存在");
+        }
     }
 
     public void delete(Long id) {
