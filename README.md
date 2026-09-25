@@ -72,6 +72,9 @@ docker-compose up -d mysql redis elasticsearch minio nacos kafka
 Kafka 任务 topic 按环境隔离：默认环境使用 `spider_task_topic-default`，本地环境使用
 `spider_task_topic-local`，避免本地和 Docker 环境互相消费爬虫任务。
 
+程序日志会携带 `environment` 字段：本地 Profile 为 `local`，未激活 Profile 的 Docker/默认环境为
+`default`。Logstash 查询时请按该字段过滤，避免混看不同环境日志。
+
 > IK 分词器：需手动将 IK 插件放入 ES 的 plugins 目录后重启，否则搜索退回标准分词。
 
 ### 2. 启动后端服务
