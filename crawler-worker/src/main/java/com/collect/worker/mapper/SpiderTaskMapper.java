@@ -19,7 +19,9 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
     @Update("UPDATE spider_task SET fail_count = #{count} WHERE id = #{id} AND deleted = 0")
     int setFail(Long id, int count);
 
-    @Update("UPDATE spider_task SET status = #{status}, error_message = #{errorMessage}, "
+    @Update("UPDATE spider_task SET status = CASE "
+            + "WHEN #{status} = 'SUCCESS' AND status = 'CANCELING' THEN 'CANCELED' "
+            + "ELSE #{status} END, error_message = #{errorMessage}, "
             + "end_time = #{endTime}, total_cost_ms = #{totalCostMs}, update_time = NOW() "
             + "WHERE id = #{id} AND deleted = 0")
     int updateCompletion(@Param("id") Long id,

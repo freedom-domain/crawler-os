@@ -86,11 +86,18 @@ CREATE TABLE IF NOT EXISTS spider (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 爬虫任务
+CREATE TABLE IF NOT EXISTS spider_task_creation_guard (
+    id TINYINT PRIMARY KEY
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO spider_task_creation_guard (id) VALUES (1);
+
 CREATE TABLE IF NOT EXISTS spider_task (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     spider_id BIGINT NOT NULL,
     spider_name VARCHAR(128),
     task_id VARCHAR(64),
+    task_message LONGTEXT,
     status VARCHAR(32) DEFAULT 'PENDING',
     start_time DATETIME(3),
     end_time DATETIME(3),

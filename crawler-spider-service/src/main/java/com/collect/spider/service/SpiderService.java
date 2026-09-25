@@ -20,6 +20,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -237,18 +238,9 @@ public class SpiderService {
     }
 
     private SpiderTask createTask(Spider spider, List<String> startUrls, Integer maxDepthOverride, boolean forceOverwrite) {
-        Long taskId = snowflakeId();
-        SpiderTask task = new SpiderTask();
-        task.setSpiderId(spider.getId());
-        task.setSpiderName(spider.getName());
-        task.setStatus("RUNNING");
-        task.setStartTime(LocalDateTime.now());
-        task.setSuccessCount(0);
-        task.setFailCount(0);
-        task.setTaskId(taskId);
-        taskMapper.insert(task);
-        log.info("任务已创建: id={}, taskId={}", task.getId(), taskId);
+        requireTaskCreationGuard();
 
+        Long taskId = snowflakeId();
         TaskMessage msg = buildMessage(spider, taskId, startUrls);
         if (maxDepthOverride != null) {
             msg.setMaxDepth(maxDepthOverride);
@@ -259,8 +251,29 @@ public class SpiderService {
             msg.setOverwriteImage(1);
         }
         String payload = JSON.toJSONString(msg);
-        kafkaTemplate.send(Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured"), payload);
-        log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
+        boolean runImmediately = taskMapper.countActiveTasks() == 0
+                && taskMapper.selectNextPendingTaskForUpdate() == null;
+
+        SpiderTask task = new SpiderTask();
+        task.setSpiderId(spider.getId());
+        task.setSpiderName(spider.getName());
+        task.setStatus(runImmediately ? "RUNNING" : "PENDING");
+        if (runImmediately) {
+            task.setStartTime(LocalDateTime.now());
+        }
+        task.setSuccessCount(0);
+        task.setFailCount(0);
+        task.setTaskId(taskId);
+        task.setTaskMessage(payload);
+        taskMapper.insert(task);
+        log.info("任务已创建: id={}, taskId={}", task.getId(), taskId);
+
+        if (runImmediately) {
+            kafkaTemplate.send(Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured"), payload);
+            log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
+        } else {
+            log.info("爬虫任务已加入等待队列: taskId={}, spider={}", taskId, spider.getName());
+        }
         return task;
     }
 
@@ -317,9 +330,13 @@ public class SpiderService {
     @SuppressWarnings("null")
     @Transactional(rollbackFor = Exception.class)
     public void deleteTask(Long id) {
-        SpiderTask task = taskMapper.selectById(id);
+        requireTaskCreationGuard();
+        SpiderTask task = taskMapper.selectByIdForUpdate(id);
         if (task == null) {
             throw new BizException("任务不存在");
+        }
+        if ("RUNNING".equals(task.getStatus()) || "CANCELING".equals(task.getStatus())) {
+            throw new BizException("运行中的任务不可删除，请先取消任务");
         }
         log.info("删除任务: id={}, taskId={}", id, task.getTaskId());
         // 任务日志的 task_id 字段存储的是任务的主键 id
@@ -329,16 +346,20 @@ public class SpiderService {
         log.info("删除任务记录: id={}", id);
     }
 
+    @Transactional(rollbackFor = Exception.class)
     public void cancelTask(Long id) {
-        SpiderTask task = taskMapper.selectById(id);
+        requireTaskCreationGuard();
+        SpiderTask task = taskMapper.selectByIdForUpdate(id);
         if (task == null) {
             throw new BizException("任务不存在");
         }
-        if ("RUNNING".equals(task.getStatus())) {
+        if ("PENDING".equals(task.getStatus())) {
             LocalDateTime endTime = LocalDateTime.now();
             task.setStatus("CANCELED");
             task.setEndTime(endTime);
-            task.setTotalCostMs(task.getStartTime() == null ? 0L : java.time.Duration.between(task.getStartTime(), endTime).toMillis());
+            taskMapper.updateById(task);
+        } else if ("RUNNING".equals(task.getStatus())) {
+            task.setStatus("CANCELING");
             taskMapper.updateById(task);
         }
     }
@@ -366,5 +387,41 @@ public class SpiderService {
         msg.setHeaders(spider.getHeaders());
         msg.setFollowRobots(spider.getFollowRobots());
         return msg;
+    }
+
+    @Scheduled(fixedDelayString = "${app.spider.queue-poll-delay-ms:1000}")
+    @Transactional(rollbackFor = Exception.class)
+    public void dispatchNextQueuedTask() {
+        requireTaskCreationGuard();
+        if (taskMapper.countActiveTasks() > 0) {
+            return;
+        }
+
+        SpiderTask task = taskMapper.selectNextPendingTaskForUpdate();
+        if (task == null) {
+            return;
+        }
+        if (task.getTaskMessage() == null || task.getTaskMessage().isBlank()) {
+            task.setStatus("FAILED");
+            task.setErrorMessage("任务消息缺失，无法派发");
+            task.setEndTime(LocalDateTime.now());
+            taskMapper.updateById(task);
+            log.error("排队任务缺少消息，已标记失败: taskId={}", task.getTaskId());
+            return;
+        }
+
+        task.setStatus("RUNNING");
+        task.setStartTime(LocalDateTime.now());
+        taskMapper.updateById(task);
+        kafkaTemplate.send(
+                Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured"),
+                task.getTaskMessage());
+        log.info("已派发排队任务: taskId={}, spider={}", task.getTaskId(), task.getSpiderName());
+    }
+
+    private void requireTaskCreationGuard() {
+        if (taskMapper.lockTaskCreation() == null) {
+            throw new BizException("任务队列未初始化，请执行数据库迁移");
+        }
     }
 }

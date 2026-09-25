@@ -403,8 +403,8 @@ const handleStop = async (row: any) => {
 const handleRun = async (row: any) => {
   row._running = true
   try {
-    await spiderRun(row.id)
-    ElMessage.success('任务已派发')
+    const res: any = await spiderRun(row.id)
+    ElMessage.success(res.data?.status === 'PENDING' ? '任务已加入等待队列' : '任务已派发')
   } finally {
     row._running = false
   }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.collect.common.entity.BaseEntity;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -40,4 +41,7 @@ public class SpiderTask extends BaseEntity {
     private Integer imageExistingCount;
     private String errorMessage;
     private Long taskId;
+    @JsonIgnore
+    @TableField("task_message")
+    private String taskMessage;
 }

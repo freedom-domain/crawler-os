@@ -144,7 +144,8 @@ public class CrawlerEngine {
         if (!executorTerminated) {
             task.setStatus("FAILED");
             task.setErrorMessage("任务线程未在超时时间内结束，可能仍有页面或图片处理未完成");
-        } else if (latestTask != null && "CANCELED".equals(latestTask.getStatus())) {
+        } else if (latestTask != null
+                && ("CANCELED".equals(latestTask.getStatus()) || "CANCELING".equals(latestTask.getStatus()))) {
             task.setStatus("CANCELED");
         } else {
             task.setStatus("SUCCESS");

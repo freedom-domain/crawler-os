@@ -14,6 +14,20 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
 
+    @Select("SELECT id FROM spider_task_creation_guard WHERE id = 1 FOR UPDATE")
+    Long lockTaskCreation();
+
+    @Select("SELECT * FROM spider_task WHERE id = #{id} AND deleted = 0 FOR UPDATE")
+    SpiderTask selectByIdForUpdate(@Param("id") Long id);
+
+    @Select("SELECT COUNT(*) FROM spider_task "
+            + "WHERE deleted = 0 AND status IN ('RUNNING', 'CANCELING')")
+    long countActiveTasks();
+
+    @Select("SELECT * FROM spider_task WHERE deleted = 0 AND status = 'PENDING' "
+            + "ORDER BY create_time ASC, id ASC LIMIT 1 FOR UPDATE")
+    SpiderTask selectNextPendingTaskForUpdate();
+
     @Select({
         "<script>",
             "SELECT t.*, stats.html_success_count, stats.html_fail_count, stats.html_existing_count, "

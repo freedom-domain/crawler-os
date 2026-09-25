@@ -616,8 +616,8 @@ const handleRerun = async (row: any) => {
       confirmButtonText: '确定',
       cancelButtonText: '取消'
     })
-    await spiderRerun(row.spiderId, row.url)
-    ElMessage.success('重新爬取任务已创建')
+    const res: any = await spiderRerun(row.spiderId, row.url)
+    ElMessage.success(res.data?.status === 'PENDING' ? '重新爬取任务已加入等待队列' : '重新爬取任务已派发')
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(error?.message || '重新爬取失败')

@@ -18,6 +18,8 @@
       <span class="filter-label">状态</span>
       <el-select v-model="statusFilter" placeholder="全部" clearable style="width: 120px">
         <el-option label="运行中" value="RUNNING" />
+        <el-option label="排队中" value="PENDING" />
+        <el-option label="取消中" value="CANCELING" />
         <el-option label="成功" value="SUCCESS" />
         <el-option label="失败" value="FAILED" />
         <el-option label="已取消" value="CANCELED" />
@@ -56,9 +58,9 @@
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right" resizable>
         <template #default="{ row }">
-          <el-button v-if="row.status === 'RUNNING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>
+          <el-button v-if="row.status === 'RUNNING' || row.status === 'PENDING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>
           <el-button size="small" type="primary" text @click="showLogs(row)">日志</el-button>
-          <el-button size="small" type="danger" text @click="handleDelete(row)">删除</el-button>
+          <el-button v-if="row.status !== 'RUNNING' && row.status !== 'CANCELING'" size="small" type="danger" text @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -212,7 +214,7 @@ const reloadLogs = () => {
 const statusTag = (status: string) => {
   const map: Record<string, string> = {
     RUNNING: 'primary', SUCCESS: 'success', FAILED: 'danger',
-    PENDING: 'warning', CANCELED: 'info'
+    PENDING: 'warning', CANCELING: 'warning', CANCELED: 'info'
   }
   return map[status] || 'info'
 }
@@ -220,7 +222,7 @@ const statusTag = (status: string) => {
 const statusLabel = (status: string) => {
   const map: Record<string, string> = {
     RUNNING: '运行中', SUCCESS: '成功', FAILED: '失败',
-    PENDING: '等待中', CANCELED: '已取消'
+    PENDING: '排队中', CANCELING: '正在取消', CANCELED: '已取消'
   }
   return map[status] || status
 }
@@ -259,7 +261,8 @@ const loadData = async () => {
     const records = res.data?.records || []
     for (const t of records) {
       const prev = prevStatusMap.get(String(t.id))
-      if (prev === 'RUNNING' && t.status !== 'RUNNING') {
+      if (['RUNNING', 'CANCELING'].includes(prev || '')
+          && ['SUCCESS', 'FAILED', 'CANCELED'].includes(t.status)) {
         const msg = t.status === 'SUCCESS'
           ? `任务「${t.spiderName}」已完成：成功 ${t.successCount} 条，失败 ${t.failCount} 条`
           : t.status === 'FAILED'
@@ -312,7 +315,7 @@ const loadLogs = async () => {
 const handleCancel = async (row: any) => {
   try {
     await taskCancel(row.id)
-    ElMessage.success('已取消')
+    ElMessage.success('已提交取消请求')
   } catch {
     ElMessage.error('取消失败')
   }
@@ -334,7 +337,9 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
-const hasActive = () => list.value.some((t: any) => t.status === 'RUNNING' || t.status === 'PENDING')
+const hasActive = () => list.value.some((t: any) =>
+  t.status === 'RUNNING' || t.status === 'PENDING' || t.status === 'CANCELING'
+)
 
 const startTimer = () => {
   stopTimer()
