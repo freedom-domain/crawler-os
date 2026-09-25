@@ -51,6 +51,11 @@ spring:
             exposedHeaders: "Authorization,Content-Disposition"
             allowCredentials: true
             maxAge: 3600
+  data:
+    redis:
+      host: ${REDIS_HOST:192.168.31.2}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:redis_4rzHHD}
 
 jwt:
   secret: crawler-platform-jwt-secret-key-must-be-long-enough-256
