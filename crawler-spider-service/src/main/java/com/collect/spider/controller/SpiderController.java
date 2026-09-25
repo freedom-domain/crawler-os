@@ -5,6 +5,7 @@ import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
 import com.collect.spider.dto.SpiderCreateReq;
+import com.collect.spider.dto.SpiderImportResult;
 import com.collect.spider.dto.SpiderRerunReq;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.dto.TaskStatsResponse;
@@ -17,6 +18,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import com.alibaba.fastjson2.JSON;
 
 import java.util.List;
 
@@ -33,6 +39,33 @@ public class SpiderController {
     public R<Spider> create(@Valid @RequestBody SpiderCreateReq req) {
         requirePermission("spider:create");
         return R.ok(spiderService.create(req));
+    }
+
+    @Operation(summary = "导出爬虫配置")
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export() {
+        requirePermission("spider:create");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=spiders.json")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(spiderService.exportAll());
+    }
+
+    @Operation(summary = "导入爬虫配置")
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public R<SpiderImportResult> importConfigs(@RequestParam("file") MultipartFile file) {
+        requirePermission("spider:create");
+        if (file == null || file.isEmpty()) {
+            throw new BizException("导入文件不能为空");
+        }
+        try {
+            List<SpiderCreateReq> configs = JSON.parseArray(
+                    new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8),
+                    SpiderCreateReq.class);
+            return R.ok(spiderService.importConfigs(configs));
+        } catch (Exception e) {
+            throw new BizException("导入文件格式错误");
+        }
     }
 
     @Operation(summary = "爬虫分页列表")

@@ -122,7 +122,7 @@ const MENU_CACHE_TTL = 5 * 60 * 1000
 const draggedTab = ref('')
 const contextMenu = ref({ visible: false, x: 0, y: 0, key: '' })
 const activeTab = computed({
-  get: () => route.fullPath,
+  get: () => route.path,
   set: (value: string) => router.push(value)
 })
 const cachedRouteNames = computed(() => tabs.value.map(tab => tab.name).filter(Boolean) as string[])
@@ -133,11 +133,12 @@ const restoreTabs = () => {
     if (!Array.isArray(saved)) return
     const restored = saved.filter((tab): tab is { key: string; path: string; title: string; name?: string } =>
       tab && typeof tab.key === 'string' && typeof tab.path === 'string' && typeof tab.title === 'string' && tab.path !== '/login'
-    )
-    if (restored.length) {
-      tabs.value = restored.some(tab => tab.path === '/dashboard')
-        ? restored
-        : [{ key: '/dashboard', path: '/dashboard', title: '首页', name: 'Dashboard' }, ...restored]
+    ).map(tab => ({ ...tab, key: tab.path }))
+    const uniqueRestored = [...new Map(restored.map(tab => [tab.path, tab])).values()]
+    if (uniqueRestored.length) {
+      tabs.value = uniqueRestored.some(tab => tab.path === '/dashboard')
+        ? uniqueRestored
+        : [{ key: '/dashboard', path: '/dashboard', title: '首页', name: 'Dashboard' }, ...uniqueRestored]
     }
   } catch {
     localStorage.removeItem(TAB_STORAGE_KEY)
@@ -182,9 +183,9 @@ const titleForPath = (path: string) => {
 const openCurrentTab = () => {
   const current = route
   if (!current.name || current.path === '/login') return
-  if (!tabs.value.some(tab => tab.key === current.fullPath)) {
+  if (!tabs.value.some(tab => tab.path === current.path)) {
     tabs.value.push({
-      key: current.fullPath,
+      key: current.path,
       path: current.path,
       title: titleForPath(current.path),
       name: String(current.name)
@@ -196,17 +197,17 @@ watch(() => route.fullPath, openCurrentTab, { immediate: true })
 
 const handleTabClick = (pane: any) => {
   const target = tabs.value.find(tab => tab.key === pane.paneName)
-  if (target && target.key !== route.fullPath) router.push(target.key)
+  if (target && target.path !== route.path) router.push(target.path)
 }
 
 const closeTab = (key: string) => {
   const index = tabs.value.findIndex(tab => tab.key === key)
   if (index < 0 || tabs.value[index].path === '/dashboard') return
-  const wasActive = key === route.fullPath
+  const wasActive = tabs.value[index].path === route.path
   tabs.value.splice(index, 1)
   if (wasActive) {
     const next = tabs.value[index] || tabs.value[index - 1] || tabs.value[0]
-    if (next) router.push(next.key)
+    if (next) router.push(next.path)
   }
 }
 
@@ -244,7 +245,7 @@ const closeOtherTabs = () => {
   const current = tabs.value.find(tab => tab.key === key)
   tabs.value = tabs.value.filter(tab => tab.path === '/dashboard' || tab.key === key)
   contextMenu.value.visible = false
-  if (current && current.key !== route.fullPath) router.push(current.key)
+  if (current && current.path !== route.path) router.push(current.path)
 }
 
 const closeAllTabs = () => {

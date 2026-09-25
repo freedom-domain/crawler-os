@@ -36,6 +36,12 @@ export const spiderStart = (id: number) => request.put(`/spider/${id}/start`)
 export const spiderStop = (id: number) => request.put(`/spider/${id}/stop`)
 export const spiderRun = (id: number) => request.post(`/spider/${id}/run`)
 export const spiderRerun = (id: number, url: string) => request.post(`/spider/${id}/rerun`, { url })
+export const spiderExport = () => request.get('/spider/export', { responseType: 'blob' })
+export const spiderImport = (file: File) => {
+  const data = new FormData()
+  data.append('file', file)
+  return request.post('/spider/import', data)
+}
 
 export const taskPage = (params: any) => request.get('/spider/task/page', { params })
 export const recentTaskList = (size = 5) => request.get('/spider/task/recent', { params: { size } })
@@ -51,6 +57,8 @@ export const syncSearchHistory = (keywords: string[]) => request.post('/search/h
 export const clearSearchHistory = () => request.delete('/search/history')
 export const deleteSearchHistory = (keyword: string) => request.delete('/search/history/item', { params: { keyword } })
 export const searchDetail = (id: string) => request.get(`/search/${id}`)
+export const searchDeleteImage = (id: string, objectName: string) =>
+  request.delete(`/search/${id}/images`, { params: { objectName } })
 export const searchDelete = (id: string) => request.delete(`/search/${id}`)
 export const searchUpdateTags = (id: string, tags: string[]) => request.put(`/search/${id}/tags`, tags)
 export const favoritePage = (params: any) => request.get('/search/favorites', { params })

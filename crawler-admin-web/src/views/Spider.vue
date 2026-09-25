@@ -3,7 +3,13 @@
     <template #header>
       <div class="card-header">
         <span>爬虫管理</span>
-        <el-button type="primary" @click="showCreate" :icon="Plus">新建爬虫</el-button>
+        <div>
+          <el-button @click="handleExport">导出配置</el-button>
+          <el-upload :show-file-list="false" :before-upload="handleImport" accept=".json">
+            <el-button>导入配置</el-button>
+          </el-upload>
+          <el-button type="primary" @click="showCreate" :icon="Plus">新建爬虫</el-button>
+        </div>
       </div>
     </template>
 
@@ -103,6 +109,13 @@
         <el-form-item label="图片选择器">
           <el-input v-model="form.imageSelector" placeholder="CSS选择器，如 .article img 或 #content" />
         </el-form-item>
+        <el-form-item label="VIP选择器">
+          <el-input v-model="form.vipSelector" placeholder="CSS选择器，如 .vip 或 .member-only" />
+          <div class="form-tip">命中选择器且元素文本包含下方内容时，跳过图片下载</div>
+        </el-form-item>
+        <el-form-item label="VIP包含内容">
+          <el-input v-model="form.vipSelectorContent" placeholder="选择器命中文本需包含的内容" />
+        </el-form-item>
         <el-form-item label="覆盖HTML">
           <el-switch v-model="form.overwriteHtml" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
           <div class="form-tip">开启后重新爬取会覆盖 ES 中的内容；关闭则内容未变化时跳过</div>
@@ -162,7 +175,7 @@
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, dictTree } from '@/api'
+import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -182,7 +195,7 @@ const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
 const form = ref({
   name: '', description: '', type: 'http', group: '',
-  contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
+  contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
 })
 
 // 调度表达式生成器
@@ -263,9 +276,35 @@ const loadData = async () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', contentSelector: '', imageSelector: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
   startUrlsStr.value = ''
   createVisible.value = true
+}
+
+const handleExport = async () => {
+  try {
+    const blob: Blob = await spiderExport() as any
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'spiders.json'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('导出失败')
+  }
+}
+
+const handleImport = async (file: File) => {
+  try {
+    const res: any = await spiderImport(file)
+    const result = res.data || {}
+    ElMessage.success(`导入完成：成功 ${result.imported} 个，跳过 ${result.skipped} 个，失败 ${result.failed} 个`)
+    loadData()
+  } catch {
+    ElMessage.error('导入失败')
+  }
+  return false
 }
 
 const showEdit = async (row: any) => {
@@ -274,7 +313,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '',
-    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
+    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0
   }
   try {

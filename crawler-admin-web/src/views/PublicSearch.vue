@@ -40,6 +40,7 @@
         <div class="header-user">
           <template v-if="isLoggedIn">
             <span class="user-nickname">{{ userStore.nickname || userStore.username }}</span>
+            <el-button size="small" @click="openAdminSearch">后台管理</el-button>
             <el-button size="small" @click="handleLogout">登出</el-button>
           </template>
           <el-button v-else type="primary" size="small" @click="loginVisible = true">登录</el-button>
@@ -207,8 +208,14 @@ import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { searchContent, searchDetail, dictChildren, spiderPage, favoriteAdd, favoriteDelete, searchDelete, spiderRerun } from '@/api'
 import { Search, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 import router from '@/router'
+import { useRoute } from 'vue-router'
 
 const list = ref<any[]>([])
+const route = useRoute()
+
+const openAdminSearch = () => {
+  window.open('/search', 'crawler-admin-search')
+}
 const userStore = useUserStore()
 const isLoggedIn = computed(() => Boolean(userStore.token))
 
@@ -418,6 +425,16 @@ const doSearch = () => {
     const merged = [newEntry, ...values.filter(item => item.keyword !== newEntry.keyword)].slice(0, 20)
     localStorage.setItem('crawler-search-history', JSON.stringify(merged))
   }
+  router.replace({
+    query: {
+      ...(keyword.value ? { keyword: keyword.value } : {}),
+      ...(filterSpider.value ? { spiderId: String(filterSpider.value) } : {}),
+      ...(filterGroup.value ? { group: filterGroup.value } : {}),
+      ...(filterTag.value ? { tag: filterTag.value } : {}),
+      ...(favoriteOnly.value && isLoggedIn.value ? { favoriteOnly: 'true' } : {}),
+      ...(hasImages.value ? { hasImages: 'true' } : {})
+    }
+  })
   scrollToTop()
   loadData()
 }
@@ -736,6 +753,13 @@ const onSpiderChange = () => {
 
 onMounted(() => {
   document.title = 'CrawlerOS 数据搜索'
+  keyword.value = String(route.query.keyword || '')
+  filterGroup.value = String(route.query.group || '')
+  filterTag.value = String(route.query.tag || '')
+  favoriteOnly.value = route.query.favoriteOnly === 'true'
+  hasImages.value = route.query.hasImages === 'true'
+  const spiderId = Number(route.query.spiderId)
+  filterSpider.value = Number.isInteger(spiderId) && spiderId > 0 ? spiderId : ''
   loadGroupOptions()
   loadTagOptions()
   loadSpiderOptions()

@@ -102,6 +102,14 @@ public class SearchController {
         return R.ok(searchService.getById(id));
     }
 
+    @Operation(summary = "删除内容图片")
+    @DeleteMapping("/{id}/images")
+    public R<Void> deleteImage(@PathVariable("id") String id, @RequestParam("objectName") String objectName) throws IOException {
+        requirePermission("search:query");
+        searchService.deleteImage(id, objectName);
+        return R.ok();
+    }
+
     @Operation(summary = "更新数据标签")
     @PutMapping("/{id}/tags")
     public R<Void> updateTags(@PathVariable("id") String id, @RequestBody List<String> tags) throws IOException {

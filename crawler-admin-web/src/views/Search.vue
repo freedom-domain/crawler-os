@@ -1,6 +1,11 @@
 <template>
   <el-card>
-    <template #header><span>数据搜索</span></template>
+    <template #header>
+      <div class="search-header">
+        <span>数据搜索</span>
+        <el-button size="small" @click="openPublicSearch">打开公共搜索</el-button>
+      </div>
+    </template>
 
     <div class="search-bar">
       <div class="search-row">
@@ -156,7 +161,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SearchResultList from '@/components/SearchResultList.vue'
 import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
@@ -167,6 +172,11 @@ import { searchContent, searchDetail, searchDelete, dictChildren, spiderPage, sp
 import { Search, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
 
 const router = useRouter()
+const route = useRoute()
+
+const openPublicSearch = () => {
+  window.open('/public/search', 'crawler-public-search')
+}
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -370,6 +380,16 @@ const doSearch = () => {
   searchAfter.value = ''
   hasMore.value = false
   historyOpen.value = false
+  router.replace({
+    query: {
+      ...(keyword.value ? { keyword: keyword.value } : {}),
+      ...(filterSpider.value ? { spiderId: String(filterSpider.value) } : {}),
+      ...(filterGroup.value ? { group: filterGroup.value } : {}),
+      ...(filterTag.value ? { tag: filterTag.value } : {}),
+      ...(favoriteOnly.value ? { favoriteOnly: 'true' } : {}),
+      ...(hasImages.value ? { hasImages: 'true' } : {})
+    }
+  })
   loadData()
 }
 
@@ -681,6 +701,13 @@ const onSpiderChange = () => {
 }
 
 onMounted(() => {
+  keyword.value = String(route.query.keyword || '')
+  filterGroup.value = String(route.query.group || '')
+  filterTag.value = String(route.query.tag || '')
+  favoriteOnly.value = route.query.favoriteOnly === 'true'
+  hasImages.value = route.query.hasImages === 'true'
+  const spiderId = Number(route.query.spiderId)
+  filterSpider.value = Number.isInteger(spiderId) && spiderId > 0 ? spiderId : ''
   loadGroupOptions()
   loadTagOptions()
   loadSpiderOptions()
@@ -689,6 +716,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.search-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .search-bar {
   margin-bottom: 20px;
   display: flex;

@@ -47,4 +47,5 @@ public class SpiderContentDoc {
 
     @Field(type = FieldType.Keyword)
     private List<String> images;
+
 }

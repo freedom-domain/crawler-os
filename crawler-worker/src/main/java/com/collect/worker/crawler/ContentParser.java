@@ -86,4 +86,11 @@ public class ContentParser {
         }
         return urls;
     }
+
+    public static boolean matchesSelectorContent(Document doc, String selector, String content) {
+        if (doc == null || selector == null || selector.isBlank() || content == null || content.isBlank()) {
+            return false;
+        }
+        return doc.select(selector).stream().anyMatch(element -> element.text().contains(content));
+    }
 }

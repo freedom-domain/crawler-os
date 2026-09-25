@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
 import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
+import com.collect.spider.dto.SpiderImportResult;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.dto.TaskStatsResponse;
 import com.collect.spider.entity.Spider;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.ArrayList;
 
 @Slf4j
 @Service
@@ -50,6 +52,8 @@ public class SpiderService {
         spider.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         spider.setContentSelector(req.getContentSelector());
         spider.setImageSelector(req.getImageSelector());
+        spider.setVipSelector(req.getVipSelector());
+        spider.setVipSelectorContent(req.getVipSelectorContent());
         spider.setOverwriteHtml(req.getOverwriteHtml());
         spider.setOverwriteImage(req.getOverwriteImage());
         spider.setGroup(req.getGroup());
@@ -84,6 +88,64 @@ public class SpiderService {
         return spiderMapper.selectById(id);
     }
 
+    public byte[] exportAll() {
+        List<SpiderCreateReq> configs = new ArrayList<>();
+        for (Spider spider : spiderMapper.selectList(null)) {
+            SpiderCreateReq config = new SpiderCreateReq();
+            config.setName(spider.getName());
+            config.setDescription(spider.getDescription());
+            config.setType(spider.getType());
+            config.setStartUrls(JSON.parseArray(spider.getStartUrls(), String.class));
+            config.setContentSelector(spider.getContentSelector());
+            config.setImageSelector(spider.getImageSelector());
+            config.setVipSelector(spider.getVipSelector());
+            config.setVipSelectorContent(spider.getVipSelectorContent());
+            config.setOverwriteHtml(spider.getOverwriteHtml());
+            config.setOverwriteImage(spider.getOverwriteImage());
+            config.setGroup(spider.getGroup());
+            config.setSchedule(spider.getSchedule());
+            config.setMaxDepth(spider.getMaxDepth());
+            config.setTimeout(spider.getTimeout());
+            config.setHeaders(spider.getHeaders());
+            config.setFollowRobots(spider.getFollowRobots());
+            config.setEnabled(spider.getEnabled());
+            configs.add(config);
+        }
+        return JSON.toJSONString(configs).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    @Transactional
+    public SpiderImportResult importConfigs(List<SpiderCreateReq> configs) {
+        int imported = 0;
+        int skipped = 0;
+        int failed = 0;
+        if (configs == null) {
+            return new SpiderImportResult(0, 0, 0);
+        }
+        for (SpiderCreateReq config : configs) {
+            if (config == null || config.getName() == null || config.getName().isBlank()
+                    || config.getType() == null || config.getType().isBlank()
+                    || config.getStartUrls() == null || config.getStartUrls().isEmpty()) {
+                failed++;
+                continue;
+            }
+            Spider existing = spiderMapper.selectOne(
+                    new LambdaQueryWrapper<Spider>().eq(Spider::getName, config.getName()));
+            if (existing != null) {
+                skipped++;
+                continue;
+            }
+            try {
+                create(config);
+                imported++;
+            } catch (RuntimeException e) {
+                log.warn("导入爬虫失败: name={}", config.getName(), e);
+                failed++;
+            }
+        }
+        return new SpiderImportResult(imported, skipped, failed);
+    }
+
     public void update(Long id, SpiderUpdateReq req) {
         Spider exist = spiderMapper.selectById(id);
         if (exist == null) {
@@ -101,6 +163,8 @@ public class SpiderService {
         exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         exist.setContentSelector(req.getContentSelector());
         exist.setImageSelector(req.getImageSelector());
+        exist.setVipSelector(req.getVipSelector());
+        exist.setVipSelectorContent(req.getVipSelectorContent());
         exist.setOverwriteHtml(req.getOverwriteHtml());
         exist.setOverwriteImage(req.getOverwriteImage());
         exist.setGroup(req.getGroup());
@@ -281,6 +345,8 @@ public class SpiderService {
         msg.setStartUrls(startUrls);
         msg.setContentSelector(spider.getContentSelector());
         msg.setImageSelector(spider.getImageSelector());
+        msg.setVipSelector(spider.getVipSelector());
+        msg.setVipSelectorContent(spider.getVipSelectorContent());
         msg.setOverwriteHtml(spider.getOverwriteHtml());
         msg.setOverwriteImage(spider.getOverwriteImage());
         msg.setMaxDepth(spider.getMaxDepth());

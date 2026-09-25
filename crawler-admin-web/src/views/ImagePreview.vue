@@ -1,5 +1,5 @@
 <template>
-  <div class="image-preview-page">
+  <div class="image-preview-page" @click="hideImageMenu">
     <!-- 工具栏触发按钮 -->
     <button 
       type="button" 
@@ -80,8 +80,18 @@
           :alt="`图片 ${pageStart + idx + 1}`"
           loading="lazy"
           @click="openViewer(pageStart + idx)"
+          @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
         />
         <div v-if="!images.length" class="empty-state">暂无图片</div>
+      </div>
+
+      <div
+        v-if="imageMenu.visible"
+        class="image-context-menu"
+        :style="{ left: `${imageMenu.x}px`, top: `${imageMenu.y}px` }"
+        @click.stop
+      >
+        <button type="button" @click="deleteSelectedImage">删除图片</button>
       </div>
 
       <!-- 分页控件 -->
@@ -101,6 +111,7 @@
             :src="images[viewerIndex]"
             :alt="`图片 ${viewerIndex + 1}`"
             :style="{ transform: `scale(${viewerScale})` }"
+            @contextmenu.prevent="openImageMenu($event, viewerIndex)"
           />
         </div>
 
@@ -130,12 +141,17 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
-import { searchDetail } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { searchDeleteImage, searchDetail } from '@/api'
+import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
+const userStore = useUserStore()
 
 const title = ref('图片预览')
 const images = ref<string[]>([])
+const imageObjects = ref<string[]>([])
+const imageMenu = ref({ visible: false, x: 0, y: 0, index: -1 })
 const loading = ref(false)
 const loadError = ref('')
 const gridScale = ref(1)
@@ -315,6 +331,7 @@ const loadImages = async () => {
     // 加载前保持传递过来的 title 不变，仅在未传递 title 时才使用文档中的 title
     if (!title.value && doc?.title) title.value = doc.title
     const rawImages: string[] = doc?.images || []
+    imageObjects.value = rawImages
     images.value = rawImages.map(imageUrl).filter(Boolean)
     // 移动端竖屏默认每页 1 张；桌面端超过 4 张时每页显示 3 张，否则每页 4 张
     // 每页数量不能超过图片总数
@@ -323,6 +340,7 @@ const loadImages = async () => {
     if (isMobile()) {
       cols.value = 1
     }
+
     page.value = 1
     if (!images.value.length) {
       loadError.value = '该条内容暂无图片'
@@ -331,6 +349,42 @@ const loadImages = async () => {
     loadError.value = '图片加载失败，请稍后重试'
   } finally {
     loading.value = false
+  }
+}
+
+const openImageMenu = (event: MouseEvent, index: number) => {
+  if (!userStore.token) return
+  imageMenu.value = { visible: true, x: event.clientX, y: event.clientY, index }
+}
+
+const hideImageMenu = () => {
+  imageMenu.value.visible = false
+}
+
+const deleteSelectedImage = async () => {
+  const index = imageMenu.value.index
+  imageMenu.value.visible = false
+  const id = route.query.id as string
+  const objectName = imageObjects.value[index]
+  if (!id || !objectName) return
+  try {
+    await ElMessageBox.confirm('确定删除选定的图片吗？删除后无法恢复。', '删除图片', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  try {
+    await searchDeleteImage(id, objectName)
+    images.value.splice(index, 1)
+    imageObjects.value.splice(index, 1)
+    viewerIndex.value = Math.min(viewerIndex.value, Math.max(0, images.value.length - 1))
+    if (!images.value.length) loadError.value = '该条内容暂无图片'
+    ElMessage.success('图片已删除')
+  } catch {
+    ElMessage.error('图片删除失败')
   }
 }
 
@@ -506,6 +560,27 @@ onBeforeUnmount(() => {
   color: #1e293b;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   overflow: auto;
+}
+
+.image-context-menu {
+  position: fixed;
+  z-index: 100;
+  min-width: 110px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 15%);
+}
+
+.image-context-menu button {
+  width: 100%;
+  padding: 7px 12px;
+  color: #f56c6c;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
 }
 
 @supports (min-height: 100dvh) {

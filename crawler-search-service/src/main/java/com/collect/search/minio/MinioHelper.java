@@ -2,6 +2,7 @@ package com.collect.search.minio;
 
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
+import io.minio.RemoveObjectArgs;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -39,5 +40,12 @@ public class MinioHelper {
             log.warn("从 MinIO 读取 HTML 失败: bucket={}, object={}", bucket, objectName, e);
             return null;
         }
+    }
+
+    public void removeObject(String bucket, String objectName) throws Exception {
+        minioClient.removeObject(RemoveObjectArgs.builder()
+                .bucket(bucket)
+                .object(objectName)
+                .build());
     }
 }

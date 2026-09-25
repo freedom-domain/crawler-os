@@ -24,6 +24,10 @@ public class SpiderCreateReq {
 
     private String imageSelector;
 
+    private String vipSelector;
+
+    private String vipSelectorContent;
+
     private Integer overwriteHtml = 0;
     private Integer overwriteImage = 0;
 

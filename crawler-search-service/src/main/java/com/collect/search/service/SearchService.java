@@ -59,6 +59,9 @@ public class SearchService {
     @Value("${minio.js-bucket:crawler}")
     private String jsBucket;
 
+    @Value("${minio.image-bucket:crawler}")
+    private String imageBucket;
+
     /** 排序字段数量（updateTime + url），用于截断 PIT 追加的 shard 路由值 */
     private static final int SORT_FIELD_COUNT = 2;
 
@@ -100,12 +103,17 @@ public class SearchService {
                     .map(id -> co.elastic.clients.elasticsearch._types.FieldValue.of(id))
                     .collect(Collectors.toList());
             boolBuilder.must(m -> m.terms(t -> t.field("spiderId").terms(tt -> tt.value(idValues))));
-        } else if (spiderId != null) {
+        }
+        // 分组和具体爬虫条件可以同时存在：前端选择爬虫时会同步带上所属分组，
+        // 不能使用 else-if，否则具体爬虫条件会被分组条件覆盖。
+        if (spiderId != null) {
             boolBuilder.must(m -> m.term(t -> t.field("spiderId").value(spiderId)));
         }
 
         if (hasImages) {
-            boolBuilder.must(m -> m.exists(e -> e.field("images")));
+            // 直接依据图片数组是否包含实际元素过滤，空数组不计入结果。
+            boolBuilder.must(m -> m.script(s -> s.script(script -> script
+                    .source("doc.containsKey('images') && doc['images'].size() > 0"))));
         }
 
         if (favoriteOnly) {
@@ -365,6 +373,28 @@ public class SearchService {
             }
         }
         return doc;
+    }
+
+    public void deleteImage(String contentId, String objectName) throws java.io.IOException {
+        if (objectName == null || objectName.isBlank()) {
+            throw new com.collect.common.exception.BizException("图片地址不能为空");
+        }
+        SpiderContentDoc doc = elasticsearchClient
+                .get(g -> g.index(indexName).id(contentId), SpiderContentDoc.class)
+                .source();
+        if (doc == null || doc.getImages() == null || !doc.getImages().contains(objectName)) {
+            throw new com.collect.common.exception.BizException("图片不存在");
+        }
+        List<String> remaining = doc.getImages().stream()
+                .filter(image -> !objectName.equals(image))
+                .toList();
+        doc.setImages(remaining);
+        elasticsearchClient.index(i -> i.index(indexName).id(contentId).document(doc));
+        try {
+            minioHelper.removeObject(imageBucket, objectName);
+        } catch (Exception e) {
+            log.warn("删除 MinIO 图片失败: bucket={}, object={}", imageBucket, objectName, e);
+        }
     }
 
     private String rewriteStaticResourceUrls(String html, String baseUrl) {

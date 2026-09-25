@@ -245,7 +245,9 @@ public class CrawlerEngine {
                 docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
                 // HTML 原文不再写入 ES，统一存入 MinIO（见 saveHtmlAndJs）
                 // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
-                List<String> imageUrls = extractAndUploadImages(doc, url, parsed.getTitle(), msg, task, overwriteImage);
+                List<String> imageUrls = shouldSkipImageDownload(doc, msg)
+                        ? List.of()
+                        : extractAndUploadImages(doc, url, parsed.getTitle(), msg, task, overwriteImage);
                 docObj.setImages(imageUrls);
 
                 // HTML 原文存入 html 目录，页面引用的 JS 存入 js 目录
@@ -421,6 +423,7 @@ public class CrawlerEngine {
                 log.info("页面未匹配到图片选择器: url={}, selector={}", pageUrl, selector);
                 return uploadedUrls;
             }
+
             // 收集选择器命中的元素本身（若是 img）以及其内部的所有 img
             List<Element> imgs = new java.util.ArrayList<>();
             for (Element el : matched) {
@@ -487,6 +490,16 @@ public class CrawlerEngine {
             log.warn("图片提取失败: url={}", pageUrl, e);
         }
         return uploadedUrls;
+    }
+
+    private boolean shouldSkipImageDownload(Document doc, TaskMessage msg) {
+        boolean matched = ContentParser.matchesSelectorContent(
+                doc, msg.getVipSelector(), msg.getVipSelectorContent());
+        if (matched) {
+            log.info("页面匹配 VIP 选择器内容，跳过图片下载: selector={}, content={}",
+                    msg.getVipSelector(), msg.getVipSelectorContent());
+        }
+        return matched;
     }
 
     /**
