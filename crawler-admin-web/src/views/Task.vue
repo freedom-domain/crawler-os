@@ -12,11 +12,11 @@
 
     <div class="filter-bar">
       <span class="filter-label">爬虫</span>
-      <el-select v-model="spiderFilter" placeholder="全部" clearable style="width: 160px" @change="loadData">
+      <el-select v-model="spiderFilter" placeholder="全部" clearable style="width: 160px">
         <el-option v-for="s in spiders" :key="s.id" :label="s.name" :value="s.id" />
       </el-select>
       <span class="filter-label">状态</span>
-      <el-select v-model="statusFilter" placeholder="全部" clearable style="width: 120px" @change="loadData">
+      <el-select v-model="statusFilter" placeholder="全部" clearable style="width: 120px">
         <el-option label="运行中" value="RUNNING" />
         <el-option label="成功" value="SUCCESS" />
         <el-option label="失败" value="FAILED" />

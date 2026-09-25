@@ -42,6 +42,10 @@
         "/^git config --get pull\\.rebase \\|\\| true; git config --get pull\\.ff \\|\\| true; git remote -v$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^mvn -q -Dmaven\\.repo\\.local=/tmp/crawler-platform-m2 -DskipTests package$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

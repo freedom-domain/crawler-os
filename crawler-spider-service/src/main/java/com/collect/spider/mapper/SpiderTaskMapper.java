@@ -16,14 +16,21 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
 
     @Select({
         "<script>",
-            "SELECT t.*, "
-                + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 1) AS html_success_count, "
-                + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 0) AS html_fail_count, "
-                + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'html' AND l.status = 2) AS html_existing_count, "
-                + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'image' AND l.status = 1) AS image_success_count, "
-                + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'image' AND l.status = 0) AS image_fail_count, "
-                + "(SELECT COUNT(*) FROM spider_task_log l WHERE l.task_id = t.id AND l.deleted = 0 AND l.type = 'image' AND l.status = 2) AS image_existing_count",
+            "SELECT t.*, stats.html_success_count, stats.html_fail_count, stats.html_existing_count, "
+                + "stats.image_success_count, stats.image_fail_count, stats.image_existing_count",
         "FROM spider_task t",
+        "LEFT JOIN (",
+            "SELECT l.task_id, "
+                + "SUM(CASE WHEN l.type = 'html' AND l.status = 1 THEN 1 ELSE 0 END) AS html_success_count, "
+                + "SUM(CASE WHEN l.type = 'html' AND l.status = 0 THEN 1 ELSE 0 END) AS html_fail_count, "
+                + "SUM(CASE WHEN l.type = 'html' AND l.status = 2 THEN 1 ELSE 0 END) AS html_existing_count, "
+                + "SUM(CASE WHEN l.type = 'image' AND l.status = 1 THEN 1 ELSE 0 END) AS image_success_count, "
+                + "SUM(CASE WHEN l.type = 'image' AND l.status = 0 THEN 1 ELSE 0 END) AS image_fail_count, "
+                + "SUM(CASE WHEN l.type = 'image' AND l.status = 2 THEN 1 ELSE 0 END) AS image_existing_count",
+            "FROM spider_task_log l",
+            "WHERE l.deleted = 0",
+            "GROUP BY l.task_id",
+        ") stats ON stats.task_id = t.id",
         "WHERE t.deleted = 0",
         "<if test='spiderId != null'>AND t.spider_id = #{spiderId}</if>",
         "<if test=\"status != null and status != ''\">AND t.status = #{status}</if>",

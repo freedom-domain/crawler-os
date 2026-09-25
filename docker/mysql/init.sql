@@ -90,7 +90,8 @@ CREATE TABLE IF NOT EXISTS spider_task (
     error_message TEXT,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_spider_task_query (deleted, spider_id, status, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 任务日志
@@ -106,7 +107,9 @@ CREATE TABLE IF NOT EXISTS spider_task_log (
     cost_ms INT,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
-    update_time DATETIME
+    update_time DATETIME,
+    KEY idx_spider_task_log_stats (task_id, deleted, type, status),
+    KEY idx_spider_task_log_page (task_id, deleted, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 字典（标签，支持父子项）
