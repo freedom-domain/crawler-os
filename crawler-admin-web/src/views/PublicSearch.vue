@@ -57,7 +57,7 @@
               <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
             </el-option-group>
           </el-select>
-          <el-select v-if="isLoggedIn" v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
+          <el-select v-if="isLoggedIn" v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
             <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
           </el-select>
           <el-checkbox v-if="isLoggedIn" v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
@@ -740,7 +740,7 @@ const spiderGroupedOptions = computed(() => {
 })
 
 const onGroupChange = () => {
-  loadData()
+  doSearch()
 }
 
 const onSpiderChange = () => {
@@ -748,7 +748,7 @@ const onSpiderChange = () => {
     const spider = spiderOptions.value.find((s) => s.id === filterSpider.value)
     if (spider) filterGroup.value = spider.group || ''
   }
-  loadData()
+  doSearch()
 }
 
 onMounted(() => {

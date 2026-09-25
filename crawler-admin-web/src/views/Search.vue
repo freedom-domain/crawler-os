@@ -40,7 +40,7 @@
             <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
           </el-option-group>
         </el-select>
-        <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="loadData">
+        <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
           <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
         </el-select>
         <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
@@ -688,7 +688,7 @@ const spiderGroupedOptions = computed(() => {
 
 // 选择分组后刷新（分组在服务端解析为该分组下的爬虫 ID 进行查询）
 const onGroupChange = () => {
-  loadData()
+  doSearch()
 }
 
 // 联动：选择爬虫后，自动带出其所属分组
@@ -697,7 +697,7 @@ const onSpiderChange = () => {
     const spider = spiderOptions.value.find((s) => s.id === filterSpider.value)
     if (spider) filterGroup.value = spider.group || ''
   }
-  loadData()
+  doSearch()
 }
 
 onMounted(() => {
