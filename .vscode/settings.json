@@ -38,6 +38,10 @@
         "/^command -v docker-compose \\|\\| true; docker --version 2>/dev/null \\|\\| true; git diff --stat$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^git config --get pull\\.rebase \\|\\| true; git config --get pull\\.ff \\|\\| true; git remote -v$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }
