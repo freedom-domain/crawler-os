@@ -5,6 +5,9 @@ on:
   push:
     tags:
       - "v*.*.*"
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
@@ -74,6 +77,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
+            type=raw,value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
@@ -83,7 +87,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_arg }}
-          push: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          push: ${{ github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
