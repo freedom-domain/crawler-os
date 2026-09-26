@@ -7,7 +7,7 @@ COPY crawler-spider-service ./crawler-spider-service
 
 RUN mvn -pl crawler-spider-service -am -DskipTests clean package -q
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 COPY --from=builder /workspace/crawler-spider-service/target/*.jar /app/app.jar

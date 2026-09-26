@@ -7,7 +7,7 @@ COPY crawler-gateway ./crawler-gateway
 
 RUN mvn -pl crawler-gateway -am -DskipTests clean package -q
 
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 COPY --from=builder /workspace/crawler-gateway/target/*.jar /app/app.jar
