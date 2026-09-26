@@ -69,7 +69,7 @@ public class SearchService {
      * 搜索爬取的数据（PIT + search_after 游标式分页）。
      *
      * @param pitId       上一次查询返回的 PIT ID，首页传 null
-     * @param searchAfter 上一次查询返回的游标值（updateTime 毫秒值 + _id），首页传 null
+     * @param searchAfter 上一次查询返回的完整排序游标（包括 PIT 的稳定分页值），首页传 null
      */
     @SuppressWarnings("null")
     public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
@@ -189,13 +189,16 @@ public class SearchService {
 
         int sortFieldCount = BASE_SORT_FIELD_COUNT + (hasKeyword ? 1 : 0);
         if (searchAfter != null && !searchAfter.isEmpty()) {
-            List<FieldValue> afterValues = searchAfter.stream()
-                    .limit(sortFieldCount)
-                    .map(v -> v instanceof Number
-                            ? FieldValue.of(((Number) v).longValue())
-                            : FieldValue.of(String.valueOf(v)))
-                    .collect(Collectors.toList());
-            if (afterValues.size() == sortFieldCount) {
+            List<FieldValue> afterValues = new java.util.ArrayList<>();
+            try {
+                for (Object value : searchAfter) {
+                    afterValues.add(toSearchAfterValue(value));
+                }
+            } catch (IllegalArgumentException e) {
+                log.warn("Ignoring invalid search_after cursor", e);
+                afterValues.clear();
+            }
+            if (afterValues.size() >= sortFieldCount) {
                 reqBuilder.searchAfter(afterValues);
             } else {
                 log.warn("Ignoring invalid search_after cursor with {} values", afterValues.size());
@@ -253,12 +256,10 @@ public class SearchService {
                     sr.setTitleHl(doc.getTitle());
                     sr.setContentHl(snippet(doc.getContent()));
                 }
-                // PIT 会在 sort 值末尾追加 shard 路由值，只取前 N 个（N = 本次查询的排序字段数）。
-                // 保留日期/数值排序值的原始类型，否则下一页的 search_after 会被 ES 按字符串解析。
-                List<FieldValue> sortValues = hit.sort() != null && hit.sort().size() > sortFieldCount
-                        ? hit.sort().subList(0, sortFieldCount)
-                        : (hit.sort() != null ? hit.sort() : List.of());
-                sr.setSortValues(sortValues.stream().map(this::toSortValue).toList());
+                // Preserve every PIT sort value, including its implicit _shard_doc tiebreaker.
+                sr.setSortValues(hit.sort() != null
+                        ? hit.sort().stream().map(this::toSortValue).toList()
+                        : List.of());
                 results.add(sr);
             }
             var totalObj = response.hits().total();
@@ -300,6 +301,25 @@ public class SearchService {
             case Null -> null;
             default -> value.toString();
         };
+    }
+
+    private FieldValue toSearchAfterValue(Object value) {
+        if (value == null) {
+            return FieldValue.NULL;
+        }
+        if (value instanceof Boolean booleanValue) {
+            return FieldValue.of(booleanValue);
+        }
+        if (value instanceof Number number) {
+            if (number instanceof Float || number instanceof Double || number instanceof java.math.BigDecimal) {
+                return FieldValue.of(number.doubleValue());
+            }
+            return FieldValue.of(number.longValue());
+        }
+        if (value instanceof String stringValue) {
+            return FieldValue.of(stringValue);
+        }
+        throw new IllegalArgumentException("Unsupported search_after value type: " + value.getClass().getName());
     }
 
     /**

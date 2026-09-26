@@ -1,5 +1,5 @@
 <template>
-  <div class="public-search">
+  <div ref="publicSearchRef" class="public-search">
     <header class="ps-header">
       <div class="ps-header-inner">
         <div class="brand-mark" aria-label="CrawlerOS">
@@ -211,6 +211,7 @@ import router from '@/router'
 import { useRoute } from 'vue-router'
 
 const list = ref<any[]>([])
+const publicSearchRef = ref<HTMLElement | null>(null)
 const route = useRoute()
 
 const openAdminSearch = () => {
@@ -397,7 +398,22 @@ const openAllImages = (row: any) => {
 }
 
 const scrollToTop = () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+  publicSearchRef.value?.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const syncSearchQuery = () => {
+  router.replace({
+    query: {
+      ...(keyword.value ? { keyword: keyword.value } : {}),
+      ...(filterSpider.value ? { spiderId: String(filterSpider.value) } : {}),
+      ...(filterGroup.value ? { group: filterGroup.value } : {}),
+      ...(filterTag.value ? { tag: filterTag.value } : {}),
+      ...(favoriteOnly.value && isLoggedIn.value ? { favoriteOnly: 'true' } : {}),
+      ...(hasImages.value ? { hasImages: 'true' } : {}),
+      page: String(page.value),
+      size: String(size.value)
+    }
+  })
 }
 
 const doSearch = () => {
@@ -425,16 +441,7 @@ const doSearch = () => {
     const merged = [newEntry, ...values.filter(item => item.keyword !== newEntry.keyword)].slice(0, 20)
     localStorage.setItem('crawler-search-history', JSON.stringify(merged))
   }
-  router.replace({
-    query: {
-      ...(keyword.value ? { keyword: keyword.value } : {}),
-      ...(filterSpider.value ? { spiderId: String(filterSpider.value) } : {}),
-      ...(filterGroup.value ? { group: filterGroup.value } : {}),
-      ...(filterTag.value ? { tag: filterTag.value } : {}),
-      ...(favoriteOnly.value && isLoggedIn.value ? { favoriteOnly: 'true' } : {}),
-      ...(hasImages.value ? { hasImages: 'true' } : {})
-    }
-  })
+  syncSearchQuery()
   scrollToTop()
   loadData()
 }
@@ -444,18 +451,22 @@ const selectHistory = (value: string) => {
   doSearch()
 }
 
+const buildSearchParams = (pit = '', after = '') => {
+  const params: any = { size: size.value, keyword: keyword.value }
+  if (filterSpider.value) params.spiderId = filterSpider.value
+  if (filterGroup.value) params.spiderGroup = filterGroup.value
+  if (filterTag.value) params.tag = filterTag.value
+  if (favoriteOnly.value && isLoggedIn.value) params.favoriteOnly = true
+  if (hasImages.value) params.hasImages = true
+  if (pit) params.pitId = pit
+  if (after) params.searchAfter = after
+  return params
+}
+
 const loadData = async () => {
   loading.value = true
   try {
-    const params: any = { size: size.value, keyword: keyword.value }
-    if (filterSpider.value) params.spiderId = filterSpider.value
-    if (filterGroup.value) params.spiderGroup = filterGroup.value
-    if (filterTag.value) params.tag = filterTag.value
-    if (favoriteOnly.value && isLoggedIn.value) params.favoriteOnly = true
-    if (hasImages.value) params.hasImages = true
-    if (pitId.value) params.pitId = pitId.value
-    if (searchAfter.value) params.searchAfter = searchAfter.value
-    const res: any = await searchContent(params)
+    const res: any = await searchContent(buildSearchParams(pitId.value, searchAfter.value))
     if (res) {
       const data = res.data
       const content: any[] = data?.content || []
@@ -464,10 +475,44 @@ const loadData = async () => {
       pitId.value = data?.pitId || ''
       const last = content[content.length - 1]
       searchAfter.value = last?.sortValues ? JSON.stringify(last.sortValues) : ''
-      hasMore.value = content.length === size.value
+      hasMore.value = page.value * size.value < total.value
     }
   } finally {
     loading.value = false
+  }
+}
+
+const loadPageFromStart = async (targetPage: number) => {
+  loading.value = true
+  let pit = ''
+  let after = ''
+  let loadedPage = 0
+  let pageContent: any[] = []
+
+  try {
+    for (let currentPage = 1; currentPage <= targetPage; currentPage++) {
+      const res: any = await searchContent(buildSearchParams(pit, after))
+      if (!res) break
+
+      const data = res.data
+      pageContent = data?.content || []
+      total.value = data?.total ?? data?.totalElements ?? pageContent.length
+      pit = data?.pitId || pit
+      if (currentPage > 1 && pageContent.length === 0) break
+      const last = pageContent[pageContent.length - 1]
+      after = last?.sortValues ? JSON.stringify(last.sortValues) : ''
+      loadedPage = currentPage
+
+      if (currentPage < targetPage && pageContent.length < size.value) break
+    }
+  } finally {
+    list.value = pageContent
+    page.value = Math.max(1, loadedPage)
+    pitId.value = pit
+    searchAfter.value = after
+    hasMore.value = page.value * size.value < total.value
+    loading.value = false
+    syncSearchQuery()
   }
 }
 
@@ -475,6 +520,7 @@ const loadData = async () => {
 const loadNextPage = () => {
   if (loading.value || !hasMore.value) return
   page.value += 1
+  syncSearchQuery()
   scrollToTop()
   loadData()
 }
@@ -485,12 +531,6 @@ const loadPrevPage = () => {
   page.value -= 1
   const targetCount = page.value * size.value
   loading.value = true
-  const params: any = { size: size.value, keyword: keyword.value }
-  if (filterSpider.value) params.spiderId = filterSpider.value
-  if (filterGroup.value) params.spiderGroup = filterGroup.value
-  if (filterTag.value) params.tag = filterTag.value
-  if (favoriteOnly.value && isLoggedIn.value) params.favoriteOnly = true
-  if (hasImages.value) params.hasImages = true
   const collected: any[] = []
   let pit = ''
   let after = ''
@@ -500,8 +540,9 @@ const loadPrevPage = () => {
     list.value = collected.slice(pageStart, targetCount)
     pitId.value = pit
     searchAfter.value = after
-    hasMore.value = collected.length >= targetCount
+    hasMore.value = page.value * size.value < total.value
     loading.value = false
+    syncSearchQuery()
     scrollToTop()
   }
   const step = async (): Promise<void> => {
@@ -509,9 +550,7 @@ const loadPrevPage = () => {
       finish()
       return
     }
-    if (pit) params.pitId = pit
-    if (after) params.searchAfter = after
-    const res: any = await searchContent(params)
+    const res: any = await searchContent(buildSearchParams(pit, after))
     const data = res.data
     const content: any[] = data?.content || []
     collected.push(...content)
@@ -744,10 +783,6 @@ const onGroupChange = () => {
 }
 
 const onSpiderChange = () => {
-  if (filterSpider.value) {
-    const spider = spiderOptions.value.find((s) => s.id === filterSpider.value)
-    if (spider) filterGroup.value = spider.group || ''
-  }
   doSearch()
 }
 
@@ -758,12 +793,24 @@ onMounted(() => {
   filterTag.value = String(route.query.tag || '')
   favoriteOnly.value = route.query.favoriteOnly === 'true'
   hasImages.value = route.query.hasImages === 'true'
+  const requestedPage = Number(route.query.page)
+  page.value = Number.isInteger(requestedPage) && requestedPage > 0
+    ? Math.min(requestedPage, 50)
+    : 1
+  const requestedSize = Number(route.query.size)
+  if ([10, 20, 50, 100, 200, 500].includes(requestedSize)) {
+    size.value = requestedSize
+  }
   const spiderId = Number(route.query.spiderId)
   filterSpider.value = Number.isInteger(spiderId) && spiderId > 0 ? spiderId : ''
   loadGroupOptions()
   loadTagOptions()
   loadSpiderOptions()
-  loadData()
+  if (page.value > 1) {
+    void loadPageFromStart(page.value)
+  } else {
+    loadData()
+  }
 })
 </script>
 

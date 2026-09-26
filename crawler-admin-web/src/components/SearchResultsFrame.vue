@@ -13,7 +13,7 @@
     <div v-if="total > 0 && cursorMode" class="results-pagination cursor-pagination">
       <span class="cursor-total">共 {{ total }} 条</span>
       <el-button :disabled="loading || currentPage <= 1" @click="$emit('prev')">上一页</el-button>
-      <span class="cursor-page">第 {{ currentPage }} 页</span>
+      <span class="cursor-page">第 {{ currentPage }} / 共 {{ totalPages }} 页</span>
       <el-button :disabled="loading || !hasMore" @click="$emit('next')">下一页</el-button>
       <el-select
         :model-value="pageSize"
@@ -41,7 +41,9 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+
+const props = defineProps<{
   loading: boolean
   total: number
   currentPage: number
@@ -52,6 +54,8 @@ defineProps<{
   /** 游标式分页：是否还有下一页 */
   hasMore?: boolean
 }>()
+
+const totalPages = computed(() => Math.ceil(props.total / props.pageSize))
 
 defineEmits<{
   (event: 'update:currentPage', value: number): void

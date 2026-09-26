@@ -91,7 +91,8 @@
         :style="{ left: `${imageMenu.x}px`, top: `${imageMenu.y}px` }"
         @click.stop
       >
-        <button type="button" @click="deleteSelectedImage">删除图片</button>
+        <button v-if="userStore.token" class="context-action context-action-tag" type="button" @click="openTagEditor">设置标签</button>
+        <button class="context-action context-action-delete" type="button" @click="deleteSelectedImage">删除图片</button>
       </div>
 
       <!-- 分页控件 -->
@@ -134,6 +135,13 @@
         <div class="viewer-position">{{ viewerIndex + 1 }} / {{ images.length }}</div>
       </div>
     </Teleport>
+
+    <TagEditorDialog
+      v-model="tagVisible"
+      :row="tagCurrentRow"
+      :tag-options="tagOptions"
+      @saved="handleTagsSaved"
+    />
   </div>
 </template>
 
@@ -142,15 +150,21 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSPro
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { searchDeleteImage, searchDetail } from '@/api'
+import { dictChildren, searchDeleteImage, searchDetail } from '@/api'
 import { useUserStore } from '@/stores/user'
+import TagEditorDialog from '@/components/TagEditorDialog.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
+const contentId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 
 const title = ref('图片预览')
 const images = ref<string[]>([])
 const imageObjects = ref<string[]>([])
+const contentTags = ref<string[]>([])
+const tagVisible = ref(false)
+const tagCurrentRow = ref<{ id: string; tags: string[] } | null>(null)
+const tagOptions = ref<any[]>([])
 const imageMenu = ref({ visible: false, x: 0, y: 0, index: -1 })
 const loading = ref(false)
 const loadError = ref('')
@@ -276,6 +290,7 @@ onMounted(() => {
   // 移动端默认每页竖屏显示一张图片
   applyMobileDefaults()
   window.addEventListener('resize', onResize)
+  loadTagOptions()
 })
 
 onBeforeUnmount(() => {
@@ -317,7 +332,7 @@ const imageUrl = (objectName: string) => {
 
 // 通过内容 id（含爬虫信息与 url）从后端获取图片列表
 const loadImages = async () => {
-  const id = route.query.id as string
+  const id = contentId.value
   if (!id) {
     loadError.value = '缺少内容标识，无法加载图片'
     return
@@ -328,6 +343,7 @@ const loadImages = async () => {
   try {
     const res: any = await searchDetail(id)
     const doc = res.data
+    contentTags.value = doc?.tags || []
     // 加载前保持传递过来的 title 不变，仅在未传递 title 时才使用文档中的 title
     if (!title.value && doc?.title) title.value = doc.title
     const rawImages: string[] = doc?.images || []
@@ -350,6 +366,28 @@ const loadImages = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const loadTagOptions = async () => {
+  if (!userStore.token) return
+  try {
+    const res: any = await dictChildren('tag')
+    tagOptions.value = res.data || []
+  } catch {
+    ElMessage.error('标签选项加载失败')
+  }
+}
+
+const openTagEditor = () => {
+  imageMenu.value.visible = false
+  if (!contentId.value) return
+  tagCurrentRow.value = { id: contentId.value, tags: [...contentTags.value] }
+  tagVisible.value = true
+}
+
+const handleTagsSaved = (tags: string[]) => {
+  contentTags.value = tags
+  if (tagCurrentRow.value) tagCurrentRow.value.tags = tags
 }
 
 const openImageMenu = (event: MouseEvent, index: number) => {
@@ -565,22 +603,70 @@ onBeforeUnmount(() => {
 .image-context-menu {
   position: fixed;
   z-index: 100;
-  min-width: 110px;
-  padding: 4px;
-  background: #fff;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px rgb(0 0 0 / 15%);
+  min-width: 148px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2), 0 3px 8px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(14px);
+  animation: context-menu-in 0.14s ease-out;
 }
 
-.image-context-menu button {
+.context-action {
   width: 100%;
-  padding: 7px 12px;
-  color: #f56c6c;
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 11px;
+  border-radius: 8px;
   text-align: left;
   background: transparent;
   border: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
   cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.context-action:hover {
+  transform: translateX(2px);
+}
+
+.context-action-tag {
+  color: #2563eb;
+}
+
+.context-action-tag:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.context-action-delete {
+  color: #dc2626;
+}
+
+.context-action-delete:hover {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.context-action:focus-visible,
+.reset-btn:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.35);
+  outline-offset: 2px;
+}
+
+@keyframes context-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @supports (min-height: 100dvh) {
@@ -653,19 +739,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-.reset-btn {
-  padding: 8px 16px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  color: #475569;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  align-self: center;
-  flex-shrink: 0;
 }
 .toolbar-section {
   display: flex;
@@ -757,21 +830,30 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 .reset-btn {
-  padding: 5px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  background: #fff;
-  color: #475569;
+  padding: 7px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #fff 0%, #eff6ff 100%);
+  color: #2563eb;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.08);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   white-space: nowrap;
   flex-shrink: 0;
   align-self: center;
 }
 .reset-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
+}
+.reset-btn:active {
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.12);
+  transform: translateY(0);
 }
 .toolbar-trigger {
   width: 40px;
