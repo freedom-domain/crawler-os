@@ -98,15 +98,21 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}
-            registry.10241001.xyz/${{ matrix.service }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
             type=raw,value=${{ github.event.release.tag_name }},enable=${{ github.event_name == 'release' }}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Generate external registry image metadata
+        id: meta-external
+        uses: docker/metadata-action@v5
+        with:
+          images: registry.10241001.xyz/${{ matrix.service }}
+          tags: |
+            type=raw,value=latest
 
       - name: Build and publish image
         uses: docker/build-push-action@v6
@@ -115,7 +121,9 @@ jobs:
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_arg }}
           push: ${{ github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ steps.meta-external.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }},ignore-error=true
