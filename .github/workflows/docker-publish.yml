@@ -75,6 +75,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate external Container Registry credentials
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          if [[ -z "$REGISTRY_USERNAME" || -z "$REGISTRY_PASSWORD" ]]; then
+            echo "::error::Configure REGISTRY_USERNAME and REGISTRY_PASSWORD in repository Actions secrets."
+            exit 1
+          fi
+
       - name: Log in to external Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
