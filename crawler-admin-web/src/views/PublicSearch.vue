@@ -215,7 +215,19 @@ const publicSearchRef = ref<HTMLElement | null>(null)
 const route = useRoute()
 
 const openAdminSearch = () => {
-  window.open('/search', 'crawler-admin-search')
+  const query: Record<string, string> = {
+    page: String(page.value),
+    size: String(size.value)
+  }
+  if (keyword.value) query.keyword = keyword.value
+  if (filterSpider.value) query.spiderId = String(filterSpider.value)
+  if (filterGroup.value) query.group = filterGroup.value
+  if (filterTag.value) query.tag = filterTag.value
+  if (favoriteOnly.value && isLoggedIn.value) query.favoriteOnly = 'true'
+  if (hasImages.value) query.hasImages = 'true'
+
+  const search = new URLSearchParams(query).toString()
+  window.open(`/search?${search}`, 'crawler-admin-search')
 }
 const userStore = useUserStore()
 const isLoggedIn = computed(() => Boolean(userStore.token))

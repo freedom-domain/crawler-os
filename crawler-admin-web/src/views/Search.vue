@@ -175,7 +175,19 @@ const router = useRouter()
 const route = useRoute()
 
 const openPublicSearch = () => {
-  window.open('/public/search', 'crawler-public-search')
+  const query: Record<string, string> = {
+    page: String(page.value),
+    size: String(size.value)
+  }
+  if (keyword.value) query.keyword = keyword.value
+  if (filterSpider.value) query.spiderId = String(filterSpider.value)
+  if (filterGroup.value) query.group = filterGroup.value
+  if (filterTag.value) query.tag = filterTag.value
+  if (favoriteOnly.value) query.favoriteOnly = 'true'
+  if (hasImages.value) query.hasImages = 'true'
+
+  const search = new URLSearchParams(query).toString()
+  window.open(`/public/search?${search}`, 'crawler-public-search')
 }
 
 const list = ref<any[]>([])
