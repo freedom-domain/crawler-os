@@ -139,7 +139,8 @@ public class MinioHelper {
         try (java.io.InputStream in = getObject(bucket, objectName)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (ErrorResponseException e) {
-            if ("NoSuchKey".equals(e.errorResponse().code())) {
+            String errorCode = e.errorResponse().code();
+            if ("NoSuchKey".equals(errorCode) || "NoSuchBucket".equals(errorCode)) {
                 return null;
             }
             throw new RuntimeException("MinIO HTML 缓存读取失败: " + e.getMessage(), e);

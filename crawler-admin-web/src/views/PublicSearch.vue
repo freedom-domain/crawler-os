@@ -388,15 +388,10 @@ const formatTime = (t: string) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-const getImageBucket = () => {
-  if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
-  return 'crawler'
-}
-
 const imageUrl = (objectName: string) => {
   if (!objectName) return ''
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/image?bucket=${encodeURIComponent(getImageBucket())}&objectName=${encodeURIComponent(objectName)}`
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
 }
 
 // 不再传递图片列表，仅传递内容 id（含爬虫信息与 url），由预览页自行从后端获取图片

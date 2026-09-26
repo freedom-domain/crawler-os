@@ -342,17 +342,12 @@ const stripHtml = (html: string) => {
   return text.replace(/\s+/g, ' ').trim()
 }
 
-const getImageBucket = () => {
-  if (import.meta.env.VITE_MINIO_BUCKET) return import.meta.env.VITE_MINIO_BUCKET
-  return 'crawler'
-}
-
 // ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
 const imageUrl = (objectName: string) => {
   if (!objectName) return ''
   // 兼容旧数据：若已是完整 URL 则直接返回
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/image?bucket=${encodeURIComponent(getImageBucket())}&objectName=${encodeURIComponent(objectName)}`
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({

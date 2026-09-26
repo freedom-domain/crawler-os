@@ -28,6 +28,9 @@ public class FileController {
     @Value("${minio.file-bucket:crawler-files}")
     private String fileBucket;
 
+    @Value("${minio.image-bucket:crawler}")
+    private String imageBucket;
+
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
     public R<FileMetadata> upload(@RequestParam("file") MultipartFile file,
@@ -54,8 +57,11 @@ public class FileController {
 
     @Operation(summary = "内联访问图片（用于浏览器预览）")
     @GetMapping("/image")
-    public ResponseEntity<InputStreamResource> image(@RequestParam("bucket") String bucket,
+    public ResponseEntity<InputStreamResource> image(@RequestParam(value = "bucket", required = false) String bucket,
                                                      @RequestParam("objectName") String objectName) {
+        if (bucket == null || bucket.isBlank()) {
+            bucket = imageBucket;
+        }
         InputStream in = fileService.download(bucket, objectName);
         String ext = objectName.contains(".") ? objectName.substring(objectName.lastIndexOf('.') + 1).toLowerCase() : "";
         MediaType mediaType = switch (ext) {
