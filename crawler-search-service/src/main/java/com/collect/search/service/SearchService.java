@@ -62,8 +62,8 @@ public class SearchService {
     @Value("${minio.image-bucket:crawler}")
     private String imageBucket;
 
-    /** 排序字段数量（updateTime + url），用于截断 PIT 追加的 shard 路由值 */
-    private static final int SORT_FIELD_COUNT = 2;
+    /** 时间和 URL 排序字段数量；关键词搜索另外增加 _score。 */
+    private static final int BASE_SORT_FIELD_COUNT = 2;
 
     /**
      * 搜索爬取的数据（PIT + search_after 游标式分页）。
@@ -173,7 +173,11 @@ public class SearchService {
                 .query(query)
                 .trackTotalHits(t -> t.enabled(true));
 
-        // search_after 必须配合排序使用：updateTime 降序 + url 降序（url 为 keyword 且唯一，作为 tiebreaker）
+        // 关键词搜索按相关度优先；其余排序字段用于稳定 search_after 分页。
+        if (hasKeyword) {
+            reqBuilder.sort(s -> s.score(score -> score
+                    .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)));
+        }
         reqBuilder.sort(s -> s.field(f -> f
                 .field("updateTime")
                 .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
@@ -183,14 +187,15 @@ public class SearchService {
                 .order(co.elastic.clients.elasticsearch._types.SortOrder.Desc)
                 .missing("_last")));
 
+        int sortFieldCount = BASE_SORT_FIELD_COUNT + (hasKeyword ? 1 : 0);
         if (searchAfter != null && !searchAfter.isEmpty()) {
             List<FieldValue> afterValues = searchAfter.stream()
-                    .limit(SORT_FIELD_COUNT)
+                    .limit(sortFieldCount)
                     .map(v -> v instanceof Number
                             ? FieldValue.of(((Number) v).longValue())
                             : FieldValue.of(String.valueOf(v)))
                     .collect(Collectors.toList());
-            if (afterValues.size() == SORT_FIELD_COUNT) {
+            if (afterValues.size() == sortFieldCount) {
                 reqBuilder.searchAfter(afterValues);
             } else {
                 log.warn("Ignoring invalid search_after cursor with {} values", afterValues.size());
@@ -248,10 +253,10 @@ public class SearchService {
                     sr.setTitleHl(doc.getTitle());
                     sr.setContentHl(snippet(doc.getContent()));
                 }
-                // PIT 会在 sort 值末尾追加 shard 路由值，只取前 N 个（N = 排序字段数）。
+                // PIT 会在 sort 值末尾追加 shard 路由值，只取前 N 个（N = 本次查询的排序字段数）。
                 // 保留日期/数值排序值的原始类型，否则下一页的 search_after 会被 ES 按字符串解析。
-                List<FieldValue> sortValues = hit.sort() != null && hit.sort().size() > SORT_FIELD_COUNT
-                        ? hit.sort().subList(0, SORT_FIELD_COUNT)
+                List<FieldValue> sortValues = hit.sort() != null && hit.sort().size() > sortFieldCount
+                        ? hit.sort().subList(0, sortFieldCount)
                         : (hit.sort() != null ? hit.sort() : List.of());
                 sr.setSortValues(sortValues.stream().map(this::toSortValue).toList());
                 results.add(sr);
