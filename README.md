@@ -98,6 +98,24 @@ docker-compose up -d crawler-gateway crawler-user-service crawler-spider-service
   crawler-search-service crawler-file-service crawler-worker crawler-admin-web
 ```
 
+单独在本地构建应用镜像（需已安装 Docker 并启动 Docker 服务）：
+
+```bash
+./scripts/build-docker-images/crawler-gateway.sh
+./scripts/build-docker-images/crawler-user-service.sh
+./scripts/build-docker-images/crawler-spider-service.sh
+./scripts/build-docker-images/crawler-search-service.sh
+./scripts/build-docker-images/crawler-file-service.sh
+./scripts/build-docker-images/crawler-worker.sh
+./scripts/build-docker-images/crawler-admin-web.sh
+```
+
+默认镜像标签为 `local`，例如 `crawler-gateway:local`；可通过 `IMAGE_TAG` 指定其他标签。
+
+GitHub Actions 发布时会同时推送到 GHCR 和 `registry.10241001.xyz`。请在仓库的
+**Settings → Secrets and variables → Actions** 中添加 `REGISTRY_USERNAME` 和
+`REGISTRY_PASSWORD` 两个 Actions secrets（用户名设为 registry 账号，密码存入 secret）。
+
 前端容器使用 Nginx 提供生产构建文件，并将 `/api` 请求转发到网关：
 
 ```bash
