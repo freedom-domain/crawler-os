@@ -1,6 +1,7 @@
 package com.collect.worker.crawler;
 
 import com.collect.common.mq.TaskMessage;
+import com.collect.common.util.ObjectNameUtils;
 import com.collect.worker.es.SpiderContentDoc;
 import com.collect.worker.entity.FileMetadata;
 import com.collect.worker.entity.SpiderTask;
@@ -202,7 +203,9 @@ public class CrawlerEngine {
                 long start = System.currentTimeMillis();
                 boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
                 String cachedHtml = readCache
-                        ? minioHelper.getHtmlIfExists(htmlBucket, "html/" + md5(url) + ".html")
+                        ? minioHelper.getHtmlIfExists(htmlBucket,
+                                "html/" + ObjectNameUtils.base64Url(url) + ".html",
+                                "html/" + md5(url) + ".html")
                         : null;
                 boolean cacheHit = cachedHtml != null;
                 Document doc = cacheHit ? Jsoup.parse(cachedHtml, url) : fetch(url, msg.getTimeout());
@@ -459,11 +462,11 @@ public class CrawlerEngine {
                     continue;
                 }
                 try {
-                    // 先用 URL 的 MD5 推算对象名（统一存入 images 前缀下）
                     String ext = guessExt(src, null);
-                    String objectName = "images/" + md5(src) + ext;
+                    String objectName = "images/" + ObjectNameUtils.base64Url(src) + ext;
                     // 不覆盖时，若图片已存在则跳过下载
-                    if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                    if (!overwrite && minioHelper.moveLegacyObjectIfExists(
+                            imageBucket, "images/" + md5(src) + ext, objectName)) {
                         skipped++;
                         saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
                         uploadedUrls.add(objectName);
@@ -476,8 +479,9 @@ public class CrawlerEngine {
                     // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
                     String realExt = guessExt(src, data);
                     if (!realExt.equals(ext)) {
-                        objectName = "images/" + md5(src) + realExt;
-                        if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                        objectName = "images/" + ObjectNameUtils.base64Url(src) + realExt;
+                        if (!overwrite && minioHelper.moveLegacyObjectIfExists(
+                                imageBucket, "images/" + md5(src) + realExt, objectName)) {
                             skipped++;
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
                             uploadedUrls.add(objectName);
@@ -526,9 +530,10 @@ public class CrawlerEngine {
     private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task,
                          boolean overwriteResources, boolean saveHtml, Set<String> processedResourceUrls) {
         try {
-            String urlHash = md5(url);
+            String urlHash = ObjectNameUtils.base64Url(url);
             if (saveHtml) {
                 String htmlObject = "html/" + urlHash + ".html";
+                minioHelper.moveLegacyObjectIfExists(htmlBucket, "html/" + md5(url) + ".html", htmlObject);
                 minioHelper.putHtml(htmlBucket, htmlObject, html);
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
                         "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
@@ -554,8 +559,10 @@ public class CrawlerEngine {
                         writeLog(task.getId(), msg.getSpiderId(), jsUrl, 0, "ERROR", "JS 下载为空", resourceCost(resourceStart), "js");
                         continue;
                     }
-                    String jsObject = "js/" + md5(jsUrl) + guessExt(jsUrl, data);
-                    if (!overwriteResources && minioHelper.objectExists(jsBucket, jsObject)) {
+                    String extension = guessExt(jsUrl, data);
+                    String jsObject = "js/" + ObjectNameUtils.base64Url(jsUrl) + extension;
+                    if (!overwriteResources && minioHelper.moveLegacyObjectIfExists(
+                            jsBucket, "js/" + md5(jsUrl) + extension, jsObject)) {
                         writeLog(task.getId(), msg.getSpiderId(), jsUrl, 2, "INFO", "JS 已存在，跳过上传: " + jsObject,
                                 resourceCost(resourceStart), "js");
                         continue;
@@ -598,8 +605,9 @@ public class CrawlerEngine {
                         writeLog(task.getId(), msg.getSpiderId(), cssUrl, 0, "ERROR", "CSS 下载为空", resourceCost(resourceStart), "css");
                         continue;
                     }
-                    String cssObject = "css/" + md5(cssUrl) + ".css";
-                    if (!overwriteResources && minioHelper.objectExists(jsBucket, cssObject)) {
+                    String cssObject = "css/" + ObjectNameUtils.base64Url(cssUrl) + ".css";
+                    if (!overwriteResources && minioHelper.moveLegacyObjectIfExists(
+                            jsBucket, "css/" + md5(cssUrl) + ".css", cssObject)) {
                         writeLog(task.getId(), msg.getSpiderId(), cssUrl, 2, "INFO", "CSS 已存在，跳过上传: " + cssObject,
                                 resourceCost(resourceStart), "css");
                         continue;
@@ -635,10 +643,9 @@ public class CrawlerEngine {
      */
     private String readHtmlFromMinio(String url) {
         try {
-            String objectName = "html/" + md5(url) + ".html";
-            try (java.io.InputStream in = minioHelper.getObject(htmlBucket, objectName)) {
-                return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            }
+            return minioHelper.getHtmlIfExists(htmlBucket,
+                    "html/" + ObjectNameUtils.base64Url(url) + ".html",
+                    "html/" + md5(url) + ".html");
         } catch (Exception e) {
             log.debug("从 MinIO 读取 HTML 失败: url={}", url, e);
             return null;

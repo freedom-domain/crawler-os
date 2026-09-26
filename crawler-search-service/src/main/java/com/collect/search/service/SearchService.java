@@ -22,6 +22,7 @@ import com.collect.search.entity.SearchHistory;
 import com.collect.search.mapper.SearchHistoryMapper;
 import com.collect.search.minio.MinioHelper;
 import com.collect.common.security.LoginUtils;
+import com.collect.common.util.ObjectNameUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -412,9 +413,11 @@ public class SearchService {
         }
         if (doc != null) {
             doc.setTags(loadUserTags(currentUserId()).getOrDefault(id, List.of()));
-            // HTML 原文存储在 MinIO（对象名 = html/{md5(url)}.html），详情时按需读取
+            // HTML 原文存储在 MinIO（对象名 = html/{base64url(url)}.html），详情时按需读取
             if (doc.getUrl() != null && !doc.getUrl().isBlank()) {
-                String rawHtml = minioHelper.readHtml(htmlBucket, "html/" + md5(doc.getUrl()) + ".html");
+                String rawHtml = minioHelper.readHtml(htmlBucket,
+                        "html/" + ObjectNameUtils.base64Url(doc.getUrl()) + ".html",
+                        "html/" + md5(doc.getUrl()) + ".html");
                 doc.setRawHtml(rewriteStaticResourceUrls(rawHtml, doc.getUrl()));
             }
         }
@@ -462,7 +465,15 @@ public class SearchService {
             String absolute = resolveUrl(baseUrl, source);
             if (absolute == null || absolute.startsWith("data:") || absolute.startsWith("javascript:")) continue;
             String extension = stylesheet ? ".css" : resourceExtension(absolute, ".js");
-            String objectName = (stylesheet ? "css/" : "js/") + md5(absolute) + extension;
+            String prefix = stylesheet ? "css/" : "js/";
+            String objectName = prefix + ObjectNameUtils.base64Url(absolute) + extension;
+            String legacyObjectName = prefix + md5(absolute) + extension;
+            try {
+                minioHelper.moveLegacyObjectIfExists(jsBucket, legacyObjectName, objectName);
+            } catch (Exception e) {
+                log.warn("迁移 MinIO 静态资源缓存失败: bucket={}, object={}", jsBucket, legacyObjectName, e);
+                objectName = legacyObjectName;
+            }
             String resourceUrl = "/api/file/resource?bucket=" +
                     java.net.URLEncoder.encode(jsBucket, StandardCharsets.UTF_8) +
                     "&objectName=" + java.net.URLEncoder.encode(objectName, StandardCharsets.UTF_8);

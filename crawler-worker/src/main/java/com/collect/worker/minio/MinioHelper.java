@@ -113,8 +113,14 @@ public class MinioHelper {
         try {
             statObject(bucket, objectName);
             return true;
+        } catch (ErrorResponseException e) {
+            String errorCode = e.errorResponse().code();
+            if ("NoSuchKey".equals(errorCode) || "NoSuchBucket".equals(errorCode)) {
+                return false;
+            }
+            throw new RuntimeException("MinIO 对象检查失败: " + e.getMessage(), e);
         } catch (Exception e) {
-            return false;
+            throw new RuntimeException("MinIO 对象检查失败: " + e.getMessage(), e);
         }
     }
 
@@ -136,6 +142,21 @@ public class MinioHelper {
     }
 
     public String getHtmlIfExists(String bucket, String objectName) {
+        return getHtmlIfExists(bucket, objectName, null);
+    }
+
+    public String getHtmlIfExists(String bucket, String objectName, String legacyObjectName) {
+        try {
+            if (legacyObjectName != null) {
+                if (!moveLegacyObjectIfExists(bucket, legacyObjectName, objectName)) {
+                    return null;
+                }
+            } else if (!objectExists(bucket, objectName)) {
+                return null;
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO HTML 缓存迁移失败: " + e.getMessage(), e);
+        }
         try (java.io.InputStream in = getObject(bucket, objectName)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (ErrorResponseException e) {
@@ -147,6 +168,21 @@ public class MinioHelper {
         } catch (Exception e) {
             throw new RuntimeException("MinIO HTML 缓存读取失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 将旧命名对象移动到新名称；目标已存在时保留目标并认为缓存可用。
+     */
+    public boolean moveLegacyObjectIfExists(String bucket, String legacyObjectName, String objectName) throws Exception {
+        if (objectExists(bucket, objectName)) {
+            return true;
+        }
+        if (!objectExists(bucket, legacyObjectName)) {
+            return false;
+        }
+        copyObject(bucket, legacyObjectName, objectName);
+        removeObject(bucket, legacyObjectName);
+        return true;
     }
 
     /**
