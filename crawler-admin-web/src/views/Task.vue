@@ -440,6 +440,15 @@ const loadLogs = async () => {
 
 const handleCancel = async (row: any) => {
   try {
+    await ElMessageBox.confirm('确定取消该任务吗？', '确认取消', {
+      type: 'warning',
+      confirmButtonText: '确认取消',
+      cancelButtonText: '继续运行'
+    })
+  } catch {
+    return
+  }
+  try {
     await taskCancel(row.id)
     ElMessage.success('已提交取消请求')
   } catch {
