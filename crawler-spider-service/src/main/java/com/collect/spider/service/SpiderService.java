@@ -20,6 +20,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.LocalDateTime;
@@ -269,7 +271,7 @@ public class SpiderService {
         log.info("任务已创建: id={}, taskId={}", task.getId(), taskId);
 
         if (runImmediately) {
-            kafkaTemplate.send(Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured"), payload);
+            sendTaskAfterCommit(payload);
             log.info("已派发爬虫任务: taskId={}, spider={}", taskId, spider.getName());
         } else {
             log.info("爬虫任务已加入等待队列: taskId={}, spider={}", taskId, spider.getName());
@@ -413,10 +415,21 @@ public class SpiderService {
         task.setStatus("RUNNING");
         task.setStartTime(LocalDateTime.now());
         taskMapper.updateById(task);
-        kafkaTemplate.send(
-                Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured"),
-                task.getTaskMessage());
+        sendTaskAfterCommit(task.getTaskMessage());
         log.info("已派发排队任务: taskId={}, spider={}", task.getTaskId(), task.getSpiderName());
+    }
+
+    private void sendTaskAfterCommit(String payload) {
+        String topic = Objects.requireNonNull(spiderTaskTopic, "Kafka task topic must be configured");
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            throw new IllegalStateException("Task dispatch requires an active database transaction");
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                kafkaTemplate.send(topic, payload);
+            }
+        });
     }
 
     private void requireTaskCreationGuard() {
