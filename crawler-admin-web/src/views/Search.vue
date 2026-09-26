@@ -31,7 +31,7 @@
           </el-select>
           <el-select v-model="filterSpider" placeholder="站点" clearable filterable style="width: 200px" @change="onSpiderChange">
             <el-option-group v-for="sec in spiderGroupedOptions" :key="sec.key" :label="sec.label">
-              <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
+              <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="Number(s.id)" />
             </el-option-group>
           </el-select>
           <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
@@ -763,6 +763,15 @@ const onGroupChange = () => {
 const onSpiderChange = () => {
   doSearch()
 }
+
+watch(() => route.query.spiderId, (value) => {
+  const spiderId = Number(value)
+  const nextSpider = Number.isInteger(spiderId) && spiderId > 0 ? spiderId : ''
+  if (filterSpider.value !== nextSpider) {
+    filterSpider.value = nextSpider
+    doSearch()
+  }
+})
 
 onMounted(() => {
   keyword.value = String(route.query.keyword || '')

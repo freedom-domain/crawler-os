@@ -21,6 +21,7 @@ public class Spider extends BaseEntity {
     private String vipSelectorContent;
     private Integer overwriteHtml;
     private Integer overwriteImage;
+    private Integer readCache;
     private Integer isPublic;
     @TableField("`group`")
     private String group;

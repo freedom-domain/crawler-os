@@ -1,0 +1,2 @@
+ALTER TABLE spider
+    ADD COLUMN read_cache TINYINT NOT NULL DEFAULT 0;

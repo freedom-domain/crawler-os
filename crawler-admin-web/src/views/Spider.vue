@@ -36,7 +36,13 @@
 
     <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border>
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
-      <el-table-column prop="name" label="名称" min-width="160"  resizable />
+      <el-table-column prop="name" label="名称" min-width="160" resizable>
+        <template #default="{ row }">
+          <el-link type="primary" @click="router.push({ name: 'Search', query: { spiderId: String(row.id) } })">
+            {{ row.name }}
+          </el-link>
+        </template>
+      </el-table-column>
       <el-table-column label="起始URL" min-width="320" show-overflow-tooltip resizable>
         <template #default="{ row }">
           <template v-for="(url, index) in parseStartUrls(row.startUrls)" :key="`${url}-${index}`">
@@ -46,7 +52,6 @@
           </template>
         </template>
       </el-table-column>
-      <el-table-column prop="schedule" label="调度" min-width="160"  resizable />
       <el-table-column prop="group" label="分组" min-width="120" resizable>
         <template #default="{ row }">
           <el-tag v-if="row.group" size="small">{{ row.group }}</el-tag>
@@ -60,20 +65,23 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="type" label="类型" min-width="100" resizable>
+      <el-table-column prop="readCache" label="读取缓存" min-width="110" resizable>
         <template #default="{ row }">
-          <el-tag>{{ row.type }}</el-tag>
+          <el-tag :type="row.readCache === 1 ? 'success' : 'info'">
+            {{ row.readCache === 1 ? '读取' : '联网' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="createTime" label="创建时间" min-width="180"  resizable />
       <el-table-column prop="updateTime" label="更新时间" min-width="180"  resizable />
-      <el-table-column prop="status" label="状态" min-width="100" resizable>
+      <el-table-column prop="status" label="定时任务" min-width="100" resizable>
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'">
             {{ row.status === 1 ? '运行中' : '停止' }}
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="schedule" label="调度" min-width="160" resizable />
       <el-table-column label="操作" width="120" fixed="right" resizable>
         <template #default="{ row }">
           <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
@@ -150,6 +158,10 @@
         <el-form-item label="覆盖图片">
           <el-switch v-model="form.overwriteImage" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
           <div class="form-tip">开启后重新爬取会重新下载并覆盖已存在的图片；关闭则已存在图片不重复下载</div>
+        </el-form-item>
+        <el-form-item label="读取缓存">
+          <el-switch v-model="form.readCache" :active-value="1" :inactive-value="0" active-text="读取" inactive-text="联网" />
+          <div class="form-tip">开启后优先读取已缓存的 HTML；命中时不覆盖已缓存的 HTML 和资源，并可补充缺少的资源，未命中时联网抓取并按原逻辑保存</div>
         </el-form-item>
         <el-form-item label="最大深度">
           <el-input-number v-model="form.maxDepth" :min="0" :max="5" />
@@ -248,7 +260,7 @@ const isHttpUrl = (value: string): boolean => {
 }
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
+  contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
 })
 
 // 调度表达式生成器
@@ -343,7 +355,7 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -380,7 +392,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
-    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
+    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0
   }
   try {

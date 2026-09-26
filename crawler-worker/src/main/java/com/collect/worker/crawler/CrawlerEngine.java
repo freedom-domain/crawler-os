@@ -200,14 +200,19 @@ public class CrawlerEngine {
                     return;
                 }
                 long start = System.currentTimeMillis();
-                Document doc = fetch(url, msg.getTimeout());
+                boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
+                String cachedHtml = readCache
+                        ? minioHelper.getHtmlIfExists(htmlBucket, "html/" + md5(url) + ".html")
+                        : null;
+                boolean cacheHit = cachedHtml != null;
+                Document doc = cacheHit ? Jsoup.parse(cachedHtml, url) : fetch(url, msg.getTimeout());
                 long cost = System.currentTimeMillis() - start;
 
                 ContentParser parsed = ContentParser.parse(doc.outerHtml(), url, msg.getContentSelector());
                 String newHtml = doc.outerHtml();
                 String newHtmlHash = md5(newHtml);
-                boolean overwriteHtml = msg.getOverwriteHtml() != null && msg.getOverwriteHtml() == 1;
-                boolean overwriteImage = msg.getOverwriteImage() != null && msg.getOverwriteImage() == 1;
+                boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
+                boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
                 boolean contentUnchanged = false;
                 SpiderContentDoc existingDoc = null;
@@ -217,7 +222,7 @@ public class CrawlerEngine {
                     SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                             criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
                     existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
-                    if (existingDoc != null) {
+                    if (existingDoc != null && !cacheHit) {
                         // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
                         String oldHtml = readHtmlFromMinio(url);
                         if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
@@ -255,7 +260,8 @@ public class CrawlerEngine {
                 docObj.setImages(imageUrls);
 
                 // HTML 原文存入 html 目录，页面引用的 JS 存入 js 目录
-                saveHtmlAndJs(doc, url, newHtml, msg, task, overwriteHtml, processedResourceUrls);
+                saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit && overwriteHtml,
+                        !cacheHit, processedResourceUrls);
 
                 saveToElasticsearchWithRetry(docObj);
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
@@ -514,18 +520,19 @@ public class CrawlerEngine {
     }
 
     /**
-     * 将页面 HTML 原文上传到 html 目录，页面引用的 JS/CSS 文件分别上传到 js/css 目录。
-    * 对象名基于 URL 的 MD5；资源是否覆盖与 HTML 使用同一个覆盖开关。
+     * 按需上传页面 HTML 原文，并将页面引用的 JS/CSS 文件上传到资源目录。
+     * 对象名基于 URL 的 MD5；资源是否覆盖与 HTML 使用同一个覆盖开关。
      */
     private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task,
-                         boolean overwriteResources, Set<String> processedResourceUrls) {
+                         boolean overwriteResources, boolean saveHtml, Set<String> processedResourceUrls) {
         try {
             String urlHash = md5(url);
-            // HTML 原文
-            String htmlObject = "html/" + urlHash + ".html";
-            minioHelper.putHtml(htmlBucket, htmlObject, html);
+            if (saveHtml) {
+                String htmlObject = "html/" + urlHash + ".html";
+                minioHelper.putHtml(htmlBucket, htmlObject, html);
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
-                    "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
+                        "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
+            }
             // 页面引用的 JS 文件
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (Element script : doc.select("script[src]")) {

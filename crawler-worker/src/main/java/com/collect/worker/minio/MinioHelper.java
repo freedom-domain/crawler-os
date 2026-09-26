@@ -11,6 +11,7 @@ import io.minio.RemoveObjectArgs;
 import io.minio.Result;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
+import io.minio.errors.ErrorResponseException;
 import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -132,6 +133,19 @@ public class MinioHelper {
                 .bucket(bucket)
                 .object(objectName)
                 .build());
+    }
+
+    public String getHtmlIfExists(String bucket, String objectName) {
+        try (java.io.InputStream in = getObject(bucket, objectName)) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (ErrorResponseException e) {
+            if ("NoSuchKey".equals(e.errorResponse().code())) {
+                return null;
+            }
+            throw new RuntimeException("MinIO HTML 缓存读取失败: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO HTML 缓存读取失败: " + e.getMessage(), e);
+        }
     }
 
     /**

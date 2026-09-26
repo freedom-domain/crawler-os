@@ -20,6 +20,7 @@ public class TaskMessage implements Serializable {
     private String vipSelectorContent;
     private Integer overwriteHtml;
     private Integer overwriteImage;
+    private Integer readCache;
     private Integer maxDepth;
     private boolean singleUrl;
     private Integer timeout;

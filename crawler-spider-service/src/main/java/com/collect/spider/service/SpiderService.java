@@ -64,6 +64,7 @@ public class SpiderService {
         spider.setVipSelectorContent(req.getVipSelectorContent());
         spider.setOverwriteHtml(req.getOverwriteHtml());
         spider.setOverwriteImage(req.getOverwriteImage());
+        spider.setReadCache(req.getReadCache() == null ? 0 : req.getReadCache());
         spider.setIsPublic(req.getIsPublic() == null ? 0 : req.getIsPublic());
         spider.setGroup(req.getGroup());
         spider.setSchedule(req.getSchedule());
@@ -130,6 +131,7 @@ public class SpiderService {
             config.setVipSelectorContent(spider.getVipSelectorContent());
             config.setOverwriteHtml(spider.getOverwriteHtml());
             config.setOverwriteImage(spider.getOverwriteImage());
+            config.setReadCache(spider.getReadCache() == null ? 0 : spider.getReadCache());
             config.setIsPublic(spider.getIsPublic() == null ? 0 : spider.getIsPublic());
             config.setGroup(spider.getGroup());
             config.setSchedule(spider.getSchedule());
@@ -198,6 +200,7 @@ public class SpiderService {
         exist.setVipSelectorContent(req.getVipSelectorContent());
         exist.setOverwriteHtml(req.getOverwriteHtml());
         exist.setOverwriteImage(req.getOverwriteImage());
+        exist.setReadCache(req.getReadCache() == null ? 0 : req.getReadCache());
         exist.setIsPublic(req.getIsPublic() == null ? 0 : req.getIsPublic());
         exist.setGroup(req.getGroup());
         exist.setSchedule(req.getSchedule());
@@ -405,6 +408,7 @@ public class SpiderService {
         msg.setVipSelectorContent(spider.getVipSelectorContent());
         msg.setOverwriteHtml(spider.getOverwriteHtml());
         msg.setOverwriteImage(spider.getOverwriteImage());
+        msg.setReadCache(spider.getReadCache() == null ? 0 : spider.getReadCache());
         msg.setMaxDepth(spider.getMaxDepth());
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());
