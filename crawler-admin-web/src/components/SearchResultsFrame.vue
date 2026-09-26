@@ -76,13 +76,15 @@ defineEmits<{
 }
 
 .results-pagination {
-  margin-top: 24px;
+  margin-top: 18px;
   justify-content: center;
 }
 
 .cursor-pagination {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 

@@ -1,7 +1,5 @@
 <template>
   <el-card>
-    <template #header><span>角色管理</span></template>
-
     <el-form :inline="true">
       <el-form-item>
         <el-button type="success" @click="openCreate" :icon="Plus">新增角色</el-button>

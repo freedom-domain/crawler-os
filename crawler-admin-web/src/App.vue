@@ -80,7 +80,7 @@ button, input, textarea, select { font: inherit; }
 .el-table .cell { line-height: 22px; padding-top: 2px; padding-bottom: 2px; }
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: #fbfcfd; }
 .el-tag { border-radius: 6px; font-weight: 600; }
-.el-pagination { margin-top: 18px; padding: 4px 0; }
+.el-pagination { margin-top: 18px; padding: 4px 0; justify-content: center; flex-wrap: wrap; gap: 4px; }
 .el-pagination button, .el-pagination li { border-radius: 6px !important; }
 .el-empty { padding: 44px 0; }
 .el-loading-mask { background: rgba(255, 255, 255, .72); backdrop-filter: blur(2px); }
@@ -177,6 +177,16 @@ button, input, textarea, select { font: inherit; }
 .el-form-item__label { color: #5e6c84; font-weight: 600; }
 .el-form-item { margin-bottom: 18px; }
 .el-form--inline .el-form-item { margin-right: 14px; margin-bottom: 10px; }
+.el-card > .el-card__body > .el-form--inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.el-card > .el-card__body > .el-form--inline .el-form-item {
+  margin: 0;
+}
 .card-header { min-height: 24px; display: flex; align-items: center; justify-content: space-between; }
 .card-header > span:first-child { color: #172b4d; font-size: 15px; font-weight: 800; }
 .el-pagination { --el-pagination-button-bg-color: #fff; }
@@ -198,11 +208,15 @@ button, input, textarea, select { font: inherit; }
   .el-dialog { width: calc(100vw - 20px) !important; }
   .el-dialog.content-preview-dialog { top: 4px !important; margin: 0 auto !important; }
   .el-form--inline {
-    display: block;
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .el-form--inline .el-form-item {
     display: block;
     margin-right: 0;
+    margin-bottom: 0;
     width: 100%;
   }
   .el-form-item__content,

@@ -1,21 +1,18 @@
 <template>
   <el-card>
-    <template #header>
-      <div class="card-header">
-        <span>爬虫管理</span>
-        <div class="header-actions">
-          <el-button @click="handleExport">导出配置</el-button>
-          <el-upload :show-file-list="false" :before-upload="handleImport" accept=".json">
-            <el-button>导入配置</el-button>
-          </el-upload>
-          <el-button type="primary" @click="showCreate" :icon="Plus">新建爬虫</el-button>
-        </div>
-      </div>
-    </template>
-
-    <el-form :inline="true" @submit.prevent>
+    <el-form class="spider-toolbar" :inline="true" @submit.prevent>
       <el-form-item>
-        <el-input v-model="keyword" placeholder="搜索爬虫名称" clearable @clear="loadData" @keyup.enter="loadData" />
+        <el-input class="spider-name-filter" v-model="keyword" placeholder="搜索爬虫名称" clearable @clear="loadData" @keyup.enter="loadData" />
+      </el-form-item>
+      <el-form-item>
+        <el-input
+          class="spider-url-filter"
+          v-model="urlFilter"
+          placeholder="搜索起始 URL"
+          clearable
+          @clear="loadData"
+          @keyup.enter="loadData"
+        />
       </el-form-item>
       <el-form-item>
         <el-select v-model="groupFilter" placeholder="全部分组" clearable style="width: 160px" @change="loadData">
@@ -24,6 +21,16 @@
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="loadData" :icon="Search">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form-item>
+      <el-form-item class="toolbar-actions">
+        <div class="spider-actions">
+          <el-button type="primary" :icon="Plus" @click="showCreate">新建爬虫</el-button>
+          <el-button @click="handleExport">导出配置</el-button>
+          <el-upload :show-file-list="false" :before-upload="handleImport" accept=".json">
+            <el-button>导入配置</el-button>
+          </el-upload>
+        </div>
       </el-form-item>
     </el-form>
 
@@ -44,6 +51,13 @@
         <template #default="{ row }">
           <el-tag v-if="row.group" size="small">{{ row.group }}</el-tag>
           <span v-else class="text-muted">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="isPublic" label="公开" width="90" align="center" resizable>
+        <template #default="{ row }">
+          <el-tag :type="row.isPublic === 1 ? 'success' : 'info'" size="small">
+            {{ row.isPublic === 1 ? '公开' : '私有' }}
+          </el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="type" label="类型" min-width="100" resizable>
@@ -69,6 +83,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="run" :disabled="row._running">执行</el-dropdown-item>
+                <el-dropdown-item command="search">查询内容</el-dropdown-item>
                 <el-dropdown-item command="toggle">{{ row.status === 1 ? '停止' : '启动' }}</el-dropdown-item>
                 <el-dropdown-item command="edit">编辑</el-dropdown-item>
                 <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
@@ -80,11 +95,11 @@
     </el-table>
 
     <el-pagination
-      style="margin-top:16px; justify-content:flex-end"
       v-model:current-page="page"
       v-model:page-size="size"
       :total="total"
-      layout="total, prev, pager, next"
+      :page-sizes="[10, 15, 20, 50, 100]"
+      layout="total, sizes, prev, pager, next, jumper"
       @change="loadData"
     />
 
@@ -109,6 +124,10 @@
           <el-select v-model="form.group" placeholder="选择分组" clearable style="width: 100%">
             <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="公开搜索">
+          <el-switch v-model="form.isPublic" :active-value="1" :inactive-value="0" active-text="公开" inactive-text="私有" />
+          <div class="form-tip">公开后，未登录用户也可以在公共搜索页查询该爬虫的内容</div>
         </el-form-item>
         <el-form-item label="内容选择器">
           <el-input v-model="form.contentSelector" placeholder="CSS选择器，如 .article-content 或 #content" />
@@ -181,20 +200,22 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, ArrowDown } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 const tableRef = ref<any>(null)
 
 const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
-const size = ref(10)
+const size = ref(15)
 const total = ref(0)
 const keyword = ref('')
+const urlFilter = ref('')
 const groupFilter = ref('')
 const highlightSpiderId = ref<number | null>(null)
 const groupOptions = ref<string[]>([])
@@ -226,7 +247,7 @@ const isHttpUrl = (value: string): boolean => {
   }
 }
 const form = ref({
-  name: '', description: '', type: 'http', group: '',
+  name: '', description: '', type: 'http', group: '', isPublic: 0,
   contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
 })
 
@@ -291,7 +312,13 @@ const loadData = async () => {
   loading.value = true
   try {
     const effectiveSize = highlightSpiderId.value ? 1000 : size.value
-    const res: any = await spiderPage({ current: 1, size: effectiveSize, keyword: keyword.value, group: groupFilter.value || undefined })
+    const res: any = await spiderPage({
+      current: 1,
+      size: effectiveSize,
+      keyword: keyword.value,
+      startUrl: urlFilter.value || undefined,
+      group: groupFilter.value || undefined
+    })
     list.value = res.data?.records || []
     total.value = res.data?.total || 0
     if (highlightSpiderId.value) {
@@ -306,9 +333,17 @@ const loadData = async () => {
   }
 }
 
+const resetFilters = () => {
+  keyword.value = ''
+  urlFilter.value = ''
+  groupFilter.value = ''
+  page.value = 1
+  loadData()
+}
+
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -344,7 +379,7 @@ const showEdit = async (row: any) => {
   const d = res.data
   editingId.value = d.id
   form.value = {
-    name: d.name, description: d.description || '', type: d.type, group: d.group || '',
+    name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
     contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0
   }
@@ -428,6 +463,9 @@ const handleDelete = async (row: any) => {
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
     case 'run': handleRun(row); break
+    case 'search':
+      router.push({ name: 'Search', query: { spiderId: String(row.id) } })
+      break
     case 'toggle': row.status === 1 ? handleStop(row) : handleStart(row); break
     case 'edit': showEdit(row); break
     case 'delete': handleDelete(row); break
@@ -461,9 +499,13 @@ onMounted(() => {
   box-shadow: inset 0 0 0 2px #f59e0b;
 }
 
-.card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-.header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-:deep(.header-actions .el-upload) { display: inline-flex; }
+.spider-toolbar :deep(.spider-name-filter) { width: 240px; }
+.spider-toolbar :deep(.spider-url-filter) { width: 280px; }
+.spider-toolbar :deep(.el-select) { width: 160px; }
+.spider-toolbar :deep(.el-upload) { display: inline-flex; }
+.spider-toolbar :deep(.toolbar-actions) { flex: 1 0 auto; justify-content: flex-end; }
+.spider-toolbar :deep(.toolbar-actions > .el-form-item__content) { width: 100%; justify-content: flex-end; }
+.spider-actions { display: flex; width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
 
@@ -474,6 +516,14 @@ onMounted(() => {
 }
 :deep(.spider-dialog .el-form-item__label) {
   white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .spider-toolbar :deep(.el-form-item) { width: 100%; }
+  .spider-toolbar :deep(.el-input),
+  .spider-toolbar :deep(.el-select) { width: 100% !important; }
+  .spider-toolbar :deep(.toolbar-actions .el-form-item__content) { width: 100%; }
+  .spider-actions { width: 100%; }
 }
 .schedule-builder {
   display: flex;

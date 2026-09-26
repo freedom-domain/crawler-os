@@ -81,6 +81,19 @@ public class SearchService {
 
         BoolQuery.Builder boolBuilder = new BoolQuery.Builder();
 
+        if (userId == null) {
+            List<Long> publicSpiderIds = spiderMapper.selectList(
+                    new LambdaQueryWrapper<Spider>().eq(Spider::getIsPublic, 1)
+            ).stream().map(Spider::getId).collect(Collectors.toList());
+            if (publicSpiderIds.isEmpty()) {
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+            List<FieldValue> publicSpiderIdValues = publicSpiderIds.stream()
+                    .map(FieldValue::of)
+                    .collect(Collectors.toList());
+            boolBuilder.must(m -> m.terms(t -> t.field("spiderId").terms(tt -> tt.value(publicSpiderIdValues))));
+        }
+
         if (keyword != null && !keyword.isBlank()) {
             String kw = keyword;
             boolBuilder.should(s -> s.match(mt -> mt.field("title").query(kw)));
@@ -389,6 +402,14 @@ public class SearchService {
         SpiderContentDoc doc = elasticsearchClient
                 .get(g -> g.index(indexName).id(id), SpiderContentDoc.class)
                 .source();
+        if (doc != null && currentUserId() == null) {
+            if (doc.getSpiderId() == null
+                    || spiderMapper.selectCount(new LambdaQueryWrapper<Spider>()
+                            .eq(Spider::getId, doc.getSpiderId())
+                            .eq(Spider::getIsPublic, 1)) == 0) {
+                return null;
+            }
+        }
         if (doc != null) {
             doc.setTags(loadUserTags(currentUserId()).getOrDefault(id, List.of()));
             // HTML 原文存储在 MinIO（对象名 = html/{md5(url)}.html），详情时按需读取

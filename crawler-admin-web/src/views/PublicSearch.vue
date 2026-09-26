@@ -33,17 +33,24 @@
                 </svg>
               </button>
               <button class="search-btn" type="button" @click="doSearch">搜索</button>
+              <button class="reset-search-btn" type="button" @click="resetSearch">
+                <el-icon><RefreshLeft /></el-icon>
+                <span>重置</span>
+              </button>
             </div>
           </SearchHistoryDropdown>
         </div>
 
         <div class="header-user">
           <template v-if="isLoggedIn">
-            <span class="user-nickname">{{ userStore.nickname || userStore.username }}</span>
-            <el-button size="small" @click="openAdminSearch">后台管理</el-button>
-            <el-button size="small" @click="handleLogout">登出</el-button>
+            <span class="user-account">
+              <el-icon><UserFilled /></el-icon>
+              <span class="user-nickname">{{ userStore.nickname || userStore.username }}</span>
+            </span>
+            <el-button class="header-admin-button" type="primary" plain size="small" :icon="Setting" @click="openAdminSearch">后台管理</el-button>
+            <el-button class="header-logout-button" plain size="small" :icon="SwitchButton" @click="handleLogout">登出</el-button>
           </template>
-          <el-button v-else type="primary" size="small" @click="loginVisible = true">登录</el-button>
+          <el-button v-else class="header-login-button" type="primary" size="small" :icon="UserFilled" @click="loginVisible = true">登录</el-button>
         </div>
       </div>
 
@@ -72,7 +79,7 @@
         v-model:page-size="size"
         :loading="loading"
         :total="total"
-        :page-sizes="[10, 20, 50, 100, 200, 500]"
+        :page-sizes="[10, 15, 20, 50, 100, 200, 500]"
         cursor-mode
         :has-more="hasMore"
         @prev="loadPrevPage"
@@ -206,7 +213,7 @@ import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import SearchDetailDialog from '@/components/SearchDetailDialog.vue'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { searchContent, searchDetail, dictChildren, spiderPage, favoriteAdd, favoriteDelete, searchDelete, spiderRerun } from '@/api'
-import { Search, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { Search, FullScreen, Minus, ZoomIn, ZoomOut, UserFilled, Setting, SwitchButton, RefreshLeft } from '@element-plus/icons-vue'
 import router from '@/router'
 import { useRoute } from 'vue-router'
 
@@ -270,7 +277,7 @@ const handleLogout = async () => {
 }
 const loading = ref(false)
 const page = ref(1)
-const size = ref(10)
+const size = ref(15)
 const total = ref(0)
 // PIT + search_after 游标式分页状态
 const pitId = ref('')
@@ -456,6 +463,16 @@ const doSearch = () => {
   syncSearchQuery()
   scrollToTop()
   loadData()
+}
+
+const resetSearch = () => {
+  keyword.value = ''
+  filterGroup.value = ''
+  filterSpider.value = ''
+  filterTag.value = ''
+  favoriteOnly.value = false
+  hasImages.value = false
+  doSearch()
 }
 
 const selectHistory = (value: string) => {
@@ -810,7 +827,7 @@ onMounted(() => {
     ? Math.min(requestedPage, 50)
     : 1
   const requestedSize = Number(route.query.size)
-  if ([10, 20, 50, 100, 200, 500].includes(requestedSize)) {
+  if ([10, 15, 20, 50, 100, 200, 500].includes(requestedSize)) {
     size.value = requestedSize
   }
   const spiderId = Number(route.query.spiderId)
@@ -898,18 +915,67 @@ onMounted(() => {
 .header-user {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
-  padding: 10px 0;
+  padding: 7px 8px;
+  border: 1px solid #e8edf3;
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.user-account {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 5px 0 2px;
+  color: #5b6b7e;
+}
+
+.user-account > .el-icon {
+  flex-shrink: 0;
+  color: #4285f4;
+  font-size: 17px;
 }
 
 .user-nickname {
   font-size: 14px;
-  color: #3c4043;
-  max-width: 120px;
+  color: #34465a;
+  font-weight: 600;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.header-user :deep(.el-button) {
+  height: 30px;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.header-admin-button {
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-bg-color: #4285f4;
+}
+
+.header-logout-button {
+  color: #66758a;
+  border-color: transparent;
+  background: transparent;
+}
+
+.header-logout-button:hover {
+  color: #d14b4b;
+  border-color: #f4dada;
+  background: #fff7f7;
+}
+
+.header-login-button {
+  border-radius: 9px;
+  padding: 0 15px;
 }
 
 .header-search-box {
@@ -1098,6 +1164,40 @@ onMounted(() => {
 
 .search-btn:hover {
   background: #1769d1;
+}
+
+.reset-search-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  width: 72px;
+  height: 44px;
+  margin-left: 8px;
+  padding: 0;
+  border: 1px solid #d9e7e8;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fff 0%, #f4faf9 100%);
+  color: #52706f;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 7px rgba(32, 86, 84, 0.08);
+  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.reset-search-btn:hover {
+  border-color: #9bd4cd;
+  background: #eef9f7;
+  color: #0f817c;
+  box-shadow: 0 4px 10px rgba(15, 129, 124, 0.12);
+  transform: translateY(-1px);
+}
+
+.reset-search-btn:focus-visible {
+  outline: 2px solid rgba(15, 129, 124, 0.35);
+  outline-offset: 2px;
 }
 
 .results-heading {
@@ -1505,10 +1605,10 @@ onMounted(() => {
   .header-user {
     width: 100%;
     justify-content: flex-end;
-    padding: 4px 0 0;
+    padding: 7px 8px;
   }
   .user-nickname {
-    max-width: 140px;
+    max-width: min(34vw, 180px);
   }
   .header-filter-panel {
     height: auto;
@@ -1605,11 +1705,14 @@ onMounted(() => {
   .search-row { gap: 8px; }
   .search-box { min-width: 0; }
   .search-btn { padding: 0 14px; }
+  .reset-search-btn { width: 56px; height: 38px; margin-left: 6px; font-size: 12px; }
   .header-user {
     gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
   }
   .user-nickname {
-    max-width: 100px;
+    max-width: 34vw;
     font-size: 13px;
   }
   .filter-row :deep(.el-select) { width: 100% !important; }

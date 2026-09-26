@@ -1,7 +1,5 @@
 <template>
   <el-card>
-    <template #header><span>权限管理</span></template>
-
     <el-form :inline="true">
       <el-form-item>
         <el-button type="success" @click="openCreate(null)" :icon="Plus">新增权限</el-button>

@@ -1,8 +1,6 @@
 <template>
   <div class="file-page">
     <el-card v-loading="deleting" element-loading-text="正在删除文件及 MinIO 对象...">
-      <template #header><span>文件管理</span></template>
-
       <el-form :inline="true" @submit.prevent>
         <el-form-item>
           <el-input v-model="filterTitle" placeholder="搜索标题" clearable style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
@@ -29,6 +27,7 @@
           <el-button type="primary" :disabled="deleting" @click="refresh">
             <el-icon><Refresh /></el-icon>刷新
           </el-button>
+          <el-button :disabled="deleting" @click="resetFilters">重置</el-button>
         </el-form-item>
         <el-form-item>
           <el-button type="danger" plain :disabled="deleting || selectedRows.length === 0" @click="removeSelected">
@@ -80,7 +79,7 @@
           v-model:current-page="page.current"
           v-model:page-size="page.size"
           :total="page.total"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="[10, 15, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           @size-change="loadData"
           @current-change="loadData"
@@ -127,7 +126,7 @@ const filterSpider = ref<number | null>(null)
 const filterFileName = ref('')
 const filterTitle = ref('')
 const spiders = ref<any[]>([])
-const page = reactive({ current: 1, size: 10, total: 0 })
+const page = reactive({ current: 1, size: 15, total: 0 })
 const previewVisible = ref(false)
 const previewLoading = ref(false)
 const previewUrl = ref('')
@@ -174,6 +173,14 @@ const loadData = async () => {
 const refresh = () => {
   page.current = 1
   loadData()
+}
+
+const resetFilters = () => {
+  filterTitle.value = ''
+  filterFileName.value = ''
+  filterCategory.value = ''
+  filterSpider.value = null
+  refresh()
 }
 
 const download = (row: any) => {
@@ -283,7 +290,8 @@ onUnmounted(clearPreview)
 </script>
 
 <style scoped>
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.pagination { margin-top: 18px; display: flex; justify-content: center; }
+.pagination :deep(.el-pagination) { margin-top: 0; }
 .preview-body { min-height: 240px; display: flex; align-items: center; justify-content: center; }
 .preview-image { display: block; width: 100%; height: min(62vh, 620px); }
 .preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0f4; color: #5e6c84; font-size: 13px; }

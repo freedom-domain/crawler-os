@@ -73,8 +73,9 @@ public class SpiderController {
     public R<IPage<Spider>> page(@RequestParam(value = "current", defaultValue = "1") int current,
                                   @RequestParam(value = "size", defaultValue = "10") int size,
                                   @RequestParam(value = "keyword", required = false) String keyword,
+                                  @RequestParam(value = "startUrl", required = false) String startUrl,
                                   @RequestParam(value = "group", required = false) String group) {
-        return R.ok(spiderService.page(current, size, keyword, group));
+        return R.ok(spiderService.page(current, size, keyword, startUrl, group));
     }
 
     @Operation(summary = "爬虫详情")
@@ -170,6 +171,21 @@ public class SpiderController {
     @GetMapping("/task/stats")
     public R<TaskStatsResponse> todayTaskStats() {
         return R.ok(spiderService.todayTaskStats());
+    }
+
+    @Operation(summary = "获取任务最大并发数")
+    @GetMapping("/task/concurrency")
+    public R<Integer> taskConcurrency() {
+        requirePermission("spider:run");
+        return R.ok(spiderService.getTaskConcurrency());
+    }
+
+    @Operation(summary = "更新任务最大并发数")
+    @PutMapping("/task/concurrency")
+    public R<Void> updateTaskConcurrency(@RequestParam("maxConcurrency") int maxConcurrency) {
+        requirePermission("spider:run");
+        spiderService.updateTaskConcurrency(maxConcurrency);
+        return R.ok();
     }
 
     @Operation(summary = "任务详情")

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
+import com.collect.common.security.LoginUtils;
 import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderImportResult;
@@ -33,6 +34,8 @@ import java.util.ArrayList;
 @Service
 @RequiredArgsConstructor
 public class SpiderService {
+    private static final int MIN_TASK_CONCURRENCY = 1;
+    private static final int MAX_TASK_CONCURRENCY = 20;
 
     @Value("${app.kafka.spider-task-topic}")
     private String spiderTaskTopic;
@@ -61,6 +64,7 @@ public class SpiderService {
         spider.setVipSelectorContent(req.getVipSelectorContent());
         spider.setOverwriteHtml(req.getOverwriteHtml());
         spider.setOverwriteImage(req.getOverwriteImage());
+        spider.setIsPublic(req.getIsPublic() == null ? 0 : req.getIsPublic());
         spider.setGroup(req.getGroup());
         spider.setSchedule(req.getSchedule());
         spider.setMaxDepth(req.getMaxDepth());
@@ -79,18 +83,33 @@ public class SpiderService {
     }
 
     @SuppressWarnings("null")
-    public IPage<Spider> page(int current, int size, String keyword, String group) {
+    public IPage<Spider> page(int current, int size, String keyword, String startUrl, String group) {
         current = Math.max(1, current);
         size = Math.min(Math.max(1, size), 100);
         LambdaQueryWrapper<Spider> qw = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
             qw.like(Spider::getName, keyword);
         }
+        if (startUrl != null && !startUrl.isBlank()) {
+            qw.like(Spider::getStartUrls, startUrl.trim());
+        }
         if (group != null && !group.isBlank()) {
             qw.eq(Spider::getGroup, group);
         }
+        if (!isAuthenticated()) {
+            qw.eq(Spider::getIsPublic, 1);
+        }
         qw.orderByDesc(Spider::getCreateTime).orderByDesc(Spider::getId);
         return spiderMapper.selectPage(new Page<>(current, size), qw);
+    }
+
+    private boolean isAuthenticated() {
+        try {
+            LoginUtils.getUserId();
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     public Spider getById(Long id) {
@@ -111,6 +130,7 @@ public class SpiderService {
             config.setVipSelectorContent(spider.getVipSelectorContent());
             config.setOverwriteHtml(spider.getOverwriteHtml());
             config.setOverwriteImage(spider.getOverwriteImage());
+            config.setIsPublic(spider.getIsPublic() == null ? 0 : spider.getIsPublic());
             config.setGroup(spider.getGroup());
             config.setSchedule(spider.getSchedule());
             config.setMaxDepth(spider.getMaxDepth());
@@ -178,6 +198,7 @@ public class SpiderService {
         exist.setVipSelectorContent(req.getVipSelectorContent());
         exist.setOverwriteHtml(req.getOverwriteHtml());
         exist.setOverwriteImage(req.getOverwriteImage());
+        exist.setIsPublic(req.getIsPublic() == null ? 0 : req.getIsPublic());
         exist.setGroup(req.getGroup());
         exist.setSchedule(req.getSchedule());
         exist.setMaxDepth(req.getMaxDepth());
@@ -253,7 +274,7 @@ public class SpiderService {
             msg.setOverwriteImage(1);
         }
         String payload = JSON.toJSONString(msg);
-        boolean runImmediately = taskMapper.countActiveTasks() == 0
+        boolean runImmediately = taskMapper.countActiveTasks() < getMaxConcurrency()
                 && taskMapper.selectNextPendingTaskForUpdate() == null;
 
         SpiderTask task = new SpiderTask();
@@ -395,28 +416,47 @@ public class SpiderService {
     @Transactional(rollbackFor = Exception.class)
     public void dispatchNextQueuedTask() {
         requireTaskCreationGuard();
-        if (taskMapper.countActiveTasks() > 0) {
-            return;
-        }
+        long activeTasks = taskMapper.countActiveTasks();
+        int maxConcurrency = getMaxConcurrency();
+        while (activeTasks < maxConcurrency) {
+            SpiderTask task = taskMapper.selectNextPendingTaskForUpdate();
+            if (task == null) {
+                break;
+            }
+            if (task.getTaskMessage() == null || task.getTaskMessage().isBlank()) {
+                task.setStatus("FAILED");
+                task.setErrorMessage("任务消息缺失，无法派发");
+                task.setEndTime(LocalDateTime.now());
+                taskMapper.updateById(task);
+                log.error("排队任务缺少消息，已标记失败: taskId={}", task.getTaskId());
+                continue;
+            }
 
-        SpiderTask task = taskMapper.selectNextPendingTaskForUpdate();
-        if (task == null) {
-            return;
-        }
-        if (task.getTaskMessage() == null || task.getTaskMessage().isBlank()) {
-            task.setStatus("FAILED");
-            task.setErrorMessage("任务消息缺失，无法派发");
-            task.setEndTime(LocalDateTime.now());
+            task.setStatus("RUNNING");
+            task.setStartTime(LocalDateTime.now());
             taskMapper.updateById(task);
-            log.error("排队任务缺少消息，已标记失败: taskId={}", task.getTaskId());
-            return;
+            sendTaskAfterCommit(task.getTaskMessage());
+            activeTasks++;
+            log.info("已派发排队任务: taskId={}, spider={}, activeTasks={}/{}",
+                    task.getTaskId(), task.getSpiderName(), activeTasks, maxConcurrency);
         }
+    }
 
-        task.setStatus("RUNNING");
-        task.setStartTime(LocalDateTime.now());
-        taskMapper.updateById(task);
-        sendTaskAfterCommit(task.getTaskMessage());
-        log.info("已派发排队任务: taskId={}, spider={}", task.getTaskId(), task.getSpiderName());
+    public int getTaskConcurrency() {
+        requireTaskCreationGuard();
+        return getMaxConcurrency();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void updateTaskConcurrency(int maxConcurrency) {
+        if (maxConcurrency < MIN_TASK_CONCURRENCY || maxConcurrency > MAX_TASK_CONCURRENCY) {
+            throw new BizException("任务并发数必须在 1 到 20 之间");
+        }
+        requireTaskCreationGuard();
+        if (taskMapper.updateMaxConcurrency(maxConcurrency) != 1) {
+            throw new BizException("任务并发策略保存失败");
+        }
+        log.info("任务最大并发数已更新: maxConcurrency={}", maxConcurrency);
     }
 
     private void sendTaskAfterCommit(String payload) {
@@ -436,5 +476,15 @@ public class SpiderService {
         if (taskMapper.lockTaskCreation() == null) {
             throw new BizException("任务队列未初始化，请执行数据库迁移");
         }
+    }
+
+    private int getMaxConcurrency() {
+        Integer maxConcurrency = taskMapper.selectMaxConcurrency();
+        if (maxConcurrency == null
+                || maxConcurrency < MIN_TASK_CONCURRENCY
+                || maxConcurrency > MAX_TASK_CONCURRENCY) {
+            throw new BizException("任务并发策略无效，请检查数据库迁移或配置");
+        }
+        return maxConcurrency;
     }
 }

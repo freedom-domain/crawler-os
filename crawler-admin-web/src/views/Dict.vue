@@ -8,6 +8,7 @@
       </div>
       <div class="search-box">
         <el-input v-model="keyword" placeholder="搜索分类" clearable :prefix-icon="Search" size="small" />
+        <el-button size="small" @click="keyword = ''">重置</el-button>
       </div>
       <div class="category-list" v-loading="loading">
         <div
@@ -316,8 +317,15 @@ onMounted(loadData)
 }
 
 .search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.search-box :deep(.el-input) {
+  min-width: 0;
 }
 
 .category-list {

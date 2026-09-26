@@ -44,6 +44,9 @@ export const spiderImport = (file: File) => {
 }
 
 export const taskPage = (params: any) => request.get('/spider/task/page', { params })
+export const taskConcurrency = () => request.get('/spider/task/concurrency')
+export const updateTaskConcurrency = (maxConcurrency: number) =>
+  request.put('/spider/task/concurrency', null, { params: { maxConcurrency } })
 export const recentTaskList = (size = 5) => request.get('/spider/task/recent', { params: { size } })
 export const taskStats = () => request.get('/spider/task/stats')
 export const taskDetail = (id: number) => request.get(`/spider/task/${id}`)

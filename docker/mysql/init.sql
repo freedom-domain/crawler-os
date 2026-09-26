@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS spider (
     vip_selector_content VARCHAR(512),
     overwrite_html TINYINT DEFAULT 0,
     overwrite_image TINYINT DEFAULT 0,
+    is_public TINYINT NOT NULL DEFAULT 0,
     group VARCHAR(64),
     schedule VARCHAR(64),
     max_depth INT DEFAULT 2,
@@ -87,7 +88,8 @@ CREATE TABLE IF NOT EXISTS spider (
 
 -- 爬虫任务
 CREATE TABLE IF NOT EXISTS spider_task_creation_guard (
-    id TINYINT PRIMARY KEY
+    id TINYINT PRIMARY KEY,
+    max_concurrency INT NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO spider_task_creation_guard (id) VALUES (1);

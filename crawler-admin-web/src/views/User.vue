@@ -1,13 +1,12 @@
 <template>
   <el-card>
-    <template #header><span>用户管理</span></template>
-
     <el-form :inline="true">
       <el-form-item>
         <el-input v-model="keyword" placeholder="搜索用户名" clearable @keyup.enter="loadData" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="loadData" :icon="Search">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
       </el-form-item>
       <el-form-item>
         <el-button type="success" @click="openCreate" :icon="Plus">新增用户</el-button>
@@ -41,11 +40,11 @@
     </el-table>
 
     <el-pagination
-      style="margin-top:16px; justify-content:flex-end"
       v-model:current-page="page"
       v-model:page-size="size"
       :total="total"
-      layout="total, prev, pager, next"
+      :page-sizes="[10, 15, 20, 50, 100]"
+      layout="total, sizes, prev, pager, next, jumper"
       @change="loadData"
     />
 
@@ -124,7 +123,7 @@ import { Search, Plus } from '@element-plus/icons-vue'
 const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
-const size = ref(10)
+const size = ref(15)
 const total = ref(0)
 const keyword = ref('')
 
@@ -161,6 +160,12 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const resetFilters = () => {
+  keyword.value = ''
+  page.value = 1
+  loadData()
 }
 
 const loadRoles = async () => {

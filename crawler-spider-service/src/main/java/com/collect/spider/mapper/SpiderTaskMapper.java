@@ -10,12 +10,19 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
 
     @Select("SELECT id FROM spider_task_creation_guard WHERE id = 1 FOR UPDATE")
     Long lockTaskCreation();
+
+    @Select("SELECT max_concurrency FROM spider_task_creation_guard WHERE id = 1")
+    Integer selectMaxConcurrency();
+
+    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency} WHERE id = 1")
+    int updateMaxConcurrency(@Param("maxConcurrency") int maxConcurrency);
 
     @Select("SELECT * FROM spider_task WHERE id = #{id} AND deleted = 0 FOR UPDATE")
     SpiderTask selectByIdForUpdate(@Param("id") Long id);

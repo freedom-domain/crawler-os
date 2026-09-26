@@ -3,7 +3,6 @@
     <section class="dashboard-hero">
       <div class="hero-copy">
         <p class="eyebrow">CRAWLEROS / CONTROL ROOM</p>
-        <h1>数据运营总览</h1>
         <p class="intro-copy">采集任务、内容资产与服务状态，都在这里保持清晰。</p>
         <div class="hero-status"><span class="status-pulse"></span>系统运行正常 <b>·</b> 实时同步中</div>
       </div>

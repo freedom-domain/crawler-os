@@ -1,51 +1,59 @@
 <template>
   <el-card>
-    <template #header>
-      <div class="search-header">
-        <span>数据搜索</span>
-        <el-button size="small" @click="openPublicSearch">打开公共搜索</el-button>
+    <div class="search-toolbar">
+      <div class="search-bar">
+        <div class="search-row">
+          <SearchHistoryDropdown
+            :open="historyOpen"
+            :keyword="keyword"
+            authenticated
+            @select="selectHistory"
+            @close="historyOpen = false"
+          >
+            <div class="search-box" :class="{ 'history-search-open': historyOpen && !keyword }">
+              <el-icon class="search-icon"><Search /></el-icon>
+              <input
+                v-model="keyword"
+                class="search-input"
+                placeholder="搜索爬取的内容…"
+                @focus="historyOpen = !keyword"
+                @input="historyOpen = !keyword"
+                @keyup.enter="doSearch"
+              />
+              <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
+              <button class="search-btn" type="button" @click="doSearch">搜索</button>
+            </div>
+          </SearchHistoryDropdown>
+        </div>
+        <div class="search-row filter-row">
+          <el-select v-model="filterGroup" placeholder="分组" clearable style="width: 160px" @change="onGroupChange">
+            <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+          </el-select>
+          <el-select v-model="filterSpider" placeholder="站点" clearable filterable style="width: 200px" @change="onSpiderChange">
+            <el-option-group v-for="sec in spiderGroupedOptions" :key="sec.key" :label="sec.label">
+              <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
+            </el-option-group>
+          </el-select>
+          <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
+            <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
+          </el-select>
+          <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
+          <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
+          <el-button class="reset-search-button" plain @click="resetSearch">
+            <el-icon><RefreshLeft /></el-icon>
+            重置
+          </el-button>
+        </div>
       </div>
-    </template>
-
-    <div class="search-bar">
-      <div class="search-row">
-        <SearchHistoryDropdown
-          :open="historyOpen"
-          :keyword="keyword"
-          authenticated
-          @select="selectHistory"
-          @close="historyOpen = false"
-        >
-          <div class="search-box" :class="{ 'history-search-open': historyOpen && !keyword }">
-            <el-icon class="search-icon"><Search /></el-icon>
-            <input
-              v-model="keyword"
-              class="search-input"
-              placeholder="搜索爬取的内容…"
-              @focus="historyOpen = !keyword"
-              @input="historyOpen = !keyword"
-              @keyup.enter="doSearch"
-            />
-            <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
-            <button class="search-btn" type="button" @click="doSearch">搜索</button>
-          </div>
-        </SearchHistoryDropdown>
-      </div>
-      <div class="search-row filter-row">
-        <el-select v-model="filterGroup" placeholder="分组" clearable style="width: 160px" @change="onGroupChange">
-          <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
-        </el-select>
-        <el-select v-model="filterSpider" placeholder="站点" clearable filterable style="width: 200px" @change="onSpiderChange">
-          <el-option-group v-for="sec in spiderGroupedOptions" :key="sec.key" :label="sec.label">
-            <el-option v-for="s in sec.items" :key="s.id" :label="s.name" :value="s.id" />
-          </el-option-group>
-        </el-select>
-        <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
-          <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
-        </el-select>
-        <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
-        <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
-      </div>
+      <el-button
+        class="public-search-link"
+        type="primary"
+        plain
+        :icon="Promotion"
+        @click="openPublicSearch"
+      >
+        公共搜索
+      </el-button>
     </div>
 
     <SearchResultsFrame
@@ -53,7 +61,7 @@
       v-model:page-size="size"
       :loading="loading"
       :total="total"
-      :page-sizes="[10, 20, 50, 100, 200, 500]"
+      :page-sizes="[10, 15, 20, 50, 100, 200, 500]"
       cursor-mode
       :has-more="hasMore"
       @prev="loadPrevPage"
@@ -169,7 +177,7 @@ import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import SearchDetailDialog from '@/components/SearchDetailDialog.vue'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { searchContent, searchDetail, searchDelete, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
-import { Search, FullScreen, Minus, ZoomIn, ZoomOut } from '@element-plus/icons-vue'
+import { Search, FullScreen, Minus, ZoomIn, ZoomOut, Promotion, RefreshLeft } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -193,7 +201,7 @@ const openPublicSearch = () => {
 const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
-const size = ref(10)
+const size = ref(15)
 const total = ref(0)
 // PIT + search_after 游标式分页状态
 const pitId = ref('')
@@ -409,6 +417,16 @@ const doSearch = () => {
   historyOpen.value = false
   syncSearchQuery()
   loadData()
+}
+
+const resetSearch = () => {
+  keyword.value = ''
+  filterGroup.value = ''
+  filterSpider.value = ''
+  filterTag.value = ''
+  favoriteOnly.value = false
+  hasImages.value = false
+  doSearch()
 }
 
 const selectHistory = (value: string) => {
@@ -757,7 +775,7 @@ onMounted(() => {
     ? Math.min(requestedPage, 50)
     : 1
   const requestedSize = Number(route.query.size)
-  if ([10, 20, 50, 100, 200, 500].includes(requestedSize)) {
+  if ([10, 15, 20, 50, 100, 200, 500].includes(requestedSize)) {
     size.value = requestedSize
   }
   const spiderId = Number(route.query.spiderId)
@@ -774,19 +792,34 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.search-header {
+.search-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.public-search-link {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  border-radius: 9px;
+  box-shadow: 0 3px 9px rgba(15, 159, 154, 0.1);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.public-search-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 12px rgba(15, 159, 154, 0.18);
 }
 
 .search-bar {
-  margin-bottom: 20px;
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 700px;
+  flex: 1;
+  min-width: 0;
 }
 
 .search-row {
@@ -796,11 +829,35 @@ onMounted(() => {
 }
 
 .filter-row {
+  width: 100%;
+  justify-content: center;
   gap: 12px;
 }
 
+.reset-search-button {
+  height: 32px;
+  padding: 0 13px;
+  border-color: #d9e7e8;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #fff 0%, #f4faf9 100%);
+  color: #52706f;
+  font-weight: 600;
+  box-shadow: 0 2px 7px rgba(32, 86, 84, 0.08);
+  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.reset-search-button:hover {
+  border-color: #9bd4cd;
+  background: #eef9f7;
+  color: #0f817c;
+  box-shadow: 0 4px 10px rgba(15, 129, 124, 0.12);
+  transform: translateY(-1px);
+}
+
 @media (max-width: 767px) {
-  .search-bar { max-width: 100%; }
+  .search-toolbar { flex-direction: column; gap: 12px; }
+  .search-bar { width: 100%; }
+  .public-search-link { align-self: flex-start; margin-top: 0; }
   .search-row { flex-wrap: wrap; }
   .search-row .el-select { width: 100% !important; }
   :deep(.content-preview-dialog) { top: 4px !important; margin: 0 auto !important; }

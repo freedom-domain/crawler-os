@@ -16,6 +16,8 @@ public class Spider extends BaseEntity {
 
     private String name;
 
+    private Integer isPublic;
+
     @TableField("`group`")
     private String group;
 }

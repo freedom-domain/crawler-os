@@ -1,21 +1,27 @@
 <template>
   <el-card>
-    <template #header>
-      <div class="card-header">
-        <span>我的收藏</span>
-        <div class="header-actions">
-          <el-input v-model="title" clearable placeholder="标题" style="width: 180px" @keyup.enter="refresh" @clear="refresh" />
-          <el-input v-model="url" clearable placeholder="来源 URL" style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
-          <el-select v-model="spiderName" clearable filterable placeholder="爬虫" style="width: 160px" @change="refresh">
-            <el-option v-for="spider in spiderOptions" :key="spider.id" :label="spider.name" :value="spider.name" />
-          </el-select>
-          <el-select v-model="tag" clearable filterable placeholder="标签" style="width: 160px" @change="refresh" @clear="clearTagFilter">
-            <el-option v-for="option in tagOptions" :key="option.id" :label="option.label" :value="option.label" />
-          </el-select>
-          <el-button type="primary" :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
-        </div>
-      </div>
-    </template>
+    <el-form :inline="true" @submit.prevent>
+      <el-form-item>
+        <el-input v-model="title" clearable placeholder="标题" style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
+      </el-form-item>
+      <el-form-item>
+        <el-input v-model="url" clearable placeholder="来源 URL" style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
+      </el-form-item>
+      <el-form-item>
+        <el-select v-model="spiderName" clearable filterable placeholder="爬虫" style="width: 160px" @change="refresh">
+          <el-option v-for="spider in spiderOptions" :key="spider.id" :label="spider.name" :value="spider.name" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-select v-model="tag" clearable filterable placeholder="标签" style="width: 160px" @change="refresh" @clear="clearTagFilter">
+          <el-option v-for="option in tagOptions" :key="option.id" :label="option.label" :value="option.label" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" :icon="Refresh" :loading="loading" @click="refresh">刷新</el-button>
+        <el-button :disabled="loading" @click="resetFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
 
     <el-table :data="list" v-loading="loading" stripe resizable border>
       <el-table-column prop="title" label="标题" min-width="420" show-overflow-tooltip resizable>
@@ -54,7 +60,8 @@
       v-model:current-page="page"
       v-model:page-size="size"
       :total="total"
-      :page-sizes="[10, 20, 50]"
+      :hide-on-single-page="false"
+      :page-sizes="[10, 15, 20, 50]"
       layout="total, sizes, prev, pager, next, jumper"
       @change="loadData"
     />
@@ -71,7 +78,7 @@ import TagEditorDialog from '@/components/TagEditorDialog.vue'
 const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
-const size = ref(10)
+const size = ref(15)
 const total = ref(0)
 const title = ref('')
 const url = ref('')
@@ -95,8 +102,10 @@ const loadData = async () => {
       spiderName: normalizedFilter(spiderName.value),
       tag: normalizedFilter(tag.value)
     })
-    list.value = res?.data?.content || []
-    total.value = res?.data?.totalElements || 0
+    const data = res?.data
+    const content = data?.content || data?.records || []
+    list.value = content
+    total.value = Number(data?.totalElements ?? data?.total ?? data?.page?.totalElements ?? content.length) || 0
   } finally {
     loading.value = false
   }
@@ -105,6 +114,14 @@ const loadData = async () => {
 const refresh = () => {
   page.value = 1
   loadData()
+}
+
+const resetFilters = () => {
+  title.value = ''
+  url.value = ''
+  spiderName.value = ''
+  tag.value = ''
+  refresh()
 }
 
 const clearTagFilter = () => {
@@ -158,9 +175,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.pagination { margin-top: 18px; display: flex; justify-content: center; }
 .source-url { color: #2563eb; text-decoration: none; }
 .source-url:hover { text-decoration: underline; }
 .tag { margin-right: 6px; margin-bottom: 4px; cursor: pointer; }

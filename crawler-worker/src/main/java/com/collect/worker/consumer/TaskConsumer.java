@@ -16,7 +16,8 @@ public class TaskConsumer {
     private final CrawlerEngine crawlerEngine;
 
     @KafkaListener(
-            topics = "${app.kafka.spider-task-topic}"
+            topics = "${app.kafka.spider-task-topic}",
+            concurrency = "${app.kafka.spider-task-consumer-concurrency:20}"
     )
     public void onMessage(String message) {
         log.info("收到爬虫任务消息: {}", message);

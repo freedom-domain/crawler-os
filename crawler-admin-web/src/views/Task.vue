@@ -1,34 +1,49 @@
 <template>
   <el-card>
-    <template #header>
-      <div class="card-header">
-        <span>任务管理</span>
-        <div>
-          <el-switch v-model="autoRefresh" active-text="自动刷新" style="margin-right: 12px" />
+    <el-form :inline="true" @submit.prevent>
+      <el-form-item>
+        <el-select v-model="spiderFilter" placeholder="全部爬虫" clearable style="width: 180px">
+          <el-option v-for="s in spiders" :key="s.id" :label="s.name" :value="s.id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 160px">
+          <el-option label="运行中" value="RUNNING" />
+          <el-option label="排队中" value="PENDING" />
+          <el-option label="取消中" value="CANCELING" />
+          <el-option label="成功" value="SUCCESS" />
+          <el-option label="失败" value="FAILED" />
+          <el-option label="已取消" value="CANCELED" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="loadData" :icon="Search">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="danger" plain @click="handleBatchDelete" :disabled="selectedRows.length === 0">
+          批量删除<span v-if="selectedRows.length">（{{ selectedRows.length }}）</span>
+        </el-button>
+      </el-form-item>
+      <el-form-item class="concurrency-toolbar-item">
+        <el-button :loading="concurrencyLoading" @click="openConcurrencyDialog">并发策略</el-button>
+      </el-form-item>
+      <el-form-item class="refresh-toolbar-item">
+        <div class="refresh-toolbar">
+          <el-switch v-model="autoRefresh" active-text="自动刷新" />
+          <el-select
+            v-model="refreshIntervalSeconds"
+            class="refresh-interval-select"
+            size="small"
+            aria-label="自动刷新间隔"
+            @change="saveRefreshInterval"
+          >
+            <el-option v-for="seconds in refreshIntervalOptions" :key="seconds" :label="`${seconds} 秒`" :value="seconds" />
+          </el-select>
           <el-button :icon="Refresh" @click="loadData">刷新</el-button>
         </div>
-      </div>
-    </template>
-
-    <div class="filter-bar">
-      <span class="filter-label">爬虫</span>
-      <el-select v-model="spiderFilter" placeholder="全部" clearable style="width: 160px">
-        <el-option v-for="s in spiders" :key="s.id" :label="s.name" :value="s.id" />
-      </el-select>
-      <span class="filter-label">状态</span>
-      <el-select v-model="statusFilter" placeholder="全部" clearable style="width: 120px">
-        <el-option label="运行中" value="RUNNING" />
-        <el-option label="排队中" value="PENDING" />
-        <el-option label="取消中" value="CANCELING" />
-        <el-option label="成功" value="SUCCESS" />
-        <el-option label="失败" value="FAILED" />
-        <el-option label="已取消" value="CANCELED" />
-      </el-select>
-      <el-button type="primary" @click="loadData" :icon="Search" style="margin-left: 8px">查询</el-button>
-      <el-button type="danger" @click="handleBatchDelete" :disabled="selectedRows.length === 0" style="margin-left: 8px">
-        批量删除 ({{ selectedRows.length }})
-      </el-button>
-    </div>
+      </el-form-item>
+    </el-form>
 
     <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable border>
       <el-table-column type="selection" width="50"  resizable />
@@ -66,14 +81,50 @@
     </el-table>
 
     <el-pagination
-      style="margin-top: 16px; justify-content: flex-end"
       v-model:current-page="page"
       v-model:page-size="size"
       :total="total"
-      :page-sizes="[10, 20, 50]"
-      layout="total, sizes, prev, pager, next"
+      :page-sizes="[10, 15, 20, 50]"
+      layout="total, sizes, prev, pager, next, jumper"
       @change="loadData"
     />
+
+    <el-dialog
+      v-model="concurrencyDialogVisible"
+      title="任务并发策略"
+      width="460px"
+      :close-on-click-modal="!concurrencySaving"
+      :close-on-press-escape="!concurrencySaving"
+    >
+      <div v-loading="concurrencyLoading" class="concurrency-settings">
+        <div class="concurrency-setting-row">
+          <span>全局最大并发任务数</span>
+          <el-input-number
+            v-model="maxConcurrency"
+            :min="1"
+            :max="20"
+            :step="1"
+            controls-position="right"
+            :disabled="!concurrencyLoaded || concurrencyLoading || concurrencySaving"
+            aria-label="最大并发任务数"
+          />
+        </div>
+        <p class="concurrency-hint">
+          同时运行的任务数上限为 1–20。降低上限不会中断正在运行的任务，后续任务会等待空位。
+        </p>
+      </div>
+      <template #footer>
+        <el-button :disabled="concurrencySaving" @click="closeConcurrencyDialog">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="concurrencySaving"
+          :disabled="!concurrencyLoaded || concurrencyLoading || maxConcurrency === savedMaxConcurrency"
+          @click="saveConcurrency"
+        >
+          保存策略
+        </el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="logVisible"
@@ -110,6 +161,7 @@
           <el-option label="ERROR" value="ERROR" />
         </el-select>
         <el-button size="small" :icon="Search" @click="reloadLogs">查询</el-button>
+        <el-button size="small" @click="resetLogFilters">重置</el-button>
       </div>
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
       <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" :max-height="logFullscreen ? 'calc(100vh - 190px)' : '60vh'" resizable border>
@@ -137,11 +189,11 @@
       </el-table>
       <el-pagination
         v-show="logs.length > 0"
-        style="margin-top: 12px; justify-content: flex-end"
         v-model:current-page="logPage"
-        :page-size="logSize"
+        v-model:page-size="logSize"
         :total="logTotal"
-        layout="total, prev, pager, next"
+        :page-sizes="[10, 15, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
         @change="loadLogs"
       />
     </el-dialog>
@@ -151,19 +203,31 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage } from '@/api'
+import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
 import { Refresh, Search } from '@element-plus/icons-vue'
 
 const list = ref<any[]>([])
 const loading = ref(false)
 const prevStatusMap = new Map<string, string>()
 const page = ref(1)
-const size = ref(10)
+const size = ref(15)
 const total = ref(0)
 const statusFilter = ref('')
 const spiderFilter = ref<number | null>(null)
 const spiders = ref<any[]>([])
-const autoRefresh = ref(false)
+const autoRefresh = ref(true)
+const refreshIntervalOptions = [5, 10, 15, 30, 60]
+const loadRefreshInterval = () => {
+  const saved = Number(localStorage.getItem('task-auto-refresh-interval-seconds'))
+  return refreshIntervalOptions.includes(saved) ? saved : 5
+}
+const refreshIntervalSeconds = ref(loadRefreshInterval())
+const maxConcurrency = ref(1)
+const savedMaxConcurrency = ref(1)
+const concurrencyLoading = ref(false)
+const concurrencySaving = ref(false)
+const concurrencyLoaded = ref(false)
+const concurrencyDialogVisible = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 
 const logVisible = ref(false)
@@ -171,7 +235,7 @@ const logFullscreen = ref(false)
 const logLoading = ref(false)
 const logs = ref<any[]>([])
 const logPage = ref(1)
-const logSize = ref(50)
+const logSize = ref(15)
 const selectedRows = ref<any[]>([])
 
 const handleSelectionChange = (rows: any[]) => {
@@ -209,6 +273,14 @@ const logLevel = ref('')
 const reloadLogs = () => {
   logPage.value = 1
   loadLogs()
+}
+
+const resetLogFilters = () => {
+  logKeyword.value = ''
+  logStatus.value = null
+  logType.value = ''
+  logLevel.value = ''
+  reloadLogs()
 }
 
 const statusTag = (status: string) => {
@@ -279,9 +351,63 @@ const loadData = async () => {
   }
 }
 
+const resetFilters = () => {
+  spiderFilter.value = null
+  statusFilter.value = ''
+  page.value = 1
+  loadData()
+}
+
 const loadSpiders = async () => {
   const res: any = await spiderPage({ current: 1, size: 100 })
   spiders.value = res.data?.records || []
+}
+
+const loadConcurrency = async () => {
+  concurrencyLoading.value = true
+  concurrencyLoaded.value = false
+  try {
+    const res: any = await taskConcurrency()
+    const value = Number(res.data)
+    if (!Number.isInteger(value) || value < 1 || value > 20) {
+      throw new Error('服务器返回的任务并发数无效')
+    }
+    maxConcurrency.value = value
+    savedMaxConcurrency.value = value
+    concurrencyLoaded.value = true
+  } catch {
+    ElMessage.error('读取任务并发策略失败')
+  } finally {
+    concurrencyLoading.value = false
+  }
+}
+
+const openConcurrencyDialog = async () => {
+  concurrencyDialogVisible.value = true
+  await loadConcurrency()
+}
+
+const closeConcurrencyDialog = () => {
+  maxConcurrency.value = savedMaxConcurrency.value
+  concurrencyDialogVisible.value = false
+}
+
+const saveConcurrency = async () => {
+  if (!Number.isInteger(maxConcurrency.value) || maxConcurrency.value < 1 || maxConcurrency.value > 20) {
+    ElMessage.warning('最大并发数需设置为 1 到 20 的整数')
+    return
+  }
+  concurrencySaving.value = true
+  try {
+    await updateTaskConcurrency(maxConcurrency.value)
+    savedMaxConcurrency.value = maxConcurrency.value
+    ElMessage.success('任务并发策略已更新')
+    concurrencyDialogVisible.value = false
+  } catch {
+    ElMessage.error('更新任务并发策略失败')
+  } finally {
+    concurrencySaving.value = false
+  }
 }
 
 const showLogs = async (row: any) => {
@@ -344,8 +470,13 @@ const hasActive = () => list.value.some((t: any) =>
 const startTimer = () => {
   stopTimer()
   if (autoRefresh.value && hasActive()) {
-    timer = setInterval(loadData, 5000)
+    timer = setInterval(loadData, refreshIntervalSeconds.value * 1000)
   }
+}
+
+const saveRefreshInterval = (seconds: number) => {
+  localStorage.setItem('task-auto-refresh-interval-seconds', String(seconds))
+  startTimer()
 }
 
 const stopTimer = () => {
@@ -373,31 +504,18 @@ onUnmounted(stopTimer)
 .log-dialog-header .el-button { margin-right: 8px; }
 :deep(.log-fullscreen-dialog) { margin: 0 auto !important; height: 100vh; }
 :deep(.log-fullscreen-dialog .el-dialog__body) { height: calc(100vh - 72px); overflow: auto; }
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.filter-bar {
+.concurrency-settings { min-height: 88px; }
+.concurrency-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.concurrency-setting-row > span { color: #475569; font-weight: 600; }
+.concurrency-hint { margin-top: 14px; color: #64748b; font-size: 13px; line-height: 1.6; }
+.refresh-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  justify-content: flex-end;
+  gap: 12px;
 }
-
-.filter-label {
-  font-size: 14px;
-  color: #606266;
-  white-space: nowrap;
-}
-
-@media (max-width: 767px) {
-  .filter-bar { flex-wrap: wrap; gap: 8px; }
-  .filter-bar .el-select { width: 100% !important; }
-  .filter-bar .el-button { margin-left: 0 !important; }
-  .card-header { flex-wrap: wrap; gap: 8px; }
-}
+.refresh-interval-select { width: 90px; }
+:deep(.concurrency-toolbar-item) { margin-left: auto !important; }
 
 .log-filter {
   display: flex;
@@ -414,5 +532,10 @@ onUnmounted(stopTimer)
 
 .log-url:hover {
   text-decoration: underline;
+}
+
+@media (max-width: 767px) {
+  :deep(.concurrency-toolbar-item) { margin-left: 0 !important; }
+  .refresh-toolbar { justify-content: flex-end; }
 }
 </style>
