@@ -1,12 +1,34 @@
-import axios from 'axios'
+import axios, { type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import router from '@/router'
+
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    _retriedWithoutAuth?: boolean
+  }
+}
 
 const request = axios.create({
   baseURL: '/api',
   timeout: 15000
 })
+
+const isPublicSearchPage = () => router.currentRoute.value.path === '/public/search'
+
+const isLoginRequest = (config: InternalAxiosRequestConfig) =>
+  config.url?.includes('/user/login') ?? false
+
+const retryPublicRequestAsGuest = (config: InternalAxiosRequestConfig) => {
+  if (!isPublicSearchPage() || isLoginRequest(config) || config._retriedWithoutAuth) {
+    return null
+  }
+
+  useUserStore().logout()
+  config._retriedWithoutAuth = true
+  config.headers.delete('Authorization')
+  return request(config)
+}
 
 request.interceptors.request.use((config) => {
   const userStore = useUserStore()
@@ -24,6 +46,16 @@ request.interceptors.response.use(
     const res = response.data
     // 后端以 HTTP 200 + body code=401 表示未登录/登录过期，需在此处理跳转
     if (res.code === 401) {
+      if (isLoginRequest(response.config)) {
+        return Promise.reject(new Error(res.msg || '登录失败'))
+      }
+      const guestRetry = retryPublicRequestAsGuest(response.config)
+      if (guestRetry) {
+        return guestRetry
+      }
+      if (isPublicSearchPage()) {
+        return Promise.reject(new Error(res.msg || '登录状态已过期'))
+      }
       const userStore = useUserStore()
       userStore.logout()
       if (router.currentRoute.value.path !== '/login') {
@@ -41,6 +73,20 @@ request.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
+      const config = error.config as InternalAxiosRequestConfig | undefined
+      if (config && isLoginRequest(config)) {
+        ElMessage.error(error.response?.data?.msg || '登录失败')
+        return Promise.reject(error)
+      }
+      if (config) {
+        const guestRetry = retryPublicRequestAsGuest(config)
+        if (guestRetry) {
+          return guestRetry
+        }
+      }
+      if (isPublicSearchPage()) {
+        return Promise.reject(error)
+      }
       const userStore = useUserStore()
       userStore.logout()
       // 避免并发请求同时触发多次跳转，且已在登录页时不再重复跳转
