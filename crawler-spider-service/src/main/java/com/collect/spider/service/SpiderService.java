@@ -271,6 +271,9 @@ public class SpiderService {
 
     private SpiderTask createTask(Spider spider, List<String> startUrls, Integer maxDepthOverride, boolean forceOverwrite) {
         requireTaskCreationGuard();
+        if (taskMapper.countActiveTasksBySpiderId(spider.getId()) > 0) {
+            throw new BizException("该爬虫已有排队或正在运行的任务");
+        }
 
         Long taskId = snowflakeId();
         TaskMessage msg = buildMessage(spider, taskId, startUrls);

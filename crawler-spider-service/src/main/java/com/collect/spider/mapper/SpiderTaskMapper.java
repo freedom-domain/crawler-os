@@ -31,6 +31,11 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
             + "WHERE deleted = 0 AND status IN ('RUNNING', 'CANCELING')")
     long countActiveTasks();
 
+    @Select("SELECT COUNT(*) FROM spider_task "
+            + "WHERE deleted = 0 AND spider_id = #{spiderId} "
+            + "AND status IN ('PENDING', 'RUNNING', 'CANCELING')")
+    long countActiveTasksBySpiderId(@Param("spiderId") Long spiderId);
+
     @Select("SELECT * FROM spider_task WHERE deleted = 0 AND status = 'PENDING' "
             + "ORDER BY create_time ASC, id ASC LIMIT 1 FOR UPDATE")
     SpiderTask selectNextPendingTaskForUpdate();

@@ -90,10 +90,18 @@ public class ContentParser {
         return urls;
     }
 
-    public static boolean matchesSelectorContent(Document doc, String selector, String content) {
-        if (doc == null || selector == null || selector.isBlank() || content == null || content.isBlank()) {
+    public static boolean isVipPage(Document doc, String selector, String vipContent) {
+        if (doc == null || selector == null || selector.isBlank()) {
             return false;
         }
-        return doc.select(selector).stream().anyMatch(element -> element.text().contains(content));
+        List<Element> matchedElements = doc.select(selector);
+        if (matchedElements.isEmpty()) {
+            return false;
+        }
+        if (vipContent == null || vipContent.isBlank()) {
+            return true;
+        }
+        String content = vipContent.trim();
+        return matchedElements.stream().anyMatch(element -> element.text().contains(content));
     }
 }

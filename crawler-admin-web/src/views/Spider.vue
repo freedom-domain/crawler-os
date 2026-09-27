@@ -337,38 +337,43 @@ const loadGroupOptions = async () => {
   }
 }
 
-const tableRowClassName = ({ row }: { row: any }) => row.id === highlightSpiderId.value ? 'spider-highlight-row' : ''
+const tableRowClassName = ({ row }: { row: any }) =>
+  Number(row.id) === highlightSpiderId.value ? 'spider-highlight-row' : ''
 
 const focusSpiderRow = () => {
   if (!highlightSpiderId.value) return
   nextTick(() => {
-    const rows = tableRef.value?.$el?.querySelectorAll?.('.el-table__row') || []
-    const targetIndex = list.value.findIndex((row) => row.id === highlightSpiderId.value)
+    const rows = tableRef.value?.$el?.querySelectorAll?.('.el-table__body-wrapper tbody tr') || []
+    const targetIndex = list.value.findIndex((row) => Number(row.id) === highlightSpiderId.value)
     const targetRow = rows[targetIndex]
     if (targetRow) {
       targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      targetRow.classList.add('spider-focus-row')
     }
   })
 }
 
 const loadData = async () => {
+  const requestedHighlightId = highlightSpiderId.value
   loading.value = true
   try {
-    const effectiveSize = highlightSpiderId.value ? 1000 : size.value
     const res: any = await spiderPage({
       current: 1,
-      size: effectiveSize,
+      size: requestedHighlightId ? 100 : size.value,
       keyword: keyword.value,
       startUrl: urlFilter.value || undefined,
       group: groupFilter.value || undefined
     })
+    if (requestedHighlightId !== highlightSpiderId.value) return
     list.value = res.data?.records || []
     total.value = res.data?.total || 0
-    if (highlightSpiderId.value) {
-      const found = list.value.some((row) => row.id === highlightSpiderId.value)
+    if (requestedHighlightId) {
+      const found = list.value.some((row) => Number(row.id) === requestedHighlightId)
       if (!found) {
-        highlightSpiderId.value = null
+        const detail: any = await spiderDetail(requestedHighlightId)
+        if (requestedHighlightId !== highlightSpiderId.value) return
+        if (detail.data && Number(detail.data.id) === requestedHighlightId) {
+          list.value.unshift(detail.data)
+        }
       }
     }
     focusSpiderRow()
@@ -518,26 +523,19 @@ watch(
   (val) => {
     const id = Number(val)
     highlightSpiderId.value = Number.isFinite(id) && id > 0 ? id : null
-    if (highlightSpiderId.value) {
-      loadData()
-    }
+    loadData()
   },
   { immediate: true }
 )
 
 onMounted(() => {
   loadGroupOptions()
-  loadData()
 })
 </script>
 
 <style scoped>
-:deep(.spider-highlight-row) {
-  background: #fff7e6 !important;
-}
-
-:deep(.spider-focus-row) {
-  box-shadow: inset 0 0 0 2px #f59e0b;
+:deep(.el-table__body tr.spider-highlight-row > td.el-table__cell) {
+  background-color: #fff1cc !important;
 }
 
 .spider-toolbar :deep(.spider-name-filter) { width: 240px; }

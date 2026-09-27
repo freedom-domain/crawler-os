@@ -1,7 +1,10 @@
 <template>
   <div class="result-item">
     <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
-    <h3 class="result-title" @click.prevent="$emit('preview', row)" v-html="row.titleHl || row.title"></h3>
+    <h3 class="result-title" @click.prevent="$emit('preview', row)">
+      <span v-html="row.titleHl || row.title"></span>
+      <span v-if="row.images?.length" class="result-image-count">图片 <strong>{{ row.images.length }}</strong> 张</span>
+    </h3>
     <div class="result-content-line">
       <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
       <span
@@ -65,6 +68,26 @@ defineEmits<{
   line-height: 1.4;
   cursor: pointer;
   transition: color 0.2s ease, text-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.result-image-count {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 9px;
+  border: 1px solid #b7e7dc;
+  border-radius: 999px;
+  background: #e8f7f3;
+  color: #087f70;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.result-image-count strong {
+  color: #075e55;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .result-title:hover {

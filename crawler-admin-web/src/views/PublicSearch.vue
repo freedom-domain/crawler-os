@@ -311,7 +311,7 @@ const previewTitle = ref('')
 const previewHtml = ref('')
 const previewSource = ref('')
 const previewBaseUrl = ref('')
-const localizePreviewResources = ref(false)
+const localizePreviewResources = ref(true)
 const showPreviewSource = ref(false)
 const previewImages = ref<string[]>([])
 const previewInitialIndex = ref(0)
@@ -641,7 +641,7 @@ const showPreviewContent = async (row: any) => {
   previewHtml.value = ''
   previewSource.value = ''
   previewBaseUrl.value = ''
-  localizePreviewResources.value = false
+  localizePreviewResources.value = true
   showPreviewSource.value = false
   try {
     const res: any = await searchDetail(row.id)

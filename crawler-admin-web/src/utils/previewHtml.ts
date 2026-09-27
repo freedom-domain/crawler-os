@@ -24,7 +24,7 @@ const localResourceUrl = (url: string, type: 'css' | 'js'): string => {
 export const resolvePreviewHtml = (
   html: string,
   baseUrl: string,
-  localizeStaticResources = false
+  localizeStaticResources = true
 ): string => {
   if (!html || !baseUrl) return html
 

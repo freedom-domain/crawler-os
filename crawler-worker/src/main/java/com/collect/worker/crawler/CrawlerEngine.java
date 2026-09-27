@@ -559,10 +559,10 @@ public class CrawlerEngine {
     }
 
     private boolean shouldSkipImageDownload(Document doc, TaskMessage msg) {
-        boolean matched = ContentParser.matchesSelectorContent(
+        boolean matched = ContentParser.isVipPage(
                 doc, msg.getVipSelector(), msg.getVipSelectorContent());
         if (matched) {
-            log.info("页面匹配 VIP 选择器内容，跳过图片下载: selector={}, content={}",
+            log.info("页面判定为 VIP，跳过图片下载: selector={}, content={}",
                     msg.getVipSelector(), msg.getVipSelectorContent());
         }
         return matched;

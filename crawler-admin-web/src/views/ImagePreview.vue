@@ -91,8 +91,9 @@
         :style="{ left: `${imageMenu.x}px`, top: `${imageMenu.y}px` }"
         @click.stop
       >
+        <button v-if="sourceUrl" class="context-action context-action-source" type="button" @click="openSourcePage">跳转来源页</button>
         <button v-if="userStore.token" class="context-action context-action-tag" type="button" @click="openTagEditor">设置标签</button>
-        <button class="context-action context-action-delete" type="button" @click="deleteSelectedImage">删除图片</button>
+        <button v-if="userStore.token" class="context-action context-action-delete" type="button" @click="deleteSelectedImage">删除图片</button>
       </div>
 
       <!-- 分页控件 -->
@@ -159,6 +160,7 @@ const userStore = useUserStore()
 const contentId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 
 const title = ref('图片预览')
+const sourceUrl = ref('')
 const images = ref<string[]>([])
 const imageObjects = ref<string[]>([])
 const contentTags = ref<string[]>([])
@@ -338,6 +340,7 @@ const loadImages = async () => {
     const res: any = await searchDetail(id)
     const doc = res.data
     contentTags.value = doc?.tags || []
+    sourceUrl.value = typeof doc?.url === 'string' ? doc.url.trim() : ''
     // 加载前保持传递过来的 title 不变，仅在未传递 title 时才使用文档中的 title
     if (!title.value && doc?.title) title.value = doc.title
     const rawImages: string[] = doc?.images || []
@@ -385,8 +388,33 @@ const handleTagsSaved = (tags: string[]) => {
 }
 
 const openImageMenu = (event: MouseEvent, index: number) => {
-  if (!userStore.token) return
+  if (!userStore.token && !sourceUrl.value) return
   imageMenu.value = { visible: true, x: event.clientX, y: event.clientY, index }
+}
+
+const openSourcePage = () => {
+  imageMenu.value.visible = false
+  if (!sourceUrl.value) {
+    ElMessage.info('该条内容暂无来源页')
+    return
+  }
+
+  let url: URL
+  try {
+    url = new URL(sourceUrl.value)
+  } catch {
+    ElMessage.error('来源页地址无效')
+    return
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    ElMessage.error('来源页地址无效')
+    return
+  }
+
+  const win = window.open(url.href, '_blank', 'noopener,noreferrer')
+  if (!win) {
+    ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
+  }
 }
 
 const hideImageMenu = () => {
@@ -630,6 +658,15 @@ onBeforeUnmount(() => {
 
 .context-action-tag {
   color: #2563eb;
+}
+
+.context-action-source {
+  color: #0f766e;
+}
+
+.context-action-source:hover {
+  background: #f0fdfa;
+  color: #0f766e;
 }
 
 .context-action-tag:hover {

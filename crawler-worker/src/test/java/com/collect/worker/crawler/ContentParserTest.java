@@ -9,19 +9,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ContentParserTest {
 
     @Test
-    void matchesSelectorContent_shouldMatchContainedText() {
-        var doc = Jsoup.parse("<div class='vip'>VIP会员专属内容</div>");
+    void isVipPage_shouldMatchSelectorWhenVipContentIsEmpty() {
+        var doc = Jsoup.parse("<div class='vip'></div>");
 
-        assertTrue(ContentParser.matchesSelectorContent(doc, ".vip", "会员专属"));
-        assertFalse(ContentParser.matchesSelectorContent(doc, ".vip", "普通用户"));
-        assertFalse(ContentParser.matchesSelectorContent(doc, ".missing", "会员"));
+        assertTrue(ContentParser.isVipPage(doc, ".vip", ""));
     }
 
     @Test
-    void matchesSelectorContent_shouldNotMatchWhenConfigurationIsIncomplete() {
+    void isVipPage_shouldRequireVipContentToMatchInsideSelectedElement() {
+        var doc = Jsoup.parse("<div class='vip'>VIP会员专属内容</div><p>其他会员内容</p>");
+
+        assertTrue(ContentParser.isVipPage(doc, ".vip", "会员专属"));
+        assertFalse(ContentParser.isVipPage(doc, ".vip", "其他会员内容"));
+        assertFalse(ContentParser.isVipPage(doc, ".missing", "会员专属"));
+    }
+
+    @Test
+    void isVipPage_shouldRequireSelectorConfigurationAndMatch() {
         var doc = Jsoup.parse("<div class='vip'>VIP会员专属内容</div>");
 
-        assertFalse(ContentParser.matchesSelectorContent(doc, ".vip", ""));
-        assertFalse(ContentParser.matchesSelectorContent(doc, "", "会员"));
+        assertFalse(ContentParser.isVipPage(doc, ".vip", "普通用户"));
+        assertFalse(ContentParser.isVipPage(doc, "", ""));
+        assertFalse(ContentParser.isVipPage(doc, null, "VIP"));
+        assertFalse(ContentParser.isVipPage(null, ".vip", "VIP"));
     }
 }
