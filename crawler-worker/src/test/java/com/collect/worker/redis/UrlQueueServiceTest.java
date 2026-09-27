@@ -3,6 +3,7 @@ package com.collect.worker.redis;
 import com.collect.worker.crawler.ContentParser;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import us.codecraft.webmagic.selector.Html;
 
 import java.util.List;
 
@@ -51,7 +52,8 @@ class UrlQueueServiceTest {
                 + "<a href='https://example.com/images/photo.jpg?size=large'>Image</a>"
                 + "</body></html>";
 
-        List<String> urls = ContentParser.extractNextUrls(org.jsoup.Jsoup.parse(html), "https://example.com", 1);
+        List<String> urls = ContentParser.extractNextUrls(
+                new Html(html, "https://example.com"), "https://example.com", 1);
 
         assertEquals(1, urls.size());
         assertEquals("https://example.com/path?a=1&b=2", urls.get(0));

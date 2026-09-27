@@ -39,7 +39,7 @@
         <lombok.version>1.18.32</lombok.version>
         <jjwt.version>0.12.5</jjwt.version>
         <minio.version>8.5.9</minio.version>
-        <jsoup.version>1.17.2</jsoup.version>
+        <webmagic.version>0.9.0</webmagic.version>
         <okhttp.version>4.12.0</okhttp.version>
         <springdoc.version>2.5.0</springdoc.version>
         <fastjson2.version>2.0.65</fastjson2.version>
@@ -119,9 +119,9 @@
                 <version>${minio.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.jsoup</groupId>
-                <artifactId>jsoup</artifactId>
-                <version>${jsoup.version}</version>
+                <groupId>us.codecraft</groupId>
+                <artifactId>webmagic-core</artifactId>
+                <version>${webmagic.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.squareup.okhttp3</groupId>

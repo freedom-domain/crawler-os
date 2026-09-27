@@ -16,10 +16,9 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import io.minio.StatObjectResponse;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
+import us.codecraft.webmagic.selector.Html;
+import us.codecraft.webmagic.selector.HtmlNode;
+import us.codecraft.webmagic.selector.Selectable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -269,11 +268,11 @@ public class CrawlerEngine {
                                 "html/" + ObjectNameUtils.base64Url(url) + ".html")
                         : null;
                 boolean cacheHit = cachedHtml != null;
-                Document doc = cacheHit ? Jsoup.parse(cachedHtml, url) : fetch(url, msg);
+                Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg);
                 long cost = System.currentTimeMillis() - start;
 
-                ContentParser parsed = ContentParser.parse(doc.outerHtml(), url, msg.getContentSelector());
-                String newHtml = doc.outerHtml();
+                ContentParser parsed = ContentParser.parse(doc.get(), url, msg.getContentSelector());
+                String newHtml = doc.get();
                 String newHtmlHash = md5(newHtml);
                 boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
                 boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
@@ -359,7 +358,7 @@ public class CrawlerEngine {
         }
     }
 
-    private void updateImagesAfterPageProcessing(Document doc, SpiderContentDoc document, String pageUrl,
+    private void updateImagesAfterPageProcessing(Html doc, SpiderContentDoc document, String pageUrl,
                                                 String title, TaskMessage msg, SpiderTask task,
                                                 boolean overwrite) {
         try {
@@ -506,7 +505,7 @@ public class CrawlerEngine {
      * overwrite=true 时重新下载并覆盖已存在的图片；否则跳过已存在的图片。
      * 返回已上传图片的 objectName 列表（无图片时返回空列表）。
      */
-    private List<String> extractAndUploadImages(Document doc, String pageUrl, String title,
+    private List<String> extractAndUploadImages(Html doc, String pageUrl, String title,
                                                 TaskMessage msg, SpiderTask task, boolean overwrite) {
         String selector = msg.getImageSelector();
         String xpath = msg.getImageXpath();
@@ -580,7 +579,7 @@ public class CrawlerEngine {
         return uploadedUrls;
     }
 
-    static List<String> extractImageSources(Document doc, String pageUrl, String selector, String xpath) {
+    static List<String> extractImageSources(Html doc, String pageUrl, String selector, String xpath) {
         if (doc == null) {
             return List.of();
         }
@@ -592,24 +591,21 @@ public class CrawlerEngine {
 
         java.util.Set<String> sources = new java.util.LinkedHashSet<>();
         if (hasSelector) {
-            Elements matched = doc.select(selector);
+            List<Selectable> matched = doc.$(selector).nodes();
             if (matched.isEmpty()) {
                 return List.of();
             }
             if (hasXpath) {
                 // 选择器 + XPath：在选择器命中的元素范围内按 XPath 定位图片
-                for (Element scope : matched) {
+                for (Selectable scope : matched) {
                     sources.addAll(extractImageSourcesByXpath(scope, pageUrl, xpath));
                 }
                 return new java.util.ArrayList<>(sources);
             }
             // 仅选择器：取命中元素自身及内部的 <img>
-            for (Element scope : matched) {
-                if ("img".equalsIgnoreCase(scope.tagName())) {
-                    addAbsoluteImageSource(sources, pageUrl, scope.attr("src"));
-                }
-                for (Element image : scope.select("img")) {
-                    addAbsoluteImageSource(sources, pageUrl, image.attr("src"));
+            for (Selectable scope : matched) {
+                for (String source : scope.xpath("//img/@src").all()) {
+                    addAbsoluteImageSource(sources, pageUrl, source);
                 }
             }
             return new java.util.ArrayList<>(sources);
@@ -620,14 +616,21 @@ public class CrawlerEngine {
         return new java.util.ArrayList<>(sources);
     }
 
-    static List<String> extractImageSourcesByXpath(Element scope, String pageUrl, String xpath) {
+    static List<String> extractImageSourcesByXpath(Selectable scope, String pageUrl, String xpath) {
         List<String> sources = new java.util.ArrayList<>();
-        Document scopedDocument = Jsoup.parse(scope.outerHtml(), pageUrl);
-        Elements nodes = scopedDocument.selectXpath(xpath);
         java.util.Set<String> seen = new java.util.LinkedHashSet<>();
-        for (Element node : nodes) {
-            // XPath 已定位到目标节点（含属性表达式），直接取节点文本内容作为图片地址
-            addAbsoluteImageSource(seen, pageUrl, node.text());
+        Selectable matched = scope.xpath(xpath);
+        if (matched instanceof HtmlNode) {
+            for (Selectable node : matched.nodes()) {
+                List<String> imageAttributes = node.xpath("//img/@src").all();
+                for (String source : imageAttributes) {
+                    addAbsoluteImageSource(seen, pageUrl, source);
+                }
+            }
+        } else {
+            for (String source : matched.all()) {
+                addAbsoluteImageSource(seen, pageUrl, source);
+            }
         }
         sources.addAll(seen);
         return sources;
@@ -636,13 +639,20 @@ public class CrawlerEngine {
     private static void addAbsoluteImageSource(java.util.Set<String> sources, String pageUrl, String source) {
         if (source == null || source.isBlank()) return;
         try {
-            sources.add(URI.create(pageUrl).resolve(source).toString());
+            URI resolved = URI.create(pageUrl).resolve(source.trim());
+            String scheme = resolved.getScheme();
+            if (resolved.getHost() == null || scheme == null
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                log.debug("图片 XPath 命中的地址无效: {}", source);
+                return;
+            }
+            sources.add(resolved.toString());
         } catch (IllegalArgumentException ignored) {
             log.debug("图片 XPath 命中的地址无效: {}", source);
         }
     }
 
-    private boolean shouldSkipImageDownload(Document doc, TaskMessage msg) {
+    private boolean shouldSkipImageDownload(Html doc, TaskMessage msg) {
         boolean matched = ContentParser.isVipPage(
                 doc, msg.getVipSelector(), msg.getVipSelectorContent());
         if (matched) {
@@ -656,7 +666,7 @@ public class CrawlerEngine {
      * 按需上传页面 HTML 原文，并将页面引用的 JS/CSS 文件上传到资源目录。
      * 对象名基于 URL 的 Base64 编码；资源是否覆盖与 HTML 使用同一个覆盖开关。
      */
-    private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg,
+    private void saveHtmlAndJs(Html doc, String url, String html, TaskMessage msg,
                                SpiderTask task, boolean saveHtml, Set<String> processedResourceUrls) {
         try {
             String urlHash = ObjectNameUtils.base64Url(url);
@@ -667,9 +677,9 @@ public class CrawlerEngine {
                         "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
             }
             Map<String, WebResource> resourceQueue = new java.util.LinkedHashMap<>();
-            for (Element script : doc.select("script[src]")) {
-                String jsUrl = script.absUrl("src");
-                if (jsUrl.isBlank()) {
+            for (String source : doc.$("script[src]", "src").all()) {
+                String jsUrl = resolveResourceUrl(url, source);
+                if (jsUrl == null) {
                     continue;
                 }
                 String extension = extensionFromUrl(jsUrl);
@@ -678,14 +688,9 @@ public class CrawlerEngine {
                 enqueueResource(resourceQueue, processedResourceUrls,
                         new WebResource(jsUrl, "js", objectName, "application/javascript"));
             }
-            for (Element stylesheet : doc.select("link[href]")) {
-                String rel = stylesheet.attr("rel");
-                if (java.util.Arrays.stream(rel.split("\\s+"))
-                        .noneMatch(value -> "stylesheet".equalsIgnoreCase(value))) {
-                    continue;
-                }
-                String cssUrl = stylesheet.absUrl("href");
-                if (cssUrl.isBlank()) {
+            for (String source : doc.$("link[rel~=stylesheet][href]", "href").all()) {
+                String cssUrl = resolveResourceUrl(url, source);
+                if (cssUrl == null) {
                     continue;
                 }
                 String objectName = "css/" + ObjectNameUtils.base64Url(cssUrl) + ".css";
@@ -762,9 +767,28 @@ public class CrawlerEngine {
         fileMetadataMapper.updateById(metadata);
     }
 
-    private String parsedTitle(Document doc, String url) {
-        String title = doc.title();
+    private String parsedTitle(Html doc, String url) {
+        List<Selectable> titleElements = doc.$("title").nodes();
+        String title = titleElements.isEmpty() ? "" : ContentParser.textOf(titleElements.get(0));
         return title.isBlank() ? url : title;
+    }
+
+    private String resolveResourceUrl(String pageUrl, String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        try {
+            URI resolved = URI.create(pageUrl).resolve(source.trim());
+            String scheme = resolved.getScheme();
+            if (resolved.getHost() == null || scheme == null
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                return null;
+            }
+            return resolved.toString();
+        } catch (IllegalArgumentException e) {
+            log.debug("页面资源地址无效: pageUrl={}, source={}", pageUrl, source);
+            return null;
+        }
     }
 
     static String extensionFromUrl(String source) {
@@ -906,7 +930,7 @@ public class CrawlerEngine {
         };
     }
 
-    private Document fetch(String url, TaskMessage msg) throws Exception {
+    private Html fetch(String url, TaskMessage msg) throws Exception {
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
@@ -916,7 +940,10 @@ public class CrawlerEngine {
             if (!response.isSuccessful()) {
                 throw new RuntimeException("HTTP " + response.code());
             }
-            return Jsoup.parse(response.body().string(), url);
+            if (response.body() == null) {
+                throw new IllegalStateException("HTTP 响应正文为空");
+            }
+            return new Html(response.body().string(), url);
         }
     }
 

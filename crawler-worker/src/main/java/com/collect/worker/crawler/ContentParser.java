@@ -1,10 +1,11 @@
 package com.collect.worker.crawler;
 
 import lombok.Data;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
+import us.codecraft.webmagic.selector.Html;
+import us.codecraft.webmagic.selector.HtmlNode;
+import us.codecraft.webmagic.selector.Selectable;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -29,60 +30,58 @@ public class ContentParser {
      * 若选择器未命中或文本为空，则回退到标题作为内容。
      * 未配置内容选择器时，保持原有行为（取 body 文本）。
      */
-    public static ContentParser parse(String html, String baseUrl, String contentSelector) {
-        Document doc = Jsoup.parse(html, baseUrl);
+    public static ContentParser parse(String source, String baseUrl, String contentSelector) {
+        Html doc = new Html(source, baseUrl);
         ContentParser parser = new ContentParser();
         parser.setUrl(baseUrl);
 
-        String title = doc.title() != null ? doc.title().trim() : baseUrl;
+        List<Selectable> titleElements = doc.$("title").nodes();
+        String title = titleElements.isEmpty() ? "" : textOf(titleElements.get(0));
+        if (title.isEmpty()) {
+            title = baseUrl;
+        }
         parser.setTitle(title);
 
         String content;
         if (contentSelector != null && !contentSelector.isBlank()) {
-            Element contentEl = doc.selectFirst(contentSelector);
-            String selectedText = contentEl != null ? contentEl.text().trim() : "";
+            List<Selectable> matched = doc.$(contentSelector).nodes();
+            String selectedText = matched.isEmpty() ? "" : textOf(matched.get(0));
             if (!selectedText.isEmpty()) {
                 content = selectedText.length() > 5000 ? selectedText.substring(0, 5000) : selectedText;
             } else {
-                // 内容选择器无内容，回退到标题
                 content = title;
             }
         } else {
-            Element body = doc.body();
-            String text = body != null ? body.text() : "";
+            List<Selectable> bodyElements = doc.$("body").nodes();
+            String text = bodyElements.isEmpty() ? "" : textOf(bodyElements.get(0));
             content = text.length() > 5000 ? text.substring(0, 5000) : text;
         }
         parser.setContent(content);
 
-        Element authorEl = doc.selectFirst("meta[name='author']");
-        if (authorEl != null) {
-            parser.setAuthor(authorEl.attr("content"));
+        List<String> metaAuthors = doc.$("meta[name=author]", "content").all();
+        if (!metaAuthors.isEmpty()) {
+            parser.setAuthor(metaAuthors.get(0));
         } else {
-            authorEl = doc.selectFirst(".author, .byline, [rel='author']");
-            parser.setAuthor(authorEl != null ? authorEl.text() : "");
+            List<Selectable> authorElements = doc.$(".author, .byline, [rel=author]").nodes();
+            parser.setAuthor(authorElements.isEmpty() ? "" : textOf(authorElements.get(0)));
         }
 
         return parser;
     }
 
-    public static List<String> extractNextUrls(Document doc, String baseUrl, int remainingDepth) {
+    public static List<String> extractNextUrls(Html doc, String baseUrl, int remainingDepth) {
         List<String> urls = new ArrayList<>();
         if (remainingDepth <= 0) {
             return urls;
         }
-        // 每页链接无上限，仅做页内去重与协议过滤；同一任务内还会在队列层统一规范化再次去重
         Set<String> seen = new HashSet<>();
-        for (Element a : doc.select("a[href]")) {
-            String href = a.absUrl("href");
-            if (href == null || href.isBlank()) {
+        for (String href : doc.$("a[href]", "href").all()) {
+            String absoluteUrl = resolveUrl(baseUrl, href);
+            if (absoluteUrl == null || com.collect.worker.redis.UrlQueueService.isImageUrl(absoluteUrl)) {
                 continue;
             }
-            if (com.collect.worker.redis.UrlQueueService.isImageUrl(href)) {
-                continue;
-            }
-            String normalizedHref = com.collect.worker.redis.UrlQueueService.normalizeUrl(href);
-            if (normalizedHref == null || normalizedHref.isBlank()
-                    || !seen.add(normalizedHref)) {
+            String normalizedHref = com.collect.worker.redis.UrlQueueService.normalizeUrl(absoluteUrl);
+            if (normalizedHref == null || normalizedHref.isBlank() || !seen.add(normalizedHref)) {
                 continue;
             }
             urls.add(normalizedHref);
@@ -90,11 +89,11 @@ public class ContentParser {
         return urls;
     }
 
-    public static boolean isVipPage(Document doc, String selector, String vipContent) {
+    public static boolean isVipPage(Html doc, String selector, String vipContent) {
         if (doc == null || selector == null || selector.isBlank()) {
             return false;
         }
-        List<Element> matchedElements = doc.select(selector);
+        List<Selectable> matchedElements = doc.$(selector).nodes();
         if (matchedElements.isEmpty()) {
             return false;
         }
@@ -102,6 +101,31 @@ public class ContentParser {
             return true;
         }
         String content = vipContent.trim();
-        return matchedElements.stream().anyMatch(element -> element.text().contains(content));
+        return matchedElements.stream().anyMatch(element -> textOf(element).contains(content));
+    }
+
+    static String textOf(Selectable selectable) {
+        if (selectable instanceof HtmlNode) {
+            String text = selectable.xpath("allText()").get();
+            return text == null ? "" : text.replaceAll("\\s+", " ").trim();
+        }
+        return selectable.get() == null ? "" : selectable.get().trim();
+    }
+
+    private static String resolveUrl(String baseUrl, String source) {
+        if (source == null || source.isBlank()) {
+            return null;
+        }
+        try {
+            URI resolved = URI.create(baseUrl).resolve(source.trim());
+            String scheme = resolved.getScheme();
+            if (resolved.getHost() == null || scheme == null
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                return null;
+            }
+            return resolved.toString();
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

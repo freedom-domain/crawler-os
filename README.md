@@ -14,7 +14,7 @@
 | 数据库 | MySQL 8.0 |
 | 搜索 | Elasticsearch 7.17 |
 | 对象存储 | MinIO |
-| 爬虫引擎 | Jsoup + OkHttp |
+| 爬虫引擎 | WebMagic + OkHttp |
 | 前端 | Vue 3 + TypeScript + Element Plus + Vite |
 
 ## 项目结构
@@ -51,7 +51,7 @@ User  Spider     Search     File
              │
           Kafka
              │
-        Worker 1..N (Jsoup 抓取)
+        Worker 1..N (WebMagic 抽取)
 ```
 
 ## 快速开始
@@ -164,7 +164,7 @@ npm run build      # 生产构建到 dist/
 
 1. 前端创建爬虫（配置起始URL、类型、深度、调度）
 2. spider-service 生成任务记录，投递 Kafka
-3. worker 消费消息，Jsoup 抓取页面
+3. worker 消费消息，WebMagic 解析页面
 4. 抓取内容写入 ES（全文检索）+ 原始 HTML 存入 MinIO
 5. 任务状态/日志回写 MySQL
 6. 前端 Dashboard 展示统计，搜索页查询 ES 数据

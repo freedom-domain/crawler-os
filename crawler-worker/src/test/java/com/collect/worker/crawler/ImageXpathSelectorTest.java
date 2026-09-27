@@ -1,7 +1,7 @@
 package com.collect.worker.crawler;
 
-import org.jsoup.Jsoup;
 import org.junit.jupiter.api.Test;
+import us.codecraft.webmagic.selector.Html;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -24,7 +24,7 @@ class ImageXpathSelectorTest {
 
     @Test
     void shouldExtractSelectorImagesDirectlyWhenXpathIsEmpty() {
-        var document = Jsoup.parse("""
+        var document = new Html("""
                 <div class="selected"><img src="/inside.jpg"></div>
                 <div class="outside"><img src="/outside.jpg"></div>
                 """, "https://example.com/page");
@@ -37,7 +37,7 @@ class ImageXpathSelectorTest {
 
     @Test
     void xpathShouldApplyToWholeDocumentWhenSelectorIsEmpty() {
-        var document = Jsoup.parse("""
+        var document = new Html("""
                 <div class="selected"><img src="/inside.jpg"></div>
                 <div class="outside"><img src="/outside.jpg"></div>
                 """, "https://example.com/page");
@@ -52,7 +52,7 @@ class ImageXpathSelectorTest {
 
     @Test
     void shouldRequireSelectorMatchBeforeApplyingXpath() {
-        var document = Jsoup.parse("""
+        var document = new Html("""
                 <div class="selected"><img src="/inside.jpg"></div>
                 <div class="outside"><img src="/outside.jpg"></div>
                 """, "https://example.com/page");
@@ -68,7 +68,7 @@ class ImageXpathSelectorTest {
 
     @Test
     void shouldReturnEmptyWhenNeitherSelectorNorXpathConfigured() {
-        var document = Jsoup.parse(
+        var document = new Html(
                 "<div class=\"selected\"><img src=\"/inside.jpg\"></div>", "https://example.com/page");
 
         var sources = CrawlerEngine.extractImageSources(
@@ -78,26 +78,39 @@ class ImageXpathSelectorTest {
     }
 
     @Test
-    void xpathShouldOnlyMatchInsideCssSelectedElement() throws Exception {
-        var document = Jsoup.parse("""
+    void xpathShouldOnlyMatchInsideCssSelectedElement() {
+        var document = new Html("""
                 <div class="selected"><img src="/inside.jpg"></div>
                 <div class="outside"><img src="/outside.jpg"></div>
                 """, "https://example.com/page");
 
         var sources = CrawlerEngine.extractImageSourcesByXpath(
-                document.selectFirst(".selected"), "https://example.com/page", "//img/@src");
+                document.$(".selected").nodes().get(0), "https://example.com/page", "//img/@src");
 
         assertEquals(java.util.List.of("https://example.com/inside.jpg"), sources);
     }
 
     @Test
-    void xpathShouldMatchCssSelectedImageElementItself() throws Exception {
-        var document = Jsoup.parse(
+    void xpathShouldMatchCssSelectedImageElementItself() {
+        var document = new Html(
                 "<img class='selected' src='/image.jpg'>", "https://example.com/page");
 
         var sources = CrawlerEngine.extractImageSourcesByXpath(
-                document.selectFirst(".selected"), "https://example.com/page", "//img/@src");
+                document.$(".selected").nodes().get(0), "https://example.com/page", "//img/@src");
 
         assertEquals(java.util.List.of("https://example.com/image.jpg"), sources);
+    }
+
+    @Test
+    void xpathShouldExtractSrcWhenItSelectsImageNodes() {
+        var document = new Html("""
+                <div class="selected"><img src="/inside.jpg"></div>
+                <div class="outside"><img src="/outside.jpg"></div>
+                """, "https://example.com/page");
+
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://example.com/page", ".selected", "//img");
+
+        assertEquals(java.util.List.of("https://example.com/inside.jpg"), sources);
     }
 }
