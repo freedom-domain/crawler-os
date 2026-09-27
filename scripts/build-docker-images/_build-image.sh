@@ -20,6 +20,16 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if [[ -n "$build_arg" ]]; then
+  service="${build_arg#SERVICE=}"
+  if [[ "$service" == "$build_arg" ]]; then
+    printf 'Error: unsupported build argument: %s\n' "$build_arg" >&2
+    exit 2
+  fi
+
+  if [[ "${LOCAL_MAVEN_PREBUILT:-}" != "1" ]]; then
+    "$repo_root/scripts/build-local.sh" -pl "$service" -am
+  fi
+
   docker build \
     --tag "$image:$image_tag" \
     --file "$repo_root/$dockerfile" \

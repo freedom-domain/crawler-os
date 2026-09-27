@@ -112,7 +112,7 @@ services:
   crawler-gateway:
     build:
       context: .
-      dockerfile: docker/Dockerfile-app
+      dockerfile: docker/Dockerfile-app-local
       args:
         SERVICE: crawler-gateway
     container_name: crawler-gateway
@@ -130,7 +130,7 @@ services:
   crawler-user-service:
     build:
       context: .
-      dockerfile: docker/Dockerfile-app
+      dockerfile: docker/Dockerfile-app-local
       args:
         SERVICE: crawler-user-service
     container_name: crawler-user-service
@@ -150,7 +150,7 @@ services:
   crawler-spider-service:
     build:
       context: .
-      dockerfile: docker/Dockerfile-app
+      dockerfile: docker/Dockerfile-app-local
       args:
         SERVICE: crawler-spider-service
     container_name: crawler-spider-service
@@ -172,7 +172,7 @@ services:
   crawler-search-service:
     build:
       context: .
-      dockerfile: docker/Dockerfile-app
+      dockerfile: docker/Dockerfile-app-local
       args:
         SERVICE: crawler-search-service
     container_name: crawler-search-service
@@ -196,7 +196,7 @@ services:
   crawler-file-service:
     build:
       context: .
-      dockerfile: docker/Dockerfile-app
+      dockerfile: docker/Dockerfile-app-local
       args:
         SERVICE: crawler-file-service
     container_name: crawler-file-service
@@ -220,7 +220,7 @@ services:
   crawler-worker:
     build:
       context: .
-      dockerfile: docker/Dockerfile-app
+      dockerfile: docker/Dockerfile-app-local
       args:
         SERVICE: crawler-worker
     container_name: crawler-worker

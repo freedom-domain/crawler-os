@@ -37,6 +37,8 @@ if [[ ! "$max_parallel" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
+"$script_dir/../build-local.sh"
+
 build_scripts=(
   crawler-gateway
   crawler-user-service
@@ -58,7 +60,7 @@ for ((start = 0; start < ${#build_scripts[@]}; start += max_parallel)); do
   for ((index = start; index < start + max_parallel && index < ${#build_scripts[@]}; index++)); do
     name="${build_scripts[$index]}"
     printf 'Starting %s\n' "$name"
-    "$script_dir/$name.sh" &
+    LOCAL_MAVEN_PREBUILT=1 "$script_dir/$name.sh" &
     batch_pids+=("$!")
     batch_names+=("$name")
   done

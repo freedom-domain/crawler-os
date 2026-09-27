@@ -79,7 +79,21 @@ Kafka 任务 topic 按环境隔离：默认环境使用 `spider_task_topic-defau
 
 ### 2. 启动后端服务
 
-本地运行（需 JDK 17）：
+本地构建后端（需 JDK 21 和本地 Maven；只生成各模块的 JAR，不构建 Docker 镜像）：
+
+```bash
+./scripts/build-local.sh
+```
+
+构建脚本会检查 Maven 实际使用的 Java 版本。若提示低于 21，请将 `JAVA_HOME` 指向 JDK 21 或更高版本，并将其 `bin` 目录加入 `PATH`；可用 `mvn -version` 确认 Maven 使用的 JDK。
+
+构建产物位于各模块的 `target/` 目录。只构建某个服务及其 Maven 依赖时，例如：
+
+```bash
+./scripts/build-local.sh -pl crawler-gateway -am
+```
+
+本地运行后端（需 JDK 21）：
 
 ```bash
 # 依次启动（每个模块独立端口）
@@ -94,11 +108,16 @@ mvn -pl crawler-worker spring-boot:run
 或 Docker 一键启动全部应用：
 
 ```bash
+./scripts/build-local.sh
 docker-compose up -d crawler-gateway crawler-user-service crawler-spider-service \
   crawler-search-service crawler-file-service crawler-worker crawler-admin-web
 ```
 
-单独在本地构建应用镜像（需已安装 Docker 并启动 Docker 服务）：
+Compose 使用本地专用的 `docker/Dockerfile-app-local`，仅提供 JRE 运行环境并复制本机 Maven 生成的 JAR；请先执行本地 Maven 构建。
+
+### 本地 Docker 镜像构建（可选）
+
+以下命令仅用于需要本地运行应用容器时构建镜像。脚本先调用本机 Maven 构建后端，再构建运行时镜像；Maven 不会在镜像中运行。
 
 ```bash
 ./scripts/build-docker-images/build-all.sh
@@ -112,7 +131,8 @@ BUILD_JOBS=3 ./scripts/build-docker-images/build-all.sh
 ```
 
 也可以继续通过对应的 `crawler-*.sh` 脚本单独构建镜像。默认镜像标签为 `latest`，可通过 `IMAGE_TAG` 指定其他标签。
-GitHub Actions 发布时只推送到 GHCR。
+
+本地构建入口是 `scripts/build-local.sh`，本地镜像使用 `docker/Dockerfile-app-local`。GitHub Actions 则由 `.github/workflows/docker-publish.yml` 独立使用 Docker Buildx 和 `docker/Dockerfile-app` 在构建容器内执行 Maven，并在适用时发布到 GHCR；Actions 不调用本地构建脚本，也不依赖本地 `target/` 产物。
 
 前端容器使用 Nginx 提供生产构建文件，并将 `/api` 请求转发到网关：
 
