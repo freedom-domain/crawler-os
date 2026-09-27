@@ -251,6 +251,8 @@ services:
       dockerfile: Dockerfile
     container_name: crawler-admin-web
     restart: always
+    environment:
+      API_UPSTREAM: ${API_UPSTREAM:-http://crawler-gateway:8080}
     ports:
       - "5173:80"
     depends_on:

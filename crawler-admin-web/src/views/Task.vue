@@ -71,8 +71,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="startTime" label="开始时间" width="170" resizable />
-      <el-table-column prop="endTime" label="结束时间" width="170" resizable />
+      <el-table-column prop="startTime" label="开始时间" width="190" resizable>
+        <template #default="{ row }">{{ formatDateTime(row.startTime) }}</template>
+      </el-table-column>
+      <el-table-column prop="endTime" label="结束时间" width="190" resizable>
+        <template #default="{ row }">{{ formatDateTime(row.endTime) }}</template>
+      </el-table-column>
       <el-table-column label="总耗时" min-width="110" align="center" resizable>
         <template #default="{ row }">
           {{ formatDuration(row.totalCostMs || 0) }}
@@ -222,7 +226,9 @@
         <el-table-column prop="level" label="级别" min-width="70" align="center"  resizable />
         <el-table-column prop="message" label="信息" show-overflow-tooltip  resizable />
         <el-table-column prop="costMs" label="耗时(ms)" min-width="90" align="center"  resizable />
-        <el-table-column prop="createTime" label="时间" min-width="180"  resizable />
+        <el-table-column prop="createTime" label="时间" min-width="180" resizable>
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
       </el-table>
       <el-pagination
         v-show="logs.length > 0"
@@ -243,6 +249,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
 import { Refresh, Search, VideoPause, Document, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/dateTime'
 
 const router = useRouter()
 const list = ref<any[]>([])

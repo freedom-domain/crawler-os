@@ -23,34 +23,13 @@
     </el-aside>
 
     <el-container>
-      <el-header class="header">
+      <el-header class="header" @click="contextMenu.visible = false">
         <el-icon v-if="mobile" class="collapse-btn" @click="drawerOpen = true"><MenuIcon /></el-icon>
         <el-icon v-else class="collapse-btn" @click="collapsed = !collapsed">
           <Fold v-if="!collapsed" />
           <Expand v-else />
         </el-icon>
         <div class="breadcrumb"><span>工作台</span><b>/</b><strong>{{ currentTitle || '概览' }}</strong></div>
-        <div class="user-info">
-          <el-dropdown @command="handleCommand">
-            <span class="user-name">
-              <span class="user-avatar"><el-icon><UserFilled /></el-icon></span>
-              <span class="user-label">{{ userStore.nickname || userStore.username }}</span>
-              <el-icon><ArrowDown /></el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人信息</el-dropdown-item>
-                <el-dropdown-item command="password">修改密码</el-dropdown-item>
-                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </el-header>
-
-      <ChangePasswordDialog v-model="pwdDialogVisible" />
-
-      <el-main @click="contextMenu.visible = false">
         <el-tabs
           v-model="activeTab"
           type="card"
@@ -77,6 +56,27 @@
             </template>
           </el-tab-pane>
         </el-tabs>
+        <div class="user-info">
+          <el-dropdown @command="handleCommand">
+            <span class="user-name">
+              <span class="user-avatar"><el-icon><UserFilled /></el-icon></span>
+              <span class="user-label">{{ userStore.nickname || userStore.username }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="profile">个人信息</el-dropdown-item>
+                <el-dropdown-item command="password">修改密码</el-dropdown-item>
+                <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </el-header>
+
+      <ChangePasswordDialog v-model="pwdDialogVisible" />
+
+      <el-main @click="contextMenu.visible = false">
         <div
           v-if="contextMenu.visible"
           class="tab-context-menu"
@@ -435,31 +435,25 @@ const handleCommand = (cmd: string) => {
 .el-menu--collapse { padding: 14px 10px; }
 .aside.is-collapsed :deep(.el-menu) { width: 72px; }
 .aside.is-collapsed .logo { justify-content: center; padding: 0; }
-.app-tabs { margin: -12px -8px 22px; padding: 5px 6px 0; overflow: hidden; border-bottom: 1px solid #dfe7ee; background: #edf3f4; }
+.app-tabs { flex: 1 1 auto; min-width: 0; margin: 0 22px 0 28px; overflow: hidden; }
 :deep(.app-tabs .el-tabs__header) { margin: 0; border-bottom: 0; }
-:deep(.app-tabs .el-tabs__nav-wrap) { overflow: visible; }
+:deep(.app-tabs .el-tabs__nav-wrap) { overflow-x: auto; overflow-y: hidden; }
 :deep(.app-tabs .el-tabs__nav-wrap::after) { display: none; }
-:deep(.app-tabs .el-tabs__nav) { gap: 4px; border: 0; }
-:deep(.app-tabs .el-tabs__item) { position: relative; height: 34px; padding: 0 14px; border: 0; border-radius: 7px 7px 0 0; color: #6b8195; background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease; }
-:deep(.app-tabs .el-tabs__item::before) { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: transparent; transition: background .18s ease; }
-:deep(.app-tabs .el-tabs__item.is-active) { color: #0f817e; background: #fff; box-shadow: 0 -1px 0 rgba(255, 255, 255, .8), 0 2px 8px rgba(23, 43, 77, .06); font-weight: 700; }
-:deep(.app-tabs .el-tabs__item.is-active::before) { background: #0f9f9a; }
-:deep(.app-tabs .el-tabs__item:hover) { color: #0f9f9a; background: rgba(255, 255, 255, .72); }
+:deep(.app-tabs .el-tabs__nav) { gap: 7px; border: 0; min-width: max-content; }
+:deep(.app-tabs .el-tabs__item) { position: relative; height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: #718096; background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
+:deep(.app-tabs .el-tabs__item.is-active) { color: #087f7d; border-color: #d5efeb; background: linear-gradient(135deg, #f0fbf8, #e5f7f3); box-shadow: 0 2px 7px rgba(15, 129, 126, .08); font-weight: 700; }
+:deep(.app-tabs .el-tabs__item:hover) { color: #0f817e; background: #f1f7f7; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-closable:hover) { padding-left: 14px; padding-right: 14px; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-active.is-closable) { padding-left: 14px; padding-right: 14px; }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item) { transition: color .18s ease, background .18s ease, box-shadow .18s ease; }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item .is-icon-close) { width: 16px; height: 16px; overflow: visible; }
-:deep(.app-tabs .el-tabs__item .el-icon) { width: 16px; height: 16px; margin-left: 7px; border-radius: 50%; color: #9fb3c8; transition: color .18s ease, background .18s ease; }
-:deep(.app-tabs .el-tabs__item .el-icon:hover) { color: #fff; background: #ed765f; }
+:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item) { transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
 :deep(.app-tabs .el-tabs__active-bar) { display: none; }
 .tab-label { display: inline-flex; align-items: center; gap: 7px; cursor: grab; user-select: none; }
 .tab-label:active { cursor: grabbing; }
-.tab-close { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; color: #9fb3c8; background: transparent; font: inherit; font-size: 15px; line-height: 14px; cursor: pointer; }
-.tab-close:hover { color: #fff; background: #ed765f; }
+.tab-close { width: 17px; height: 17px; padding: 0; border: 0; border-radius: 50%; color: #9aabb8; background: transparent; font: inherit; font-size: 15px; line-height: 15px; cursor: pointer; transition: color .18s ease, background .18s ease; }
+.tab-close:hover { color: #fff; background: #e87968; }
 .tab-context-menu { position: fixed; z-index: 3000; display: flex; flex-direction: column; min-width: 118px; padding: 5px; border: 1px solid #dfe7ee; border-radius: 8px; background: #fff; box-shadow: 0 10px 24px rgba(23, 43, 77, .16); }
 .tab-context-menu button { padding: 8px 12px; border: 0; border-radius: 5px; color: #486581; background: transparent; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
 .tab-context-menu button:hover { color: #0f817e; background: #eaf7f5; }
-@media (max-width: 767px) { .app-tabs { margin: -6px -4px 16px; padding-left: 4px; overflow-x: auto; } :deep(.app-tabs .el-tabs__nav) { min-width: max-content; } }
 .header {
   height: 72px;
   background: rgba(255, 255, 255, .94);
@@ -469,11 +463,12 @@ const handleCommand = (cmd: string) => {
   box-shadow: 0 1px 14px rgba(23, 43, 77, .06);
   backdrop-filter: blur(12px);
 }
-.collapse-btn { font-size: 20px; cursor: pointer; margin: 0 22px; color: #486581; }
+.collapse-btn { flex: 0 0 auto; font-size: 20px; cursor: pointer; margin: 0 22px; color: #486581; }
 .breadcrumb { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.breadcrumb span, .breadcrumb b, .breadcrumb strong { white-space: nowrap; }
 .breadcrumb span, .breadcrumb b { color: #9fb3c8; font-weight: 500; }
 .breadcrumb strong { color: #102a43; font-size: 16px; font-weight: 800; }
-.user-info { margin-left: auto; margin-right: 24px; }
+.user-info { flex: 0 0 auto; margin-left: 0; margin-right: 24px; }
 .user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
 .user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
 .user-label { color: #243b53; font-size: 14px; font-weight: 600; }
@@ -500,6 +495,7 @@ const handleCommand = (cmd: string) => {
   .collapse-btn { margin: 0 14px; }
   .breadcrumb { font-size: 13px; }
   .breadcrumb strong { font-size: 14px; }
+  .app-tabs { margin-left: 14px; margin-right: 12px; }
   .user-info { margin-right: 12px; }
   :deep(.el-main) { padding: 14px; }
 }

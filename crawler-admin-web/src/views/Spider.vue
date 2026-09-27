@@ -72,8 +72,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createTime" label="创建时间" min-width="180"  resizable />
-      <el-table-column prop="updateTime" label="更新时间" min-width="180"  resizable />
+      <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
+        <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+      </el-table-column>
+      <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
+        <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
+      </el-table-column>
       <el-table-column prop="status" label="定时任务" min-width="100" resizable>
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'">
@@ -239,6 +243,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, ArrowDown, VideoPlay, VideoPause, EditPen, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/dateTime'
 
 const route = useRoute()
 const router = useRouter()

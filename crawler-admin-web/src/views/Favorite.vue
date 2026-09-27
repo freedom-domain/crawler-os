@@ -42,7 +42,9 @@
           <span v-if="!row.tags || !row.tags.length" class="tag-empty" @click="openTagEditor(row)">添加标签</span>
         </template>
       </el-table-column>
-      <el-table-column prop="crawlTime" label="抓取时间" min-width="180"  resizable />
+      <el-table-column prop="crawlTime" label="抓取时间" min-width="180" resizable>
+        <template #default="{ row }">{{ formatDateTime(row.crawlTime) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="180" fixed="right" resizable>
         <template #default="{ row }">
           <el-button link type="primary" @click="openTagEditor(row)">编辑标签</el-button>
@@ -74,6 +76,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { dictChildren, favoriteDelete, favoritePage, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
+import { formatDateTime } from '@/utils/dateTime'
 
 const list = ref<any[]>([])
 const loading = ref(false)

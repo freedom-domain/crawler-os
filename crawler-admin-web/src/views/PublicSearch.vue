@@ -224,6 +224,7 @@ import { Search, FullScreen, Minus, ZoomIn, ZoomOut, UserFilled, Setting, Switch
 import router from '@/router'
 import { useRoute } from 'vue-router'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
+import { formatDateTime as formatTime } from '@/utils/dateTime'
 
 const list = ref<any[]>([])
 const publicSearchRef = ref<HTMLElement | null>(null)
@@ -389,13 +390,6 @@ const loadTagOptions = async () => {
   } catch {
     tagOptions.value = []
   }
-}
-
-const formatTime = (t: string) => {
-  if (!t) return ''
-  const d = new Date(t)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 const imageUrl = (objectName: string) => {

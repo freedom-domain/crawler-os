@@ -13,4 +13,4 @@ WORKDIR /app
 COPY --from=builder /workspace/crawler-search-service/target/*.jar /app/app.jar
 
 EXPOSE 8083
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-Dnacos.logging.default.config.enabled=false", "-jar", "/app/app.jar"]

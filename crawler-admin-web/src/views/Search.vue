@@ -186,6 +186,7 @@ import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { searchContent, searchDetail, searchDelete, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
 import { Search, FullScreen, Minus, ZoomIn, ZoomOut, Promotion, RefreshLeft } from '@element-plus/icons-vue'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
+import { formatDateTime as formatTime } from '@/utils/dateTime'
 
 const router = useRouter()
 const route = useRoute()
@@ -335,13 +336,6 @@ const handleTagsSaved = (tags: string[]) => {
     tagCurrentRow.value.tags = tags
     tagCurrentRow.value.favorited = true
   }
-}
-
-const formatTime = (t: string) => {
-  if (!t) return ''
-  const d = new Date(t)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 const stripHtml = (html: string) => {

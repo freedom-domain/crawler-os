@@ -45,6 +45,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { clearSearchHistory, deleteSearchHistory, searchHistory, syncSearchHistory } from '@/api'
+import { formatDateTime as formatTime } from '@/utils/dateTime'
 
 const LOCAL_HISTORY_KEY = 'crawler-search-history'
 
@@ -110,25 +111,6 @@ const syncLocalHistory = async () => {
   } catch {
     // Keep local history for the next successful login sync.
   }
-}
-
-const formatTime = (value: string | number | Date) => {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const minute = 60 * 1000
-  const hour = 60 * minute
-  const day = 24 * hour
-  if (diff < minute) return '刚刚'
-  if (diff < hour) return `${Math.floor(diff / minute)} 分钟前`
-  if (diff < day && date.getDate() === now.getDate()) return `${Math.floor(diff / hour)} 小时前`
-  if (diff < day) return '昨天'
-  if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`
-  const month = date.getMonth() + 1
-  const dayOfMonth = date.getDate()
-  if (date.getFullYear() === now.getFullYear()) return `${month}月${dayOfMonth}日`
-  return `${date.getFullYear()}年${month}月${dayOfMonth}日`
 }
 
 const select = (keyword: string) => {

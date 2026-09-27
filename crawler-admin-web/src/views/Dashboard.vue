@@ -35,7 +35,9 @@
           </el-table-column>
           <el-table-column prop="successCount" label="成功" min-width="80" resizable />
           <el-table-column prop="failCount" label="失败" min-width="80" resizable />
-          <el-table-column prop="createTime" label="创建时间" min-width="180" resizable />
+          <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
+            <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+          </el-table-column>
         </el-table>
         <div v-if="!recentTasks.length" class="panel-empty">暂无最近任务</div>
       </div>
@@ -56,6 +58,7 @@
 import { ref, onActivated } from 'vue'
 import { spiderPage, taskStats, recentTaskList, searchContent } from '@/api'
 import { Connection, List, CircleCheck, DataBoard, DataAnalysis } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/dateTime'
 
 const stats = ref({ spiderCount: 0, taskCount: 0, successRate: 0, dataCount: 0 })
 const recentTasks = ref<any[]>([])

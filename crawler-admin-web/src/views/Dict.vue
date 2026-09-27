@@ -61,7 +61,7 @@
                   size="small"
                   @change="handleStatusChange(element)"
                 />
-                <span class="child-time">{{ element.createTime }}</span>
+                <span class="child-time">{{ formatDateTime(element.createTime) }}</span>
                 <div class="child-actions">
                   <el-button size="small" text @click="showEdit(element)">编辑</el-button>
                   <el-button size="small" text type="danger" @click="handleDelete(element)">删除</el-button>
@@ -111,6 +111,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import draggable from 'vuedraggable'
 import { dictTree, dictCreate, dictUpdate, dictDelete } from '@/api'
 import { Plus, Search, Edit, Delete } from '@element-plus/icons-vue'
+import { formatDateTime } from '@/utils/dateTime'
 
 const treeData = ref<any[]>([])
 const loading = ref(false)

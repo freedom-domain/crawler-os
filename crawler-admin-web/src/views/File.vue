@@ -41,7 +41,7 @@
 
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable border>
         <el-table-column type="selection" width="48"  resizable />
-        <el-table-column prop="id" label="ID" min-width="70"  resizable />
+        <el-table-column prop="id" label="ID" min-width="80" resizable />
         <el-table-column prop="title" label="标题" min-width="500" show-overflow-tooltip resizable />
         <el-table-column label="来源" min-width="700" show-overflow-tooltip resizable>
           <template #default="{ row }">
@@ -61,7 +61,9 @@
           <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
         </el-table-column>
         <el-table-column prop="contentType" label="类型" min-width="160" show-overflow-tooltip  resizable />
-        <el-table-column prop="createTime" label="上传时间" min-width="170"  resizable />
+        <el-table-column prop="createTime" label="上传时间" min-width="170" resizable>
+          <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
+        </el-table-column>
         <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="bucket" label="存储桶" min-width="120"  resizable />
@@ -117,6 +119,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { filePage, spiderPage } from '@/api'
 import request from '@/api/request'
+import { formatDateTime } from '@/utils/dateTime'
 
 const loading = ref(false)
 const tableData = ref<any[]>([])

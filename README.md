@@ -141,6 +141,8 @@ docker-compose up -d crawler-admin-web
 # http://127.0.0.1:5173
 ```
 
+Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关位于同一 Docker 网络的场景。若在 1Panel 中单独部署前端容器，请为其设置 `API_UPSTREAM` 环境变量，值为**从前端容器内部可访问**的网关地址，例如 `http://<网关容器IP或网络别名>:8080`。配置后重建并重新部署前端镜像；浏览器仍通过同域 `/api` 请求，不需要在前端源码中配置 API 地址。
+
 ### 3. 启动前端
 
 ```bash
