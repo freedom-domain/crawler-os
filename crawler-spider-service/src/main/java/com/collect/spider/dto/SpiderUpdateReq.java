@@ -49,4 +49,8 @@ public class SpiderUpdateReq {
     private String headers;
 
     private Integer followRobots = 0;
+
+    @Min(value = 0, message = "TLS证书校验配置只能设置为0或1")
+    @Max(value = 1, message = "TLS证书校验配置只能设置为0或1")
+    private Integer skipTlsVerify = 0;
 }

@@ -79,7 +79,7 @@
         v-model:page-size="size"
         :loading="loading"
         :total="total"
-        :page-sizes="[10, 15, 20, 50, 100, 200, 500]"
+        :page-sizes="[5, 10, 15, 20, 50, 100, 200, 500]"
         cursor-mode
         :has-more="hasMore"
         @prev="loadPrevPage"
@@ -286,7 +286,7 @@ const handleLogout = async () => {
 }
 const loading = ref(false)
 const page = ref(1)
-const size = ref(15)
+const size = ref(5)
 const total = ref(0)
 // PIT + search_after 游标式分页状态
 const pitId = ref('')
@@ -797,7 +797,7 @@ onMounted(() => {
     ? Math.min(requestedPage, 50)
     : 1
   const requestedSize = Number(route.query.size)
-  if ([10, 15, 20, 50, 100, 200, 500].includes(requestedSize)) {
+  if ([5, 10, 15, 20, 50, 100, 200, 500].includes(requestedSize)) {
     size.value = requestedSize
   }
   const spiderId = Number(route.query.spiderId)

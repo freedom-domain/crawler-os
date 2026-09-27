@@ -1,0 +1,2 @@
+ALTER TABLE spider
+    ADD COLUMN skip_tls_verify TINYINT NOT NULL DEFAULT 0;

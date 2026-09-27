@@ -28,7 +28,12 @@ import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.stereotype.Component;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.TrustManager;
 import java.net.URI;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -48,6 +53,8 @@ public class CrawlerEngine {
     private final UrlQueueService urlQueue;
     private final MinioHelper minioHelper;
     private final FileMetadataMapper fileMetadataMapper;
+    private final OkHttpClient verifiedHttpClient;
+    private final OkHttpClient unverifiedHttpClient;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
@@ -70,13 +77,50 @@ public class CrawlerEngine {
         this.urlQueue = urlQueue;
         this.minioHelper = minioHelper;
         this.fileMetadataMapper = fileMetadataMapper;
+        this.verifiedHttpClient = buildHttpClient(false);
+        this.unverifiedHttpClient = buildHttpClient(true);
     }
 
-    private final OkHttpClient httpClient = new OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .followRedirects(true)
-            .build();
+    static OkHttpClient buildHttpClient(boolean skipTlsVerify) {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .followRedirects(true);
+        if (!skipTlsVerify) {
+            return builder.build();
+        }
+
+        // This client is selected only for crawlers that explicitly enable skipTlsVerify.
+        X509TrustManager trustManager = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {}
+
+            @Override
+            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {}
+
+            @Override
+            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                return new java.security.cert.X509Certificate[0];
+            }
+        };
+
+        try {
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
+            return builder
+                    .sslSocketFactory(sslContext.getSocketFactory(), trustManager)
+                    .hostnameVerifier((hostname, session) -> true)
+                    .build();
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("无法初始化跳过 TLS 证书校验的 HTTP 客户端", e);
+        }
+    }
+
+    private OkHttpClient httpClient(TaskMessage msg) {
+        return Integer.valueOf(1).equals(msg.getSkipTlsVerify())
+                ? unverifiedHttpClient
+                : verifiedHttpClient;
+    }
 
     @SuppressWarnings("null")
     public void execute(TaskMessage msg) {
@@ -87,6 +131,10 @@ public class CrawlerEngine {
         }
 
         Long taskId = msg.getTaskId();
+        if (Integer.valueOf(1).equals(msg.getSkipTlsVerify())) {
+            log.warn("爬虫已配置跳过 TLS 证书及主机名校验: spiderId={}, taskId={}",
+                    msg.getSpiderId(), msg.getTaskId());
+        }
         int maxDepth = msg.getMaxDepth() != null ? msg.getMaxDepth() : 2;
         int concurrency = 8;
         var semaphore = new java.util.concurrent.Semaphore(concurrency);
@@ -208,7 +256,7 @@ public class CrawlerEngine {
                                 "html/" + md5(url) + ".html")
                         : null;
                 boolean cacheHit = cachedHtml != null;
-                Document doc = cacheHit ? Jsoup.parse(cachedHtml, url) : fetch(url, msg.getTimeout());
+                Document doc = cacheHit ? Jsoup.parse(cachedHtml, url) : fetch(url, msg);
                 long cost = System.currentTimeMillis() - start;
 
                 ContentParser parsed = ContentParser.parse(doc.outerHtml(), url, msg.getContentSelector());
@@ -362,7 +410,7 @@ public class CrawlerEngine {
             if (uri.getHost() == null) return false;
             String scheme = uri.getScheme() == null ? "https" : uri.getScheme();
             String robotsUrl = scheme + "://" + uri.getAuthority() + "/robots.txt";
-            RobotsRules rules = robotsCache.computeIfAbsent(robotsUrl, this::loadRobotsRules);
+            RobotsRules rules = robotsCache.computeIfAbsent(robotsUrl, key -> loadRobotsRules(key, msg));
             return rules.isAllowed(uri.getRawPath());
         } catch (Exception e) {
             log.debug("robots.txt 检查失败，放行 URL: {}", url, e);
@@ -370,13 +418,13 @@ public class CrawlerEngine {
         }
     }
 
-    private RobotsRules loadRobotsRules(String robotsUrl) {
+    private RobotsRules loadRobotsRules(String robotsUrl, TaskMessage msg) {
         try {
             Request request = new Request.Builder()
                     .url(robotsUrl)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                     .build();
-            try (Response response = httpClient.newCall(request).execute()) {
+            try (Response response = httpClient(msg).newCall(request).execute()) {
                 if (!response.isSuccessful() || response.body() == null) return RobotsRules.allowAll();
                 return RobotsRules.parse(response.body().string());
             }
@@ -472,7 +520,7 @@ public class CrawlerEngine {
                         uploadedUrls.add(objectName);
                         continue;
                     }
-                    byte[] data = downloadImage(src);
+                    byte[] data = downloadImage(src, msg);
                     if (data == null || data.length == 0) {
                         continue;
                     }
@@ -553,7 +601,7 @@ public class CrawlerEngine {
                     continue;
                 }
                 try {
-                    byte[] data = downloadBytes(jsUrl);
+                    byte[] data = downloadBytes(jsUrl, msg);
                     if (data == null || data.length == 0) {
                         processedResourceUrls.remove(resourceKey);
                         writeLog(task.getId(), msg.getSpiderId(), jsUrl, 0, "ERROR", "JS 下载为空", resourceCost(resourceStart), "js");
@@ -599,7 +647,7 @@ public class CrawlerEngine {
                     continue;
                 }
                 try {
-                    byte[] data = downloadBytes(cssUrl);
+                    byte[] data = downloadBytes(cssUrl, msg);
                     if (data == null || data.length == 0) {
                         processedResourceUrls.remove(resourceKey);
                         writeLog(task.getId(), msg.getSpiderId(), cssUrl, 0, "ERROR", "CSS 下载为空", resourceCost(resourceStart), "css");
@@ -652,12 +700,12 @@ public class CrawlerEngine {
         }
     }
 
-    private byte[] downloadBytes(String src) throws Exception {
+    private byte[] downloadBytes(String src, TaskMessage msg) throws Exception {
         Request request = new Request.Builder()
                 .url(src)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .build();
-        try (Response response = httpClient.newCall(request).execute()) {
+        try (Response response = httpClient(msg).newCall(request).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
             }
@@ -708,12 +756,12 @@ public class CrawlerEngine {
         }
     }
 
-    private byte[] downloadImage(String src) throws Exception {
+    private byte[] downloadImage(String src, TaskMessage msg) throws Exception {
         Request request = new Request.Builder()
                 .url(src)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .build();
-        try (Response response = httpClient.newCall(request).execute()) {
+        try (Response response = httpClient(msg).newCall(request).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
             }
@@ -761,13 +809,13 @@ public class CrawlerEngine {
         };
     }
 
-    private Document fetch(String url, Integer timeout) throws Exception {
+    private Document fetch(String url, TaskMessage msg) throws Exception {
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .header("Accept", "text/html,application/xhtml+xml")
                 .build();
-        try (Response response = httpClient.newCall(request).execute()) {
+        try (Response response = httpClient(msg).newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 throw new RuntimeException("HTTP " + response.code());
             }

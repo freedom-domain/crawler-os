@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS spider (
     timeout INT DEFAULT 15000,
     headers TEXT,
     follow_robots TINYINT DEFAULT 0,
+    skip_tls_verify TINYINT NOT NULL DEFAULT 0,
     enabled TINYINT DEFAULT 1,
     creator_id BIGINT,
     status TINYINT DEFAULT 0,

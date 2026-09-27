@@ -35,8 +35,9 @@
       <div class="result-meta">
         <span v-if="row.spiderName" class="meta-tag spider-tag" @click="row.spiderId && $emit('spider', row)">{{ row.spiderName }}</span>
         <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
-        <span class="meta-time">{{ formatTime(row.crawlTime) }}</span>
-        <span v-if="row.updateTime" class="meta-time update-time">更新: {{ formatTime(row.updateTime) }}</span>
+        <span v-if="row.updateTime" class="meta-time update-time">
+          更新: {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
+        </span>
         <el-button
           v-if="authenticated"
           size="small"
@@ -67,6 +68,7 @@
 <script setup lang="ts">
 import SearchResultItem from '@/components/SearchResultItem.vue'
 import { ArrowDown, Star, StarFilled } from '@element-plus/icons-vue'
+import { formatTimeAgo } from '@/utils/dateTime'
 
 defineProps<{
   rows: any[]

@@ -143,6 +143,8 @@ docker-compose up -d crawler-admin-web
 
 Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关位于同一 Docker 网络的场景。若在 1Panel 中单独部署前端容器，请为其设置 `API_UPSTREAM` 环境变量，值为**从前端容器内部可访问**的网关地址，例如 `http://<网关容器IP或网络别名>:8080`。配置后重建并重新部署前端镜像；浏览器仍通过同域 `/api` 请求，不需要在前端源码中配置 API 地址。
 
+已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。
+
 ### 3. 启动前端
 
 ```bash

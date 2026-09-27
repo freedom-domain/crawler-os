@@ -197,6 +197,10 @@
           <el-switch v-model="form.followRobots" :active-value="1" :inactive-value="0" active-text="是" inactive-text="否" />
           <div class="form-tip">开启后，遵循目标站点 robots.txt 中的 Disallow 规则</div>
         </el-form-item>
+        <el-form-item label="跳过 TLS 校验">
+          <el-switch v-model="form.skipTlsVerify" :active-value="1" :inactive-value="0" active-text="跳过" inactive-text="校验" />
+          <div class="form-tip">仅在 HTTPS 证书异常且确认目标可信时开启；开启后将跳过证书链和域名校验</div>
+        </el-form-item>
         <el-form-item label="调度表达式">
           <div class="schedule-builder">
             <el-select v-model="scheduleType" placeholder="选择频率" style="width: 120px" @change="generateSchedule">
@@ -288,7 +292,7 @@ const isHttpUrl = (value: string): boolean => {
 }
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0
+  contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0
 })
 
 // 调度表达式生成器
@@ -383,7 +387,7 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -421,7 +425,7 @@ const showEdit = async (row: any) => {
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
     contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0,
-    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0
+    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0
   }
   try {
     const urls = JSON.parse(d.startUrls || '[]')

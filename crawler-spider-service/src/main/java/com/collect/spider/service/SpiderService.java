@@ -72,6 +72,7 @@ public class SpiderService {
         spider.setTimeout(req.getTimeout());
         spider.setHeaders(req.getHeaders());
         spider.setFollowRobots(req.getFollowRobots());
+        spider.setSkipTlsVerify(req.getSkipTlsVerify() == null ? 0 : req.getSkipTlsVerify());
         spider.setEnabled(req.getEnabled());
         spider.setCreatorId(1L);
         spider.setStatus(0);
@@ -139,6 +140,7 @@ public class SpiderService {
             config.setTimeout(spider.getTimeout());
             config.setHeaders(spider.getHeaders());
             config.setFollowRobots(spider.getFollowRobots());
+            config.setSkipTlsVerify(spider.getSkipTlsVerify() == null ? 0 : spider.getSkipTlsVerify());
             config.setEnabled(spider.getEnabled());
             configs.add(config);
         }
@@ -208,6 +210,7 @@ public class SpiderService {
         exist.setTimeout(req.getTimeout());
         exist.setHeaders(req.getHeaders());
         exist.setFollowRobots(req.getFollowRobots());
+        exist.setSkipTlsVerify(req.getSkipTlsVerify() == null ? 0 : req.getSkipTlsVerify());
         try {
             spiderMapper.updateById(exist);
         } catch (DuplicateKeyException e) {
@@ -416,6 +419,7 @@ public class SpiderService {
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());
         msg.setFollowRobots(spider.getFollowRobots());
+        msg.setSkipTlsVerify(spider.getSkipTlsVerify() == null ? 0 : spider.getSkipTlsVerify());
         return msg;
     }
 

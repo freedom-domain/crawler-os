@@ -26,4 +26,5 @@ public class TaskMessage implements Serializable {
     private Integer timeout;
     private String headers;
     private Integer followRobots;
+    private Integer skipTlsVerify;
 }
