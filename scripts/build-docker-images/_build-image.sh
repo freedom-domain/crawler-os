@@ -12,7 +12,7 @@ context="$3"
 build_arg="$4"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
-image_tag="${IMAGE_TAG:-local}"
+image_tag="${IMAGE_TAG:-latest}"
 
 if ! command -v docker >/dev/null 2>&1; then
   printf 'Error: docker is not installed or is not on PATH.\n' >&2
