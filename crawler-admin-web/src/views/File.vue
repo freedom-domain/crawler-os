@@ -19,7 +19,7 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-select v-model="filterSpider" placeholder="全部爬虫" clearable filterable style="width: 160px" @change="refresh">
+          <el-select v-model="filterSpider" placeholder="全部爬虫" clearable filterable style="width: 160px" @change="syncSpiderFilter">
             <el-option v-for="spider in spiders" :key="spider.id" :label="spider.name" :value="spider.id" />
           </el-select>
         </el-form-item>
@@ -114,13 +114,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { filePage, spiderPage } from '@/api'
 import request from '@/api/request'
 import { formatDateTime } from '@/utils/dateTime'
 
+const route = useRoute()
+const router = useRouter()
 const loading = ref(false)
 const tableData = ref<any[]>([])
 const selectedRows = ref<any[]>([])
@@ -178,12 +181,29 @@ const refresh = () => {
   loadData()
 }
 
+const syncSpiderFilter = () => {
+  const currentSpiderId = Array.isArray(route.query.spiderId)
+    ? route.query.spiderId[0]
+    : route.query.spiderId
+  const nextSpiderId = filterSpider.value ? String(filterSpider.value) : undefined
+  if (currentSpiderId === nextSpiderId) {
+    refresh()
+    return
+  }
+  router.replace({
+    query: {
+      ...route.query,
+      spiderId: nextSpiderId
+    }
+  })
+}
+
 const resetFilters = () => {
   filterTitle.value = ''
   filterFileName.value = ''
   filterCategory.value = ''
   filterSpider.value = null
-  refresh()
+  syncSpiderFilter()
 }
 
 const download = (row: any) => {
@@ -280,7 +300,16 @@ const removeByCondition = async () => {
   }
 }
 
-onMounted(loadData)
+watch(
+  () => route.query.spiderId,
+  (value) => {
+    const id = Number(Array.isArray(value) ? value[0] : value)
+    filterSpider.value = Number.isInteger(id) && id > 0 ? id : null
+    refresh()
+  },
+  { immediate: true }
+)
+
 onMounted(async () => {
   try {
     const res: any = await spiderPage({ current: 1, size: 100 })

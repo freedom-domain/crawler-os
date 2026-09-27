@@ -499,7 +499,10 @@ public class CrawlerEngine {
     }
 
     /**
-     * 若爬虫配置了图片 CSS 选择器，则提取选择器命中的元素内的图片并上传到 MinIO。
+     * 提取页面图片并上传到 MinIO。优先使用图片 CSS 选择器定位范围：
+     * - 仅配置选择器：取选择器命中元素自身及内部的 <img>；
+     * - 选择器 + XPath：在选择器命中的元素范围内再按 XPath 定位图片；
+     * - 仅配置 XPath：直接在整页范围内按 XPath 定位图片。
      * overwrite=true 时重新下载并覆盖已存在的图片；否则跳过已存在的图片。
      * 返回已上传图片的 objectName 列表（无图片时返回空列表）。
      */
@@ -507,41 +510,17 @@ public class CrawlerEngine {
                                                 TaskMessage msg, SpiderTask task, boolean overwrite) {
         String selector = msg.getImageSelector();
         String xpath = msg.getImageXpath();
-        if ((xpath == null || xpath.isBlank()) && (selector == null || selector.isBlank())) {
+        boolean hasSelector = selector != null && !selector.isBlank();
+        boolean hasXpath = xpath != null && !xpath.isBlank();
+        if (!hasSelector && !hasXpath) {
             return List.of();
         }
         List<String> uploadedUrls = new java.util.ArrayList<>();
         long imgStart = System.currentTimeMillis();
         try {
-            List<String> imageSources = new java.util.ArrayList<>();
-            Elements matched = selector != null && !selector.isBlank()
-                    ? doc.select(selector)
-                    : new Elements(doc);
-            boolean selectorMissed = matched.isEmpty();
-            if (selectorMissed) {
-                log.info("页面未匹配到图片选择器: url={}, selector={}", pageUrl, selector);
-            }
-            if (xpath != null && !xpath.isBlank()) {
-                if (!selectorMissed) {
-                    for (Element scope : matched) {
-                        imageSources.addAll(extractImageSourcesByXpath(scope, pageUrl, xpath));
-                    }
-                }
-                if (!selectorMissed && imageSources.isEmpty()) {
-                    log.info("页面未匹配到图片 XPath: url={}, selector={}, xpath={}", pageUrl, selector, xpath);
-                }
-            } else {
-                List<Element> imgs = new java.util.ArrayList<>();
-                for (Element el : matched) {
-                    if ("img".equalsIgnoreCase(el.tagName())) {
-                        imgs.add(el);
-                    }
-                    imgs.addAll(el.select("img"));
-                }
-                for (Element img : imgs) {
-                    String src = img.absUrl("src");
-                    if (!src.isBlank()) imageSources.add(src);
-                }
+            List<String> imageSources = extractImageSources(doc, pageUrl, selector, xpath);
+            if (imageSources.isEmpty()) {
+                log.info("页面未匹配到图片: url={}, selector={}, xpath={}", pageUrl, selector, xpath);
             }
 
             int uploaded = 0;
@@ -601,19 +580,54 @@ public class CrawlerEngine {
         return uploadedUrls;
     }
 
-    static List<String> extractImageSourcesByXpath(Element scope, String pageUrl, String xpath)
-            {
+    static List<String> extractImageSources(Document doc, String pageUrl, String selector, String xpath) {
+        if (doc == null) {
+            return List.of();
+        }
+        boolean hasSelector = selector != null && !selector.isBlank();
+        boolean hasXpath = xpath != null && !xpath.isBlank();
+        if (!hasSelector && !hasXpath) {
+            return List.of();
+        }
+
+        java.util.Set<String> sources = new java.util.LinkedHashSet<>();
+        if (hasSelector) {
+            Elements matched = doc.select(selector);
+            if (matched.isEmpty()) {
+                return List.of();
+            }
+            if (hasXpath) {
+                // 选择器 + XPath：在选择器命中的元素范围内按 XPath 定位图片
+                for (Element scope : matched) {
+                    sources.addAll(extractImageSourcesByXpath(scope, pageUrl, xpath));
+                }
+                return new java.util.ArrayList<>(sources);
+            }
+            // 仅选择器：取命中元素自身及内部的 <img>
+            for (Element scope : matched) {
+                if ("img".equalsIgnoreCase(scope.tagName())) {
+                    addAbsoluteImageSource(sources, pageUrl, scope.attr("src"));
+                }
+                for (Element image : scope.select("img")) {
+                    addAbsoluteImageSource(sources, pageUrl, image.attr("src"));
+                }
+            }
+            return new java.util.ArrayList<>(sources);
+        }
+
+        // 仅 XPath：直接在整页范围内按 XPath 定位图片
+        sources.addAll(extractImageSourcesByXpath(doc, pageUrl, xpath));
+        return new java.util.ArrayList<>(sources);
+    }
+
+    static List<String> extractImageSourcesByXpath(Element scope, String pageUrl, String xpath) {
         List<String> sources = new java.util.ArrayList<>();
         Document scopedDocument = Jsoup.parse(scope.outerHtml(), pageUrl);
         Elements nodes = scopedDocument.selectXpath(xpath);
         java.util.Set<String> seen = new java.util.LinkedHashSet<>();
         for (Element node : nodes) {
-            if ("img".equalsIgnoreCase(node.tagName())) {
-                addAbsoluteImageSource(seen, pageUrl, node.attr("src"));
-            }
-            for (Element image : node.select("img")) {
-                addAbsoluteImageSource(seen, pageUrl, image.attr("src"));
-            }
+            // XPath 已定位到目标节点（含属性表达式），直接取节点文本内容作为图片地址
+            addAbsoluteImageSource(seen, pageUrl, node.text());
         }
         sources.addAll(seen);
         return sources;

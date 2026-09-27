@@ -2,7 +2,15 @@
   <el-card>
     <el-form class="spider-toolbar" :inline="true" @submit.prevent>
       <el-form-item>
-        <el-input class="spider-name-filter" v-model="keyword" placeholder="搜索爬虫名称" clearable @clear="loadData" @keyup.enter="loadData" />
+        <el-input
+          class="spider-name-filter"
+          v-model="keyword"
+          placeholder="搜索爬虫名称"
+          clearable
+          @input="scheduleFilterSearch"
+          @clear="searchImmediately"
+          @keyup.enter="searchImmediately"
+        />
       </el-form-item>
       <el-form-item>
         <el-input
@@ -10,17 +18,18 @@
           v-model="urlFilter"
           placeholder="搜索起始 URL"
           clearable
-          @clear="loadData"
-          @keyup.enter="loadData"
+          @input="scheduleFilterSearch"
+          @clear="searchImmediately"
+          @keyup.enter="searchImmediately"
         />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="groupFilter" placeholder="全部分组" clearable style="width: 160px" @change="loadData">
+        <el-select v-model="groupFilter" placeholder="全部分组" clearable style="width: 160px" @change="handleGroupChange">
           <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="loadData" :icon="Search">查询</el-button>
+        <el-button type="primary" @click="searchImmediately" :icon="Search">查询</el-button>
         <el-button @click="resetFilters">重置</el-button>
       </el-form-item>
       <el-form-item class="toolbar-actions">
@@ -102,6 +111,12 @@
                   <span class="spider-action-item">
                     <el-icon><VideoPlay /></el-icon>
                     执行
+                  </span>
+                </el-dropdown-item>
+                <el-dropdown-item command="files">
+                  <span class="spider-action-item">
+                    <el-icon><FolderOpened /></el-icon>
+                    查看文件
                   </span>
                 </el-dropdown-item>
                 <el-dropdown-item command="toggle" :disabled="row.status !== 1 && !row.schedule?.trim()">
@@ -252,11 +267,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, ArrowDown, VideoPlay, VideoPause, EditPen, Delete } from '@element-plus/icons-vue'
+import { Plus, Search, ArrowDown, VideoPlay, VideoPause, EditPen, Delete, FolderOpened } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 
 const route = useRoute()
@@ -276,6 +291,7 @@ const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
 const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
+let filterSearchTimer: ReturnType<typeof setTimeout> | null = null
 const parseStartUrls = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value.filter((url): url is string => typeof url === 'string' && Boolean(url.trim()))
@@ -362,6 +378,47 @@ const focusSpiderRow = () => {
   })
 }
 
+const routeQueryValue = (value: unknown) => {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+const trimmedFilterValue = (value: unknown) =>
+  typeof value === 'string' ? value.trim() : ''
+
+let routeInitialized = false
+
+const syncQueryToRoute = () => {
+  const filters = {
+    keyword: trimmedFilterValue(keyword.value),
+    startUrl: trimmedFilterValue(urlFilter.value),
+    group: trimmedFilterValue(groupFilter.value),
+    spiderId: highlightSpiderId.value ? String(highlightSpiderId.value) : ''
+  }
+  const routeFilters = {
+    keyword: routeQueryValue(route.query.keyword ?? route.query.spiderName),
+    startUrl: routeQueryValue(route.query.startUrl),
+    group: routeQueryValue(route.query.group),
+    spiderId: routeQueryValue(route.query.spiderId)
+  }
+  if (Object.keys(filters).every((key) => filters[key as keyof typeof filters] === routeFilters[key as keyof typeof routeFilters])
+      && route.query.spiderName === undefined) {
+    return
+  }
+
+  const query = { ...route.query }
+  delete query.keyword
+  delete query.startUrl
+  delete query.group
+  delete query.spiderId
+  if (filters.keyword) query.keyword = filters.keyword
+  if (filters.startUrl) query.startUrl = filters.startUrl
+  if (filters.group) query.group = filters.group
+  if (filters.spiderId) query.spiderId = filters.spiderId
+
+  void router.replace({ query })
+}
+
 const loadData = async () => {
   const requestedHighlightId = highlightSpiderId.value
   loading.value = true
@@ -392,10 +449,40 @@ const loadData = async () => {
   }
 }
 
+const cancelScheduledFilterSearch = () => {
+  if (filterSearchTimer) {
+    clearTimeout(filterSearchTimer)
+    filterSearchTimer = null
+  }
+}
+
+const scheduleFilterSearch = () => {
+  cancelScheduledFilterSearch()
+  filterSearchTimer = setTimeout(() => {
+    filterSearchTimer = null
+    page.value = 1
+    loadData()
+  }, 300)
+}
+
+const searchImmediately = () => {
+  cancelScheduledFilterSearch()
+  page.value = 1
+  loadData()
+}
+
+const handleGroupChange = () => {
+  cancelScheduledFilterSearch()
+  syncQueryToRoute()
+  loadData()
+}
+
 const resetFilters = () => {
+  cancelScheduledFilterSearch()
   keyword.value = ''
   urlFilter.value = ''
   groupFilter.value = ''
+  highlightSpiderId.value = null
   page.value = 1
   loadData()
 }
@@ -552,6 +639,9 @@ const handleClearContent = async (row: any) => {
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
     case 'run': handleRun(row); break
+    case 'files':
+      router.push({ name: 'File', query: { spiderId: String(row.id) } })
+      break
     case 'toggle': row.status === 1 ? handleStop(row) : handleStart(row); break
     case 'edit': showEdit(row); break
     case 'clear-content': handleClearContent(row); break
@@ -560,10 +650,33 @@ const handleCommand = (cmd: string, row: any) => {
 }
 
 watch(
-  () => route.query.spiderId,
-  (val) => {
-    const id = Number(val)
-    highlightSpiderId.value = Number.isFinite(id) && id > 0 ? id : null
+  [keyword, urlFilter, groupFilter],
+  () => syncQueryToRoute()
+)
+
+watch(
+  () => [route.query.spiderId, route.query.keyword, route.query.spiderName, route.query.startUrl, route.query.group],
+  ([spiderIdValue, keywordValue, spiderNameValue, startUrlValue, groupValue]) => {
+    const id = Number(routeQueryValue(spiderIdValue))
+    const routeKeyword = keywordValue ?? spiderNameValue
+    const nextKeyword = routeQueryValue(routeKeyword)
+    const nextStartUrl = routeQueryValue(startUrlValue)
+    const nextGroup = routeQueryValue(groupValue)
+    const nextHighlightId = Number.isFinite(id) && id > 0 ? id : null
+    const routeMatchesFilters = route.query.spiderName === undefined
+        && trimmedFilterValue(keyword.value) === nextKeyword
+        && trimmedFilterValue(urlFilter.value) === nextStartUrl
+        && trimmedFilterValue(groupFilter.value) === nextGroup
+        && highlightSpiderId.value === nextHighlightId
+    if (routeInitialized && routeMatchesFilters) {
+      return
+    }
+    routeInitialized = true
+
+    highlightSpiderId.value = nextHighlightId
+    keyword.value = nextKeyword
+    urlFilter.value = nextStartUrl
+    groupFilter.value = nextGroup
     loadData()
   },
   { immediate: true }
@@ -572,6 +685,8 @@ watch(
 onMounted(() => {
   loadGroupOptions()
 })
+
+onUnmounted(cancelScheduledFilterSearch)
 </script>
 
 <style scoped>

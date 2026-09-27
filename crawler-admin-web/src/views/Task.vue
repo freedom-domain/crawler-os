@@ -79,7 +79,7 @@
       </el-table-column>
       <el-table-column label="总耗时" min-width="110" align="center" resizable>
         <template #default="{ row }">
-          {{ formatDuration(row.totalCostMs || 0) }}
+          {{ formatDuration(taskDurationMs(row)) }}
         </template>
       </el-table-column>
       <el-table-column label="HTML" align="center" resizable>
@@ -169,7 +169,7 @@
 
     <el-dialog
       v-model="logVisible"
-      :width="logFullscreen ? '100%' : '900px'"
+      :width="logFullscreen ? '100%' : '1200px'"
       :top="logFullscreen ? '0' : '5vh'"
       :class="{ 'log-fullscreen-dialog': logFullscreen }"
       destroy-on-close
@@ -177,7 +177,7 @@
     >
       <template #header>
         <div class="log-dialog-header">
-          <span>任务日志</span>
+          <span class="log-dialog-title">任务日志{{ currentTask ? `（任务 #${currentTask.taskId ?? currentTask.id}${currentTask.spiderName ? ' · ' + currentTask.spiderName : ''}）` : '' }}</span>
           <el-button size="small" text type="primary" @click="logFullscreen = !logFullscreen">
             <el-icon><component :is="logFullscreen ? 'Minus' : 'FullScreen'" /></el-icon>
             {{ logFullscreen ? '退出放大' : '放大' }}
@@ -205,8 +205,8 @@
         <el-button size="small" @click="resetLogFilters">重置</el-button>
       </div>
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
-      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" :max-height="logFullscreen ? 'calc(100vh - 190px)' : '60vh'" resizable border>
-        <el-table-column label="URL" show-overflow-tooltip resizable>
+      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" :max-height="logFullscreen ? 'calc(100vh - 190px)' : '65vh'" resizable border>
+        <el-table-column label="URL" min-width="280" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <a class="log-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
           </template>
@@ -224,7 +224,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="level" label="级别" min-width="70" align="center"  resizable />
-        <el-table-column prop="message" label="信息" show-overflow-tooltip  resizable />
+        <el-table-column prop="message" label="信息" min-width="220" show-overflow-tooltip  resizable />
         <el-table-column prop="costMs" label="耗时(ms)" min-width="90" align="center"  resizable />
         <el-table-column prop="createTime" label="时间" min-width="180" resizable>
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
@@ -268,6 +268,7 @@ const loadRefreshInterval = () => {
   return refreshIntervalOptions.includes(saved) ? saved : 5
 }
 const refreshIntervalSeconds = ref(loadRefreshInterval())
+const currentTimeMs = ref(Date.now())
 const maxConcurrency = ref(1)
 const savedMaxConcurrency = ref(1)
 const concurrencyLoading = ref(false)
@@ -275,6 +276,7 @@ const concurrencySaving = ref(false)
 const concurrencyLoaded = ref(false)
 const concurrencyDialogVisible = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
+let durationTimer: ReturnType<typeof setInterval> | null = null
 
 const logVisible = ref(false)
 const logFullscreen = ref(false)
@@ -373,6 +375,16 @@ const formatDuration = (ms: number) => {
   if (h > 0) return `${h}h ${m}m ${s}s`
   if (m > 0) return `${m}m ${s}s`
   return `${s}s`
+}
+
+const taskDurationMs = (task: any) => {
+  if (task.endTime || !task.startTime) return task.totalCostMs || 0
+
+  const startTime = typeof task.startTime === 'string'
+    ? task.startTime.replace(' ', 'T')
+    : task.startTime
+  const startMs = new Date(startTime).getTime()
+  return Number.isFinite(startMs) ? Math.max(0, currentTimeMs.value - startMs) : task.totalCostMs || 0
 }
 
 const loadData = async () => {
@@ -551,17 +563,23 @@ watch([autoRefresh, () => list.value], () => {
 })
 
 onMounted(() => {
+  durationTimer = setInterval(() => {
+    currentTimeMs.value = Date.now()
+  }, 1000)
   loadData()
   loadSpiders()
   startTimer()
 })
 
-onUnmounted(stopTimer)
+onUnmounted(() => {
+  stopTimer()
+  if (durationTimer) clearInterval(durationTimer)
+})
 </script>
 
 <style scoped>
 .log-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
-.log-dialog-header .el-button { margin-right: 8px; }
+.log-dialog-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 :deep(.log-fullscreen-dialog) { margin: 0 auto !important; height: 100vh; }
 :deep(.log-fullscreen-dialog .el-dialog__body) { height: calc(100vh - 72px); overflow: auto; }
 .concurrency-settings { min-height: 88px; }
