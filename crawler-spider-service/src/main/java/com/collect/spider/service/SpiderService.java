@@ -228,6 +228,9 @@ public class SpiderService {
         if (spider == null) {
             throw new BizException("爬虫不存在");
         }
+        if (spider.getSchedule() == null || spider.getSchedule().isBlank()) {
+            throw new BizException("请先设置调度表达式后再启动定时任务");
+        }
         spider.setStatus(1);
         spider.setEnabled(1);
         spiderMapper.updateById(spider);

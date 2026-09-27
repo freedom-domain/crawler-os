@@ -84,17 +84,40 @@
       <el-table-column prop="schedule" label="调度" min-width="160" resizable />
       <el-table-column label="操作" width="120" fixed="right" resizable>
         <template #default="{ row }">
-          <el-dropdown trigger="click" @command="(cmd: string) => handleCommand(cmd, row)">
+          <el-dropdown
+            trigger="click"
+            popper-class="spider-action-popper"
+            @command="(cmd: string) => handleCommand(cmd, row)"
+          >
             <el-button size="small" type="primary">
               操作 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="run" :disabled="row._running">执行</el-dropdown-item>
-                <el-dropdown-item command="search">查询内容</el-dropdown-item>
-                <el-dropdown-item command="toggle">{{ row.status === 1 ? '停止' : '启动' }}</el-dropdown-item>
-                <el-dropdown-item command="edit">编辑</el-dropdown-item>
-                <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                <el-dropdown-item command="run" :disabled="row._running">
+                  <span class="spider-action-item">
+                    <el-icon><VideoPlay /></el-icon>
+                    执行
+                  </span>
+                </el-dropdown-item>
+                <el-dropdown-item command="toggle" :disabled="row.status !== 1 && !row.schedule?.trim()">
+                  <span class="spider-action-item">
+                    <el-icon><component :is="row.status === 1 ? VideoPause : VideoPlay" /></el-icon>
+                    {{ row.status === 1 ? '停止定时任务' : '启动定时任务' }}
+                  </span>
+                </el-dropdown-item>
+                <el-dropdown-item command="edit">
+                  <span class="spider-action-item">
+                    <el-icon><EditPen /></el-icon>
+                    编辑
+                  </span>
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" divided class="spider-delete-action">
+                  <span class="spider-action-item">
+                    <el-icon><Delete /></el-icon>
+                    删除
+                  </span>
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -215,7 +238,7 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, Search, ArrowDown, VideoPlay, VideoPause, EditPen, Delete } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -475,9 +498,6 @@ const handleDelete = async (row: any) => {
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
     case 'run': handleRun(row); break
-    case 'search':
-      router.push({ name: 'Search', query: { spiderId: String(row.id) } })
-      break
     case 'toggle': row.status === 1 ? handleStop(row) : handleStart(row); break
     case 'edit': showEdit(row); break
     case 'delete': handleDelete(row); break
@@ -520,6 +540,36 @@ onMounted(() => {
 .spider-actions { display: flex; width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
+
+:global(.spider-action-popper) {
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 12%);
+}
+:global(.spider-action-popper .el-dropdown-menu) { padding: 0; }
+:global(.spider-action-popper .el-dropdown-menu__item) {
+  min-height: 36px;
+  margin: 2px 0;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: #334155;
+  line-height: 36px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+:global(.spider-action-popper .el-dropdown-menu__item:not(.is-disabled):hover) {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+:global(.spider-action-popper .el-dropdown-menu__item.spider-delete-action:not(.is-disabled)) { color: #dc2626; }
+:global(.spider-action-popper .el-dropdown-menu__item.spider-delete-action:not(.is-disabled):hover) {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+:global(.spider-action-popper .el-dropdown-menu__item.is-disabled) { opacity: 0.5; }
+.spider-action-item { display: inline-flex; align-items: center; gap: 10px; }
+.spider-action-item .el-icon { font-size: 15px; }
 
 :deep(.spider-dialog .el-dialog__body) {
   height: 70vh;

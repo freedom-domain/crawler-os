@@ -31,11 +31,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -56,9 +52,6 @@ public class SearchService {
 
     @Value("${minio.html-bucket:crawler}")
     private String htmlBucket;
-
-    @Value("${minio.js-bucket:crawler}")
-    private String jsBucket;
 
     @Value("${minio.image-bucket:crawler}")
     private String imageBucket;
@@ -418,7 +411,7 @@ public class SearchService {
                 String rawHtml = minioHelper.readHtml(htmlBucket,
                         "html/" + ObjectNameUtils.base64Url(doc.getUrl()) + ".html",
                         "html/" + md5(doc.getUrl()) + ".html");
-                doc.setRawHtml(rewriteStaticResourceUrls(rawHtml, doc.getUrl()));
+                doc.setRawHtml(rawHtml);
             }
         }
         return doc;
@@ -444,60 +437,6 @@ public class SearchService {
         } catch (Exception e) {
             log.warn("删除 MinIO 图片失败: bucket={}, object={}", imageBucket, objectName, e);
         }
-    }
-
-    private String rewriteStaticResourceUrls(String html, String baseUrl) {
-        if (html == null || baseUrl == null || baseUrl.isBlank()) return html;
-        String rewritten = rewriteResourceAttribute(html, baseUrl, "script", "src", false);
-        return rewriteResourceAttribute(rewritten, baseUrl, "link", "href", true);
-    }
-
-    private String rewriteResourceAttribute(String html, String baseUrl, String tag, String attribute, boolean stylesheet) {
-        Pattern pattern = Pattern.compile("(<" + tag + "\\b[^>]*\\s" + attribute + "\\s*=\\s*[\\\"'])([^\\\"']+)([\\\"'])", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(html);
-        StringBuffer result = new StringBuffer();
-        while (matcher.find()) {
-            String tagText = matcher.group(0);
-            if (stylesheet && !tagText.toLowerCase().matches(".*\\brel\\s*=\\s*[\\\"'][^\\\"']*stylesheet[^\\\"']*[\\\"'].*")) {
-                continue;
-            }
-            String source = matcher.group(2).trim();
-            String absolute = resolveUrl(baseUrl, source);
-            if (absolute == null || absolute.startsWith("data:") || absolute.startsWith("javascript:")) continue;
-            String extension = stylesheet ? ".css" : resourceExtension(absolute, ".js");
-            String prefix = stylesheet ? "css/" : "js/";
-            String objectName = prefix + ObjectNameUtils.base64Url(absolute) + extension;
-            String legacyObjectName = prefix + md5(absolute) + extension;
-            try {
-                minioHelper.moveLegacyObjectIfExists(jsBucket, legacyObjectName, objectName);
-            } catch (Exception e) {
-                log.warn("迁移 MinIO 静态资源缓存失败: bucket={}, object={}", jsBucket, legacyObjectName, e);
-                objectName = legacyObjectName;
-            }
-            String resourceUrl = "/api/file/resource?bucket=" +
-                    java.net.URLEncoder.encode(jsBucket, StandardCharsets.UTF_8) +
-                    "&objectName=" + java.net.URLEncoder.encode(objectName, StandardCharsets.UTF_8);
-            matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(1) + resourceUrl + matcher.group(3)));
-        }
-        matcher.appendTail(result);
-        return result.toString();
-    }
-
-    private String resolveUrl(String baseUrl, String source) {
-        try {
-            return new URI(baseUrl).resolve(source).toString();
-        } catch (URISyntaxException e) {
-            return null;
-        }
-    }
-
-    private String resourceExtension(String url, String fallback) {
-        String path = url;
-        int queryIndex = path.indexOf('?');
-        if (queryIndex >= 0) path = path.substring(0, queryIndex);
-        int dot = path.lastIndexOf('.');
-        int slash = path.lastIndexOf('/');
-        return dot > slash && dot < path.length() - 1 ? path.substring(dot) : fallback;
     }
 
     private String md5(String input) {

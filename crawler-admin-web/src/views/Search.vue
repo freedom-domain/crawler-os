@@ -22,6 +22,10 @@
               />
               <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
               <button class="search-btn" type="button" @click="doSearch">搜索</button>
+              <el-button class="reset-search-button" plain @click="resetSearch">
+                <el-icon><RefreshLeft /></el-icon>
+                重置
+              </el-button>
             </div>
           </SearchHistoryDropdown>
         </div>
@@ -39,10 +43,6 @@
           </el-select>
           <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
           <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
-          <el-button class="reset-search-button" plain @click="resetSearch">
-            <el-icon><RefreshLeft /></el-icon>
-            重置
-          </el-button>
         </div>
       </div>
       <el-button
@@ -140,7 +140,14 @@
       <template #header>
         <div class="preview-content-header">
           <span>{{ previewTitle }} - 内容</span>
-          <el-switch v-model="showPreviewSource" inactive-text="内容预览" active-text="HTML 源码" />
+          <div class="preview-content-controls">
+            <el-switch
+              v-model="localizePreviewResources"
+              active-text="CSS/JS 使用本地地址"
+              @change="togglePreviewResourceLocalization"
+            />
+            <el-switch v-model="showPreviewSource" inactive-text="内容预览" active-text="HTML 源码" />
+          </div>
         </div>
       </template>
       <div v-loading="previewLoading">
@@ -178,6 +185,7 @@ import SearchDetailDialog from '@/components/SearchDetailDialog.vue'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { searchContent, searchDetail, searchDelete, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
 import { Search, FullScreen, Minus, ZoomIn, ZoomOut, Promotion, RefreshLeft } from '@element-plus/icons-vue'
+import { resolvePreviewHtml } from '@/utils/previewHtml'
 
 const router = useRouter()
 const route = useRoute()
@@ -224,6 +232,8 @@ const detailLoading = ref(false)
 const previewTitle = ref('')
 const previewHtml = ref('')
 const previewSource = ref('')
+const previewBaseUrl = ref('')
+const localizePreviewResources = ref(false)
 const showPreviewSource = ref(false)
 const previewImages = ref<string[]>([])
 const previewInitialIndex = ref(0)
@@ -568,65 +578,32 @@ const showPreviewImages = async (row: any, initialIndex = 0) => {
   }
 }
 
-/**
- * 将 rawHtml 中的相对链接替换为基于爬虫源 URL 的绝对链接。
- * MinIO 静态资源通过当前应用的 /api/file/resource 代理访问，不能拼接到爬虫源站。
- */
-const resolveHtmlLinks = (html: string, baseUrl: string): string => {
-  if (!html || !baseUrl) return html
-  const div = document.createElement('div')
-  div.innerHTML = html
-  const toAbsolute = (url: string): string => {
-    if (!url) return url
-    const trimmed = url.trim()
-    if (/^(https?:)?\/\//i.test(trimmed)) return trimmed
-    if (/^(javascript:|mailto:|tel:|data:|blob:|#)/i.test(trimmed)) return trimmed
-    if (/^\/api\/file\/resource(?:[/?#]|$)/i.test(trimmed)) return trimmed
-    try {
-      return new URL(trimmed, baseUrl).href
-    } catch {
-      return trimmed
-    }
-  }
-  div.querySelectorAll('a[href]').forEach((a) => {
-    a.setAttribute('href', toAbsolute(a.getAttribute('href') || ''))
-  })
-  div.querySelectorAll('img[src]').forEach((img) => {
-    img.setAttribute('src', toAbsolute(img.getAttribute('src') || ''))
-  })
-  div.querySelectorAll('script[src]').forEach((s) => {
-    s.setAttribute('src', toAbsolute(s.getAttribute('src') || ''))
-  })
-  div.querySelectorAll('link[href]').forEach((l) => {
-    l.setAttribute('href', toAbsolute(l.getAttribute('href') || ''))
-  })
-  div.querySelectorAll('source[src]').forEach((s) => {
-    s.setAttribute('src', toAbsolute(s.getAttribute('src') || ''))
-  })
-  div.querySelectorAll('video[src], audio[src]').forEach((m) => {
-    m.setAttribute('src', toAbsolute(m.getAttribute('src') || ''))
-  })
-  return div.innerHTML
-}
-
 const showPreviewContent = async (row: any) => {
   previewContentVisible.value = true
   previewLoading.value = true
   previewTitle.value = row.title || '内容预览'
   previewHtml.value = ''
   previewSource.value = ''
+  previewBaseUrl.value = ''
+  localizePreviewResources.value = false
   showPreviewSource.value = false
   try {
     const res: any = await searchDetail(row.id)
     const rawHtml = res.data?.rawHtml || res.data?.content || '无原始内容'
     previewSource.value = rawHtml
-    previewHtml.value = resolveHtmlLinks(rawHtml, res.data?.url || row.url || '')
+    previewBaseUrl.value = res.data?.url || row.url || ''
+    previewHtml.value = resolvePreviewHtml(rawHtml, previewBaseUrl.value, localizePreviewResources.value)
   } catch {
     previewHtml.value = '加载失败'
     previewSource.value = '加载失败'
   } finally {
     previewLoading.value = false
   }
+}
+
+const togglePreviewResourceLocalization = (enabled: boolean) => {
+  if (!previewSource.value || previewSource.value === '加载失败') return
+  previewHtml.value = resolvePreviewHtml(previewSource.value, previewBaseUrl.value, enabled)
 }
 
 const showDetail = async (row: any) => {
@@ -839,15 +816,20 @@ onMounted(() => {
 }
 
 .reset-search-button {
-  height: 32px;
-  padding: 0 13px;
+  flex-shrink: 0;
+  width: 88px;
+  height: 36px;
+  min-height: 36px;
+  margin-left: 8px;
+  padding: 0;
   border-color: #d9e7e8;
-  border-radius: 9px;
+  border-radius: 999px;
   background: linear-gradient(135deg, #fff 0%, #f4faf9 100%);
   color: #52706f;
   font-weight: 600;
   box-shadow: 0 2px 7px rgba(32, 86, 84, 0.08);
   transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  justify-content: center;
 }
 
 .reset-search-button:hover {
@@ -929,13 +911,14 @@ onMounted(() => {
 
 .search-btn {
   flex-shrink: 0;
+  width: 88px;
   border: none;
   border-radius: 999px;
   background: #1a73e8;
   color: #fff;
   font-size: 14px;
   font-weight: 500;
-  padding: 0 22px;
+  padding: 0;
   height: 36px;
   min-height: 36px;
   cursor: pointer;
@@ -1153,11 +1136,17 @@ onMounted(() => {
 .preview-content-header {
   display: flex;
   align-items: center;
-  gap: 16px;
   justify-content: space-between;
   color: #172b4d;
   font-size: 16px;
   font-weight: 600;
+}
+
+.preview-content-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-right: 28px;
 }
 
 .detail-dialog-body {

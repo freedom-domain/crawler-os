@@ -47,15 +47,32 @@
 
     <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable border>
       <el-table-column type="selection" width="50"  resizable />
-      <el-table-column prop="taskId" label="任务ID" min-width="200" show-overflow-tooltip  resizable />
-      <el-table-column prop="spiderName" label="爬虫名称" min-width="160"  resizable />
-      <el-table-column label="状态" min-width="100" resizable>
+      <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip resizable />
+      <el-table-column label="爬虫名称" min-width="160" resizable>
         <template #default="{ row }">
-          <el-tag :type="statusTag(row.status)">{{ statusLabel(row.status) }}</el-tag>
+          <el-button link type="primary" @click="goToSpiderData(row.spiderId)">
+            {{ row.spiderName }}
+          </el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="startTime" label="开始时间" min-width="180"  resizable />
-      <el-table-column prop="endTime" label="结束时间" min-width="180"  resizable />
+      <el-table-column label="状态" width="120" resizable>
+        <template #default="{ row }">
+          <el-tag
+            :type="statusTag(row.status)"
+            effect="light"
+            round
+            class="task-status-tag"
+            :class="`task-status-${String(row.status || '').toLowerCase()}`"
+          >
+            <span class="task-status-content">
+              <span class="task-status-dot"></span>
+              {{ statusLabel(row.status) }}
+            </span>
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="startTime" label="开始时间" width="170" resizable />
+      <el-table-column prop="endTime" label="结束时间" width="170" resizable />
       <el-table-column label="总耗时" min-width="110" align="center" resizable>
         <template #default="{ row }">
           {{ formatDuration(row.totalCostMs || 0) }}
@@ -71,11 +88,31 @@
         <el-table-column prop="imageFailCount" label="失败" min-width="70" align="center"  resizable />
         <el-table-column prop="imageExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right" resizable>
+      <el-table-column label="操作" width="230" fixed="right" resizable>
         <template #default="{ row }">
-          <el-button v-if="row.status === 'RUNNING' || row.status === 'PENDING'" size="small" type="warning" @click="handleCancel(row)">取消</el-button>
-          <el-button size="small" type="primary" text @click="showLogs(row)">日志</el-button>
-          <el-button v-if="row.status !== 'RUNNING' && row.status !== 'CANCELING'" size="small" type="danger" text @click="handleDelete(row)">删除</el-button>
+          <div class="task-row-actions">
+            <el-button
+              v-if="row.status === 'RUNNING' || row.status === 'PENDING'"
+              size="small"
+              type="warning"
+              plain
+              :icon="VideoPause"
+              @click="handleCancel(row)"
+            >
+              取消
+            </el-button>
+            <el-button size="small" type="primary" text :icon="Document" @click="showLogs(row)">日志</el-button>
+            <el-button
+              v-if="row.status !== 'RUNNING' && row.status !== 'CANCELING'"
+              size="small"
+              type="danger"
+              text
+              :icon="Delete"
+              @click="handleDelete(row)"
+            >
+              删除
+            </el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -203,9 +240,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Refresh, Search, VideoPause, Document, Delete } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const list = ref<any[]>([])
 const loading = ref(false)
 const prevStatusMap = new Map<string, string>()
@@ -269,6 +308,11 @@ const logKeyword = ref('')
 const logStatus = ref<number | null>(null)
 const logType = ref('')
 const logLevel = ref('')
+
+const goToSpiderData = (spiderId?: number) => {
+  if (!spiderId) return
+  router.push({ name: 'Search', query: { spiderId: String(spiderId) } })
+}
 
 const reloadLogs = () => {
   logPage.value = 1
@@ -525,6 +569,15 @@ onUnmounted(stopTimer)
 }
 .refresh-interval-select { width: 90px; }
 :deep(.concurrency-toolbar-item) { margin-left: auto !important; }
+
+.task-row-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.task-row-actions .el-button + .el-button { margin-left: 0; }
+.task-status-tag { border: 0; font-weight: 600; }
+.task-status-content { display: inline-flex; align-items: center; gap: 7px; }
+.task-status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
+.task-status-running .task-status-dot { box-shadow: 0 0 0 3px rgb(64 158 255 / 16%); }
+.task-status-success .task-status-dot { box-shadow: 0 0 0 3px rgb(103 194 58 / 16%); }
+.task-status-failed .task-status-dot { box-shadow: 0 0 0 3px rgb(245 108 108 / 16%); }
 
 .log-filter {
   display: flex;

@@ -31,6 +31,9 @@ public class FileController {
     @Value("${minio.image-bucket:crawler}")
     private String imageBucket;
 
+    @Value("${minio.js-bucket:crawler}")
+    private String jsBucket;
+
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
     public R<FileMetadata> upload(@RequestParam("file") MultipartFile file,
@@ -81,8 +84,11 @@ public class FileController {
 
     @Operation(summary = "内联访问静态资源")
     @GetMapping("/resource")
-    public ResponseEntity<InputStreamResource> resource(@RequestParam("bucket") String bucket,
+    public ResponseEntity<InputStreamResource> resource(@RequestParam(value = "bucket", required = false) String bucket,
                                                          @RequestParam("objectName") String objectName) {
+        if (bucket == null || bucket.isBlank()) {
+            bucket = jsBucket;
+        }
         InputStream in = fileService.download(bucket, objectName);
         MediaType mediaType = switch (objectName.substring(objectName.lastIndexOf('.') + 1).toLowerCase()) {
             case "js", "mjs" -> MediaType.parseMediaType("application/javascript");
