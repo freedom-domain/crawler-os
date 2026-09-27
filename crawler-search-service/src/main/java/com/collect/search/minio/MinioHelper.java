@@ -1,7 +1,6 @@
 package com.collect.search.minio;
 
 import io.minio.GetObjectArgs;
-import io.minio.CopyObjectArgs;
 import io.minio.MinioClient;
 import io.minio.RemoveObjectArgs;
 import io.minio.StatObjectArgs;
@@ -37,16 +36,8 @@ public class MinioHelper {
      * 读取 HTML 原文。对象不存在或读取失败时返回 null。
      */
     public String readHtml(String bucket, String objectName) {
-        return readHtml(bucket, objectName, null);
-    }
-
-    public String readHtml(String bucket, String objectName, String legacyObjectName) {
         try {
-            if (legacyObjectName != null) {
-                if (!moveLegacyObjectIfExists(bucket, legacyObjectName, objectName)) {
-                    return null;
-                }
-            } else if (!objectExists(bucket, objectName)) {
+            if (!objectExists(bucket, objectName)) {
                 return null;
             }
         } catch (Exception e) {
@@ -59,28 +50,6 @@ public class MinioHelper {
             log.warn("从 MinIO 读取 HTML 失败: bucket={}, object={}", bucket, objectName, e);
             return null;
         }
-    }
-
-    public boolean moveLegacyObjectIfExists(String bucket, String legacyObjectName, String objectName) throws Exception {
-        if (objectExists(bucket, objectName)) {
-            return true;
-        }
-        if (!objectExists(bucket, legacyObjectName)) {
-            return false;
-        }
-        minioClient.copyObject(CopyObjectArgs.builder()
-                .bucket(bucket)
-                .object(objectName)
-                .source(io.minio.CopySource.builder()
-                        .bucket(bucket)
-                        .object(legacyObjectName)
-                        .build())
-                .build());
-        minioClient.removeObject(RemoveObjectArgs.builder()
-                .bucket(bucket)
-                .object(legacyObjectName)
-                .build());
-        return true;
     }
 
     private boolean objectExists(String bucket, String objectName) throws Exception {

@@ -3,7 +3,7 @@
     <el-overlay v-if="mobile && drawerOpen" class="drawer-mask" @click="drawerOpen = false" />
     <el-aside :width="collapsed ? '72px' : '236px'" :class="['aside', { 'is-collapsed': collapsed, 'is-mobile': mobile, 'is-open': drawerOpen }]">
       <div class="logo">
-        <span class="logo-mark">C</span>
+        <img class="logo-mark" src="/crawleros-icon.svg" alt="" />
         <span v-if="!collapsed" class="logo-copy">Crawler<span>OS</span></span>
       </div>
       <el-menu
@@ -403,13 +403,9 @@ const handleCommand = (cmd: string) => {
 .logo-mark {
   width: 30px;
   height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  color: #172b4d;
-  background: #72e0c8;
-  font-size: 17px;
-  font-weight: 900;
+  display: block;
+  flex: none;
+  border-radius: 9px;
 }
 .logo-copy span { color: #72e0c8; }
 :deep(.el-menu) { border-right: 0; padding: 14px 10px; }

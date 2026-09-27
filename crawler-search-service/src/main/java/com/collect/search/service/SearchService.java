@@ -31,8 +31,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -409,8 +407,7 @@ public class SearchService {
             // HTML 原文存储在 MinIO（对象名 = html/{base64url(url)}.html），详情时按需读取
             if (doc.getUrl() != null && !doc.getUrl().isBlank()) {
                 String rawHtml = minioHelper.readHtml(htmlBucket,
-                        "html/" + ObjectNameUtils.base64Url(doc.getUrl()) + ".html",
-                        "html/" + md5(doc.getUrl()) + ".html");
+                        "html/" + ObjectNameUtils.base64Url(doc.getUrl()) + ".html");
                 doc.setRawHtml(rawHtml);
             }
         }
@@ -436,20 +433,6 @@ public class SearchService {
             minioHelper.removeObject(imageBucket, objectName);
         } catch (Exception e) {
             log.warn("删除 MinIO 图片失败: bucket={}, object={}", imageBucket, objectName, e);
-        }
-    }
-
-    private String md5(String input) {
-        try {
-            byte[] hash = java.security.MessageDigest.getInstance("MD5")
-                    .digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
         }
     }
 

@@ -3,7 +3,7 @@
     <div class="ambient ambient-one"></div>
     <div class="ambient ambient-two"></div>
     <div class="login-aside">
-      <div class="brand-lockup"><span class="brand-mark">C</span><span>Crawler<span>OS</span></span></div>
+      <div class="brand-lockup"><img class="brand-mark" src="/crawleros-icon.svg" alt="" /><span>Crawler<span>OS</span></span></div>
       <div class="aside-copy">
         <p class="eyebrow">INTELLIGENT CRAWL OPERATIONS</p>
         <h1>让数据采集<br /><em>更有秩序。</em></h1>
@@ -12,7 +12,7 @@
       <div class="aside-foot">CrawlerOS · Admin Console</div>
     </div>
     <div class="login-box">
-      <div class="mobile-brand"><span class="brand-mark">C</span>Crawler<span>OS</span></div>
+      <div class="mobile-brand"><img class="brand-mark" src="/crawleros-icon.svg" alt="" />Crawler<span>OS</span></div>
       <p class="welcome">欢迎回来</p>
       <h2 class="title">登录管理控制台</h2>
       <p class="subtitle">输入账号，继续你的数据工作。</p>
@@ -101,7 +101,7 @@ const handleLogin = async () => {
 .login-aside { color: white; height: min(650px, 80vh); display: flex; flex-direction: column; justify-content: space-between; position: relative; z-index: 1; }
 .brand-lockup, .mobile-brand { display: flex; align-items: center; gap: 11px; font-size: 20px; font-weight: 800; letter-spacing: .4px; }
 .brand-lockup > span:last-child span, .mobile-brand > span:last-child { color: #72e0c8; }
-.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: #72e0c8; color: #102a43; font-weight: 900; }
+.brand-mark { width: 34px; height: 34px; display: block; flex: none; border-radius: 10px; }
 .aside-copy { margin-top: auto; margin-bottom: auto; }
 .eyebrow { margin-bottom: 20px; color: #72e0c8; font-size: 11px; font-weight: 800; letter-spacing: 2px; }
 .aside-copy h1 { font-size: clamp(38px, 4vw, 56px); line-height: 1.12; letter-spacing: -1.5px; }

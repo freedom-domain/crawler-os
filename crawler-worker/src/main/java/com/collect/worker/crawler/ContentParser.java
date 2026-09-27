@@ -77,6 +77,9 @@ public class ContentParser {
             if (href == null || href.isBlank()) {
                 continue;
             }
+            if (com.collect.worker.redis.UrlQueueService.isImageUrl(href)) {
+                continue;
+            }
             String normalizedHref = com.collect.worker.redis.UrlQueueService.normalizeUrl(href);
             if (normalizedHref == null || normalizedHref.isBlank()
                     || !seen.add(normalizedHref)) {

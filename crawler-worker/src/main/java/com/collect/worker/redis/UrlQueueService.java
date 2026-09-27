@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -23,6 +24,11 @@ public class UrlQueueService {
 
     private static final String KEY_PREFIX = "crawler:urls:";
     private static final long TTL_HOURS = 24;
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of(
+            "apng", "avif", "bmp", "gif", "heic", "heif", "ico", "jfif",
+            "jpe", "jpeg", "jpg", "pjp", "pjpeg", "png", "svg", "tif",
+            "tiff", "webp"
+    );
 
     public static String normalizeUrl(String rawUrl) {
         if (rawUrl == null) {
@@ -76,6 +82,23 @@ public class UrlQueueService {
             return builder.toString();
         } catch (Exception e) {
             return url;
+        }
+    }
+
+    public static boolean isImageUrl(String rawUrl) {
+        if (rawUrl == null || rawUrl.isBlank()) {
+            return false;
+        }
+        try {
+            String path = URI.create(rawUrl.trim()).getPath();
+            if (path == null || path.isEmpty()) {
+                return false;
+            }
+            int slash = path.lastIndexOf('/');
+            int dot = path.lastIndexOf('.');
+            return dot > slash && IMAGE_EXTENSIONS.contains(path.substring(dot + 1).toLowerCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return false;
         }
     }
 
@@ -134,6 +157,9 @@ public class UrlQueueService {
     }
 
     public boolean enqueueIfAbsent(Long taskId, String url, int depth) {
+        if (isImageUrl(url)) {
+            return false;
+        }
         String normalized = normalizeUrl(url);
         if (normalized == null || normalized.isBlank()) {
             return false;
@@ -152,6 +178,9 @@ public class UrlQueueService {
      * 原子认领待处理 URL，兼容旧队列中已经存在的重复项。
      */
     public boolean claimForProcessing(Long taskId, String url) {
+        if (isImageUrl(url)) {
+            return false;
+        }
         String normalized = normalizeUrl(url);
         if (normalized == null || normalized.isBlank()) {
             return false;

@@ -252,8 +252,7 @@ public class CrawlerEngine {
                 boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
                 String cachedHtml = readCache
                         ? minioHelper.getHtmlIfExists(htmlBucket,
-                                "html/" + ObjectNameUtils.base64Url(url) + ".html",
-                                "html/" + md5(url) + ".html")
+                                "html/" + ObjectNameUtils.base64Url(url) + ".html")
                         : null;
                 boolean cacheHit = cachedHtml != null;
                 Document doc = cacheHit ? Jsoup.parse(cachedHtml, url) : fetch(url, msg);
@@ -513,8 +512,7 @@ public class CrawlerEngine {
                     String ext = guessExt(src, null);
                     String objectName = "images/" + ObjectNameUtils.base64Url(src) + ext;
                     // 不覆盖时，若图片已存在则跳过下载
-                    if (!overwrite && minioHelper.moveLegacyObjectIfExists(
-                            imageBucket, "images/" + md5(src) + ext, objectName)) {
+                    if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                         skipped++;
                         saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
                         uploadedUrls.add(objectName);
@@ -528,8 +526,7 @@ public class CrawlerEngine {
                     String realExt = guessExt(src, data);
                     if (!realExt.equals(ext)) {
                         objectName = "images/" + ObjectNameUtils.base64Url(src) + realExt;
-                        if (!overwrite && minioHelper.moveLegacyObjectIfExists(
-                                imageBucket, "images/" + md5(src) + realExt, objectName)) {
+                        if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skipped++;
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
                             uploadedUrls.add(objectName);
@@ -573,7 +570,7 @@ public class CrawlerEngine {
 
     /**
      * 按需上传页面 HTML 原文，并将页面引用的 JS/CSS 文件上传到资源目录。
-     * 对象名基于 URL 的 MD5；资源是否覆盖与 HTML 使用同一个覆盖开关。
+     * 对象名基于 URL 的 Base64 编码；资源是否覆盖与 HTML 使用同一个覆盖开关。
      */
     private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task,
                          boolean overwriteResources, boolean saveHtml, Set<String> processedResourceUrls) {
@@ -581,7 +578,6 @@ public class CrawlerEngine {
             String urlHash = ObjectNameUtils.base64Url(url);
             if (saveHtml) {
                 String htmlObject = "html/" + urlHash + ".html";
-                minioHelper.moveLegacyObjectIfExists(htmlBucket, "html/" + md5(url) + ".html", htmlObject);
                 minioHelper.putHtml(htmlBucket, htmlObject, html);
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
                         "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
@@ -609,8 +605,7 @@ public class CrawlerEngine {
                     }
                     String extension = guessExt(jsUrl, data);
                     String jsObject = "js/" + ObjectNameUtils.base64Url(jsUrl) + extension;
-                    if (!overwriteResources && minioHelper.moveLegacyObjectIfExists(
-                            jsBucket, "js/" + md5(jsUrl) + extension, jsObject)) {
+                    if (!overwriteResources && minioHelper.objectExists(jsBucket, jsObject)) {
                         writeLog(task.getId(), msg.getSpiderId(), jsUrl, 2, "INFO", "JS 已存在，跳过上传: " + jsObject,
                                 resourceCost(resourceStart), "js");
                         continue;
@@ -654,8 +649,7 @@ public class CrawlerEngine {
                         continue;
                     }
                     String cssObject = "css/" + ObjectNameUtils.base64Url(cssUrl) + ".css";
-                    if (!overwriteResources && minioHelper.moveLegacyObjectIfExists(
-                            jsBucket, "css/" + md5(cssUrl) + ".css", cssObject)) {
+                    if (!overwriteResources && minioHelper.objectExists(jsBucket, cssObject)) {
                         writeLog(task.getId(), msg.getSpiderId(), cssUrl, 2, "INFO", "CSS 已存在，跳过上传: " + cssObject,
                                 resourceCost(resourceStart), "css");
                         continue;
@@ -692,8 +686,7 @@ public class CrawlerEngine {
     private String readHtmlFromMinio(String url) {
         try {
             return minioHelper.getHtmlIfExists(htmlBucket,
-                    "html/" + ObjectNameUtils.base64Url(url) + ".html",
-                    "html/" + md5(url) + ".html");
+                    "html/" + ObjectNameUtils.base64Url(url) + ".html");
         } catch (Exception e) {
             log.debug("从 MinIO 读取 HTML 失败: url={}", url, e);
             return null;

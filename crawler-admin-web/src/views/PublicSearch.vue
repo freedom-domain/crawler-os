@@ -3,7 +3,7 @@
     <header class="ps-header">
       <div class="ps-header-inner">
         <div class="brand-mark" aria-label="CrawlerOS">
-          <span class="brand-symbol"><el-icon><Search /></el-icon></span>
+          <img class="brand-symbol" src="/crawleros-icon.svg" alt="" />
           <span class="brand-name">Crawler<span>OS</span></span>
         </div>
 
@@ -855,22 +855,19 @@ onMounted(() => {
 .brand-symbol {
   width: 30px;
   height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  color: #4285f4;
-  background: #f1f3f4;
-  font-size: 17px;
+  display: block;
+  flex: none;
+  border-radius: 9px;
 }
 
 .brand-name {
-  color: #4285f4;
+  color: #193b5c;
   font-size: 20px;
   letter-spacing: .02em;
   font-weight: 800;
 }
 
-.brand-name span { color: #ea4335; }
+.brand-name span { color: #0f9f9a; }
 
 .header-search-wrap {
   display: flex;

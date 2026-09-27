@@ -1,7 +1,6 @@
 package com.collect.worker.minio;
 
 import io.minio.BucketExistsArgs;
-import io.minio.CopyObjectArgs;
 import io.minio.GetObjectArgs;
 import io.minio.ListObjectsArgs;
 import io.minio.MakeBucketArgs;
@@ -142,16 +141,8 @@ public class MinioHelper {
     }
 
     public String getHtmlIfExists(String bucket, String objectName) {
-        return getHtmlIfExists(bucket, objectName, null);
-    }
-
-    public String getHtmlIfExists(String bucket, String objectName, String legacyObjectName) {
         try {
-            if (legacyObjectName != null) {
-                if (!moveLegacyObjectIfExists(bucket, legacyObjectName, objectName)) {
-                    return null;
-                }
-            } else if (!objectExists(bucket, objectName)) {
+            if (!objectExists(bucket, objectName)) {
                 return null;
             }
         } catch (Exception e) {
@@ -168,21 +159,6 @@ public class MinioHelper {
         } catch (Exception e) {
             throw new RuntimeException("MinIO HTML 缓存读取失败: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * 将旧命名对象移动到新名称；目标已存在时保留目标并认为缓存可用。
-     */
-    public boolean moveLegacyObjectIfExists(String bucket, String legacyObjectName, String objectName) throws Exception {
-        if (objectExists(bucket, objectName)) {
-            return true;
-        }
-        if (!objectExists(bucket, legacyObjectName)) {
-            return false;
-        }
-        copyObject(bucket, legacyObjectName, objectName);
-        removeObject(bucket, legacyObjectName);
-        return true;
     }
 
     /**
@@ -204,7 +180,7 @@ public class MinioHelper {
      * 同 bucket 内复制对象（服务端 copy，不经过本地）。
      */
     public void copyObject(String bucket, String srcObject, String dstObject) throws Exception {
-        minioClient.copyObject(CopyObjectArgs.builder()
+        minioClient.copyObject(io.minio.CopyObjectArgs.builder()
                 .bucket(bucket)
                 .object(dstObject)
                 .source(io.minio.CopySource.builder()

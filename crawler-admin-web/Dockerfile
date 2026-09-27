@@ -14,5 +14,6 @@ ENV NGINX_ENVSUBST_FILTER=^API_UPSTREAM$
 
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/public/crawleros-icon.svg /usr/share/nginx/html/favicon.svg
 
 EXPOSE 80

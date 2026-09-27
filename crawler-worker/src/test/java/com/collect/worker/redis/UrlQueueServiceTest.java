@@ -7,6 +7,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,10 +25,20 @@ class UrlQueueServiceTest {
     }
 
     @Test
+    void isImageUrl_shouldMatchImageExtensionInPathOnly() {
+        assertTrue(UrlQueueService.isImageUrl("https://example.com/photos/cover.JPG?size=large"));
+        assertTrue(UrlQueueService.isImageUrl("https://example.com/photos/cover%2Ewebp"));
+        assertFalse(UrlQueueService.isImageUrl("https://example.com/article.jpg/detail"));
+        assertFalse(UrlQueueService.isImageUrl("https://example.com/article?format=image.png"));
+        assertFalse(UrlQueueService.isImageUrl("https://example.com/image"));
+    }
+
+    @Test
     void extractNextUrls_shouldDeduplicateEquivalentLinks() {
         String html = "<html><body>"
                 + "<a href='https://example.com/path/?b=2&a=1#section'>A</a>"
                 + "<a href='https://example.com/path?a=1&b=2'>B</a>"
+                + "<a href='https://example.com/images/photo.jpg?size=large'>Image</a>"
                 + "</body></html>";
 
         List<String> urls = ContentParser.extractNextUrls(org.jsoup.Jsoup.parse(html), "https://example.com", 1);
