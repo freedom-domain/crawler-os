@@ -26,6 +26,8 @@ public class SpiderCreateReq {
 
     private String imageSelector;
 
+    private String imageXpath;
+
     private String vipSelector;
 
     private String vipSelectorContent;

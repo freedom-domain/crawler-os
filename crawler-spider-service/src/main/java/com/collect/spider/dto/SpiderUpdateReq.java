@@ -26,6 +26,8 @@ public class SpiderUpdateReq {
 
     private String imageSelector;
 
+    private String imageXpath;
+
     private String vipSelector;
 
     private String vipSelectorContent;

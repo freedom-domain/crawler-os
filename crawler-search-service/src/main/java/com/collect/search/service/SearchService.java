@@ -14,11 +14,13 @@ import co.elastic.clients.elasticsearch.core.search.PointInTimeReference;
 import co.elastic.clients.elasticsearch._types.Time;
 import com.collect.search.dto.SearchResult;
 import com.collect.search.entity.Spider;
+import com.collect.search.entity.FileObjectRecord;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.mapper.SpiderMapper;
 import com.collect.search.entity.UserFavorite;
 import com.collect.search.mapper.UserFavoriteMapper;
 import com.collect.search.entity.SearchHistory;
+import com.collect.search.mapper.FileObjectMapper;
 import com.collect.search.mapper.SearchHistoryMapper;
 import com.collect.search.minio.MinioHelper;
 import com.collect.common.security.LoginUtils;
@@ -44,6 +46,7 @@ public class SearchService {
     private final UserFavoriteMapper userFavoriteMapper;
     private final SearchHistoryMapper searchHistoryMapper;
     private final MinioHelper minioHelper;
+    private final FileObjectMapper fileObjectMapper;
 
     @Value("${app.es.content-index:spider_content}")
     private String indexName;
@@ -435,6 +438,41 @@ public class SearchService {
             log.warn("删除 MinIO 图片失败: bucket={}, object={}", imageBucket, objectName, e);
         }
     }
+
+    public SpiderContentClearResult clearSpiderContent(Long spiderId) throws java.io.IOException {
+        if (spiderId == null || spiderId <= 0 || spiderMapper.selectById(spiderId) == null) {
+            throw new IllegalArgumentException("爬虫不存在");
+        }
+        if (fileObjectMapper.countActiveTasksBySpiderId(spiderId) > 0) {
+            throw new IllegalStateException("该爬虫有排队或运行中的任务，请先等待任务结束再清空内容");
+        }
+
+        List<FileObjectRecord> files = fileObjectMapper.selectBySpiderId(spiderId);
+        int deletedFiles = 0;
+        for (FileObjectRecord file : files) {
+            if (file.getBucket() == null || file.getBucket().isBlank()
+                    || file.getObjectName() == null || file.getObjectName().isBlank()) {
+                throw new IllegalStateException("文件元数据缺少 bucket 或 objectName，无法安全清理");
+            }
+            try {
+                minioHelper.removeObject(file.getBucket(), file.getObjectName());
+                deletedFiles++;
+            } catch (Exception e) {
+                throw new IllegalStateException("删除 MinIO 文件失败: " + file.getObjectName(), e);
+            }
+        }
+
+        var response = elasticsearchClient.deleteByQuery(request -> request
+                .index(indexName)
+                .query(query -> query.term(term -> term.field("spiderId").value(spiderId))));
+        if (!response.failures().isEmpty()) {
+            throw new IllegalStateException("ES 内容未能完整清理，失败分片数: " + response.failures().size());
+        }
+        int deletedMetadata = fileObjectMapper.softDeleteBySpiderId(spiderId);
+        return new SpiderContentClearResult(response.deleted(), deletedFiles, deletedMetadata);
+    }
+
+    public record SpiderContentClearResult(long deletedDocuments, int deletedFiles, int deletedMetadata) {}
 
     @SuppressWarnings("null")
     public void updateTags(String id, List<String> tags) throws java.io.IOException {

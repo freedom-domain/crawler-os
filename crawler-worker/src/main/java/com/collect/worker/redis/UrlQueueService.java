@@ -6,8 +6,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -111,27 +109,10 @@ public class UrlQueueService {
             if (param == null || param.isBlank()) {
                 continue;
             }
-            String decodedParam = param;
-            int idx = param.indexOf('=');
-            if (idx >= 0) {
-                String key = param.substring(0, idx);
-                String value = param.substring(idx + 1);
-                decodedParam = safeDecode(key) + "=" + safeDecode(value);
-            } else {
-                decodedParam = safeDecode(param);
-            }
-            params.add(decodedParam);
+            params.add(param);
         }
         params.sort(Comparator.naturalOrder());
         return String.join("&", params);
-    }
-
-    private static String safeDecode(String value) {
-        try {
-            return URLDecoder.decode(value, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return value;
-        }
     }
 
     private void push(Long taskId, String url) {

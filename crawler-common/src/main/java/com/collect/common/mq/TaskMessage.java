@@ -16,6 +16,7 @@ public class TaskMessage implements Serializable {
     private List<String> startUrls;
     private String contentSelector;
     private String imageSelector;
+    private String imageXpath;
     private String vipSelector;
     private String vipSelectorContent;
     private Integer overwriteHtml;

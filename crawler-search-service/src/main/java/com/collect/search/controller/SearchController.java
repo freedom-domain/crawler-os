@@ -110,6 +110,14 @@ public class SearchController {
         return R.ok();
     }
 
+    @Operation(summary = "清空指定爬虫的已采集内容及文件")
+    @DeleteMapping("/spiders/{spiderId}/content")
+    public R<SearchService.SpiderContentClearResult> clearSpiderContent(@PathVariable Long spiderId)
+            throws IOException {
+        requirePermission("spider:create");
+        return R.ok(searchService.clearSpiderContent(spiderId));
+    }
+
     @Operation(summary = "更新数据标签")
     @PutMapping("/{id}/tags")
     public R<Void> updateTags(@PathVariable("id") String id, @RequestBody List<String> tags) throws IOException {

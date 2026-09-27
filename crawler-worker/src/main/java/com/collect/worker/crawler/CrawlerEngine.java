@@ -47,6 +47,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 public class CrawlerEngine {
 
+    record WebResource(String url, String category, String objectName, String contentType) {}
+
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
     private final ElasticsearchOperations elasticsearchOperations;
@@ -174,8 +176,18 @@ public class CrawlerEngine {
                 if (batch.isEmpty()) break;
                 var futures = batch.stream().map(executor::submit).toList();
                 for (var f : futures) {
-                    try { f.get(); } catch (Exception ignored) {}
+                    try {
+                        f.get();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.error("等待抓取任务执行被中断: taskId={}", taskId, e);
+                        break;
+                    } catch (java.util.concurrent.ExecutionException e) {
+                        fail.incrementAndGet();
+                        log.error("抓取任务线程异常: taskId={}", taskId, e.getCause());
+                    }
                 }
+                if (Thread.currentThread().isInterrupted()) break;
             }
         } finally {
             executor.shutdown();
@@ -201,6 +213,8 @@ public class CrawlerEngine {
         }
         task.setEndTime(endTime);
         task.setTotalCostMs(task.getStartTime() == null ? 0L : java.time.Duration.between(task.getStartTime(), endTime).toMillis());
+        taskMapper.setSuccess(task.getId(), success.get());
+        taskMapper.setFail(task.getId(), fail.get());
         taskMapper.updateCompletion(task.getId(), task.getStatus(), task.getErrorMessage(), endTime, task.getTotalCostMs());
         log.info("任务完成: taskId={}, totalCostMs={}", taskId, task.getTotalCostMs());
     }
@@ -264,6 +278,24 @@ public class CrawlerEngine {
                 boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
                 boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
+                if (!msg.isSingleUrl() && depth < maxDepth) {
+                    List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
+                    next.removeIf(nextUrl -> {
+                        String normalized = UrlQueueService.normalizeUrl(nextUrl);
+                        return normalized == null || msg.getStartUrls().stream()
+                                .map(UrlQueueService::normalizeUrl)
+                                .anyMatch(normalized::equals) || !isSameDomain(normalized, msg.getStartUrls());
+                    });
+                    int enqueued = 0;
+                    for (String nextUrl : next) {
+                        String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
+                        if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
+                        if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache)) continue;
+                        if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
+                    }
+                    log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
+                }
+
                 boolean contentUnchanged = false;
                 SpiderContentDoc existingDoc = null;
                 if (!isConfiguredStartUrl(url, msg.getStartUrls())) {
@@ -302,39 +334,17 @@ public class CrawlerEngine {
                 DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
                 docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
                 docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
-                // HTML 原文不再写入 ES，统一存入 MinIO（见 saveHtmlAndJs）
-                // 图片：不覆盖时跳过已存在的图片，覆盖时重新下载
-                List<String> imageUrls = shouldSkipImageDownload(doc, msg)
-                        ? List.of()
-                        : extractAndUploadImages(doc, url, parsed.getTitle(), msg, task, overwriteImage);
-                docObj.setImages(imageUrls);
-
-                // HTML 原文存入 html 目录，页面引用的 JS 存入 js 目录
-                saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit && overwriteHtml,
-                        !cacheHit, processedResourceUrls);
+                docObj.setImages(List.of());
 
                 saveToElasticsearchWithRetry(docObj);
                 writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                     (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
-
-                if (!msg.isSingleUrl() && depth < maxDepth) {
-                    List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
-                    next.removeIf(u -> {
-                        String normalized = UrlQueueService.normalizeUrl(u);
-                        return normalized == null || msg.getStartUrls().stream()
-                                .map(UrlQueueService::normalizeUrl)
-                                .anyMatch(normalized::equals) || !isSameDomain(normalized, msg.getStartUrls());
-                    });
-                    int enqueued = 0;
-                    for (String nextUrl : next) {
-                        String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
-                        if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
-                        if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache)) continue;
-                        if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
-                    }
-                    log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
-                }
                 success.incrementAndGet();
+
+                // Persist the page before downloading static assets so slow asset hosts cannot delay it.
+                saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, processedResourceUrls);
+                updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
+                        msg, task, overwriteImage);
             } finally {
                 semaphore.release();
             }
@@ -346,6 +356,23 @@ public class CrawlerEngine {
             fail.incrementAndGet();
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
+        }
+    }
+
+    private void updateImagesAfterPageProcessing(Document doc, SpiderContentDoc document, String pageUrl,
+                                                String title, TaskMessage msg, SpiderTask task,
+                                                boolean overwrite) {
+        try {
+            List<String> imageUrls = shouldSkipImageDownload(doc, msg)
+                    ? List.of()
+                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite);
+            document.setImages(imageUrls);
+            saveToElasticsearchWithRetry(document);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("图片结果回写被中断，页面内容已保存: url={}", pageUrl);
+        } catch (Exception e) {
+            log.warn("图片处理失败，页面内容已保存: url={}", pageUrl, e);
         }
     }
 
@@ -479,32 +506,48 @@ public class CrawlerEngine {
     private List<String> extractAndUploadImages(Document doc, String pageUrl, String title,
                                                 TaskMessage msg, SpiderTask task, boolean overwrite) {
         String selector = msg.getImageSelector();
-        if (selector == null || selector.isBlank()) {
+        String xpath = msg.getImageXpath();
+        if ((xpath == null || xpath.isBlank()) && (selector == null || selector.isBlank())) {
             return List.of();
         }
         List<String> uploadedUrls = new java.util.ArrayList<>();
         long imgStart = System.currentTimeMillis();
         try {
-            Elements matched = doc.select(selector);
-            if (matched.isEmpty()) {
+            List<String> imageSources = new java.util.ArrayList<>();
+            Elements matched = selector != null && !selector.isBlank()
+                    ? doc.select(selector)
+                    : new Elements(doc);
+            boolean selectorMissed = matched.isEmpty();
+            if (selectorMissed) {
                 log.info("页面未匹配到图片选择器: url={}, selector={}", pageUrl, selector);
-                return uploadedUrls;
             }
-
-            // 收集选择器命中的元素本身（若是 img）以及其内部的所有 img
-            List<Element> imgs = new java.util.ArrayList<>();
-            for (Element el : matched) {
-                if ("img".equalsIgnoreCase(el.tagName())) {
-                    imgs.add(el);
+            if (xpath != null && !xpath.isBlank()) {
+                if (!selectorMissed) {
+                    for (Element scope : matched) {
+                        imageSources.addAll(extractImageSourcesByXpath(scope, pageUrl, xpath));
+                    }
                 }
-                imgs.addAll(el.select("img"));
+                if (!selectorMissed && imageSources.isEmpty()) {
+                    log.info("页面未匹配到图片 XPath: url={}, selector={}, xpath={}", pageUrl, selector, xpath);
+                }
+            } else {
+                List<Element> imgs = new java.util.ArrayList<>();
+                for (Element el : matched) {
+                    if ("img".equalsIgnoreCase(el.tagName())) {
+                        imgs.add(el);
+                    }
+                    imgs.addAll(el.select("img"));
+                }
+                for (Element img : imgs) {
+                    String src = img.absUrl("src");
+                    if (!src.isBlank()) imageSources.add(src);
+                }
             }
 
             int uploaded = 0;
             int skipped = 0;
             java.util.Set<String> seen = new java.util.HashSet<>();
-            for (Element img : imgs) {
-                String src = img.absUrl("src");
+            for (String src : imageSources) {
                 if (src.isBlank() || !seen.add(src)) {
                     continue;
                 }
@@ -558,6 +601,33 @@ public class CrawlerEngine {
         return uploadedUrls;
     }
 
+    static List<String> extractImageSourcesByXpath(Element scope, String pageUrl, String xpath)
+            {
+        List<String> sources = new java.util.ArrayList<>();
+        Document scopedDocument = Jsoup.parse(scope.outerHtml(), pageUrl);
+        Elements nodes = scopedDocument.selectXpath(xpath);
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        for (Element node : nodes) {
+            if ("img".equalsIgnoreCase(node.tagName())) {
+                addAbsoluteImageSource(seen, pageUrl, node.attr("src"));
+            }
+            for (Element image : node.select("img")) {
+                addAbsoluteImageSource(seen, pageUrl, image.attr("src"));
+            }
+        }
+        sources.addAll(seen);
+        return sources;
+    }
+
+    private static void addAbsoluteImageSource(java.util.Set<String> sources, String pageUrl, String source) {
+        if (source == null || source.isBlank()) return;
+        try {
+            sources.add(URI.create(pageUrl).resolve(source).toString());
+        } catch (IllegalArgumentException ignored) {
+            log.debug("图片 XPath 命中的地址无效: {}", source);
+        }
+    }
+
     private boolean shouldSkipImageDownload(Document doc, TaskMessage msg) {
         boolean matched = ContentParser.isVipPage(
                 doc, msg.getVipSelector(), msg.getVipSelectorContent());
@@ -572,8 +642,8 @@ public class CrawlerEngine {
      * 按需上传页面 HTML 原文，并将页面引用的 JS/CSS 文件上传到资源目录。
      * 对象名基于 URL 的 Base64 编码；资源是否覆盖与 HTML 使用同一个覆盖开关。
      */
-    private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg, SpiderTask task,
-                         boolean overwriteResources, boolean saveHtml, Set<String> processedResourceUrls) {
+    private void saveHtmlAndJs(Document doc, String url, String html, TaskMessage msg,
+                               SpiderTask task, boolean saveHtml, Set<String> processedResourceUrls) {
         try {
             String urlHash = ObjectNameUtils.base64Url(url);
             if (saveHtml) {
@@ -582,48 +652,18 @@ public class CrawlerEngine {
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
                         "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
             }
-            // 页面引用的 JS 文件
-            java.util.Set<String> seen = new java.util.HashSet<>();
+            Map<String, WebResource> resourceQueue = new java.util.LinkedHashMap<>();
             for (Element script : doc.select("script[src]")) {
                 String jsUrl = script.absUrl("src");
-                if (jsUrl.isBlank() || !seen.add(jsUrl)) {
+                if (jsUrl.isBlank()) {
                     continue;
                 }
-                long resourceStart = System.currentTimeMillis();
-                String resourceKey = "js:" + jsUrl;
-                if (!processedResourceUrls.add(resourceKey)) {
-                    writeLog(task.getId(), msg.getSpiderId(), jsUrl, 2, "INFO", "JS URL 已处理，跳过: " + jsUrl,
-                            resourceCost(resourceStart), "js");
-                    continue;
-                }
-                try {
-                    byte[] data = downloadBytes(jsUrl, msg);
-                    if (data == null || data.length == 0) {
-                        processedResourceUrls.remove(resourceKey);
-                        writeLog(task.getId(), msg.getSpiderId(), jsUrl, 0, "ERROR", "JS 下载为空", resourceCost(resourceStart), "js");
-                        continue;
-                    }
-                    String extension = guessExt(jsUrl, data);
-                    String jsObject = "js/" + ObjectNameUtils.base64Url(jsUrl) + extension;
-                    if (!overwriteResources && minioHelper.objectExists(jsBucket, jsObject)) {
-                        writeLog(task.getId(), msg.getSpiderId(), jsUrl, 2, "INFO", "JS 已存在，跳过上传: " + jsObject,
-                                resourceCost(resourceStart), "js");
-                        continue;
-                    }
-                    minioHelper.putJs(jsBucket, jsObject, data);
-                        saveFileMetadata(jsBucket, jsObject, data.length, "application/javascript", "js",
-                            msg.getSpiderId(), parsedTitle(doc, url), jsUrl);
-                    writeLog(task.getId(), msg.getSpiderId(), jsUrl, 1, "INFO", "JS 上传成功: " + jsObject,
-                            resourceCost(resourceStart), "js");
-                } catch (Exception e) {
-                    processedResourceUrls.remove(resourceKey);
-                    log.warn("JS 下载/上传失败: src={}", jsUrl, e);
-                    writeLog(task.getId(), msg.getSpiderId(), jsUrl, 0, "ERROR", "JS 下载/上传失败: " + e.getMessage(),
-                            resourceCost(resourceStart), "js");
-                }
+                String extension = extensionFromUrl(jsUrl);
+                String objectName = "js/" + ObjectNameUtils.base64Url(jsUrl)
+                        + (extension.isEmpty() ? ".js" : extension);
+                enqueueResource(resourceQueue, processedResourceUrls,
+                        new WebResource(jsUrl, "js", objectName, "application/javascript"));
             }
-            // 页面引用的 CSS 文件，与 JS 使用相同的资源桶但使用独立的 css/ 前缀
-            seen.clear();
             for (Element stylesheet : doc.select("link[href]")) {
                 String rel = stylesheet.attr("rel");
                 if (java.util.Arrays.stream(rel.split("\\s+"))
@@ -631,49 +671,100 @@ public class CrawlerEngine {
                     continue;
                 }
                 String cssUrl = stylesheet.absUrl("href");
-                if (cssUrl.isBlank() || !seen.add(cssUrl)) {
+                if (cssUrl.isBlank()) {
                     continue;
                 }
-                long resourceStart = System.currentTimeMillis();
-                String resourceKey = "css:" + cssUrl;
-                if (!processedResourceUrls.add(resourceKey)) {
-                    writeLog(task.getId(), msg.getSpiderId(), cssUrl, 2, "INFO", "CSS URL 已处理，跳过: " + cssUrl,
-                            resourceCost(resourceStart), "css");
-                    continue;
-                }
-                try {
-                    byte[] data = downloadBytes(cssUrl, msg);
-                    if (data == null || data.length == 0) {
-                        processedResourceUrls.remove(resourceKey);
-                        writeLog(task.getId(), msg.getSpiderId(), cssUrl, 0, "ERROR", "CSS 下载为空", resourceCost(resourceStart), "css");
-                        continue;
-                    }
-                    String cssObject = "css/" + ObjectNameUtils.base64Url(cssUrl) + ".css";
-                    if (!overwriteResources && minioHelper.objectExists(jsBucket, cssObject)) {
-                        writeLog(task.getId(), msg.getSpiderId(), cssUrl, 2, "INFO", "CSS 已存在，跳过上传: " + cssObject,
-                                resourceCost(resourceStart), "css");
-                        continue;
-                    }
-                    minioHelper.putCss(jsBucket, cssObject, data);
-                        saveFileMetadata(jsBucket, cssObject, data.length, "text/css", "css",
-                            msg.getSpiderId(), parsedTitle(doc, url), cssUrl);
-                    writeLog(task.getId(), msg.getSpiderId(), cssUrl, 1, "INFO", "CSS 上传成功: " + cssObject,
-                            resourceCost(resourceStart), "css");
-                } catch (Exception e) {
-                    processedResourceUrls.remove(resourceKey);
-                    log.warn("CSS 下载/上传失败: href={}", cssUrl, e);
-                    writeLog(task.getId(), msg.getSpiderId(), cssUrl, 0, "ERROR", "CSS 下载/上传失败: " + e.getMessage(),
-                            resourceCost(resourceStart), "css");
-                }
+                String objectName = "css/" + ObjectNameUtils.base64Url(cssUrl) + ".css";
+                enqueueResource(resourceQueue, processedResourceUrls,
+                        new WebResource(cssUrl, "css", objectName, "text/css"));
+            }
+            for (WebResource resource : resourceQueue.values()) {
+                processWebResource(resource, msg, task, parsedTitle(doc, url));
             }
         } catch (Exception e) {
             log.warn("HTML/JS/CSS 上传失败: url={}", url, e);
         }
     }
 
+    static boolean enqueueResource(Map<String, WebResource> resourceQueue,
+                                   Set<String> processedResourceUrls,
+                                   WebResource resource) {
+        if (!processedResourceUrls.add(resource.url())) {
+            return false;
+        }
+        resourceQueue.put(resource.url(), resource);
+        return true;
+    }
+
+    private void processWebResource(WebResource resource, TaskMessage msg, SpiderTask task, String title) {
+        long start = System.currentTimeMillis();
+        try {
+            byte[] downloaded = downloadBytes(resource.url(), msg);
+            if (downloaded == null || downloaded.length == 0) {
+                writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
+                        resource.category().toUpperCase() + " 下载为空", resourceCost(start), resource.category());
+                return;
+            }
+
+            byte[] existing = minioHelper.getObjectIfExists(jsBucket, resource.objectName());
+            if (existing != null && java.util.Arrays.equals(existing, downloaded)) {
+                writeLog(task.getId(), msg.getSpiderId(), resource.url(), 2, "INFO",
+                        resource.category().toUpperCase() + " 已存在，内容未变化",
+                        resourceCost(start), resource.category());
+                return;
+            }
+
+            if ("js".equals(resource.category())) {
+                minioHelper.putJs(jsBucket, resource.objectName(), downloaded);
+            } else {
+                minioHelper.putCss(jsBucket, resource.objectName(), downloaded);
+            }
+            saveOrUpdateResourceMetadata(resource, downloaded.length, msg.getSpiderId(), title);
+            String message = existing == null ? "上传成功" : "内容变化，覆盖更新";
+            writeLog(task.getId(), msg.getSpiderId(), resource.url(), 1, "INFO",
+                    resource.category().toUpperCase() + " " + message,
+                    resourceCost(start), resource.category());
+        } catch (Exception e) {
+            log.warn("{} 下载/上传失败: url={}", resource.category().toUpperCase(), resource.url(), e);
+            writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
+                    resource.category().toUpperCase() + " 下载/上传失败: " + e.getMessage(),
+                    resourceCost(start), resource.category());
+        }
+    }
+
+    private void saveOrUpdateResourceMetadata(WebResource resource, long fileSize, Long spiderId, String title) {
+        FileMetadata metadata = fileMetadataMapper.selectByObject(jsBucket, resource.objectName());
+        if (metadata == null) {
+            saveFileMetadata(jsBucket, resource.objectName(), fileSize, resource.contentType(),
+                    resource.category(), spiderId, title, resource.url());
+            return;
+        }
+        metadata.setFileSize(fileSize);
+        metadata.setContentType(resource.contentType());
+        metadata.setCategory(resource.category());
+        metadata.setSpiderId(spiderId);
+        metadata.setTitle(title);
+        metadata.setSource(resource.url());
+        fileMetadataMapper.updateById(metadata);
+    }
+
     private String parsedTitle(Document doc, String url) {
         String title = doc.title();
         return title.isBlank() ? url : title;
+    }
+
+    static String extensionFromUrl(String source) {
+        String path;
+        try {
+            path = URI.create(source).getPath();
+        } catch (IllegalArgumentException e) {
+            return "";
+        }
+        if (path == null) return "";
+        int slash = path.lastIndexOf('/');
+        int dot = path.lastIndexOf('.');
+        if (dot <= slash || dot == path.length() - 1) return "";
+        return path.substring(dot);
     }
 
     private int resourceCost(long startTime) {
@@ -762,32 +853,31 @@ public class CrawlerEngine {
         }
     }
 
-    private String guessExt(String src, byte[] data) {
-        String lower = src.toLowerCase();
-        int q = lower.indexOf('?');
-        if (q > 0) {
-            lower = lower.substring(0, q);
+    static String guessExt(String src, byte[] data) {
+        String ext = extensionFromUrl(src);
+        String detectedExt = detectImageExtension(data);
+        if (!detectedExt.isEmpty()) {
+            return detectedExt;
         }
-        String ext = "";
-        int dot = lower.lastIndexOf('.');
-        if (dot >= 0 && dot < lower.length() - 1) {
-            ext = lower.substring(dot);
+        return ext.isEmpty() ? ".img" : ext;
+    }
+
+    private static String detectImageExtension(byte[] data) {
+        if (data == null) return "";
+        if (data.length >= 4 && (data[0] & 0xFF) == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
+            return ".png";
         }
-        if (ext.isEmpty()) {
-            // 通过魔数判断
-            if (data.length > 3 && (data[0] & 0xFF) == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
-                ext = ".png";
-            } else if (data.length > 2 && (data[0] & 0xFF) == 0xFF && (data[1] & 0xFF) == 0xD8) {
-                ext = ".jpg";
-            } else if (data.length > 5 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F') {
-                ext = ".gif";
-            } else if (data.length > 8 && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
-                ext = ".webp";
-            } else {
-                ext = ".img";
-            }
+        if (data.length >= 2 && (data[0] & 0xFF) == 0xFF && (data[1] & 0xFF) == 0xD8) {
+            return ".jpg";
         }
-        return ext;
+        if (data.length >= 3 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F') {
+            return ".gif";
+        }
+        if (data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
+            return ".webp";
+        }
+        return "";
     }
 
     private String guessContentType(String ext) {

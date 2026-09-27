@@ -116,6 +116,12 @@
                     编辑
                   </span>
                 </el-dropdown-item>
+                <el-dropdown-item command="clear-content" divided :disabled="row._clearingContent">
+                  <span class="spider-action-item">
+                    <el-icon><Delete /></el-icon>
+                    清空内容
+                  </span>
+                </el-dropdown-item>
                 <el-dropdown-item command="delete" divided class="spider-delete-action">
                   <span class="spider-action-item">
                     <el-icon><Delete /></el-icon>
@@ -170,6 +176,10 @@
         </el-form-item>
         <el-form-item label="图片选择器">
           <el-input v-model="form.imageSelector" placeholder="CSS选择器，如 .article img 或 #content" />
+        </el-form-item>
+        <el-form-item label="图片 XPath">
+          <el-input v-model="form.imageXpath" placeholder="XPath，如 //article//img 或 //div[@class='article']//img" />
+          <div class="form-tip">填写后优先使用 XPath 定位图片；为空时使用上面的 CSS 选择器</div>
         </el-form-item>
         <el-form-item label="VIP选择器">
           <el-input v-model="form.vipSelector" placeholder="CSS选择器，如 .vip 或 .member-only" />
@@ -245,7 +255,7 @@
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
+import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, ArrowDown, VideoPlay, VideoPause, EditPen, Delete } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 
@@ -292,7 +302,7 @@ const isHttpUrl = (value: string): boolean => {
 }
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0
+  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0
 })
 
 // 调度表达式生成器
@@ -392,7 +402,7 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
   startUrlsStr.value = ''
   createVisible.value = true
 }
@@ -429,7 +439,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
-    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0,
+    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0
   }
   try {
@@ -509,11 +519,42 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
+const handleClearContent = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定清空爬虫「${row.name}」的所有已采集内容吗？此操作将删除该爬虫在 ES 中的内容、MinIO 文件及文件元数据，且无法恢复。`,
+      '清空爬虫内容',
+      {
+        type: 'warning',
+        confirmButtonText: '清空内容',
+        cancelButtonText: '取消',
+        distinguishCancelAndClose: true
+      }
+    )
+  } catch {
+    return
+  }
+
+  row._clearingContent = true
+  try {
+    const res: any = await spiderClearContent(row.id)
+    const result = res.data || {}
+    ElMessage.success(
+      `清理完成：ES 内容 ${result.deletedDocuments || 0} 条，MinIO 文件 ${result.deletedFiles || 0} 个，文件元数据 ${result.deletedMetadata || 0} 条`
+    )
+  } catch {
+    ElMessage.error('清空内容失败，请检查服务日志后重试')
+  } finally {
+    row._clearingContent = false
+  }
+}
+
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
     case 'run': handleRun(row); break
     case 'toggle': row.status === 1 ? handleStop(row) : handleStart(row); break
     case 'edit': showEdit(row); break
+    case 'clear-content': handleClearContent(row); break
     case 'delete': handleDelete(row); break
   }
 }

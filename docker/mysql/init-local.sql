@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS spider (
     start_urls TEXT,
     content_selector VARCHAR(512),
     image_selector VARCHAR(512),
+    image_xpath VARCHAR(512),
     vip_selector VARCHAR(512),
     vip_selector_content VARCHAR(512),
     overwrite_html TINYINT DEFAULT 0,

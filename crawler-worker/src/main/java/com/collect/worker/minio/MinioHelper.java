@@ -140,6 +140,20 @@ public class MinioHelper {
                 .build());
     }
 
+    public byte[] getObjectIfExists(String bucket, String objectName) {
+        try (java.io.InputStream in = getObject(bucket, objectName)) {
+            return in.readAllBytes();
+        } catch (ErrorResponseException e) {
+            String errorCode = e.errorResponse().code();
+            if ("NoSuchKey".equals(errorCode) || "NoSuchBucket".equals(errorCode)) {
+                return null;
+            }
+            throw new RuntimeException("MinIO 对象读取失败: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO 对象读取失败: " + e.getMessage(), e);
+        }
+    }
+
     public String getHtmlIfExists(String bucket, String objectName) {
         try {
             if (!objectExists(bucket, objectName)) {

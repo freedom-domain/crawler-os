@@ -60,6 +60,7 @@ public class SpiderService {
         spider.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         spider.setContentSelector(req.getContentSelector());
         spider.setImageSelector(req.getImageSelector());
+        spider.setImageXpath(req.getImageXpath());
         spider.setVipSelector(req.getVipSelector());
         spider.setVipSelectorContent(req.getVipSelectorContent());
         spider.setOverwriteHtml(req.getOverwriteHtml());
@@ -128,6 +129,7 @@ public class SpiderService {
             config.setStartUrls(JSON.parseArray(spider.getStartUrls(), String.class));
             config.setContentSelector(spider.getContentSelector());
             config.setImageSelector(spider.getImageSelector());
+            config.setImageXpath(spider.getImageXpath());
             config.setVipSelector(spider.getVipSelector());
             config.setVipSelectorContent(spider.getVipSelectorContent());
             config.setOverwriteHtml(spider.getOverwriteHtml());
@@ -198,6 +200,7 @@ public class SpiderService {
         exist.setStartUrls(JSON.toJSONString(req.getStartUrls()));
         exist.setContentSelector(req.getContentSelector());
         exist.setImageSelector(req.getImageSelector());
+        exist.setImageXpath(req.getImageXpath());
         exist.setVipSelector(req.getVipSelector());
         exist.setVipSelectorContent(req.getVipSelectorContent());
         exist.setOverwriteHtml(req.getOverwriteHtml());
@@ -413,6 +416,7 @@ public class SpiderService {
         msg.setStartUrls(startUrls);
         msg.setContentSelector(spider.getContentSelector());
         msg.setImageSelector(spider.getImageSelector());
+        msg.setImageXpath(spider.getImageXpath());
         msg.setVipSelector(spider.getVipSelector());
         msg.setVipSelectorContent(spider.getVipSelectorContent());
         msg.setOverwriteHtml(spider.getOverwriteHtml());

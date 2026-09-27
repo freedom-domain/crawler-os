@@ -1,10 +1,13 @@
 package com.collect.search.minio;
 
 import io.minio.GetObjectArgs;
+import io.minio.ListObjectsArgs;
 import io.minio.MinioClient;
 import io.minio.RemoveObjectArgs;
 import io.minio.StatObjectArgs;
+import io.minio.Result;
 import io.minio.errors.ErrorResponseException;
+import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -69,9 +72,38 @@ public class MinioHelper {
     }
 
     public void removeObject(String bucket, String objectName) throws Exception {
-        minioClient.removeObject(RemoveObjectArgs.builder()
+        boolean found = false;
+        for (Result<Item> result : minioClient.listObjects(ListObjectsArgs.builder()
                 .bucket(bucket)
-                .object(objectName)
-                .build());
+                .prefix(objectName)
+                .includeVersions(true)
+                .build())) {
+            Item item = result.get();
+            if (!objectName.equals(item.objectName())) {
+                continue;
+            }
+            found = true;
+            RemoveObjectArgs.Builder builder = RemoveObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName);
+            if (item.versionId() != null && !item.versionId().isBlank()) {
+                builder.versionId(item.versionId());
+            }
+            minioClient.removeObject(builder.build());
+        }
+        if (!found) {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectName)
+                    .build());
+        }
+        try {
+            minioClient.statObject(StatObjectArgs.builder().bucket(bucket).object(objectName).build());
+            throw new IllegalStateException("MinIO 对象删除校验失败: " + objectName);
+        } catch (ErrorResponseException e) {
+            if (e.response().code() != 404) {
+                throw e;
+            }
+        }
     }
 }

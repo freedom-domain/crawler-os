@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -22,6 +23,15 @@ class UrlQueueServiceTest {
         assertEquals("https://example.com/path?a=1&b=2", canonical);
         assertEquals(canonical, UrlQueueService.normalizeUrl("https://example.com/path?a=1&b=2"));
         assertEquals(canonical, UrlQueueService.normalizeUrl("https://example.com:443/path/?a=1&b=2#section"));
+    }
+
+    @Test
+    void normalizeUrl_shouldPreserveEncodedQueryDelimiters() {
+        String encodedDelimiter = UrlQueueService.normalizeUrl("https://example.com/search?q=a%26b");
+        String queryDelimiter = UrlQueueService.normalizeUrl("https://example.com/search?q=a&b");
+
+        assertEquals("https://example.com/search?q=a%26b", encodedDelimiter);
+        assertNotEquals(encodedDelimiter, queryDelimiter);
     }
 
     @Test
