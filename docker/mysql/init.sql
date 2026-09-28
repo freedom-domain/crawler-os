@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS spider (
 -- 爬虫任务
 CREATE TABLE IF NOT EXISTS spider_task_creation_guard (
     id TINYINT PRIMARY KEY,
-    max_concurrency INT NOT NULL DEFAULT 1
+    max_concurrency INT NOT NULL DEFAULT 1,
+    url_concurrency INT NOT NULL DEFAULT 8
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO spider_task_creation_guard (id) VALUES (1);

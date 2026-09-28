@@ -28,4 +28,6 @@ public class TaskMessage implements Serializable {
     private String headers;
     private Integer followRobots;
     private Integer skipTlsVerify;
+    private Integer concurrency;
+    private Integer urlConcurrency;
 }

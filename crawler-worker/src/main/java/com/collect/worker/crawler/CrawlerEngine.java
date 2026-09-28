@@ -46,7 +46,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
@@ -183,8 +182,9 @@ public class CrawlerEngine {
                     msg.getSpiderId(), msg.getTaskId());
         }
         int maxDepth = msg.getMaxDepth() != null ? msg.getMaxDepth() : 2;
-        int concurrency = 8;
-        var semaphore = new java.util.concurrent.Semaphore(concurrency);
+        int concurrency = msg.getUrlConcurrency() != null ? msg.getUrlConcurrency() : 8;
+        if (concurrency < 1) concurrency = 1;
+        if (concurrency > 50) concurrency = 50;
         ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
         TaskExecutionContext execution = new TaskExecutionContext();
         Map<String, RobotsRules> robotsCache = new ConcurrentHashMap<>();
@@ -192,6 +192,7 @@ public class CrawlerEngine {
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger fail = new AtomicInteger(0);
         Set<String> processedResourceUrls = ConcurrentHashMap.newKeySet();
+        Set<Future<?>> activeFutures = ConcurrentHashMap.newKeySet();
         boolean executorTerminated = true;
 
         try {
@@ -201,28 +202,53 @@ public class CrawlerEngine {
                 urlQueue.enqueueIfAbsent(taskId, normalizedStartUrl, 0);
             }
 
-            while (urlQueue.size(taskId) > 0) {
+            while (true) {
                 // 任务状态不是运行中（如被取消）时停止爬取
                 SpiderTask latest = taskMapper.selectById(task.getId());
                 if (latest == null || !"RUNNING".equals(latest.getStatus())) {
                     log.info("任务状态不是运行中，停止爬取: taskId={}, status={}", taskId, latest == null ? null : latest.getStatus());
                     break;
                 }
-                List<Runnable> batch = new java.util.ArrayList<>();
-                for (int i = 0; i < concurrency; i++) {
-                    String item = urlQueue.pop(taskId);
-                    if (item == null) break;
-                    String[] parts = item.split("\t", 2);
-                    String url = parts[0];
-                    if (!urlQueue.claimForProcessing(taskId, url)) continue;
-                    int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
-                    batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail,
-                            semaphore, executor, robotsCache, processedResourceUrls, execution));
+                // 清理已完成的 future
+                activeFutures.removeIf(f -> f.isDone());
+                // 队列为空且没有活跃任务 → 全部完成
+                if (activeFutures.isEmpty() && urlQueue.size(taskId) == 0) break;
+                // 达到并发上限，等待至少一个任务完成
+                if (activeFutures.size() >= concurrency) {
+                    awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
+                    SpiderTask check = taskMapper.selectById(task.getId());
+                    if (check == null || !"RUNNING".equals(check.getStatus())) {
+                        execution.cancel();
+                        break;
+                    }
+                    continue;
                 }
-                if (batch.isEmpty()) break;
-                var futures = batch.stream().map(executor::submit).toList();
-                if (!awaitTaskBatch(futures, task, execution, executor, fail)) break;
-                if (Thread.currentThread().isInterrupted()) break;
+                // 尝试从队列取一个 URL
+                String item = urlQueue.pop(taskId);
+                if (item == null) {
+                    if (activeFutures.isEmpty()) break;
+                    // 队列为空但有活跃任务，等待一个完成后再检查新入队的 URL
+                    awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
+                    SpiderTask check = taskMapper.selectById(task.getId());
+                    if (check == null || !"RUNNING".equals(check.getStatus())) {
+                        execution.cancel();
+                        break;
+                    }
+                    continue;
+                }
+                String[] parts = item.split("\t", 2);
+                String url = parts[0];
+                if (!urlQueue.claimForProcessing(taskId, url)) {
+                    continue;
+                }
+                int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+                final String crawlUrl = url;
+                final int crawlDepth = depth;
+                Future<?> future = executor.submit(() ->
+                        crawlUrl(crawlUrl, crawlDepth, maxDepth, msg, task, taskId, success, fail,
+                                robotsCache, processedResourceUrls, execution)
+                );
+                activeFutures.add(future);
             }
         } finally {
             if (execution.isCancelled()) {
@@ -234,7 +260,6 @@ public class CrawlerEngine {
                 executorTerminated = false;
                 execution.cancel();
                 executor.shutdownNow();
-                // shutdownNow 只是发出中断请求，必须继续等待图片/页面线程真正退出。
                 awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             }
             urlQueue.clear(taskId);
@@ -259,37 +284,21 @@ public class CrawlerEngine {
         log.info("任务完成: taskId={}, totalCostMs={}", taskId, task.getTotalCostMs());
     }
 
-    private boolean awaitTaskBatch(List<? extends Future<?>> futures, SpiderTask task,
-                                   TaskExecutionContext execution, ExecutorService executor,
-                                   AtomicInteger fail) {
-        for (Future<?> future : futures) {
-            while (true) {
-                try {
-                    future.get(TASK_CANCEL_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
-                    break;
-                } catch (TimeoutException e) {
-                    SpiderTask latest = taskMapper.selectById(task.getId());
-                    if (latest == null || !"RUNNING".equals(latest.getStatus())) {
-                        log.info("收到任务取消状态，停止当前任务: taskId={}, status={}",
-                                task.getTaskId(), latest == null ? null : latest.getStatus());
-                        execution.cancel();
-                        executor.shutdownNow();
-                        return false;
-                    }
-                } catch (InterruptedException e) {
-                    execution.cancel();
-                    executor.shutdownNow();
-                    Thread.currentThread().interrupt();
-                    log.error("等待抓取任务执行被中断: taskId={}", task.getTaskId(), e);
-                    return false;
-                } catch (java.util.concurrent.ExecutionException e) {
-                    fail.incrementAndGet();
-                    log.error("抓取任务线程异常: taskId={}", task.getTaskId(), e.getCause());
-                    break;
-                }
+    private boolean awaitAnyFuture(Set<Future<?>> futures, long timeoutMs) {
+        if (futures.isEmpty()) return true;
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            for (Future<?> f : futures) {
+                if (f.isDone()) return true;
+            }
+            try {
+                Thread.sleep(Math.min(100, deadline - System.currentTimeMillis()));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return true;
             }
         }
-        return !execution.isCancelled();
+        return false;
     }
 
     private boolean awaitExecutorTermination(java.util.concurrent.ExecutorService executor,
@@ -315,113 +324,106 @@ public class CrawlerEngine {
     }
 
     private void crawlUrl(String url, int depth, int maxDepth, TaskMessage msg, SpiderTask task,
-                          Long taskId, AtomicInteger success, AtomicInteger fail,
-                          java.util.concurrent.Semaphore semaphore,
-                          java.util.concurrent.ExecutorService executor,
-                          Map<String, RobotsRules> robotsCache,
-                          Set<String> processedResourceUrls,
-                          TaskExecutionContext execution) {
+                           Long taskId, AtomicInteger success, AtomicInteger fail,
+                           Map<String, RobotsRules> robotsCache,
+                           Set<String> processedResourceUrls,
+                           TaskExecutionContext execution) {
         try {
-            semaphore.acquire();
-            try {
-                // 任务状态不是运行中（如被取消）时停止爬取
-                SpiderTask latest = taskMapper.selectById(task.getId());
-                if (latest == null || !"RUNNING".equals(latest.getStatus())) {
-                    log.info("任务状态不是运行中，停止爬取: taskId={}, url={}", taskId, url);
-                    return;
-                }
-                if (!isAllowedByRobots(url, msg, robotsCache, execution)) {
-                    log.info("robots.txt 禁止抓取: url={}", url);
-                    writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "robots.txt 禁止抓取", 0);
-                    fail.incrementAndGet();
-                    return;
-                }
-                long start = System.currentTimeMillis();
-                boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
-                String cachedHtml = readCache
-                        ? minioHelper.getHtmlIfExists(htmlBucket,
-                                "html/" + ObjectNameUtils.base64Url(url) + ".html")
-                        : null;
-                boolean cacheHit = cachedHtml != null;
-                Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg, execution);
-                long cost = System.currentTimeMillis() - start;
-
-                ContentParser parsed = ContentParser.parse(doc.get(), url, msg.getContentSelector());
-                String newHtml = doc.get();
-                String newHtmlHash = md5(newHtml);
-                boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
-                boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
-
-                if (!msg.isSingleUrl() && depth < maxDepth) {
-                    List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
-                    next.removeIf(nextUrl -> {
-                        String normalized = UrlQueueService.normalizeUrl(nextUrl);
-                        return normalized == null || msg.getStartUrls().stream()
-                                .map(UrlQueueService::normalizeUrl)
-                                .anyMatch(normalized::equals) || !isSameDomain(normalized, msg.getStartUrls());
-                    });
-                    int enqueued = 0;
-                    for (String nextUrl : next) {
-                        String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
-                        if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
-                        if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache, execution)) continue;
-                        if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
-                    }
-                    log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
-                }
-
-                boolean contentUnchanged = false;
-                SpiderContentDoc existingDoc = null;
-                if (!isConfiguredStartUrl(url, msg.getStartUrls())) {
-                    // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
-                    CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
-                    SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
-                            criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
-                    existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
-                    if (existingDoc != null && !cacheHit) {
-                        // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
-                        String oldHtml = readHtmlFromMinio(url);
-                        if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
-                            contentUnchanged = true;
-                        }
-                    }
-                }
-
-                // 后续页面不覆盖 HTML 且内容未变化 → 跳过
-                if (!overwriteHtml && contentUnchanged) {
-                    writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                            "已存在，跳过: " + parsed.getTitle(), (int) cost);
-                    log.info("内容未变化，跳过: url={}", url);
-                    success.incrementAndGet();
-                    return;
-                }
-
-                SpiderContentDoc docObj = new SpiderContentDoc();
-                docObj.setId(md5(url));
-                docObj.setTitle(parsed.getTitle());
-                docObj.setContent(parsed.getContent());
-                docObj.setUrl(url);
-                docObj.setAuthor(parsed.getAuthor());
-                docObj.setSpiderId(msg.getSpiderId());
-                docObj.setSpiderName(msg.getSpiderName());
-                docObj.setSourceType(msg.getType());
-                DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-                docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
-                docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
-                docObj.setImages(List.of());
-
-                saveToElasticsearchWithRetry(docObj);
-                writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                    (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
-                success.incrementAndGet();
-
-                // Persist the page before downloading static assets so slow asset hosts cannot delay it.
-                saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, processedResourceUrls, execution);
-                updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
-                        msg, task, overwriteImage, execution);
-            } finally {
-                semaphore.release();
+            // 任务状态不是运行中（如被取消）时停止爬取
+            SpiderTask latest = taskMapper.selectById(task.getId());
+            if (latest == null || !"RUNNING".equals(latest.getStatus())) {
+                log.info("任务状态不是运行中，停止爬取: taskId={}, url={}", taskId, url);
+                return;
             }
+            if (!isAllowedByRobots(url, msg, robotsCache, execution)) {
+                log.info("robots.txt 禁止抓取: url={}", url);
+                writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "robots.txt 禁止抓取", 0);
+                fail.incrementAndGet();
+                return;
+            }
+            long start = System.currentTimeMillis();
+            boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
+            String cachedHtml = readCache
+                    ? minioHelper.getHtmlIfExists(htmlBucket,
+                            "html/" + ObjectNameUtils.base64Url(url) + ".html")
+                    : null;
+            boolean cacheHit = cachedHtml != null;
+            Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg, execution);
+            long cost = System.currentTimeMillis() - start;
+
+            ContentParser parsed = ContentParser.parse(doc.get(), url, msg.getContentSelector());
+            String newHtml = doc.get();
+            String newHtmlHash = md5(newHtml);
+            boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
+            boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
+
+            if (!msg.isSingleUrl() && depth < maxDepth) {
+                List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
+                next.removeIf(nextUrl -> {
+                    String normalized = UrlQueueService.normalizeUrl(nextUrl);
+                    return normalized == null || msg.getStartUrls().stream()
+                            .map(UrlQueueService::normalizeUrl)
+                            .anyMatch(normalized::equals) || !isSameDomain(normalized, msg.getStartUrls());
+                });
+                int enqueued = 0;
+                for (String nextUrl : next) {
+                    String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
+                    if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
+                    if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache, execution)) continue;
+                    if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
+                }
+                log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
+            }
+
+            boolean contentUnchanged = false;
+            SpiderContentDoc existingDoc = null;
+            if (!isConfiguredStartUrl(url, msg.getStartUrls())) {
+                // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
+                CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
+                SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
+                        criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+                existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
+                if (existingDoc != null && !cacheHit) {
+                    // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
+                    String oldHtml = readHtmlFromMinio(url);
+                    if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
+                        contentUnchanged = true;
+                    }
+                }
+            }
+
+            // 后续页面不覆盖 HTML 且内容未变化 → 跳过
+            if (!overwriteHtml && contentUnchanged) {
+                writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
+                        "已存在，跳过: " + parsed.getTitle(), (int) cost);
+                log.info("内容未变化，跳过: url={}", url);
+                success.incrementAndGet();
+                return;
+            }
+
+            SpiderContentDoc docObj = new SpiderContentDoc();
+            docObj.setId(md5(url));
+            docObj.setTitle(parsed.getTitle());
+            docObj.setContent(parsed.getContent());
+            docObj.setUrl(url);
+            docObj.setAuthor(parsed.getAuthor());
+            docObj.setSpiderId(msg.getSpiderId());
+            docObj.setSpiderName(msg.getSpiderName());
+            docObj.setSourceType(msg.getType());
+            DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+            docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
+            docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
+            docObj.setImages(List.of());
+
+            saveToElasticsearchWithRetry(docObj);
+            writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
+                (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
+            success.incrementAndGet();
+
+            // Persist the page before downloading static assets so slow asset hosts cannot delay it.
+            saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, processedResourceUrls, execution);
+            updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
+                    msg, task, overwriteImage, execution);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (!execution.isCancelled()) {

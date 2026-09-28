@@ -552,13 +552,8 @@ const handleRun = async (row: any) => {
       type: isPending ? 'info' : 'success',
       duration: 5000
     })
-  } catch (e) {
-    ElNotification({
-      title: '任务派发失败',
-      message: (e as any)?.message || '未知错误',
-      type: 'error',
-      duration: 5000
-    })
+  } catch {
+    // The request interceptor already displays the backend error message.
   } finally {
     row._running = false
   }

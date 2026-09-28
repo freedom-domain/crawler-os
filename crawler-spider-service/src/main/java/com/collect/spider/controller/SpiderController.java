@@ -8,6 +8,7 @@ import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderImportResult;
 import com.collect.spider.dto.SpiderRerunReq;
 import com.collect.spider.dto.SpiderUpdateReq;
+import com.collect.spider.dto.TaskConcurrencyResponse;
 import com.collect.spider.dto.TaskStatsResponse;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
@@ -173,18 +174,19 @@ public class SpiderController {
         return R.ok(spiderService.todayTaskStats());
     }
 
-    @Operation(summary = "获取任务最大并发数")
+    @Operation(summary = "获取任务并发策略")
     @GetMapping("/task/concurrency")
-    public R<Integer> taskConcurrency() {
+    public R<TaskConcurrencyResponse> taskConcurrency() {
         requirePermission("spider:run");
         return R.ok(spiderService.getTaskConcurrency());
     }
 
-    @Operation(summary = "更新任务最大并发数")
+    @Operation(summary = "更新任务并发策略")
     @PutMapping("/task/concurrency")
-    public R<Void> updateTaskConcurrency(@RequestParam("maxConcurrency") int maxConcurrency) {
+    public R<Void> updateTaskConcurrency(@RequestParam("maxConcurrency") int maxConcurrency,
+                                         @RequestParam("urlConcurrency") int urlConcurrency) {
         requirePermission("spider:run");
-        spiderService.updateTaskConcurrency(maxConcurrency);
+        spiderService.updateTaskConcurrency(maxConcurrency, urlConcurrency);
         return R.ok();
     }
 

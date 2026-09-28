@@ -9,6 +9,7 @@ import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderImportResult;
 import com.collect.spider.dto.SpiderUpdateReq;
+import com.collect.spider.dto.TaskConcurrencyResponse;
 import com.collect.spider.dto.TaskStatsResponse;
 import com.collect.spider.entity.Spider;
 import com.collect.spider.entity.SpiderTask;
@@ -36,6 +37,8 @@ import java.util.ArrayList;
 public class SpiderService {
     private static final int MIN_TASK_CONCURRENCY = 1;
     private static final int MAX_TASK_CONCURRENCY = 20;
+    private static final int MIN_URL_CONCURRENCY = 1;
+    private static final int MAX_URL_CONCURRENCY = 50;
 
     @Value("${app.kafka.spider-task-topic}")
     private String spiderTaskTopic;
@@ -427,6 +430,8 @@ public class SpiderService {
         msg.setHeaders(spider.getHeaders());
         msg.setFollowRobots(spider.getFollowRobots());
         msg.setSkipTlsVerify(spider.getSkipTlsVerify() == null ? 0 : spider.getSkipTlsVerify());
+        msg.setConcurrency(getMaxConcurrency());
+        msg.setUrlConcurrency(getUrlConcurrency());
         return msg;
     }
 
@@ -460,21 +465,27 @@ public class SpiderService {
         }
     }
 
-    public int getTaskConcurrency() {
+    public TaskConcurrencyResponse getTaskConcurrency() {
         requireTaskCreationGuard();
-        return getMaxConcurrency();
+        TaskConcurrencyResponse resp = new TaskConcurrencyResponse();
+        resp.setMaxConcurrency(getMaxConcurrency());
+        resp.setUrlConcurrency(getUrlConcurrency());
+        return resp;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void updateTaskConcurrency(int maxConcurrency) {
+    public void updateTaskConcurrency(int maxConcurrency, int urlConcurrency) {
         if (maxConcurrency < MIN_TASK_CONCURRENCY || maxConcurrency > MAX_TASK_CONCURRENCY) {
             throw new BizException("任务并发数必须在 1 到 20 之间");
         }
+        if (urlConcurrency < MIN_URL_CONCURRENCY || urlConcurrency > MAX_URL_CONCURRENCY) {
+            throw new BizException("URL 并发数必须在 1 到 50 之间");
+        }
         requireTaskCreationGuard();
-        if (taskMapper.updateMaxConcurrency(maxConcurrency) != 1) {
+        if (taskMapper.updateConcurrency(maxConcurrency, urlConcurrency) != 1) {
             throw new BizException("任务并发策略保存失败");
         }
-        log.info("任务最大并发数已更新: maxConcurrency={}", maxConcurrency);
+        log.info("任务并发策略已更新: maxConcurrency={}, urlConcurrency={}", maxConcurrency, urlConcurrency);
     }
 
     private void sendTaskAfterCommit(String payload) {
@@ -504,5 +515,15 @@ public class SpiderService {
             throw new BizException("任务并发策略无效，请检查数据库迁移或配置");
         }
         return maxConcurrency;
+    }
+
+    private int getUrlConcurrency() {
+        Integer urlConcurrency = taskMapper.selectUrlConcurrency();
+        if (urlConcurrency == null
+                || urlConcurrency < MIN_URL_CONCURRENCY
+                || urlConcurrency > MAX_URL_CONCURRENCY) {
+            return 8;
+        }
+        return urlConcurrency;
     }
 }

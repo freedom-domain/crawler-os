@@ -45,9 +45,9 @@
       <el-table-column prop="crawlTime" label="抓取时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.crawlTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="100" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <TableRowActions :items="rowActions" @command="command => handleRowAction(command, row)" />
+          <el-button size="small" type="danger" plain @click="remove(row)">取消收藏</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -73,10 +73,9 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Refresh, Edit, Delete } from '@element-plus/icons-vue'
+import { Refresh } from '@element-plus/icons-vue'
 import { dictChildren, favoriteDelete, favoritePage, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
-import TableRowActions from '@/components/TableRowActions.vue'
 import { formatDateTime } from '@/utils/dateTime'
 
 const list = ref<any[]>([])
@@ -84,10 +83,6 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(15)
 const total = ref(0)
-const rowActions = [
-  { command: 'edit-tags', label: '编辑标签', icon: Edit },
-  { command: 'unfavorite', label: '取消收藏', icon: Delete, danger: true }
-]
 const title = ref('')
 const url = ref('')
 const spiderName = ref('')
@@ -173,11 +168,6 @@ const remove = async (row: any) => {
   } catch (error: any) {
     if (error !== 'cancel') console.error(error)
   }
-}
-
-const handleRowAction = (command: string, row: any) => {
-  if (command === 'edit-tags') openTagEditor(row)
-  if (command === 'unfavorite') remove(row)
 }
 
 onMounted(() => {

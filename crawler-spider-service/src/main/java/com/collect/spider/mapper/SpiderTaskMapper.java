@@ -21,8 +21,11 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
     @Select("SELECT max_concurrency FROM spider_task_creation_guard WHERE id = 1")
     Integer selectMaxConcurrency();
 
-    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency} WHERE id = 1")
-    int updateMaxConcurrency(@Param("maxConcurrency") int maxConcurrency);
+    @Select("SELECT url_concurrency FROM spider_task_creation_guard WHERE id = 1")
+    Integer selectUrlConcurrency();
+
+    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency}, url_concurrency = #{urlConcurrency} WHERE id = 1")
+    int updateConcurrency(@Param("maxConcurrency") int maxConcurrency, @Param("urlConcurrency") int urlConcurrency);
 
     @Select("SELECT * FROM spider_task WHERE id = #{id} AND deleted = 0 FOR UPDATE")
     SpiderTask selectByIdForUpdate(@Param("id") Long id);

@@ -117,7 +117,7 @@
     >
       <div v-loading="concurrencyLoading" class="concurrency-settings">
         <div class="concurrency-setting-row">
-          <span>全局最大并发任务数</span>
+          <span>同时运行任务数</span>
           <el-input-number
             v-model="maxConcurrency"
             :min="1"
@@ -129,7 +129,22 @@
           />
         </div>
         <p class="concurrency-hint">
-          不同爬虫可按此上限并行运行；同一爬虫同时只允许一个排队或运行中的任务。降低上限不会中断正在运行的任务。
+          全局同时运行的爬虫任务上限。同一爬虫同时只允许一个排队或运行中的任务。降低上限不会中断正在运行的任务。
+        </p>
+        <div class="concurrency-setting-row">
+          <span>每任务 URL 并发数</span>
+          <el-input-number
+            v-model="urlConcurrency"
+            :min="1"
+            :max="50"
+            :step="1"
+            controls-position="right"
+            :disabled="!concurrencyLoaded || concurrencyLoading || concurrencySaving"
+            aria-label="每任务URL并发数"
+          />
+        </div>
+        <p class="concurrency-hint">
+          单个任务内同时抓取的 URL 数量。值越大抓取越快，但对目标站点压力越大。
         </p>
       </div>
       <template #footer>
@@ -137,7 +152,7 @@
         <el-button
           type="primary"
           :loading="concurrencySaving"
-          :disabled="!concurrencyLoaded || concurrencyLoading || maxConcurrency === savedMaxConcurrency"
+          :disabled="!concurrencyLoaded || concurrencyLoading || (maxConcurrency === savedMaxConcurrency && urlConcurrency === savedUrlConcurrency)"
           @click="saveConcurrency"
         >
           保存策略
@@ -251,6 +266,8 @@ const refreshIntervalSeconds = ref(loadRefreshInterval())
 const currentTimeMs = ref(Date.now())
 const maxConcurrency = ref(1)
 const savedMaxConcurrency = ref(1)
+const urlConcurrency = ref(8)
+const savedUrlConcurrency = ref(8)
 const concurrencyLoading = ref(false)
 const concurrencySaving = ref(false)
 const concurrencyLoaded = ref(false)
@@ -432,12 +449,15 @@ const loadConcurrency = async () => {
   concurrencyLoaded.value = false
   try {
     const res: any = await taskConcurrency()
-    const value = Number(res.data)
-    if (!Number.isInteger(value) || value < 1 || value > 20) {
+    const max = Number(res.data?.maxConcurrency)
+    const url = Number(res.data?.urlConcurrency)
+    if (!Number.isInteger(max) || max < 1 || max > 20) {
       throw new Error('服务器返回的任务并发数无效')
     }
-    maxConcurrency.value = value
-    savedMaxConcurrency.value = value
+    maxConcurrency.value = max
+    savedMaxConcurrency.value = max
+    urlConcurrency.value = Number.isInteger(url) && url >= 1 && url <= 50 ? url : 8
+    savedUrlConcurrency.value = urlConcurrency.value
     concurrencyLoaded.value = true
   } catch {
     ElMessage.error('读取任务并发策略失败')
@@ -453,18 +473,24 @@ const openConcurrencyDialog = async () => {
 
 const closeConcurrencyDialog = () => {
   maxConcurrency.value = savedMaxConcurrency.value
+  urlConcurrency.value = savedUrlConcurrency.value
   concurrencyDialogVisible.value = false
 }
 
 const saveConcurrency = async () => {
   if (!Number.isInteger(maxConcurrency.value) || maxConcurrency.value < 1 || maxConcurrency.value > 20) {
-    ElMessage.warning('最大并发数需设置为 1 到 20 的整数')
+    ElMessage.warning('任务并发数需设置为 1 到 20 的整数')
+    return
+  }
+  if (!Number.isInteger(urlConcurrency.value) || urlConcurrency.value < 1 || urlConcurrency.value > 50) {
+    ElMessage.warning('URL 并发数需设置为 1 到 50 的整数')
     return
   }
   concurrencySaving.value = true
   try {
-    await updateTaskConcurrency(maxConcurrency.value)
+    await updateTaskConcurrency(maxConcurrency.value, urlConcurrency.value)
     savedMaxConcurrency.value = maxConcurrency.value
+    savedUrlConcurrency.value = urlConcurrency.value
     ElMessage.success('任务并发策略已更新')
     concurrencyDialogVisible.value = false
   } catch {
