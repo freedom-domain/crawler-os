@@ -14,6 +14,7 @@ import com.collect.worker.mapper.SpiderTaskMapper;
 import com.collect.worker.minio.MinioHelper;
 import com.collect.worker.redis.UrlQueueService;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -42,14 +43,50 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Component
 public class CrawlerEngine {
 
+    private static final long TASK_CANCEL_POLL_INTERVAL_MS = 500;
+
     record WebResource(String url, String category, String objectName, String contentType) {}
+
+    @FunctionalInterface
+    private interface ResponseReader<T> {
+        T read(Response response) throws Exception;
+    }
+
+    static final class TaskExecutionContext {
+        private final Set<Call> activeCalls = ConcurrentHashMap.newKeySet();
+        private volatile boolean cancelled;
+
+        Call register(Call call) {
+            activeCalls.add(call);
+            if (cancelled) {
+                call.cancel();
+            }
+            return call;
+        }
+
+        void unregister(Call call) {
+            activeCalls.remove(call);
+        }
+
+        void cancel() {
+            cancelled = true;
+            activeCalls.forEach(call -> call.cancel());
+        }
+
+        boolean isCancelled() {
+            return cancelled;
+        }
+    }
 
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
@@ -148,7 +185,8 @@ public class CrawlerEngine {
         int maxDepth = msg.getMaxDepth() != null ? msg.getMaxDepth() : 2;
         int concurrency = 8;
         var semaphore = new java.util.concurrent.Semaphore(concurrency);
-        var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        TaskExecutionContext execution = new TaskExecutionContext();
         Map<String, RobotsRules> robotsCache = new ConcurrentHashMap<>();
 
         AtomicInteger success = new AtomicInteger(0);
@@ -178,29 +216,23 @@ public class CrawlerEngine {
                     String url = parts[0];
                     if (!urlQueue.claimForProcessing(taskId, url)) continue;
                     int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
-                        batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail, semaphore, executor,
-                            robotsCache, processedResourceUrls));
+                    batch.add(() -> crawlUrl(url, depth, maxDepth, msg, task, taskId, success, fail,
+                            semaphore, executor, robotsCache, processedResourceUrls, execution));
                 }
                 if (batch.isEmpty()) break;
                 var futures = batch.stream().map(executor::submit).toList();
-                for (var f : futures) {
-                    try {
-                        f.get();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        log.error("等待抓取任务执行被中断: taskId={}", taskId, e);
-                        break;
-                    } catch (java.util.concurrent.ExecutionException e) {
-                        fail.incrementAndGet();
-                        log.error("抓取任务线程异常: taskId={}", taskId, e.getCause());
-                    }
-                }
+                if (!awaitTaskBatch(futures, task, execution, executor, fail)) break;
                 if (Thread.currentThread().isInterrupted()) break;
             }
         } finally {
-            executor.shutdown();
+            if (execution.isCancelled()) {
+                executor.shutdownNow();
+            } else {
+                executor.shutdown();
+            }
             if (!awaitExecutorTermination(executor, 30, TimeUnit.SECONDS)) {
                 executorTerminated = false;
+                execution.cancel();
                 executor.shutdownNow();
                 // shutdownNow 只是发出中断请求，必须继续等待图片/页面线程真正退出。
                 awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
@@ -225,6 +257,39 @@ public class CrawlerEngine {
         taskMapper.setFail(task.getId(), fail.get());
         taskMapper.updateCompletion(task.getId(), task.getStatus(), task.getErrorMessage(), endTime, task.getTotalCostMs());
         log.info("任务完成: taskId={}, totalCostMs={}", taskId, task.getTotalCostMs());
+    }
+
+    private boolean awaitTaskBatch(List<? extends Future<?>> futures, SpiderTask task,
+                                   TaskExecutionContext execution, ExecutorService executor,
+                                   AtomicInteger fail) {
+        for (Future<?> future : futures) {
+            while (true) {
+                try {
+                    future.get(TASK_CANCEL_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
+                    break;
+                } catch (TimeoutException e) {
+                    SpiderTask latest = taskMapper.selectById(task.getId());
+                    if (latest == null || !"RUNNING".equals(latest.getStatus())) {
+                        log.info("收到任务取消状态，停止当前任务: taskId={}, status={}",
+                                task.getTaskId(), latest == null ? null : latest.getStatus());
+                        execution.cancel();
+                        executor.shutdownNow();
+                        return false;
+                    }
+                } catch (InterruptedException e) {
+                    execution.cancel();
+                    executor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                    log.error("等待抓取任务执行被中断: taskId={}", task.getTaskId(), e);
+                    return false;
+                } catch (java.util.concurrent.ExecutionException e) {
+                    fail.incrementAndGet();
+                    log.error("抓取任务线程异常: taskId={}", task.getTaskId(), e.getCause());
+                    break;
+                }
+            }
+        }
+        return !execution.isCancelled();
     }
 
     private boolean awaitExecutorTermination(java.util.concurrent.ExecutorService executor,
@@ -254,7 +319,8 @@ public class CrawlerEngine {
                           java.util.concurrent.Semaphore semaphore,
                           java.util.concurrent.ExecutorService executor,
                           Map<String, RobotsRules> robotsCache,
-                          Set<String> processedResourceUrls) {
+                          Set<String> processedResourceUrls,
+                          TaskExecutionContext execution) {
         try {
             semaphore.acquire();
             try {
@@ -264,7 +330,7 @@ public class CrawlerEngine {
                     log.info("任务状态不是运行中，停止爬取: taskId={}, url={}", taskId, url);
                     return;
                 }
-                if (!isAllowedByRobots(url, msg, robotsCache)) {
+                if (!isAllowedByRobots(url, msg, robotsCache, execution)) {
                     log.info("robots.txt 禁止抓取: url={}", url);
                     writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "robots.txt 禁止抓取", 0);
                     fail.incrementAndGet();
@@ -277,7 +343,7 @@ public class CrawlerEngine {
                                 "html/" + ObjectNameUtils.base64Url(url) + ".html")
                         : null;
                 boolean cacheHit = cachedHtml != null;
-                Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg);
+                Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg, execution);
                 long cost = System.currentTimeMillis() - start;
 
                 ContentParser parsed = ContentParser.parse(doc.get(), url, msg.getContentSelector());
@@ -298,7 +364,7 @@ public class CrawlerEngine {
                     for (String nextUrl : next) {
                         String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
                         if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
-                        if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache)) continue;
+                        if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache, execution)) continue;
                         if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
                     }
                     log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
@@ -350,17 +416,22 @@ public class CrawlerEngine {
                 success.incrementAndGet();
 
                 // Persist the page before downloading static assets so slow asset hosts cannot delay it.
-                saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, processedResourceUrls);
+                saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, processedResourceUrls, execution);
                 updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
-                        msg, task, overwriteImage);
+                        msg, task, overwriteImage, execution);
             } finally {
                 semaphore.release();
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            fail.incrementAndGet();
-            writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "任务线程被中断", 0);
+            if (!execution.isCancelled()) {
+                fail.incrementAndGet();
+                writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", "任务线程被中断", 0);
+            }
         } catch (Exception e) {
+            if (execution.isCancelled()) {
+                return;
+            }
             fail.incrementAndGet();
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
@@ -369,18 +440,22 @@ public class CrawlerEngine {
 
     private void updateImagesAfterPageProcessing(Html doc, SpiderContentDoc document, String pageUrl,
                                                 String title, TaskMessage msg, SpiderTask task,
-                                                boolean overwrite) {
+                                                boolean overwrite, TaskExecutionContext execution) {
         try {
             List<String> imageUrls = shouldSkipImageDownload(doc, msg)
                     ? List.of()
-                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite);
+                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution);
             document.setImages(imageUrls);
             saveToElasticsearchWithRetry(document);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.warn("图片结果回写被中断，页面内容已保存: url={}", pageUrl);
+            if (!execution.isCancelled()) {
+                log.warn("图片结果回写被中断，页面内容已保存: url={}", pageUrl);
+            }
         } catch (Exception e) {
-            log.warn("图片处理失败，页面内容已保存: url={}", pageUrl, e);
+            if (!execution.isCancelled()) {
+                log.warn("图片处理失败，页面内容已保存: url={}", pageUrl, e);
+            }
         }
     }
 
@@ -437,14 +512,15 @@ public class CrawlerEngine {
         return normalized.startsWith("www.") ? normalized.substring(4) : normalized;
     }
 
-    private boolean isAllowedByRobots(String url, TaskMessage msg, Map<String, RobotsRules> robotsCache) {
+    private boolean isAllowedByRobots(String url, TaskMessage msg, Map<String, RobotsRules> robotsCache,
+                                     TaskExecutionContext execution) {
         if (!Integer.valueOf(1).equals(msg.getFollowRobots())) return true;
         try {
             URI uri = URI.create(url);
             if (uri.getHost() == null) return false;
             String scheme = uri.getScheme() == null ? "https" : uri.getScheme();
             String robotsUrl = scheme + "://" + uri.getAuthority() + "/robots.txt";
-            RobotsRules rules = robotsCache.computeIfAbsent(robotsUrl, key -> loadRobotsRules(key, msg));
+            RobotsRules rules = robotsCache.computeIfAbsent(robotsUrl, key -> loadRobotsRules(key, msg, execution));
             return rules.isAllowed(uri.getRawPath());
         } catch (Exception e) {
             log.debug("robots.txt 检查失败，放行 URL: {}", url, e);
@@ -452,16 +528,16 @@ public class CrawlerEngine {
         }
     }
 
-    private RobotsRules loadRobotsRules(String robotsUrl, TaskMessage msg) {
+    private RobotsRules loadRobotsRules(String robotsUrl, TaskMessage msg, TaskExecutionContext execution) {
         try {
             Request request = new Request.Builder()
                     .url(robotsUrl)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                     .build();
-            try (Response response = httpClient(msg).newCall(request).execute()) {
+            return executeRequest(httpClient(msg), request, execution, response -> {
                 if (!response.isSuccessful() || response.body() == null) return RobotsRules.allowAll();
                 return RobotsRules.parse(response.body().string());
-            }
+            });
         } catch (Exception e) {
             log.debug("读取 robots.txt 失败，放行 URL: {}", robotsUrl);
             return RobotsRules.allowAll();
@@ -515,7 +591,9 @@ public class CrawlerEngine {
      * 返回已上传图片的 objectName 列表（无图片时返回空列表）。
      */
     private List<String> extractAndUploadImages(Html doc, String pageUrl, String title,
-                                                TaskMessage msg, SpiderTask task, boolean overwrite) {
+                                                TaskMessage msg, SpiderTask task, boolean overwrite,
+                                                TaskExecutionContext execution) {
+        if (execution.isCancelled()) return List.of();
         String selector = msg.getImageSelector();
         String xpath = msg.getImageXpath();
         boolean hasSelector = selector != null && !selector.isBlank();
@@ -535,6 +613,7 @@ public class CrawlerEngine {
             int skipped = 0;
             java.util.Set<String> seen = new java.util.HashSet<>();
             for (String src : imageSources) {
+                if (execution.isCancelled()) break;
                 if (src.isBlank() || !seen.add(src)) {
                     continue;
                 }
@@ -548,8 +627,8 @@ public class CrawlerEngine {
                         uploadedUrls.add(objectName);
                         continue;
                     }
-                    byte[] data = downloadImage(src, msg);
-                    if (data == null || data.length == 0) {
+                    byte[] data = downloadImage(src, msg, execution);
+                    if (execution.isCancelled() || data == null || data.length == 0) {
                         continue;
                     }
                     // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
@@ -571,6 +650,7 @@ public class CrawlerEngine {
                     // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
                     uploadedUrls.add(objectName);
                 } catch (Exception e) {
+                    if (execution.isCancelled()) break;
                     log.warn("图片下载/上传失败: src={}", src, e);
                 }
             }
@@ -583,6 +663,7 @@ public class CrawlerEngine {
                 writeLog(task.getId(), msg.getSpiderId(), pageUrl, skipped > 0 ? 2 : 1, "INFO", msg2, (int) imgCost, "image");
             }
         } catch (Exception e) {
+            if (execution.isCancelled()) return uploadedUrls;
             log.warn("图片提取失败: url={}", pageUrl, e);
         }
         return uploadedUrls;
@@ -593,7 +674,8 @@ public class CrawlerEngine {
             return List.of();
         }
         boolean hasSelector = selector != null && !selector.isBlank();
-        boolean hasXpath = xpath != null && !xpath.isBlank();
+        List<String> xpaths = parseImageXpaths(xpath);
+        boolean hasXpath = !xpaths.isEmpty();
         if (!hasSelector && !hasXpath) {
             return List.of();
         }
@@ -607,7 +689,9 @@ public class CrawlerEngine {
             if (hasXpath) {
                 // 选择器 + XPath：在选择器命中的元素范围内按 XPath 定位图片
                 for (Selectable scope : matched) {
-                    sources.addAll(extractImageSourcesByXpath(scope, pageUrl, xpath));
+                    for (String expression : xpaths) {
+                        sources.addAll(extractImageSourcesByXpath(scope, pageUrl, expression));
+                    }
                 }
                 return new java.util.ArrayList<>(sources);
             }
@@ -621,8 +705,20 @@ public class CrawlerEngine {
         }
 
         // 仅 XPath：直接在整页范围内按 XPath 定位图片
-        sources.addAll(extractImageSourcesByXpath(doc, pageUrl, xpath));
+        for (String expression : xpaths) {
+            sources.addAll(extractImageSourcesByXpath(doc, pageUrl, expression));
+        }
         return new java.util.ArrayList<>(sources);
+    }
+
+    private static List<String> parseImageXpaths(String xpath) {
+        if (xpath == null || xpath.isBlank()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(xpath.split(";"))
+                .map(String::trim)
+                .filter(expression -> !expression.isEmpty())
+                .toList();
     }
 
     static List<String> extractImageSourcesByXpath(Selectable scope, String pageUrl, String xpath) {
@@ -676,7 +772,9 @@ public class CrawlerEngine {
      * 对象名基于 URL 的 Base64 编码；资源是否覆盖与 HTML 使用同一个覆盖开关。
      */
     private void saveHtmlAndJs(Html doc, String url, String html, TaskMessage msg,
-                               SpiderTask task, boolean saveHtml, Set<String> processedResourceUrls) {
+                               SpiderTask task, boolean saveHtml, Set<String> processedResourceUrls,
+                               TaskExecutionContext execution) {
+        if (execution.isCancelled()) return;
         try {
             String urlHash = ObjectNameUtils.base64Url(url);
             if (saveHtml) {
@@ -707,9 +805,11 @@ public class CrawlerEngine {
                         new WebResource(cssUrl, "css", objectName, "text/css"));
             }
             for (WebResource resource : resourceQueue.values()) {
-                processWebResource(resource, msg, task, parsedTitle(doc, url));
+                if (execution.isCancelled()) break;
+                processWebResource(resource, msg, task, parsedTitle(doc, url), execution);
             }
         } catch (Exception e) {
+            if (execution.isCancelled()) return;
             log.warn("HTML/JS/CSS 上传失败: url={}", url, e);
         }
     }
@@ -724,10 +824,12 @@ public class CrawlerEngine {
         return true;
     }
 
-    private void processWebResource(WebResource resource, TaskMessage msg, SpiderTask task, String title) {
+    private void processWebResource(WebResource resource, TaskMessage msg, SpiderTask task, String title,
+                                    TaskExecutionContext execution) {
         long start = System.currentTimeMillis();
         try {
-            byte[] downloaded = downloadBytes(resource.url(), msg);
+            byte[] downloaded = downloadBytes(resource.url(), msg, execution);
+            if (execution.isCancelled()) return;
             if (downloaded == null || downloaded.length == 0) {
                 writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
                         resource.category().toUpperCase() + " 下载为空", resourceCost(start), resource.category());
@@ -753,6 +855,7 @@ public class CrawlerEngine {
                     resource.category().toUpperCase() + " " + message,
                     resourceCost(start), resource.category());
         } catch (Exception e) {
+            if (execution.isCancelled()) return;
             log.warn("{} 下载/上传失败: url={}", resource.category().toUpperCase(), resource.url(), e);
             writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
                     resource.category().toUpperCase() + " 下载/上传失败: " + e.getMessage(),
@@ -831,17 +934,17 @@ public class CrawlerEngine {
         }
     }
 
-    private byte[] downloadBytes(String src, TaskMessage msg) throws Exception {
+    private byte[] downloadBytes(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
         Request request = new Request.Builder()
                 .url(src)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .build();
-        try (Response response = httpClient(msg).newCall(request).execute()) {
+        return executeRequest(httpClient(msg), request, execution, response -> {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
             }
             return response.body().bytes();
-        }
+        });
     }
 
     private void saveFileMetadata(String bucket, String objectName, long fileSize, String contentType,
@@ -887,17 +990,17 @@ public class CrawlerEngine {
         }
     }
 
-    private byte[] downloadImage(String src, TaskMessage msg) throws Exception {
+    private byte[] downloadImage(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
         Request request = new Request.Builder()
                 .url(src)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .build();
-        try (Response response = httpClient(msg).newCall(request).execute()) {
+        return executeRequest(httpClient(msg), request, execution, response -> {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
             }
             return response.body().bytes();
-        }
+        });
     }
 
     static String guessExt(String src, byte[] data) {
@@ -939,13 +1042,13 @@ public class CrawlerEngine {
         };
     }
 
-    private Html fetch(String url, TaskMessage msg) throws Exception {
+    private Html fetch(String url, TaskMessage msg, TaskExecutionContext execution) throws Exception {
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .header("Accept", "text/html,application/xhtml+xml")
                 .build();
-        try (Response response = httpClient(msg).newCall(request).execute()) {
+        return executeRequest(httpClient(msg), request, execution, response -> {
             if (!response.isSuccessful()) {
                 throw new RuntimeException("HTTP " + response.code());
             }
@@ -953,6 +1056,16 @@ public class CrawlerEngine {
                 throw new IllegalStateException("HTTP 响应正文为空");
             }
             return new Html(response.body().string(), url);
+        });
+    }
+
+    private <T> T executeRequest(OkHttpClient client, Request request,
+                                 TaskExecutionContext execution, ResponseReader<T> reader) throws Exception {
+        Call call = execution.register(client.newCall(request));
+        try (Response response = call.execute()) {
+            return reader.read(response);
+        } finally {
+            execution.unregister(call);
         }
     }
 

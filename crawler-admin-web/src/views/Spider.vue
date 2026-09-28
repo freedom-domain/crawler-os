@@ -145,8 +145,13 @@
           <el-input v-model="form.imageSelector" placeholder="CSS选择器，如 .article img 或 #content" />
         </el-form-item>
         <el-form-item label="图片 XPath">
-          <el-input v-model="form.imageXpath" placeholder="XPath，如 //article//img 或 //div[@class='article']//img" />
-          <div class="form-tip">填写后优先使用 XPath 定位图片；为空时使用上面的 CSS 选择器</div>
+          <el-input
+            v-model="form.imageXpath"
+            type="textarea"
+            :rows="2"
+            placeholder="可填写多个 XPath，并用分号分隔，如 //article//img/@src; //div[@class='gallery']//img/@data-src"
+          />
+          <div class="form-tip">多个 XPath 用分号分隔，命中结果会合并去重；填写后优先使用 XPath 定位图片，留空时使用上面的 CSS 选择器</div>
         </el-form-item>
         <el-form-item label="VIP选择器">
           <el-input v-model="form.vipSelector" placeholder="CSS选择器，如 .vip 或 .member-only" />
@@ -539,6 +544,8 @@ const handleRun = async (row: any) => {
   try {
     const res: any = await spiderRun(row.id)
     ElMessage.success(res.data?.status === 'PENDING' ? '任务已加入等待队列' : '任务已派发')
+  } catch {
+    // The request interceptor already displays the backend error message.
   } finally {
     row._running = false
   }

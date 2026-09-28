@@ -129,7 +129,7 @@
           />
         </div>
         <p class="concurrency-hint">
-          同时运行的任务数上限为 1–20。降低上限不会中断正在运行的任务，后续任务会等待空位。
+          不同爬虫可按此上限并行运行；同一爬虫同时只允许一个排队或运行中的任务。降低上限不会中断正在运行的任务。
         </p>
       </div>
       <template #footer>
@@ -391,7 +391,7 @@ const loadData = async () => {
     const records = res.data?.records || []
     for (const t of records) {
       const prev = prevStatusMap.get(String(t.id))
-      if (['RUNNING', 'CANCELING'].includes(prev || '')
+      if (['PENDING', 'RUNNING', 'CANCELING'].includes(prev || '')
           && ['SUCCESS', 'FAILED', 'CANCELED'].includes(t.status)) {
         const msg = t.status === 'SUCCESS'
           ? `任务「${t.spiderName}」已完成：成功 ${t.successCount} 条，失败 ${t.failCount} 条`
@@ -503,14 +503,16 @@ const loadLogs = async () => {
 
 const handleCancel = async (row: any) => {
   try {
-    await ElMessageBox.confirm('确定取消该任务吗？', '确认取消', {
+    await ElMessageBox.confirm('取消后任务会尽快停止，已经完成的数据不会回滚。', '确认取消任务', {
       type: 'warning',
       confirmButtonText: '确认取消',
-      cancelButtonText: '继续运行'
+      cancelButtonText: '继续运行',
+      confirmButtonClass: 'el-button--danger'
     })
   } catch {
     return
   }
+
   try {
     await taskCancel(row.id)
     ElMessage.success('已提交取消请求')

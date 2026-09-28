@@ -113,4 +113,39 @@ class ImageXpathSelectorTest {
 
         assertEquals(java.util.List.of("https://example.com/inside.jpg"), sources);
     }
+
+    @Test
+    void shouldCombineSemicolonSeparatedXpathsAndIgnoreEmptyExpressions() {
+        var document = new Html("""
+                <div class="selected"><img src="/first.jpg"></div>
+                <div class="outside"><img src="/second.jpg"></div>
+                """, "https://example.com/page");
+
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://example.com/page", "",
+                " //div[@class='selected']//img/@src ; ; //div[@class='outside']//img/@src; ");
+
+        assertEquals(java.util.List.of(
+                "https://example.com/first.jpg",
+                "https://example.com/second.jpg"), sources);
+    }
+
+    @Test
+    void shouldCombineSemicolonSeparatedXpathsWithinCssSelectedScope() {
+        var document = new Html("""
+                <div class="selected">
+                  <img src="/first.jpg">
+                  <img data-src="/second.jpg">
+                </div>
+                <div class="outside"><img src="/outside.jpg"></div>
+                """, "https://example.com/page");
+
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://example.com/page", ".selected",
+                "//img/@src; //img/@data-src");
+
+        assertEquals(java.util.List.of(
+                "https://example.com/first.jpg",
+                "https://example.com/second.jpg"), sources);
+    }
 }
