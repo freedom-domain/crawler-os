@@ -17,6 +17,9 @@ spring:
         namespace: ${NACOS_NAMESPACE:crawler-default}
   kafka:
     bootstrap-servers: 192.168.31.2:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP:worker-consumer-group}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -36,6 +39,8 @@ spring:
 app:
   kafka:
     spider-task-topic: spider_task_topic-default
+    task-log-topic: spider_task_log_topic-default
+    task-log-consumer-group: task-log-consumer-group
   es:
     content-index: ${ES_CONTENT_INDEX:spider_content}
 

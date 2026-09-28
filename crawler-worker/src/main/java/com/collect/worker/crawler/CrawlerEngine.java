@@ -1,5 +1,7 @@
 package com.collect.worker.crawler;
 
+import com.alibaba.fastjson2.JSON;
+import com.collect.common.mq.TaskLogMessage;
 import com.collect.common.mq.TaskMessage;
 import com.collect.common.util.ObjectNameUtils;
 import com.collect.worker.es.SpiderContentDoc;
@@ -21,6 +23,7 @@ import us.codecraft.webmagic.selector.HtmlNode;
 import us.codecraft.webmagic.selector.Selectable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.Criteria;
@@ -54,11 +57,15 @@ public class CrawlerEngine {
     private final UrlQueueService urlQueue;
     private final MinioHelper minioHelper;
     private final FileMetadataMapper fileMetadataMapper;
+    private final KafkaTemplate<String, String> kafkaTemplate;
     private final OkHttpClient verifiedHttpClient;
     private final OkHttpClient unverifiedHttpClient;
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
+
+    @Value("${app.kafka.task-log-topic:spider_task_log_topic-default}")
+    private String taskLogTopic;
 
     @Value("${minio.image-bucket:crawler}")
     private String imageBucket;
@@ -71,13 +78,15 @@ public class CrawlerEngine {
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
                          ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
-                         MinioHelper minioHelper, FileMetadataMapper fileMetadataMapper) {
+                         MinioHelper minioHelper, FileMetadataMapper fileMetadataMapper,
+                         KafkaTemplate<String, String> kafkaTemplate) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
         this.elasticsearchOperations = elasticsearchOperations;
         this.urlQueue = urlQueue;
         this.minioHelper = minioHelper;
         this.fileMetadataMapper = fileMetadataMapper;
+        this.kafkaTemplate = kafkaTemplate;
         this.verifiedHttpClient = buildHttpClient(false);
         this.unverifiedHttpClient = buildHttpClient(true);
     }
@@ -964,15 +973,31 @@ public class CrawlerEngine {
 
     private void writeLog(Long taskId, Long spiderId, String url, int status,
                           String level, String message, int costMs, String type) {
-        SpiderTaskLog logEntry = new SpiderTaskLog();
-        logEntry.setTaskId(taskId);
-        logEntry.setSpiderId(spiderId);
-        logEntry.setUrl(url);
-        logEntry.setStatus(status);
-        logEntry.setLevel(level);
-        logEntry.setType(type);
-        logEntry.setMessage(message != null && message.length() > 500 ? message.substring(0, 500) : message);
-        logEntry.setCostMs(costMs);
-        logMapper.insert(logEntry);
+        TaskLogMessage logMsg = new TaskLogMessage();
+        logMsg.setTaskId(taskId);
+        logMsg.setSpiderId(spiderId);
+        logMsg.setUrl(url);
+        logMsg.setStatus(status);
+        logMsg.setLevel(level);
+        logMsg.setType(type);
+        logMsg.setMessage(message != null && message.length() > 500 ? message.substring(0, 500) : message);
+        logMsg.setCostMs(costMs);
+        logMsg.setCreateTime(LocalDateTime.now());
+        try {
+            kafkaTemplate.send(taskLogTopic, JSON.toJSONString(logMsg));
+        } catch (Exception e) {
+            // Kafka 发送失败时降级为直接写库，保证日志不丢
+            log.warn("任务日志发送 Kafka 失败，降级直接写库: taskId={}, url={}", taskId, url, e);
+            SpiderTaskLog logEntry = new SpiderTaskLog();
+            logEntry.setTaskId(taskId);
+            logEntry.setSpiderId(spiderId);
+            logEntry.setUrl(url);
+            logEntry.setStatus(status);
+            logEntry.setLevel(level);
+            logEntry.setType(type);
+            logEntry.setMessage(logMsg.getMessage());
+            logEntry.setCostMs(costMs);
+            logMapper.insert(logEntry);
+        }
     }
 }
