@@ -43,7 +43,7 @@
           <el-tree-select
             v-model="form.parentId"
             :data="parentTreeOptions"
-            :props="{ label: 'name', value: 'id', children: 'children' }"
+            :props="{ label: 'name', children: 'children' }"
             check-strictly
             :render-after-expand="false"
             placeholder="请选择上级节点（不选则为顶级）"

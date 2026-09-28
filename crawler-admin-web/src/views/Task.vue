@@ -337,7 +337,7 @@ const resetLogFilters = () => {
 }
 
 const statusTag = (status: string) => {
-  const map: Record<string, string> = {
+  const map: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
     RUNNING: 'primary', SUCCESS: 'success', FAILED: 'danger',
     PENDING: 'warning', CANCELING: 'warning', CANCELED: 'info'
   }
@@ -360,7 +360,7 @@ const logTypeLabel = (type: string) => {
 }
 
 const logTypeTag = (type: string) => {
-  const map: Record<string, string> = {
+  const map: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
     html: 'info', image: 'warning', js: 'primary', css: 'success'
   }
   return map[type] || 'info'
@@ -612,12 +612,13 @@ onUnmounted(() => {
 }
 
 .log-url {
-  color: #409eff;
+  color: var(--teal);
   text-decoration: none;
   word-break: break-all;
 }
 
 .log-url:hover {
+  color: var(--teal-dark);
   text-decoration: underline;
 }
 

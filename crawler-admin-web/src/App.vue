@@ -80,6 +80,9 @@ button, input, textarea, select { font: inherit; }
 .el-table .cell { line-height: 22px; padding-top: 2px; padding-bottom: 2px; }
 .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: #fbfcfd; }
 .el-tag { border-radius: 6px; font-weight: 600; }
+/* 统一链接色：跟随主题青色，替代 Element 默认蓝 */
+.el-link--primary, .el-link--primary:hover, a { color: var(--teal); }
+.el-link--primary.is-hovered, a:hover { color: var(--teal-dark); }
 .el-pagination { margin-top: 18px; padding: 4px 0; justify-content: center; flex-wrap: wrap; gap: 4px; }
 .el-pagination button, .el-pagination li { border-radius: 6px !important; }
 .el-empty { padding: 44px 0; }
@@ -187,6 +190,9 @@ button, input, textarea, select { font: inherit; }
 .el-card > .el-card__body > .el-form--inline .el-form-item {
   margin: 0;
 }
+/* 表格空数据占位：统一空状态视觉 */
+.el-table__empty-block { min-height: 160px; }
+.el-table__empty-text { color: var(--ink-500); font-size: 13px; }
 .card-header { min-height: 24px; display: flex; align-items: center; justify-content: space-between; }
 .card-header > span:first-child { color: #172b4d; font-size: 15px; font-weight: 800; }
 .el-pagination { --el-pagination-button-bg-color: #fff; }

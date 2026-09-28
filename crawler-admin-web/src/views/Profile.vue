@@ -255,7 +255,7 @@ const permGroups = computed(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #909399;
+  color: var(--ink-500);
 }
 
 .info-label .el-icon {
@@ -265,7 +265,7 @@ const permGroups = computed(() => {
 .info-value {
   font-size: 15px;
   font-weight: 500;
-  color: #303133;
+  color: var(--ink-900);
 }
 
 /* 权限列表 */
@@ -276,8 +276,8 @@ const permGroups = computed(() => {
 }
 
 .perm-group {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   overflow: hidden;
 }
 
@@ -286,8 +286,8 @@ const permGroups = computed(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: #f5f7fa;
-  border-bottom: 1px solid #ebeef5;
+  background: var(--surface-soft);
+  border-bottom: 1px solid #edf2f4;
 }
 
 .perm-group-header .el-icon {
@@ -296,7 +296,7 @@ const permGroups = computed(() => {
 
 .perm-group-name {
   font-weight: 600;
-  color: #303133;
+  color: var(--ink-950);
   flex: 1;
 }
 

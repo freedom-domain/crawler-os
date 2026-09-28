@@ -29,7 +29,7 @@
           <Fold v-if="!collapsed" />
           <Expand v-else />
         </el-icon>
-        <div class="breadcrumb"><span>工作台</span><b>/</b><strong>{{ currentTitle || '概览' }}</strong></div>
+        <div class="breadcrumb"><span>工作台</span><b>/</b><strong>{{ currentTitle || '概览' }}</strong><span v-if="activeCount > 1" class="tab-count">{{ activeCount }} 个标签页</span></div>
         <el-tabs
           v-model="activeTab"
           type="card"
@@ -126,6 +126,7 @@ const activeTab = computed({
   set: (value: string) => router.push(value)
 })
 const cachedRouteNames = computed(() => tabs.value.map(tab => tab.name).filter(Boolean) as string[])
+const activeCount = computed(() => tabs.value.length)
 
 const restoreTabs = () => {
   try {
@@ -464,6 +465,7 @@ const handleCommand = (cmd: string) => {
 .breadcrumb span, .breadcrumb b, .breadcrumb strong { white-space: nowrap; }
 .breadcrumb span, .breadcrumb b { color: #9fb3c8; font-weight: 500; }
 .breadcrumb strong { color: #102a43; font-size: 16px; font-weight: 800; }
+.tab-count { margin-left: 10px; padding: 2px 9px; border-radius: 999px; color: #087f7d; background: #e2f6f3; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .user-info { flex: 0 0 auto; margin-left: 0; margin-right: 24px; }
 .user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
 .user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
@@ -492,6 +494,7 @@ const handleCommand = (cmd: string) => {
   .breadcrumb { font-size: 13px; }
   .breadcrumb strong { font-size: 14px; }
   .app-tabs { margin-left: 14px; margin-right: 12px; }
+  .tab-count { display: none; }
   .user-info { margin-right: 12px; }
   :deep(.el-main) { padding: 14px; }
 }

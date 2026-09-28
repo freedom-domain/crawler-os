@@ -89,12 +89,12 @@ defineEmits<{
 }
 
 .cursor-total {
-  color: #909399;
+  color: var(--ink-500);
   font-size: 13px;
 }
 
 .cursor-page {
-  color: #606266;
+  color: var(--ink-700);
   font-size: 13px;
   min-width: 56px;
   text-align: center;
@@ -106,7 +106,7 @@ defineEmits<{
 
 .empty {
   padding: 48px 0;
-  color: #909399;
+  color: var(--ink-500);
   text-align: center;
 }
 </style>

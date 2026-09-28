@@ -171,15 +171,15 @@ defineEmits<{
   align-items: center;
   gap: 12px;
   font-size: 13px;
-  color: #999;
+  color: var(--ink-500);
   flex-wrap: wrap;
 }
 
 .meta-tag {
-  background: #f0f0f0;
+  background: #eef2f5;
   padding: 2px 8px;
-  border-radius: 3px;
-  color: #666;
+  border-radius: 4px;
+  color: var(--ink-700);
 }
 
 .spider-tag {
@@ -192,7 +192,7 @@ defineEmits<{
 }
 
 .update-time {
-  color: #999;
+  color: var(--ink-500);
 }
 
 @media (max-width: 460px) {

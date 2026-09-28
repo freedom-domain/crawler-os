@@ -179,8 +179,8 @@ onMounted(() => {
 
 <style scoped>
 .pagination { margin-top: 18px; display: flex; justify-content: center; }
-.source-url { color: #2563eb; text-decoration: none; }
-.source-url:hover { text-decoration: underline; }
+.source-url { color: var(--teal); text-decoration: none; }
+.source-url:hover { color: var(--teal-dark); text-decoration: underline; }
 .tag { margin-right: 6px; margin-bottom: 4px; cursor: pointer; }
 .tag-empty { color: #0f9f9a; cursor: pointer; }
 </style>

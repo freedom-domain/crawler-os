@@ -595,9 +595,9 @@ const showPreviewContent = async (row: any) => {
   }
 }
 
-const togglePreviewResourceLocalization = (enabled: boolean) => {
+const togglePreviewResourceLocalization = (enabled: string | number | boolean) => {
   if (!previewSource.value || previewSource.value === '加载失败') return
-  previewHtml.value = resolvePreviewHtml(previewSource.value, previewBaseUrl.value, enabled)
+  previewHtml.value = resolvePreviewHtml(previewSource.value, previewBaseUrl.value, Boolean(enabled))
 }
 
 const showDetail = async (row: any) => {
