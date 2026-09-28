@@ -1,6 +1,5 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
 
@@ -40,10 +39,5 @@ document.addEventListener('mouseup', () => {
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-
-// 图标全局注册（模板中以字符串引用图标名，如 prefix-icon="User"）
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
 
 app.mount('#app')

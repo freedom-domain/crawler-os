@@ -3,7 +3,12 @@
     <a class="result-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
     <h3 class="result-title" @click.prevent="$emit('preview', row)">
       <span v-html="row.titleHl || row.title"></span>
-      <span v-if="row.images?.length" class="result-image-count">图片 <strong>{{ row.images.length }}</strong> 张</span>
+      <button
+        v-if="row.images?.length"
+        type="button"
+        class="result-image-count"
+        @click.stop="$emit('images', row)"
+      >图片 <strong>{{ row.images.length }}</strong> 张</button>
     </h3>
     <div class="result-content-line">
       <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
@@ -32,6 +37,7 @@ defineProps<{
 defineEmits<{ 
   (e: 'preview', row: any): void
   (e: 'detail', row: any): void
+  (e: 'images', row: any): void
 }>()
 </script>
 
@@ -72,6 +78,7 @@ defineEmits<{
 
 .result-image-count {
   display: inline-block;
+  font-family: inherit;
   margin-left: 10px;
   padding: 2px 9px;
   border: 1px solid #b7e7dc;
@@ -80,8 +87,19 @@ defineEmits<{
   color: #087f70;
   font-size: 12px;
   font-weight: 600;
+  line-height: inherit;
   vertical-align: middle;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.result-image-count:hover {
+  background: #d7f1e9;
+}
+
+.result-image-count:focus-visible {
+  outline: 2px solid #087f70;
+  outline-offset: 2px;
 }
 
 .result-image-count strong {

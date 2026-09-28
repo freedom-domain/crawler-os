@@ -468,6 +468,8 @@ const handleCommand = (cmd: string) => {
 .tab-count { margin-left: 10px; padding: 2px 9px; border-radius: 999px; color: #087f7d; background: #e2f6f3; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .user-info { flex: 0 0 auto; margin-left: 0; margin-right: 24px; }
 .user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
+:deep(.user-info .el-tooltip__trigger:hover) { outline: none; border-color: transparent; box-shadow: none; }
+:deep(.user-info .el-tooltip__trigger:focus-visible) { outline: 2px solid #0f9f9a; outline-offset: 3px; }
 .user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
 .user-label { color: #243b53; font-size: 14px; font-weight: 600; }
 :deep(.el-main) { flex: 1 1 auto; min-height: 0; padding: 32px; background: transparent; overflow: auto; }

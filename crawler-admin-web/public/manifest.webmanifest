@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "CrawlerOS",
+  "short_name": "CrawlerOS",
+  "description": "CrawlerOS 爬虫管理平台",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f3f7f8",
+  "theme_color": "#102644",
+  "icons": [
+    {
+      "src": "/crawleros-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

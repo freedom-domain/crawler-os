@@ -7,13 +7,18 @@
           <div class="detail-url-row">
             <a v-if="detail.url" class="detail-url" :href="detail.url" target="_blank" rel="noopener noreferrer">{{ detail.url }}</a>
             <span v-else class="detail-url">暂无来源地址</span>
-            <span class="detail-time">抓取：{{ formatTime(detail.crawlTime) || '未知' }} | 更新：{{ formatTime(detail.updateTime) || '未更新' }}</span>
           </div>
-          <div class="detail-badges">
-            <span v-if="detail.spiderName" class="meta-tag">{{ detail.spiderName }}</span>
-            <span v-if="detail.spiderGroup" class="meta-tag group-tag">{{ detail.spiderGroup }}</span>
-            <span class="detail-meta-item">来源：{{ detail.sourceType || '未知' }}</span>
-            <span class="detail-meta-item">标签：{{ detail.tags?.length ? detail.tags.join(' / ') : '无' }}</span>
+          <div class="detail-info-row">
+            <div class="detail-time-row">
+              <span class="detail-time"><span class="detail-time-label">抓取</span>{{ formatTime(detail.crawlTime) || '未知' }}</span>
+              <span class="detail-time"><span class="detail-time-label">更新</span>{{ formatTime(detail.updateTime) || '未更新' }}</span>
+            </div>
+            <div class="detail-badges">
+              <span v-if="detail.spiderName" class="meta-tag">{{ detail.spiderName }}</span>
+              <span v-if="detail.spiderGroup" class="meta-tag group-tag">{{ detail.spiderGroup }}</span>
+              <span class="detail-meta-item">来源：{{ detail.sourceType || '未知' }}</span>
+              <span class="detail-meta-item">标签：{{ detail.tags?.length ? detail.tags.join(' / ') : '无' }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -64,13 +69,16 @@ const visible = computed({
 <style scoped>
 .detail-dialog-body { min-height: 220px; }
 .detail-content { display: flex; flex-direction: column; gap: 18px; }
-.detail-title-row { display: flex; align-items: flex-start; gap: 12px; padding: 0; }
-.detail-header-meta { display: flex; flex: 1 1 58%; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 8px; min-width: 0; color: #627d98; font-size: 12px; }
-.detail-url-row { display: flex; flex: 1 1 320px; align-items: baseline; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-.detail-dialog-title { flex: 1 1 42%; min-width: 0; color: #102a43; font-size: 20px; font-weight: 700; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.detail-url { color: #087f7d; font-size: 13px; word-break: break-all; }
-.detail-time { color: var(--ink-500); font-size: 12px; white-space: nowrap; }
-.detail-badges { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; }
+.detail-title-row { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 0; }
+.detail-header-meta { display: flex; width: 100%; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; color: #627d98; font-size: 12px; }
+.detail-url-row { min-width: 0; padding: 8px 10px; border-radius: 6px; background: #f5f8fa; text-align: center; }
+.detail-dialog-title { width: 100%; min-width: 0; color: #102a43; font-size: 20px; font-weight: 700; line-height: 1.4; text-align: center; overflow-wrap: anywhere; }
+.detail-url { display: block; color: #087f7d; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.detail-info-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 16px; }
+.detail-time-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; }
+.detail-time { display: inline-flex; flex-wrap: wrap; gap: 4px; color: var(--ink-500); font-size: 12px; }
+.detail-time-label { color: #627d98; font-weight: 600; }
+.detail-badges { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px; }
 .detail-meta-item { color: #627d98; }
 .meta-tag { background: #f1f3f4; padding: 3px 8px; border-radius: 4px; color: #5f6368; font-size: 12px; font-weight: 500; }
 .group-tag { background: #e8f0fe; color: #1967d2; }
@@ -81,10 +89,6 @@ const visible = computed({
 .empty { text-align: center; color: var(--ink-500); padding: 40px 0; font-size: 14px; }
 
 @media (max-width: 720px) {
-  .detail-title-row { flex-direction: column; }
-  .detail-dialog-title { flex-basis: auto; width: 100%; white-space: normal; }
-  .detail-header-meta { justify-content: flex-start; }
-  .detail-badges { justify-content: flex-start; }
   .detail-images { gap: 8px; }
   .detail-image { width: calc(50% - 4px); height: 120px; }
 }

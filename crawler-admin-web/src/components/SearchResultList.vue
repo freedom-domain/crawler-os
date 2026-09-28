@@ -5,6 +5,7 @@
     :row="row"
     @preview="$emit('preview', $event)"
     @detail="$emit('detail', $event)"
+    @images="$emit('images', $event)"
   >
     <template #images>
       <div v-if="row.images && row.images.length" class="result-images">

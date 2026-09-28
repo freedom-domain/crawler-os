@@ -110,7 +110,7 @@
               </el-button>
             </div>
             <el-button size="small" text type="primary" @click="toggleFullscreen">
-              <el-icon><component :is="isFullscreen ? 'Minus' : 'FullScreen'" /></el-icon>
+              <el-icon><component :is="isFullscreen ? Minus : FullScreen" /></el-icon>
               {{ isFullscreen ? '退出全屏' : '全屏' }}
             </el-button>
           </div>

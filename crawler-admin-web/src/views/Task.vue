@@ -2,12 +2,12 @@
   <el-card>
     <el-form :inline="true" @submit.prevent>
       <el-form-item>
-        <el-select v-model="spiderFilter" placeholder="全部爬虫" clearable style="width: 180px">
+        <el-select v-model="spiderFilter" placeholder="全部爬虫" clearable style="width: 180px" @change="onFilterChange">
           <el-option v-for="s in spiders" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 160px">
+        <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 160px" @change="onFilterChange">
           <el-option label="运行中" value="RUNNING" />
           <el-option label="排队中" value="PENDING" />
           <el-option label="取消中" value="CANCELING" />
@@ -179,7 +179,7 @@
         <div class="log-dialog-header">
           <span class="log-dialog-title">任务日志{{ currentTask ? `（任务 #${currentTask.taskId ?? currentTask.id}${currentTask.spiderName ? ' · ' + currentTask.spiderName : ''}）` : '' }}</span>
           <el-button size="small" text type="primary" @click="logFullscreen = !logFullscreen">
-            <el-icon><component :is="logFullscreen ? 'Minus' : 'FullScreen'" /></el-icon>
+            <el-icon><component :is="logFullscreen ? Minus : FullScreen" /></el-icon>
             {{ logFullscreen ? '退出放大' : '放大' }}
           </el-button>
         </div>
@@ -248,7 +248,7 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
-import { Refresh, Search, VideoPause, Document, Delete } from '@element-plus/icons-vue'
+import { Refresh, Search, VideoPause, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 
 const router = useRouter()
@@ -412,6 +412,11 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const onFilterChange = () => {
+  page.value = 1
+  loadData()
 }
 
 const resetFilters = () => {
