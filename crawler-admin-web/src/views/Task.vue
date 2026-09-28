@@ -628,15 +628,6 @@ onUnmounted(() => {
 }
 
 @media (max-width: 767px) {
-  :deep(.concurrency-toolbar-item) { margin-left: 0 !important; }
-  .refresh-toolbar { justify-content: flex-end; }
-}
-.refresh-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; white-space: nowrap; }
-.refresh-interval-select { width: 90px; }
-.task-row-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.task-row-actions .el-button + .el-button { margin-left: 0; }
-
-@media (max-width: 767px) {
   .task-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .task-toolbar :deep(.el-form-item) { width: 100%; margin: 0; }
   .task-toolbar :deep(.el-form-item__content) { width: 100%; min-width: 0; }
