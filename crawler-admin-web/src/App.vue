@@ -73,6 +73,11 @@ button, input, textarea, select { font: inherit; }
 .table-row-actions .el-button + .el-button { margin-left: 0; }
 .table-action-popper .el-dropdown-menu__item.is-danger:not(.is-disabled) { color: var(--el-color-danger); }
 .table-action-popper .el-dropdown-menu__item.is-danger:not(.is-disabled):hover { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
+.el-message-box__wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .el-message-box {
   width: min(420px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
@@ -88,14 +93,15 @@ button, input, textarea, select { font: inherit; }
 }
 .el-message-box__header {
   margin-right: 0;
-  padding: 23px 24px 7px;
+  padding: 24px 28px 0;
+  position: relative;
 }
-.el-message-box__title { color: var(--ink-950); font-size: 17px; font-weight: 700; }
+.el-message-box__title { color: var(--ink-950); font-size: 16px; font-weight: 700; letter-spacing: .3px; }
 .el-message-box__headerbtn {
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
+  top: 16px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   transition: background-color .15s ease;
 }
@@ -104,42 +110,63 @@ button, input, textarea, select { font: inherit; }
 .el-message-box__content {
   max-height: min(55vh, 420px);
   overflow-y: auto;
-  padding: 12px 24px 22px;
+  padding: 16px 28px 28px;
   color: var(--ink-700);
 }
-.el-message-box__container { align-items: flex-start; gap: 12px; }
+.el-message-box__container {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
 .el-message-box__status {
   display: grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
   place-items: center;
-  margin: 1px 0 0;
-  border-radius: 10px;
+  margin: 0;
+  border-radius: 12px;
   background: #fff6e8;
   color: #c48619;
-  font-size: 19px;
+  font-size: 21px;
 }
 .el-message-box__status.el-message-box-icon--primary { background: #e9f6f5; color: var(--teal); }
 .el-message-box__status.el-message-box-icon--success { background: #eaf7f0; color: #198b60; }
 .el-message-box__status.el-message-box-icon--info { background: #edf3fc; color: #5279b7; }
 .el-message-box__status.el-message-box-icon--error { background: #fdf0ee; color: #c9574d; }
-.el-message-box__message { flex: 1; min-width: 0; padding-top: 2px; color: #526579; font-size: 14px; }
-.el-message-box__message p { line-height: 1.7; overflow-wrap: anywhere; }
+.el-message-box__message {
+  flex: 1;
+  min-width: 0;
+  padding-top: 6px;
+  color: #4a5b6e;
+  font-size: 14px;
+  line-height: 1.8;
+}
+.el-message-box__message p {
+  margin: 0;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  letter-spacing: .1px;
+}
+.el-message-box__message p + p {
+  margin-top: 10px;
+}
 .el-message-box__btns {
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 22px 18px;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 24px 20px;
   border-top: 1px solid #eef2f4;
   background: #fafcfc;
 }
 .el-message-box__btns .el-button + .el-button { margin-left: 0; }
 .el-message-box__btns .el-button {
-  min-width: 76px;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 7px;
+  min-width: 88px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 8px;
   font-size: 13px;
+  font-weight: 600;
 }
 .el-message-box__btns .el-button:not(.el-button--primary):not(.el-button--danger) {
   --el-button-text-color: #5d7082;
@@ -239,9 +266,10 @@ button, input, textarea, select { font: inherit; }
   .el-card__body { padding: 14px; }
   /* 消息提示 */
   .el-message { min-width: 0; margin-left: auto; margin-right: auto; width: max-content; max-width: calc(100vw - 32px); }
-  .el-message-box__header { padding: 21px 20px 7px; }
-  .el-message-box__content { padding: 10px 20px 18px; }
-  .el-message-box__btns { padding: 12px 18px 16px; }
+  .el-message-box__header { padding: 20px 18px 0; }
+  .el-message-box__content { padding: 14px 18px 22px; }
+  .el-message-box__container { gap: 12px; }
+  .el-message-box__btns { padding: 14px 18px 18px; gap: 10px; }
   .el-message-box__btns .el-button { min-width: 0; flex: 1; margin: 0; }
 }
 .el-menu--popup {

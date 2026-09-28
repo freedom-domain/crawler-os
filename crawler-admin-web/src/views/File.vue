@@ -114,7 +114,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { Refresh, View, Download, Delete } from '@element-plus/icons-vue'
 import { filePage, spiderPage } from '@/api'
 import request from '@/api/request'
@@ -252,7 +253,7 @@ const deleteRows = async (rows: any[]) => {
 
 const remove = async (row: any) => {
   try {
-    await ElMessageBox.confirm('确定删除该文件？', '提示', { type: 'warning' })
+    if (!await confirm('确定删除该文件？', { danger: true })) return
     deleting.value = true
     await request.delete('/file', {
       params: { bucket: row.bucket, objectName: row.objectName }
@@ -275,7 +276,7 @@ const handleRowAction = (command: string, row: any) => {
 const removeSelected = async () => {
   const rows = [...selectedRows.value]
   try {
-    await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 个文件？`, '提示', { type: 'warning' })
+    if (!await confirm(`确定删除选中的 ${rows.length} 个文件？`, { danger: true })) return
     deleting.value = true
     await deleteRows(rows)
     selectedRows.value = []
@@ -291,7 +292,7 @@ const removeSelected = async () => {
 const removeByCondition = async () => {
   if (!hasFilters.value) return
   try {
-    await ElMessageBox.confirm('确定删除当前筛选条件下的全部文件？此操作不可恢复。', '危险操作', { type: 'warning' })
+    if (!await confirm('确定删除当前筛选条件下的全部文件？此操作不可恢复。', { title: '危险操作', confirmText: '删除全部', danger: true })) return
     deleting.value = true
     const res: any = await request.delete('/file/condition', {
       params: {

@@ -81,7 +81,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import {
   roleList, roleCreate, roleUpdate, roleDelete,
   rolePermissions, roleAssignPermissions, permissionTree
@@ -169,13 +170,15 @@ const saveForm = async () => {
   }
 }
 
-const handleDelete = (row: any) => {
-  ElMessageBox.confirm(`确定删除角色「${row.name}」吗？`, '提示', { type: 'warning' })
-    .then(async () => {
-      await roleDelete(row.id)
-      ElMessage.success('删除成功')
-      loadData()
-    }).catch(() => {})
+const handleDelete = async (row: any) => {
+  if (!await confirm(`确定删除角色「${row.name}」吗？`, { title: '删除确认', danger: true })) return
+  try {
+    await roleDelete(row.id)
+    ElMessage.success('删除成功')
+    loadData()
+  } catch {
+    ElMessage.error('删除失败')
+  }
 }
 
 const openAssign = async (row: any) => {

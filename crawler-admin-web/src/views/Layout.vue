@@ -103,7 +103,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
-import { ElIcon, ElSubMenu, ElMenuItem, ElMessageBox } from 'element-plus'
+import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -356,20 +357,16 @@ const currentTitle = computed(() => {
   return findTitle(menuList.value) || ''
 })
 
-const handleCommand = (cmd: string) => {
+const handleCommand = async (cmd: string) => {
   if (cmd === 'profile') {
     router.push('/profile')
   } else if (cmd === 'password') {
     pwdDialogVisible.value = true
   } else if (cmd === 'logout') {
-    ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }).then(() => {
+    if (await confirm('确定要退出登录吗？')) {
       userStore.logout()
       router.replace('/login')
-    }).catch(() => {})
+    }
   }
 }
 </script>

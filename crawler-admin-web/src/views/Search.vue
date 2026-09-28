@@ -177,7 +177,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import SearchResultList from '@/components/SearchResultList.vue'
 import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
 import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
@@ -645,11 +646,7 @@ const toggleFavorite = async (row: any, shouldFavorite: boolean) => {
 const handleRerun = async (row: any) => {
   if (!row.spiderId || !row.url) return
   try {
-    await ElMessageBox.confirm(`确定重新爬取该记录？\n${row.url}`, '重新爬取', {
-      type: 'warning',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消'
-    })
+    if (!await confirm(`确定重新爬取该记录？\n${row.url}`, { title: '重新爬取' })) return
     const res: any = await spiderRerun(row.spiderId, row.url)
     ElMessage.success(res.data?.status === 'PENDING' ? '重新爬取任务已加入等待队列' : '重新爬取任务已派发')
   } catch (error: any) {
@@ -660,7 +657,7 @@ const handleRerun = async (row: any) => {
 
 const handleDelete = async (row: any) => {
   try {
-    await ElMessageBox.confirm('确定删除该条数据?', '警告', { type: 'warning' })
+    if (!await confirm('确定删除该条数据？', { title: '删除确认', danger: true })) return
   } catch {
     return
   }

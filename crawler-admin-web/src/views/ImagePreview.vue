@@ -150,7 +150,8 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { dictChildren, searchDeleteImage, searchDetail } from '@/api'
 import { useUserStore } from '@/stores/user'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
@@ -428,11 +429,7 @@ const deleteSelectedImage = async () => {
   const objectName = imageObjects.value[index]
   if (!id || !objectName) return
   try {
-    await ElMessageBox.confirm('确定删除选定的图片吗？删除后无法恢复。', '删除图片', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
+    if (!await confirm('确定删除选定的图片吗？删除后无法恢复。', { title: '删除图片', confirmText: '删除', danger: true })) return
   } catch {
     return
   }

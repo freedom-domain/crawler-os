@@ -107,7 +107,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import draggable from 'vuedraggable'
 import { dictTree, dictCreate, dictUpdate, dictDelete } from '@/api'
 import { Plus, Search, Edit, Delete } from '@element-plus/icons-vue'
@@ -262,7 +263,7 @@ const handleDelete = async (row: any) => {
     ? `「${row.label}」下存在 ${row.children.length} 个子项，删除分类不会级联删除子项。确定继续？`
     : `确定删除「${row.label}」?`
   try {
-    await ElMessageBox.confirm(msg, '警告', { type: 'warning' })
+    if (!await confirm(msg, { title: '删除确认', danger: true })) return
   } catch {
     return
   }

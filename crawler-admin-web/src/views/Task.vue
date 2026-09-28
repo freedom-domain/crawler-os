@@ -223,7 +223,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { useRouter } from 'vue-router'
 import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
 import { Refresh, Search, VideoPause, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
@@ -272,7 +273,7 @@ const handleSelectionChange = (rows: any[]) => {
 const handleBatchDelete = async () => {
   if (selectedRows.value.length === 0) return
   try {
-    await ElMessageBox.confirm(`确定删除选中的 ${selectedRows.value.length} 个任务吗？`, '提示', { type: 'warning' })
+    if (!await confirm(`确定删除选中的 ${selectedRows.value.length} 个任务吗？`, { title: '批量删除', danger: true })) return
   } catch {
     return
   }
@@ -503,12 +504,7 @@ const loadLogs = async () => {
 
 const handleCancel = async (row: any) => {
   try {
-    await ElMessageBox.confirm('取消后任务会尽快停止，已经完成的数据不会回滚。', '确认取消任务', {
-      type: 'warning',
-      confirmButtonText: '确认取消',
-      cancelButtonText: '继续运行',
-      confirmButtonClass: 'el-button--danger'
-    })
+    if (!await confirm('取消后任务会尽快停止，已经完成的数据不会回滚。', { title: '取消任务', confirmText: '确认取消', cancelText: '继续运行', danger: true })) return
   } catch {
     return
   }
@@ -524,7 +520,7 @@ const handleCancel = async (row: any) => {
 
 const handleDelete = async (row: any) => {
   try {
-    await ElMessageBox.confirm('确定删除该任务及其日志吗？', '提示', { type: 'warning' })
+    if (!await confirm('确定删除该任务及其日志吗？', { title: '删除确认', danger: true })) return
   } catch {
     return
   }

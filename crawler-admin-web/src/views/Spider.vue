@@ -226,7 +226,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, VideoPlay, VideoPause, EditPen, Delete, FolderOpened } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
@@ -543,9 +544,21 @@ const handleRun = async (row: any) => {
   row._running = true
   try {
     const res: any = await spiderRun(row.id)
-    ElMessage.success(res.data?.status === 'PENDING' ? '任务已加入等待队列' : '任务已派发')
-  } catch {
-    // The request interceptor already displays the backend error message.
+    const status = res.data?.status
+    const isPending = status === 'PENDING'
+    ElNotification({
+      title: isPending ? '任务已加入等待队列' : '任务已派发',
+      message: isPending ? '爬虫将按并发策略排队执行' : '爬虫已开始执行',
+      type: isPending ? 'info' : 'success',
+      duration: 5000
+    })
+  } catch (e) {
+    ElNotification({
+      title: '任务派发失败',
+      message: (e as any)?.message || '未知错误',
+      type: 'error',
+      duration: 5000
+    })
   } finally {
     row._running = false
   }
@@ -553,7 +566,7 @@ const handleRun = async (row: any) => {
 
 const handleDelete = async (row: any) => {
   try {
-    await ElMessageBox.confirm('确定删除该爬虫?', '警告', { type: 'warning' })
+    if (!await confirm('确定删除该爬虫？', { title: '删除确认', danger: true })) return
   } catch {
     return
   }
@@ -568,16 +581,10 @@ const handleDelete = async (row: any) => {
 
 const handleClearContent = async (row: any) => {
   try {
-    await ElMessageBox.confirm(
+    if (!await confirm(
       `确定清空爬虫「${row.name}」的所有已采集内容吗？此操作将删除该爬虫在 ES 中的内容、MinIO 文件及文件元数据，且无法恢复。`,
-      '清空爬虫内容',
-      {
-        type: 'warning',
-        confirmButtonText: '清空内容',
-        cancelButtonText: '取消',
-        distinguishCancelAndClose: true
-      }
-    )
+      { title: '清空内容', confirmText: '清空内容', danger: true }
+    )) return
   } catch {
     return
   }

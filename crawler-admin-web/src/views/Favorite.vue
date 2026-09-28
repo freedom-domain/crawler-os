@@ -71,7 +71,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { Refresh, Edit, Delete } from '@element-plus/icons-vue'
 import { dictChildren, favoriteDelete, favoritePage, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
@@ -165,7 +166,7 @@ const handleTagsSaved = (tags: string[]) => {
 
 const remove = async (row: any) => {
   try {
-    await ElMessageBox.confirm('确定取消收藏该内容吗？', '提示', { type: 'warning' })
+    if (!await confirm('确定取消收藏该内容吗？')) return
     await favoriteDelete(row.id)
     ElMessage.success('已取消收藏')
     await loadData()

@@ -82,7 +82,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { permissionTree, permissionCreate, permissionUpdate, permissionDelete } from '@/api'
 import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection, Rank, ArrowRight, Edit, Delete, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
 import TableRowActions from '@/components/TableRowActions.vue'
@@ -217,13 +218,15 @@ const saveForm = async () => {
   }
 }
 
-const handleDelete = (row: any) => {
-  ElMessageBox.confirm(`确定删除权限「${row.name}」吗？`, '提示', { type: 'warning' })
-    .then(async () => {
-      await permissionDelete(row.id)
-      ElMessage.success('删除成功')
-      loadData()
-    }).catch(() => {})
+const handleDelete = async (row: any) => {
+  if (!await confirm(`确定删除权限「${row.name}」吗？`, { title: '删除确认', danger: true })) return
+  try {
+    await permissionDelete(row.id)
+    ElMessage.success('删除成功')
+    loadData()
+  } catch {
+    ElMessage.error('删除失败')
+  }
 }
 
 const moveUp = async (row: any) => {

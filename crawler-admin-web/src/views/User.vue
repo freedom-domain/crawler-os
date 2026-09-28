@@ -116,7 +116,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { userPage, userCreate, userUpdate, userDelete, roles } from '@/api'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirm } from '@/utils/confirm'
 import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 
@@ -214,14 +215,15 @@ const saveEdit = async () => {
   }
 }
 
-const handleDelete = (row: any) => {
-  ElMessageBox.confirm(`确定删除用户「${row.username}」吗？`, '提示', {
-    type: 'warning'
-  }).then(async () => {
+const handleDelete = async (row: any) => {
+  if (!await confirm(`确定删除用户「${row.username}」吗？`, { title: '删除确认', danger: true })) return
+  try {
     await userDelete(row.id)
     ElMessage.success('删除成功')
     loadData()
-  }).catch(() => {})
+  } catch {
+    ElMessage.error('删除失败')
+  }
 }
 
 const handleRowAction = (command: string, row: any) => {
