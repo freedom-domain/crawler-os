@@ -1,12 +1,12 @@
 <template>
   <el-card>
-    <el-form :inline="true" @submit.prevent>
-      <el-form-item>
+    <el-form class="task-toolbar" :inline="true" @submit.prevent>
+      <el-form-item class="task-filter-item">
         <el-select v-model="spiderFilter" placeholder="全部爬虫" clearable style="width: 180px" @change="onFilterChange">
           <el-option v-for="s in spiders" :key="s.id" :label="s.name" :value="s.id" />
         </el-select>
       </el-form-item>
-      <el-form-item>
+      <el-form-item class="task-filter-item">
         <el-select v-model="statusFilter" placeholder="全部状态" clearable style="width: 160px" @change="onFilterChange">
           <el-option label="运行中" value="RUNNING" />
           <el-option label="排队中" value="PENDING" />
@@ -16,19 +16,19 @@
           <el-option label="已取消" value="CANCELED" />
         </el-select>
       </el-form-item>
-      <el-form-item>
+      <el-form-item class="task-query-actions">
         <el-button type="primary" @click="loadData" :icon="Search">查询</el-button>
         <el-button @click="resetFilters">重置</el-button>
       </el-form-item>
-      <el-form-item>
+      <el-form-item class="task-batch-action">
         <el-button type="danger" plain @click="handleBatchDelete" :disabled="selectedRows.length === 0">
           批量删除<span v-if="selectedRows.length">（{{ selectedRows.length }}）</span>
         </el-button>
       </el-form-item>
-      <el-form-item class="concurrency-toolbar-item">
+      <el-form-item class="concurrency-toolbar-item task-concurrency-action">
         <el-button :loading="concurrencyLoading" @click="openConcurrencyDialog">并发策略</el-button>
       </el-form-item>
-      <el-form-item class="refresh-toolbar-item">
+      <el-form-item class="refresh-toolbar-item task-refresh-action">
         <div class="refresh-toolbar">
           <el-switch v-model="autoRefresh" active-text="自动刷新" />
           <el-select
@@ -92,7 +92,7 @@
         <el-table-column prop="imageFailCount" label="失败" min-width="70" align="center"  resizable />
         <el-table-column prop="imageExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="操作" width="230" fixed="right" resizable>
+      <el-table-column label="操作" width="140" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <div class="task-row-actions">
             <el-button
@@ -630,5 +630,25 @@ onUnmounted(() => {
 @media (max-width: 767px) {
   :deep(.concurrency-toolbar-item) { margin-left: 0 !important; }
   .refresh-toolbar { justify-content: flex-end; }
+}
+.refresh-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; white-space: nowrap; }
+.refresh-interval-select { width: 90px; }
+.task-row-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.task-row-actions .el-button + .el-button { margin-left: 0; }
+
+@media (max-width: 767px) {
+  .task-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .task-toolbar :deep(.el-form-item) { width: 100%; margin: 0; }
+  .task-toolbar :deep(.el-form-item__content) { width: 100%; min-width: 0; }
+  .task-filter-item :deep(.el-select) { width: 100% !important; }
+  .task-query-actions,
+  .task-refresh-action { grid-column: 1 / -1; }
+  .task-query-actions :deep(.el-form-item__content) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .task-query-actions :deep(.el-button + .el-button) { margin-left: 0; }
+  .task-query-actions :deep(.el-button),
+  .task-batch-action :deep(.el-button),
+  .task-concurrency-action :deep(.el-button) { width: 100%; margin-left: 0; }
+  .task-refresh-action :deep(.el-form-item__content) { justify-content: space-between; }
+  .refresh-toolbar { width: 100%; justify-content: space-between; gap: 8px; }
 }
 </style>
