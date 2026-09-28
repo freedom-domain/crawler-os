@@ -94,7 +94,7 @@
       </el-table-column>
       <el-table-column label="操作" width="140" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="task-row-actions">
+          <div class="table-row-actions">
             <el-button
               v-if="row.status === 'RUNNING' || row.status === 'PENDING'"
               size="small"
@@ -600,8 +600,6 @@ onUnmounted(() => {
 .refresh-interval-select { width: 90px; }
 :deep(.concurrency-toolbar-item) { margin-left: auto !important; }
 
-.task-row-actions { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.task-row-actions .el-button + .el-button { margin-left: 0; }
 .task-status-tag { border: 0; font-weight: 600; }
 .task-status-content { display: inline-flex; align-items: center; gap: 7px; }
 .task-status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }

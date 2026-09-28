@@ -67,11 +67,13 @@
         <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="bucket" label="存储桶" min-width="120"  resizable />
-        <el-table-column label="操作" width="190" fixed="right" resizable>
+        <el-table-column label="操作" width="190" fixed="right" align="center" resizable>
           <template #default="{ row }">
-            <el-button v-if="canPreview(row)" type="primary" link size="small" @click="preview(row)">预览</el-button>
-            <el-button type="primary" link size="small" @click="download(row)">下载</el-button>
-            <el-button type="danger" link size="small" :disabled="deleting" @click="remove(row)">删除</el-button>
+            <div class="table-row-actions">
+              <el-button v-if="canPreview(row)" type="primary" link size="small" @click="preview(row)">预览</el-button>
+              <el-button type="primary" link size="small" @click="download(row)">下载</el-button>
+              <el-button type="danger" link size="small" :disabled="deleting" @click="remove(row)">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>

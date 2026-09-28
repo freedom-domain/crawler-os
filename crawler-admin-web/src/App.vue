@@ -64,6 +64,15 @@ button, input, textarea, select { font: inherit; }
 .el-button { border-radius: 7px; font-weight: 600; }
 .el-button--small { border-radius: 6px; }
 .el-button.is-link { font-weight: 600; }
+.table-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  white-space: nowrap;
+}
+.table-row-actions .el-button + .el-button { margin-left: 0; }
 .el-button--primary {
   --el-button-bg-color: var(--teal);
   --el-button-border-color: var(--teal);

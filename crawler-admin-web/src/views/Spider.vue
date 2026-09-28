@@ -95,57 +95,59 @@
         </template>
       </el-table-column>
       <el-table-column prop="schedule" label="调度" min-width="160" resizable />
-      <el-table-column label="操作" width="120" fixed="right" resizable>
+      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <el-dropdown
-            trigger="click"
-            popper-class="spider-action-popper"
-            @command="(cmd: string) => handleCommand(cmd, row)"
-          >
-            <el-button size="small" type="primary">
-              操作 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="run" :disabled="row._running">
-                  <span class="spider-action-item">
-                    <el-icon><VideoPlay /></el-icon>
-                    执行
-                  </span>
-                </el-dropdown-item>
-                <el-dropdown-item command="files">
-                  <span class="spider-action-item">
-                    <el-icon><FolderOpened /></el-icon>
-                    查看文件
-                  </span>
-                </el-dropdown-item>
-                <el-dropdown-item command="toggle" :disabled="row.status !== 1 && !row.schedule?.trim()">
-                  <span class="spider-action-item">
-                    <el-icon><component :is="row.status === 1 ? VideoPause : VideoPlay" /></el-icon>
-                    {{ row.status === 1 ? '停止定时任务' : '启动定时任务' }}
-                  </span>
-                </el-dropdown-item>
-                <el-dropdown-item command="edit">
-                  <span class="spider-action-item">
-                    <el-icon><EditPen /></el-icon>
-                    编辑
-                  </span>
-                </el-dropdown-item>
-                <el-dropdown-item command="clear-content" divided :disabled="row._clearingContent">
-                  <span class="spider-action-item">
-                    <el-icon><Delete /></el-icon>
-                    清空内容
-                  </span>
-                </el-dropdown-item>
-                <el-dropdown-item command="delete" divided class="spider-delete-action">
-                  <span class="spider-action-item">
-                    <el-icon><Delete /></el-icon>
-                    删除
-                  </span>
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <div class="table-row-actions">
+            <el-dropdown
+              trigger="click"
+              popper-class="spider-action-popper"
+              @command="(cmd: string) => handleCommand(cmd, row)"
+            >
+              <el-button size="small" type="primary">
+                操作 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="run" :disabled="row._running">
+                    <span class="spider-action-item">
+                      <el-icon><VideoPlay /></el-icon>
+                      执行
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="files">
+                    <span class="spider-action-item">
+                      <el-icon><FolderOpened /></el-icon>
+                      查看文件
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="toggle" :disabled="row.status !== 1 && !row.schedule?.trim()">
+                    <span class="spider-action-item">
+                      <el-icon><component :is="row.status === 1 ? VideoPause : VideoPlay" /></el-icon>
+                      {{ row.status === 1 ? '停止定时任务' : '启动定时任务' }}
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="edit">
+                    <span class="spider-action-item">
+                      <el-icon><EditPen /></el-icon>
+                      编辑
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="clear-content" divided :disabled="row._clearingContent">
+                    <span class="spider-action-item">
+                      <el-icon><Delete /></el-icon>
+                      清空内容
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item command="delete" divided class="spider-delete-action">
+                    <span class="spider-action-item">
+                      <el-icon><Delete /></el-icon>
+                      删除
+                    </span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

@@ -45,10 +45,12 @@
       <el-table-column prop="crawlTime" label="抓取时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.crawlTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right" resizable>
+      <el-table-column label="操作" width="180" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <el-button link type="primary" @click="openTagEditor(row)">编辑标签</el-button>
-          <el-button type="danger" link @click="remove(row)">取消收藏</el-button>
+          <div class="table-row-actions">
+            <el-button link type="primary" size="small" @click="openTagEditor(row)">编辑标签</el-button>
+            <el-button type="danger" link size="small" @click="remove(row)">取消收藏</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>

@@ -31,10 +31,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right" resizable>
+      <el-table-column label="操作" width="160" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+          <div class="table-row-actions">
+            <el-button type="primary" link size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>

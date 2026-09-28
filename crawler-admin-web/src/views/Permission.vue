@@ -24,14 +24,14 @@
       </el-table-column>
       <el-table-column prop="path" label="路由路径" min-width="160"  resizable />
       <el-table-column prop="sort" label="排序" min-width="80"  resizable />
-      <el-table-column label="操作" width="360" fixed="right" resizable>
+      <el-table-column label="操作" width="360" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="action-buttons">
-            <el-button type="primary" link @click="openCreate(row)">新增子项</el-button>
-            <el-button type="warning" link @click="openEdit(row)">编辑</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-            <el-button link @click="moveUp(row)" :disabled="isFirst(row)">上移</el-button>
-            <el-button link @click="moveDown(row)" :disabled="isLast(row)">下移</el-button>
+          <div class="table-row-actions">
+            <el-button type="primary" link size="small" @click="openCreate(row)">新增子项</el-button>
+            <el-button type="warning" link size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button link size="small" @click="moveUp(row)" :disabled="isFirst(row)">上移</el-button>
+            <el-button link size="small" @click="moveDown(row)" :disabled="isLast(row)">下移</el-button>
           </div>
         </template>
       </el-table-column>
@@ -296,7 +296,6 @@ onMounted(loadData)
 .permission-icon { color: #16a6a3; font-size: 18px; vertical-align: middle; }
 .icon-empty { color: #9fb3c8; font-size: 12px; }
 .icon-option { display: flex; align-items: center; gap: 8px; }
-.action-buttons { display: flex; flex-wrap: nowrap; gap: 4px; margin: 2px 0; }
 :deep(.permission-parent-row td:first-child .cell) {
   border-left: 3px solid #16a6a3;
   color: #1f4f5a;
