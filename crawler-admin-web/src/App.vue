@@ -68,11 +68,11 @@ button, input, textarea, select { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: nowrap;
-  gap: 4px;
   white-space: nowrap;
 }
 .table-row-actions .el-button + .el-button { margin-left: 0; }
+.table-action-popper .el-dropdown-menu__item.is-danger:not(.is-disabled) { color: var(--el-color-danger); }
+.table-action-popper .el-dropdown-menu__item.is-danger:not(.is-disabled):hover { color: var(--el-color-danger); background: var(--el-color-danger-light-9); }
 .el-button--primary {
   --el-button-bg-color: var(--teal);
   --el-button-border-color: var(--teal);

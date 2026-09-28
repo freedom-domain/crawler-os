@@ -31,12 +31,9 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="table-row-actions">
-            <el-button type="primary" link size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
-          </div>
+          <TableRowActions :items="rowActions" @command="command => handleRowAction(command, row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -120,7 +117,8 @@
 import { ref, onMounted } from 'vue'
 import { userPage, userCreate, userUpdate, userDelete, roles } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
+import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -128,6 +126,10 @@ const page = ref(1)
 const size = ref(15)
 const total = ref(0)
 const keyword = ref('')
+const rowActions = [
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, danger: true }
+]
 
 const editVisible = ref(false)
 const saving = ref(false)
@@ -220,6 +222,11 @@ const handleDelete = (row: any) => {
     ElMessage.success('删除成功')
     loadData()
   }).catch(() => {})
+}
+
+const handleRowAction = (command: string, row: any) => {
+  if (command === 'edit') openEdit(row)
+  if (command === 'delete') handleDelete(row)
 }
 
 const openCreate = () => {

@@ -24,15 +24,9 @@
       </el-table-column>
       <el-table-column prop="path" label="路由路径" min-width="160"  resizable />
       <el-table-column prop="sort" label="排序" min-width="80"  resizable />
-      <el-table-column label="操作" width="360" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="table-row-actions">
-            <el-button type="primary" link size="small" @click="openCreate(row)">新增子项</el-button>
-            <el-button type="warning" link size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
-            <el-button link size="small" @click="moveUp(row)" :disabled="isFirst(row)">上移</el-button>
-            <el-button link size="small" @click="moveDown(row)" :disabled="isLast(row)">下移</el-button>
-          </div>
+          <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -90,7 +84,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { permissionTree, permissionCreate, permissionUpdate, permissionDelete } from '@/api'
-import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection, Rank, ArrowRight } from '@element-plus/icons-vue'
+import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection, Rank, ArrowRight, Edit, Delete, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 
 const tree = ref<any[]>([])
 const loading = ref(false)
@@ -115,6 +110,13 @@ const iconOptions = [
   { value: 'Odometer', label: '仪表盘', icon: Odometer }
 ]
 const iconLibrary = Object.fromEntries(iconOptions.map(item => [item.value, item.icon]))
+const getRowActions = (row: any) => [
+  { command: 'create-child', label: '新增子项', icon: Plus },
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, danger: true },
+  { command: 'move-up', label: '上移', icon: ArrowUp, disabled: isFirst(row), divided: true },
+  { command: 'move-down', label: '下移', icon: ArrowDown, disabled: isLast(row) }
+]
 
 // 类型展示
 const typeLabel = (type: number) => (type === 0 ? '目录' : type === 1 ? '菜单' : '按钮')
@@ -258,6 +260,14 @@ const moveDown = async (row: any) => {
   }
   ElMessage.success('已下移')
   loadData()
+}
+
+const handleRowAction = (command: string, row: any) => {
+  if (command === 'create-child') openCreate(row)
+  if (command === 'edit') openEdit(row)
+  if (command === 'delete') handleDelete(row)
+  if (command === 'move-up') moveUp(row)
+  if (command === 'move-down') moveDown(row)
 }
 
 const getSiblings = (row: any): any[] => {

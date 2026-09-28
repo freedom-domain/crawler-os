@@ -67,13 +67,9 @@
         <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="bucket" label="存储桶" min-width="120"  resizable />
-        <el-table-column label="操作" width="190" fixed="right" align="center" resizable>
+        <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
           <template #default="{ row }">
-            <div class="table-row-actions">
-              <el-button v-if="canPreview(row)" type="primary" link size="small" @click="preview(row)">预览</el-button>
-              <el-button type="primary" link size="small" @click="download(row)">下载</el-button>
-              <el-button type="danger" link size="small" :disabled="deleting" @click="remove(row)">删除</el-button>
-            </div>
+            <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
           </template>
         </el-table-column>
       </el-table>
@@ -119,10 +115,11 @@
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, View, Download, Delete } from '@element-plus/icons-vue'
 import { filePage, spiderPage } from '@/api'
 import request from '@/api/request'
 import { formatDateTime } from '@/utils/dateTime'
+import TableRowActions from '@/components/TableRowActions.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -215,6 +212,12 @@ const download = (row: any) => {
 
 const canPreview = (row: any) => row.category === 'image' || row.contentType?.startsWith('image/')
 
+const getRowActions = (row: any) => [
+  ...(canPreview(row) ? [{ command: 'preview', label: '预览', icon: View }] : []),
+  { command: 'download', label: '下载', icon: Download },
+  { command: 'delete', label: '删除', icon: Delete, disabled: deleting.value, danger: true }
+]
+
 const preview = async (row: any) => {
   previewRow.value = row
   previewVisible.value = true
@@ -261,6 +264,12 @@ const remove = async (row: any) => {
   } finally {
     deleting.value = false
   }
+}
+
+const handleRowAction = (command: string, row: any) => {
+  if (command === 'preview') preview(row)
+  if (command === 'download') download(row)
+  if (command === 'delete') remove(row)
 }
 
 const removeSelected = async () => {

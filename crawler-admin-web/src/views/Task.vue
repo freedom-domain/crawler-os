@@ -92,31 +92,9 @@
         <el-table-column prop="imageFailCount" label="失败" min-width="70" align="center"  resizable />
         <el-table-column prop="imageExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="操作" width="140" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="table-row-actions">
-            <el-button
-              v-if="row.status === 'RUNNING' || row.status === 'PENDING'"
-              size="small"
-              type="warning"
-              plain
-              :icon="VideoPause"
-              @click="handleCancel(row)"
-            >
-              取消
-            </el-button>
-            <el-button size="small" type="primary" text :icon="Document" @click="showLogs(row)">日志</el-button>
-            <el-button
-              v-if="row.status !== 'RUNNING' && row.status !== 'CANCELING'"
-              size="small"
-              type="danger"
-              text
-              :icon="Delete"
-              @click="handleDelete(row)"
-            >
-              删除
-            </el-button>
-          </div>
+          <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -250,6 +228,7 @@ import { useRouter } from 'vue-router'
 import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
 import { Refresh, Search, VideoPause, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 const router = useRouter()
 const list = ref<any[]>([])
@@ -317,6 +296,22 @@ const logKeyword = ref('')
 const logStatus = ref<number | null>(null)
 const logType = ref('')
 const logLevel = ref('')
+
+const getRowActions = (row: any): TableRowAction[] => [
+  ...(['RUNNING', 'PENDING'].includes(row.status)
+    ? [{ command: 'cancel', label: '取消', icon: VideoPause }]
+    : []),
+  { command: 'logs', label: '日志', icon: Document },
+  ...(!['RUNNING', 'CANCELING'].includes(row.status)
+    ? [{ command: 'delete', label: '删除', icon: Delete, danger: true }]
+    : [])
+]
+
+const handleRowAction = (command: string, row: any) => {
+  if (command === 'cancel') handleCancel(row)
+  if (command === 'logs') showLogs(row)
+  if (command === 'delete') handleDelete(row)
+}
 
 const goToSpiderData = (spiderId?: number) => {
   if (!spiderId) return

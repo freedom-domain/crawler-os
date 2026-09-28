@@ -97,57 +97,7 @@
       <el-table-column prop="schedule" label="调度" min-width="160" resizable />
       <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="table-row-actions">
-            <el-dropdown
-              trigger="click"
-              popper-class="spider-action-popper"
-              @command="(cmd: string) => handleCommand(cmd, row)"
-            >
-              <el-button size="small" type="primary">
-                操作 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="run" :disabled="row._running">
-                    <span class="spider-action-item">
-                      <el-icon><VideoPlay /></el-icon>
-                      执行
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item command="files">
-                    <span class="spider-action-item">
-                      <el-icon><FolderOpened /></el-icon>
-                      查看文件
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item command="toggle" :disabled="row.status !== 1 && !row.schedule?.trim()">
-                    <span class="spider-action-item">
-                      <el-icon><component :is="row.status === 1 ? VideoPause : VideoPlay" /></el-icon>
-                      {{ row.status === 1 ? '停止定时任务' : '启动定时任务' }}
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item command="edit">
-                    <span class="spider-action-item">
-                      <el-icon><EditPen /></el-icon>
-                      编辑
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item command="clear-content" divided :disabled="row._clearingContent">
-                    <span class="spider-action-item">
-                      <el-icon><Delete /></el-icon>
-                      清空内容
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item command="delete" divided class="spider-delete-action">
-                    <span class="spider-action-item">
-                      <el-icon><Delete /></el-icon>
-                      删除
-                    </span>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <TableRowActions :items="getRowActions(row)" @command="command => handleCommand(command, row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -273,8 +223,9 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, ArrowDown, VideoPlay, VideoPause, EditPen, Delete, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, Search, VideoPlay, VideoPause, EditPen, Delete, FolderOpened } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -638,6 +589,20 @@ const handleClearContent = async (row: any) => {
   }
 }
 
+const getRowActions = (row: any): TableRowAction[] => [
+  { command: 'run', label: '执行', icon: VideoPlay, disabled: row._running },
+  { command: 'files', label: '查看文件', icon: FolderOpened },
+  {
+    command: 'toggle',
+    label: row.status === 1 ? '停止定时任务' : '启动定时任务',
+    icon: row.status === 1 ? VideoPause : VideoPlay,
+    disabled: row.status !== 1 && !row.schedule?.trim()
+  },
+  { command: 'edit', label: '编辑', icon: EditPen },
+  { command: 'clear-content', label: '清空内容', icon: Delete, divided: true, disabled: row._clearingContent },
+  { command: 'delete', label: '删除', icon: Delete, divided: true, danger: true }
+]
+
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
     case 'run': handleRun(row); break
@@ -705,36 +670,6 @@ onUnmounted(cancelScheduledFilterSearch)
 .spider-actions { display: flex; width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
-
-:global(.spider-action-popper) {
-  min-width: 168px;
-  padding: 5px;
-  border: 1px solid #e8edf5;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgb(15 23 42 / 12%);
-}
-:global(.spider-action-popper .el-dropdown-menu) { padding: 0; }
-:global(.spider-action-popper .el-dropdown-menu__item) {
-  min-height: 36px;
-  margin: 2px 0;
-  padding: 0 10px;
-  border-radius: 6px;
-  color: #334155;
-  line-height: 36px;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-:global(.spider-action-popper .el-dropdown-menu__item:not(.is-disabled):hover) {
-  background: #f1f5f9;
-  color: #2563eb;
-}
-:global(.spider-action-popper .el-dropdown-menu__item.spider-delete-action:not(.is-disabled)) { color: #dc2626; }
-:global(.spider-action-popper .el-dropdown-menu__item.spider-delete-action:not(.is-disabled):hover) {
-  background: #fef2f2;
-  color: #b91c1c;
-}
-:global(.spider-action-popper .el-dropdown-menu__item.is-disabled) { opacity: 0.5; }
-.spider-action-item { display: inline-flex; align-items: center; gap: 10px; }
-.spider-action-item .el-icon { font-size: 15px; }
 
 :deep(.spider-dialog .el-dialog__body) {
   height: 70vh;

@@ -18,13 +18,9 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="table-row-actions">
-            <el-button type="primary" link size="small" @click="openEdit(row)">编辑</el-button>
-            <el-button type="warning" link size="small" @click="openAssign(row)">分配权限</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
-          </div>
+          <TableRowActions :items="rowActions" @command="command => handleRowAction(command, row)" />
         </template>
       </el-table-column>
     </el-table>
@@ -90,11 +86,17 @@ import {
   roleList, roleCreate, roleUpdate, roleDelete,
   rolePermissions, roleAssignPermissions, permissionTree
 } from '@/api'
-import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Menu as MenuIcon } from '@element-plus/icons-vue'
+import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Menu as MenuIcon, Edit, Delete } from '@element-plus/icons-vue'
+import TableRowActions from '@/components/TableRowActions.vue'
 
 const list = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
+const rowActions = [
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'assign', label: '分配权限', icon: Lock },
+  { command: 'delete', label: '删除', icon: Delete, danger: true }
+]
 
 const formVisible = ref(false)
 const form = ref<any>({ id: null, name: '', code: '', description: '', status: 1 })
@@ -186,6 +188,12 @@ const openAssign = async (row: any) => {
     const checked = permRes.data || []
     checked.forEach((id: number) => treeRef.value?.setChecked(id, true, false))
   }, 100)
+}
+
+const handleRowAction = (command: string, row: any) => {
+  if (command === 'edit') openEdit(row)
+  if (command === 'assign') openAssign(row)
+  if (command === 'delete') handleDelete(row)
 }
 
 const getAllIds = (nodes: any[]): number[] => {
