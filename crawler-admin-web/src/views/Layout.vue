@@ -266,7 +266,7 @@ const MenuNode = defineComponent({
     return () => {
       const item = props.item
       const hasChildren = item.children && item.children.length > 0
-      const icon = h(ElIcon, null, [h(getIcon(item))])
+      const icon = h(ElIcon, null, { default: () => h(getIcon(item)) })
       if (hasChildren) {
         return h(ElSubMenu, { index: item.path || String(item.id) }, {
           title: () => [icon, h('span', item.name)],
