@@ -93,13 +93,22 @@ button, input, textarea, select { font: inherit; }
 }
 .el-message-box__header {
   margin-right: 0;
-  padding: 24px 28px 0;
-  position: relative;
+  padding: 8px 28px;
+  border-bottom: 1px solid #eef2f4;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
-.el-message-box__title { color: var(--ink-950); font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+.el-message-box__title {
+  color: var(--ink-950);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  flex: 1;
+  line-height: 1;
+}
 .el-message-box__headerbtn {
-  top: 16px;
-  right: 16px;
+  position: static;
   width: 30px;
   height: 30px;
   border-radius: 8px;
@@ -110,34 +119,31 @@ button, input, textarea, select { font: inherit; }
 .el-message-box__content {
   max-height: min(55vh, 420px);
   overflow-y: auto;
-  padding: 16px 28px 28px;
+  padding: 20px 28px 24px;
   color: var(--ink-700);
 }
 .el-message-box__container {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 16px;
 }
 .el-message-box__status {
   display: grid;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 42px;
   place-items: center;
   margin: 0;
-  border-radius: 12px;
-  background: #fff6e8;
-  color: #c48619;
-  font-size: 21px;
+  background: transparent;
+  color: red;
+  font-size: 68px;
+  width: 1em !important;
+  height: 1em !important;
 }
-.el-message-box__status.el-message-box-icon--primary { background: #e9f6f5; color: var(--teal); }
-.el-message-box__status.el-message-box-icon--success { background: #eaf7f0; color: #198b60; }
-.el-message-box__status.el-message-box-icon--info { background: #edf3fc; color: #5279b7; }
-.el-message-box__status.el-message-box-icon--error { background: #fdf0ee; color: #c9574d; }
+.el-message-box__status.el-message-box-icon--primary { color: var(--teal); }
+.el-message-box__status.el-message-box-icon--success { color: #198b60; }
+.el-message-box__status.el-message-box-icon--info { color: #5279b7; }
+.el-message-box__status.el-message-box-icon--error { color: #c9574d; }
 .el-message-box__message {
   flex: 1;
   min-width: 0;
-  padding-top: 6px;
   color: #4a5b6e;
   font-size: 14px;
   line-height: 1.8;
@@ -152,12 +158,16 @@ button, input, textarea, select { font: inherit; }
 .el-message-box__message p + p {
   margin-top: 10px;
 }
+.el-message-box:has(.el-message-box-icon--error) .el-message-box__message { color: #c9574d; }
+.el-message-box:has(.el-message-box-icon--warning) .el-message-box__message { color: #c48619; }
+.el-message-box:has(.el-message-box-icon--success) .el-message-box__message { color: #198b60; }
+.el-message-box:has(.el-message-box-icon--info) .el-message-box__message { color: #5279b7; }
+.el-message-box:has(.el-message-box-icon--primary) .el-message-box__message { color: var(--teal); }
 .el-message-box__btns {
   justify-content: center;
   gap: 12px;
-  padding: 16px 24px 20px;
+  padding: 5px;
   border-top: 1px solid #eef2f4;
-  background: #fafcfc;
 }
 .el-message-box__btns .el-button + .el-button { margin-left: 0; }
 .el-message-box__btns .el-button {
@@ -269,7 +279,7 @@ button, input, textarea, select { font: inherit; }
   .el-message-box__header { padding: 20px 18px 0; }
   .el-message-box__content { padding: 14px 18px 22px; }
   .el-message-box__container { gap: 12px; }
-  .el-message-box__btns { padding: 14px 18px 18px; gap: 10px; }
+  .el-message-box__btns { padding: 5px; gap: 10px; }
   .el-message-box__btns .el-button { min-width: 0; flex: 1; margin: 0; }
 }
 .el-menu--popup {

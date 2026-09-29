@@ -49,15 +49,21 @@
           <el-icon :size="16" :color="row.favorited ? '#f56c6c' : ''"><StarFilled v-if="row.favorited" /><Star v-else /></el-icon>
           <span style="margin-left: 2px">{{ row.favorited ? '已收藏' : '收藏' }}</span>
         </el-button>
-        <el-dropdown v-if="authenticated" trigger="click" @command="(command: string) => $emit('command', command, row)">
+        <el-dropdown v-if="authenticated" trigger="click" popper-class="table-action-popper" @command="(command: string) => $emit('command', command, row)">
           <el-button size="small" text type="primary">
             操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="tag">标签</el-dropdown-item>
-              <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">重新爬取</el-dropdown-item>
-              <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+              <el-dropdown-item command="tag">
+                <span class="action-item"><el-icon><Edit /></el-icon>标签</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">
+                <span class="action-item"><el-icon><RefreshRight /></el-icon>重新爬取</span>
+              </el-dropdown-item>
+              <el-dropdown-item command="delete" divided class="is-danger">
+                <span class="action-item"><el-icon><Delete /></el-icon>删除</span>
+              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -68,7 +74,7 @@
 
 <script setup lang="ts">
 import SearchResultItem from '@/components/SearchResultItem.vue'
-import { ArrowDown, Star, StarFilled } from '@element-plus/icons-vue'
+import { ArrowDown, Star, StarFilled, Edit, RefreshRight, Delete } from '@element-plus/icons-vue'
 import { formatTimeAgo } from '@/utils/dateTime'
 
 defineProps<{
@@ -139,6 +145,8 @@ defineEmits<{
 
 .spider-tag { cursor: pointer; }
 .update-time { color: #999; font-size: 12px; }
+
+.action-item { display: inline-flex; align-items: center; gap: 8px; }
 
 @media (max-width: 460px) {
   .result-thumb { width: 64px; height: 64px; }
