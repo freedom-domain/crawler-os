@@ -17,7 +17,7 @@
                 </svg>
               </span>
               <span class="history-keyword">{{ item.keyword }}</span>
-              <span v-if="item.createTime" class="history-time">{{ formatTime(item.createTime) }}</span>
+              <span v-if="item.createTime" class="history-time">{{ formatTimeAgo(item.createTime) }}</span>
               <button class="history-remove" type="button" aria-label="删除此搜索历史" @click.stop="remove(item.keyword)">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 6 6 18M6 6l12 12"/>
@@ -45,7 +45,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { clearSearchHistory, deleteSearchHistory, searchHistory, syncSearchHistory } from '@/api'
-import { formatDateTime as formatTime } from '@/utils/dateTime'
+import { formatTimeAgo } from '@/utils/dateTime'
 
 const LOCAL_HISTORY_KEY = 'crawler-search-history'
 

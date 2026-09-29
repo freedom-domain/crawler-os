@@ -90,7 +90,7 @@
           <div class="results-heading">
             <div>
               <span class="section-kicker">SEARCH RESULTS</span>
-              <span v-if="total > 0" class="result-count">找到约 {{ total }} 条结果</span>
+              <span v-if="total > 0" class="result-count">找到约 {{ total }} 条结果<span v-if="searchDurationMs > 0" class="search-duration">{{ searchDurationMs >= 1000 ? `${(searchDurationMs / 1000).toFixed(1)}s` : `${searchDurationMs}ms` }}</span></span>
             </div>
             <span class="result-page">第 {{ page }} 页</span>
           </div>
@@ -285,6 +285,7 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(5)
 const total = ref(0)
+const searchDurationMs = ref(0)
 // PIT + search_after 游标式分页状态
 const pitId = ref('')
 const searchAfter = ref('')
@@ -491,6 +492,7 @@ const buildSearchParams = (pit = '', after = '') => {
 
 const loadData = async () => {
   loading.value = true
+  const start = performance.now()
   try {
     const res: any = await searchContent(buildSearchParams(pitId.value, searchAfter.value))
     if (res) {
@@ -502,6 +504,7 @@ const loadData = async () => {
       const last = content[content.length - 1]
       searchAfter.value = last?.sortValues ? JSON.stringify(last.sortValues) : ''
       hasMore.value = page.value * size.value < total.value
+      searchDurationMs.value = Math.round(performance.now() - start)
     }
   } finally {
     loading.value = false
@@ -1174,6 +1177,17 @@ onMounted(() => {
   margin-left: 14px;
   color: #5f6368;
   font-size: 13px;
+}
+
+.search-duration {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #f1f3f4;
+  color: #9aa0a6;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .result-page {
