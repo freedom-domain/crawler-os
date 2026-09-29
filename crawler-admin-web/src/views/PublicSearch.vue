@@ -389,10 +389,11 @@ const loadTagOptions = async () => {
   }
 }
 
-const imageUrl = (objectName: string) => {
+const imageUrl = (objectName: string, width?: number) => {
   if (!objectName) return ''
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
+  const sizeParam = width ? `&width=${width}` : ''
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}${sizeParam}`
 }
 
 // 不再传递图片列表，仅传递内容 id（含爬虫信息与 url），由预览页自行从后端获取图片

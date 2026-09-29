@@ -22,6 +22,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.image.BufferedImage;
+import java.awt.image.ColorModel;
+import java.awt.image.WritableRaster;
+import java.awt.image.RenderedImage;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.UUID;
 
@@ -182,6 +193,34 @@ public class FileService {
             if (e.response().code() != 404) {
                 throw e;
             }
+        }
+    }
+
+    public byte[] resizeImage(String bucket, String objectName, int maxWidth) {
+        try (InputStream in = download(bucket, objectName)) {
+            byte[] original = in.readAllBytes();
+            Image image = ImageIO.read(new ByteArrayInputStream(original));
+            if (image == null || image.getWidth(null) <= 0) {
+                return null;
+            }
+            int w = image.getWidth(null);
+            int h = image.getHeight(null);
+            if (w <= maxWidth) {
+                return null;
+            }
+            int newW = maxWidth;
+            int newH = Math.max(1, (int) Math.round((double) maxWidth * h / w));
+            BufferedImage scaled = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = scaled.createGraphics();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(image, 0, 0, newW, newH, null);
+            g.dispose();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            ImageIO.write(scaled, "jpg", out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            log.warn("图片缩放失败，返回原图: objectName={}", objectName, e);
+            return null;
         }
     }
 

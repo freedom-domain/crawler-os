@@ -81,10 +81,6 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
                       @Param("spiderId") Long spiderId,
                       @Param("status") String status);
 
-            @Select("SELECT t.spider_name, t.status, t.success_count, t.fail_count, t.create_time "
-                + "FROM spider_task t WHERE t.deleted = 0 ORDER BY t.create_time DESC LIMIT #{limit}")
-        java.util.List<SpiderTask> selectRecentTasks(@Param("limit") int limit);
-
         @Select("SELECT COUNT(*) AS total, "
                 + "COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) AS success "
                 + "FROM spider_task WHERE deleted = 0 AND create_time >= CURDATE()")

@@ -348,11 +348,12 @@ const stripHtml = (html: string) => {
 }
 
 // ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
-const imageUrl = (objectName: string) => {
+const imageUrl = (objectName: string, width?: number) => {
   if (!objectName) return ''
   // 兼容旧数据：若已是完整 URL 则直接返回
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
+  const sizeParam = width ? `&width=${width}` : ''
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}${sizeParam}`
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({

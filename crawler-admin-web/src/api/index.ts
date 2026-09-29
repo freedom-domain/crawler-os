@@ -48,7 +48,6 @@ export const taskPage = (params: any) => request.get('/spider/task/page', { para
 export const taskConcurrency = () => request.get('/spider/task/concurrency')
 export const updateTaskConcurrency = (maxConcurrency: number, urlConcurrency: number) =>
   request.put('/spider/task/concurrency', null, { params: { maxConcurrency, urlConcurrency } })
-export const recentTaskList = (size = 5) => request.get('/spider/task/recent', { params: { size } })
 export const taskStats = () => request.get('/spider/task/stats')
 export const taskDetail = (id: number) => request.get(`/spider/task/${id}`)
 export const taskLogs = (id: number, params: any) => request.get(`/spider/task/${id}/logs`, { params })

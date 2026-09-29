@@ -330,11 +330,6 @@ public class SpiderService {
     }
 
     @SuppressWarnings("null")
-    public List<SpiderTask> recentTasks(int limit) {
-        return taskMapper.selectRecentTasks(Math.max(1, Math.min(limit, 20)));
-    }
-
-    @SuppressWarnings("null")
     public TaskStatsResponse todayTaskStats() {
         return taskMapper.selectTodayTaskStats();
     }

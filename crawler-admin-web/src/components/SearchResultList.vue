@@ -12,7 +12,7 @@
         <img
           v-for="(img, idx) in row.images.slice(0, 6)"
           :key="idx"
-          :src="imageUrl(img)"
+          :src="imageUrl(img, 144)"
           class="result-thumb"
           @click="$emit('images', row)"
         />
@@ -74,7 +74,7 @@ import { formatTimeAgo } from '@/utils/dateTime'
 defineProps<{
   rows: any[]
   authenticated?: boolean
-  imageUrl: (objectName: string) => string
+  imageUrl: (objectName: string, width?: number) => string
   formatTime: (value: string) => string
 }>()
 

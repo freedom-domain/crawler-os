@@ -61,11 +61,11 @@ public class FileController {
     @Operation(summary = "内联访问图片（用于浏览器预览）")
     @GetMapping("/image")
     public ResponseEntity<InputStreamResource> image(@RequestParam(value = "bucket", required = false) String bucket,
-                                                     @RequestParam("objectName") String objectName) {
+                                                     @RequestParam("objectName") String objectName,
+                                                     @RequestParam(value = "width", required = false) Integer width) {
         if (bucket == null || bucket.isBlank()) {
             bucket = imageBucket;
         }
-        InputStream in = fileService.download(bucket, objectName);
         String ext = objectName.contains(".") ? objectName.substring(objectName.lastIndexOf('.') + 1).toLowerCase() : "";
         MediaType mediaType = switch (ext) {
             case "png" -> MediaType.IMAGE_PNG;
@@ -76,6 +76,18 @@ public class FileController {
             case "svg" -> MediaType.parseMediaType("image/svg+xml");
             default -> MediaType.APPLICATION_OCTET_STREAM;
         };
+
+        if (width != null && width > 0 && width < 4096) {
+            byte[] resized = fileService.resizeImage(bucket, objectName, width);
+            if (resized != null) {
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                        .contentType(MediaType.IMAGE_JPEG)
+                        .body(new InputStreamResource(new java.io.ByteArrayInputStream(resized)));
+            }
+        }
+
+        InputStream in = fileService.download(bucket, objectName);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
                 .contentType(mediaType)

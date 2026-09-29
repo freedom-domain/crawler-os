@@ -162,12 +162,6 @@ public class SpiderController {
         return R.ok(spiderService.taskPage(current, size, spiderId, status));
     }
 
-    @Operation(summary = "最近任务列表")
-    @GetMapping("/task/recent")
-    public R<List<SpiderTask>> recentTasks(@RequestParam(value = "size", defaultValue = "5") int size) {
-        return R.ok(spiderService.recentTasks(size));
-    }
-
     @Operation(summary = "今日任务统计")
     @GetMapping("/task/stats")
     public R<TaskStatsResponse> todayTaskStats() {
