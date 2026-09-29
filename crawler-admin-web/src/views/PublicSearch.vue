@@ -42,14 +42,19 @@
         </div>
 
         <div class="header-user">
-          <template v-if="isLoggedIn">
-            <span class="user-account">
+          <el-dropdown v-if="isLoggedIn" trigger="click" class="user-dropdown">
+            <span class="user-account" tabindex="0">
               <el-icon><UserFilled /></el-icon>
               <span class="user-nickname">{{ userStore.nickname || userStore.username }}</span>
+              <el-icon class="user-dropdown-arrow"><ArrowDown /></el-icon>
             </span>
-            <el-button class="header-admin-button" type="primary" plain size="small" :icon="Setting" @click="openAdminSearch">后台管理</el-button>
-            <el-button class="header-logout-button" plain size="small" :icon="SwitchButton" @click="handleLogout">登出</el-button>
-          </template>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item :icon="Setting" @click="openAdminSearch">后台管理</el-dropdown-item>
+                <el-dropdown-item :icon="SwitchButton" divided @click="handleLogout">登出</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button v-else class="header-login-button" type="primary" size="small" :icon="UserFilled" @click="loginVisible = true">登录</el-button>
         </div>
       </div>
@@ -221,7 +226,7 @@ import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import SearchDetailDialog from '@/components/SearchDetailDialog.vue'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { searchContent, searchDetail, dictChildren, spiderPage, favoriteAdd, favoriteDelete, searchDelete, spiderRerun } from '@/api'
-import { Search, FullScreen, Minus, ZoomIn, ZoomOut, UserFilled, Setting, SwitchButton, RefreshLeft } from '@element-plus/icons-vue'
+import { Search, FullScreen, Minus, ZoomIn, ZoomOut, UserFilled, Setting, SwitchButton, RefreshLeft, ArrowDown } from '@element-plus/icons-vue'
 import router from '@/router'
 import { useRoute } from 'vue-router'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
@@ -940,6 +945,36 @@ onMounted(() => {
 .header-login-button {
   border-radius: 9px;
   padding: 0 15px;
+}
+
+.user-dropdown :deep(.el-dropdown__caret-button) {
+  display: none;
+}
+
+.user-account {
+  cursor: pointer;
+  transition: background 0.15s ease, border-radius 0.15s ease;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.user-account:hover {
+  background: rgba(66, 133, 244, 0.08);
+}
+
+.user-account:focus-visible {
+  outline: 2px solid rgba(66, 133, 244, 0.35);
+  outline-offset: -2px;
+}
+
+.user-dropdown-arrow {
+  font-size: 12px;
+  color: #9aa0a6;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.user-account:hover .user-dropdown-arrow {
+  color: #4285f4;
 }
 
 .header-search-box {

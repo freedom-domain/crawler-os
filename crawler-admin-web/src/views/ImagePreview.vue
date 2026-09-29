@@ -91,9 +91,18 @@
         :style="{ left: `${imageMenu.x}px`, top: `${imageMenu.y}px` }"
         @click.stop
       >
-        <button v-if="sourceUrl" class="context-action context-action-source" type="button" @click="openSourcePage">跳转来源页</button>
-        <button v-if="userStore.token" class="context-action context-action-tag" type="button" @click="openTagEditor">设置标签</button>
-        <button v-if="userStore.token" class="context-action context-action-delete" type="button" @click="deleteSelectedImage">删除图片</button>
+        <button v-if="sourceUrl" class="context-action context-action-source" type="button" @click="openSourcePage">
+          <el-icon><Promotion /></el-icon>
+          <span>跳转来源页</span>
+        </button>
+        <button v-if="userStore.token" class="context-action context-action-tag" type="button" @click="openTagEditor">
+          <el-icon><Edit /></el-icon>
+          <span>设置标签</span>
+        </button>
+        <button v-if="userStore.token" class="context-action context-action-delete" type="button" @click="deleteSelectedImage">
+          <el-icon><Delete /></el-icon>
+          <span>删除图片</span>
+        </button>
       </div>
 
       <!-- 分页控件 -->
@@ -149,7 +158,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting, Promotion, Edit, Delete } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { dictChildren, searchDeleteImage, searchDetail } from '@/api'
@@ -216,13 +225,13 @@ const toolbarStyle = computed<CSSProperties>(() => {
   const vh = window.innerHeight
   // 判断按钮在左边还是右边
   const isLeft = x < vw / 2
-  // 横向工具栏尺寸（自适应宽度，最大 480px，高度取实际渲染值）
-  const toolbarWidth = toolbarRef.value?.offsetWidth || 480
-  const toolbarHeight = toolbarRef.value?.offsetHeight || 64
+  // 竖向工具栏尺寸（固定宽度 180px，高度取实际渲染值）
+  const toolbarWidth = toolbarRef.value?.offsetWidth || 180
+  const toolbarHeight = toolbarRef.value?.offsetHeight || 280
   // 按钮尺寸 40px，面板与按钮间距 12px
   const triggerSize = 40
   const gap = 12
-  // 垂直方向：面板与按钮中心精确对齐，确保不超出上下边界
+  // 垂直方向：面板与按钮中心垂直对齐，确保不超出上下边界
   let top = y + triggerSize / 2 - toolbarHeight / 2
   if (top < 10) top = 10
   if (top + toolbarHeight > vh - 10) top = vh - 10 - toolbarHeight
@@ -348,11 +357,12 @@ const loadImages = async () => {
     imageObjects.value = rawImages
     images.value = rawImages.map(imageUrl).filter(Boolean)
     // 移动端竖屏默认每页 1 张；桌面端超过 4 张时每页显示 3 张，否则每页 4 张
-    // 每页数量不能超过图片总数
+    // 约束：每页数量不超过图片总数，每行数量不超过每页数量
     const size = isMobile() ? 1 : (images.value.length > 4 ? 3 : 4)
     pageSize.value = Math.min(size, images.value.length)
+    cols.value = Math.min(cols.value, pageSize.value)
     if (isMobile()) {
-      cols.value = 1
+      cols.value = Math.min(1, pageSize.value)
     }
 
     page.value = 1
@@ -497,9 +507,10 @@ const resetToInitial = () => {
   gridScale.value = 1
   page.value = 1
   // 移动端竖屏默认每页 1 张，桌面端默认每页 4 张
+  // 约束：每页数量不超过图片总数，每行数量不超过每页数量
   const size = isMobile() ? 1 : 4
-  pageSize.value = size
-  cols.value = size
+  pageSize.value = Math.min(size, images.value.length || size)
+  cols.value = Math.min(size, pageSize.value)
   loadImages()
   window.scrollTo({ top: 0 })
 }
@@ -622,12 +633,12 @@ onBeforeUnmount(() => {
 .image-context-menu {
   position: fixed;
   z-index: 100;
-  min-width: 148px;
+  min-width: 160px;
   padding: 6px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(203, 213, 225, 0.8);
-  border-radius: 12px;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.2), 0 3px 8px rgba(15, 23, 42, 0.08);
+  background: #163b59;
+  border: 1px solid rgba(114, 224, 200, 0.18);
+  border-radius: 9px;
+  box-shadow: 0 14px 30px rgba(16, 42, 67, 0.24);
   backdrop-filter: blur(14px);
   animation: context-menu-in 0.14s ease-out;
 }
@@ -636,54 +647,57 @@ onBeforeUnmount(() => {
   width: 100%;
   display: flex;
   align-items: center;
-  min-height: 38px;
-  padding: 0 11px;
-  border-radius: 8px;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 7px;
   text-align: left;
   background: transparent;
   border: 0;
   font: inherit;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 600;
+  color: #d9e2ec;
   cursor: pointer;
-  transition: color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.context-action .el-icon {
+  font-size: 16px;
+  color: #72e0c8;
+  flex-shrink: 0;
 }
 
 .context-action:hover {
-  transform: translateX(2px);
+  color: #fff;
+  background: rgba(114, 224, 200, 0.16);
 }
 
-.context-action-tag {
-  color: #2563eb;
+.context-action-tag .el-icon {
+  color: #93b4fd;
 }
 
-.context-action-source {
-  color: #0f766e;
+.context-action-source .el-icon {
+  color: #72e0c8;
 }
 
-.context-action-source:hover {
-  background: #f0fdfa;
-  color: #0f766e;
-}
-
-.context-action-tag:hover {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.context-action-delete {
-  color: #dc2626;
+.context-action-delete .el-icon {
+  color: #f87171;
 }
 
 .context-action-delete:hover {
-  background: #fef2f2;
-  color: #b91c1c;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.context-action-delete:hover .el-icon {
+  color: #f87171;
 }
 
 .context-action:focus-visible,
 .reset-btn:focus-visible {
-  outline: 3px solid rgba(59, 130, 246, 0.35);
-  outline-offset: 2px;
+  outline: 2px solid rgba(114, 224, 200, 0.35);
+  outline-offset: -2px;
 }
 
 @keyframes context-menu-in {
@@ -706,13 +720,13 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.98);
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: auto;
-  max-width: 640px;
-  min-width: 0;
+  gap: 6px;
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(8px);
   /* 点击图标后渐进展开：从按钮侧滑入 + 淡入 */
@@ -727,21 +741,21 @@ onBeforeUnmount(() => {
 }
 .toolbar-controls {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex-wrap: nowrap;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   min-width: 0;
 }
 .control-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #f8fafc;
-  flex-shrink: 1;
   min-width: 0;
 }
 .control-item .section-label {
@@ -1174,18 +1188,18 @@ onBeforeUnmount(() => {
 @media (max-width: 640px) {
   .grid-wrapper { padding: 16px; }
   .grid { gap: 10px; }
-  /* 移动端工具栏：全宽显示，控制项换行 */
+  /* 移动端工具栏：竖向排列，固定宽度 */
   .toolbar-header {
-    max-width: calc(100vw - 32px);
-    padding: 10px 12px;
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+    padding: 8px;
   }
   .toolbar-controls {
-    gap: 8px;
+    gap: 5px;
   }
   .control-item {
-    padding: 5px 8px;
-    flex: 1;
-    min-width: 70px;
+    padding: 6px 8px;
   }
   .control-item .section-label {
     font-size: 10px;
