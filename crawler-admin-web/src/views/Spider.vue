@@ -71,16 +71,30 @@
       </el-table-column>
       <el-table-column prop="isPublic" label="公开" width="90" align="center" resizable>
         <template #default="{ row }">
-          <el-tag :type="row.isPublic === 1 ? 'success' : 'info'" size="small">
-            {{ row.isPublic === 1 ? '公开' : '私有' }}
-          </el-tag>
+          <el-switch
+            v-model="row.isPublic"
+            :active-value="1"
+            :inactive-value="0"
+            size="small"
+            :loading="row._savingPublic"
+            :disabled="row._savingPublic"
+            @change="handleTogglePublic(row)"
+          />
         </template>
       </el-table-column>
-      <el-table-column prop="readCache" label="读取缓存" min-width="110" resizable>
+      <el-table-column prop="readCache" label="读取缓存" min-width="130" align="center" resizable>
         <template #default="{ row }">
-          <el-tag :type="row.readCache === 1 ? 'success' : 'info'">
-            {{ row.readCache === 1 ? '读取' : '联网' }}
-          </el-tag>
+          <el-switch
+            v-model="row.readCache"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="缓存"
+            inactive-text="联网"
+            size="small"
+            :loading="row._savingCache"
+            :disabled="row._savingCache"
+            @change="handleToggleReadCache(row)"
+          />
         </template>
       </el-table-column>
       <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
@@ -172,7 +186,7 @@
           <div class="form-tip">开启后重新爬取会重新下载并覆盖已存在的图片；关闭则已存在图片不重复下载</div>
         </el-form-item>
         <el-form-item label="读取缓存">
-          <el-switch v-model="form.readCache" :active-value="1" :inactive-value="0" active-text="读取" inactive-text="联网" />
+          <el-switch v-model="form.readCache" :active-value="1" :inactive-value="0" active-text="缓存" inactive-text="联网" />
           <div class="form-tip">开启后优先读取已缓存的 HTML；命中时不覆盖已缓存的 HTML 和资源，并可补充缺少的资源，未命中时联网抓取并按原逻辑保存</div>
         </el-form-item>
         <el-form-item label="最大深度">
@@ -533,6 +547,58 @@ const handleStart = async (row: any) => {
   loadData()
 }
 
+// 列表内直接切换「公开 / 读取缓存」开关
+const buildUpdatePayload = (detail: any) => {
+  let startUrls: string[] = []
+  try {
+    const parsed = JSON.parse(detail.startUrls || '[]')
+    startUrls = Array.isArray(parsed) ? parsed.filter((u: any) => typeof u === 'string' && u.trim()) : []
+  } catch {
+    startUrls = String(detail.startUrls || '').split(',').map(s => s.trim()).filter(Boolean)
+  }
+  return {
+    name: detail.name,
+    description: detail.description || '',
+    type: detail.type,
+    startUrls,
+    contentSelector: detail.contentSelector || '',
+    imageSelector: detail.imageSelector || '',
+    imageXpath: detail.imageXpath || '',
+    vipSelector: detail.vipSelector || '',
+    vipSelectorContent: detail.vipSelectorContent || '',
+    overwriteHtml: detail.overwriteHtml ?? 0,
+    overwriteImage: detail.overwriteImage ?? 0,
+    readCache: detail.readCache ?? 0,
+    isPublic: detail.isPublic ?? 0,
+    group: detail.group || '',
+    schedule: detail.schedule || '',
+    maxDepth: detail.maxDepth ?? 2,
+    timeout: detail.timeout ?? 15000,
+    followRobots: detail.followRobots ?? 0,
+    skipTlsVerify: detail.skipTlsVerify ?? 0
+  }
+}
+
+const applyToggle = async (row: any, field: 'isPublic' | 'readCache', savingKey: string) => {
+  const oldValue = row[field]
+  row[savingKey] = true
+  try {
+    const detail: any = await spiderDetail(row.id)
+    const payload = buildUpdatePayload(detail.data)
+    payload[field] = oldValue
+    await spiderUpdate(row.id, payload)
+    ElMessage.success(`${field === 'isPublic' ? '公开状态' : '读取缓存'}已更新`)
+  } catch {
+    row[field] = oldValue
+    ElMessage.error(`${field === 'isPublic' ? '公开状态' : '读取缓存'}切换失败`)
+  } finally {
+    row[savingKey] = false
+  }
+}
+
+const handleTogglePublic = (row: any) => applyToggle(row, 'isPublic', '_savingPublic')
+const handleToggleReadCache = (row: any) => applyToggle(row, 'readCache', '_savingCache')
+
 const handleStop = async (row: any) => {
   try {
     await spiderStop(row.id)
@@ -690,6 +756,8 @@ onUnmounted(cancelScheduledFilterSearch)
 .spider-actions { display: flex; width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
+
+:deep(.el-table .el-switch__label) { white-space: nowrap; }
 
 :deep(.spider-dialog .el-dialog__body) {
   height: 70vh;
