@@ -63,9 +63,18 @@
       <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip resizable />
       <el-table-column label="爬虫名称" min-width="160" resizable>
         <template #default="{ row }">
-          <el-button link type="primary" @click="goToSpiderData(row.spiderId)">
-            {{ row.spiderName }}
-          </el-button>
+          <el-dropdown trigger="click" @command="(cmd: string) => handleSpiderJump(cmd, row)">
+            <el-button link type="primary" class="spider-name-dropdown">
+              {{ row.spiderName }}
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="data">查看数据</el-dropdown-item>
+                <el-dropdown-item command="spider">跳转爬虫</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
       <el-table-column label="状态" width="120" resizable>
@@ -257,8 +266,8 @@ import { ref, computed, onMounted, onUnmounted, onActivated, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { useRoute, useRouter } from 'vue-router'
-import { taskPage, taskLogs, taskCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
-import { Refresh, Search, VideoPause, VideoPlay, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
+import { taskPage, taskLogs, taskCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency, taskActiveCount } from '@/api'
+import { Refresh, Search, VideoPause, VideoPlay, Document, Delete, Minus, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -291,6 +300,8 @@ const concurrencyLoaded = ref(false)
 const concurrencyDialogVisible = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
 let durationTimer: ReturnType<typeof setInterval> | null = null
+let statusCheckTimer: ReturnType<typeof setInterval> | null = null
+const remoteActive = ref(false)
 
 const logVisible = ref(false)
 const logFullscreen = ref(false)
@@ -359,6 +370,18 @@ const handleRowAction = (command: string, row: any) => {
 const goToSpiderData = (spiderId?: number) => {
   if (!spiderId) return
   router.push({ name: 'Search', query: { spiderId: String(spiderId) } })
+}
+
+const goToSpider = (spiderId?: number, spiderName?: string) => {
+  if (!spiderId) return
+  const query: Record<string, string> = { spiderId: String(spiderId) }
+  if (spiderName) query.keyword = spiderName
+  router.push({ name: 'Spider', query })
+}
+
+const handleSpiderJump = (cmd: string, row: any) => {
+  if (cmd === 'data') goToSpiderData(row.spiderId)
+  if (cmd === 'spider') goToSpider(row.spiderId, row.spiderName)
 }
 
 const reloadLogs = () => {
@@ -605,12 +628,34 @@ const handleDelete = async (row: any) => {
   loadData()
 }
 
-const hasActive = () => list.value.some((t: any) =>
+const hasActive = () => remoteActive.value || list.value.some((t: any) =>
   t.status === 'RUNNING' || t.status === 'PENDING' || t.status === 'CANCELING' ||
   (t.status === 'RUNNING' && t.pausedAt)
 )
 
 const autoRefreshing = computed(() => autoRefresh.value && hasActive())
+
+const checkRemoteStatus = async () => {
+  try {
+    const res: any = await taskActiveCount()
+    remoteActive.value = (res.data ?? 0) > 0
+  } catch {
+    // 查询失败时保留上一次的 remoteActive 状态
+  }
+  startTimer()
+}
+
+const startStatusCheck = () => {
+  stopStatusCheck()
+  statusCheckTimer = setInterval(checkRemoteStatus, 5000)
+}
+
+const stopStatusCheck = () => {
+  if (statusCheckTimer) {
+    clearInterval(statusCheckTimer)
+    statusCheckTimer = null
+  }
+}
 
 const startTimer = () => {
   stopTimer()
@@ -656,10 +701,12 @@ onMounted(() => {
   loadData()
   loadSpiders()
   startTimer()
+  startStatusCheck()
 })
 
 onUnmounted(() => {
   stopTimer()
+  stopStatusCheck()
   if (durationTimer) clearInterval(durationTimer)
 })
 </script>
@@ -702,6 +749,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .refresh-interval-select { width: 90px; }
+.spider-name-dropdown { padding: 0 4px; }
 :deep(.concurrency-toolbar-item) { margin-left: auto !important; }
 
 .task-status-tag { border: 0; font-weight: 600; }

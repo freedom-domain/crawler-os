@@ -29,17 +29,37 @@
         </el-select>
       </el-form-item>
       <el-form-item>
+        <el-select v-model="publicFilter" placeholder="是否公开" clearable style="width: 120px" @change="searchImmediately">
+          <el-option label="公开" :value="1" />
+          <el-option label="私有" :value="0" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
         <el-button type="primary" @click="searchImmediately" :icon="Search">查询</el-button>
         <el-button @click="resetFilters">重置</el-button>
       </el-form-item>
       <el-form-item class="toolbar-actions">
         <div class="spider-actions">
           <el-button type="primary" :icon="Plus" @click="showCreate">新建爬虫</el-button>
-          <el-button :icon="List" @click="goToTaskPage">运行中的任务</el-button>
-          <el-button @click="handleExport">导出配置</el-button>
-          <el-upload :show-file-list="false" :before-upload="handleImport" accept=".json">
-            <el-button>导入配置</el-button>
-          </el-upload>
+          <el-dropdown trigger="click" @command="handleConfigCommand">
+            <el-button>
+              配置管理
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="export" :icon="Download">导出配置</el-dropdown-item>
+                <el-dropdown-item command="import" :icon="Upload">导入配置</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <input
+            ref="importInputRef"
+            type="file"
+            accept=".json"
+            style="display: none"
+            @change="onImportFileChange"
+          />
         </div>
       </el-form-item>
     </el-form>
@@ -325,7 +345,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, List } from '@element-plus/icons-vue'
+import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, ArrowDown, Download, Upload, List } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -341,6 +361,7 @@ const total = ref(0)
 const keyword = ref('')
 const urlFilter = ref('')
 const groupFilter = ref('')
+const publicFilter = ref<number | null>(null)
 const highlightSpiderId = ref<number | null>(null)
 const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
@@ -450,12 +471,14 @@ const syncQueryToRoute = () => {
     keyword: trimmedFilterValue(keyword.value),
     startUrl: trimmedFilterValue(urlFilter.value),
     group: trimmedFilterValue(groupFilter.value),
+    isPublic: publicFilter.value != null ? String(publicFilter.value) : '',
     spiderId: highlightSpiderId.value ? String(highlightSpiderId.value) : ''
   }
   const routeFilters = {
     keyword: routeQueryValue(route.query.keyword ?? route.query.spiderName),
     startUrl: routeQueryValue(route.query.startUrl),
     group: routeQueryValue(route.query.group),
+    isPublic: routeQueryValue(route.query.isPublic),
     spiderId: routeQueryValue(route.query.spiderId)
   }
   if (Object.keys(filters).every((key) => filters[key as keyof typeof filters] === routeFilters[key as keyof typeof routeFilters])
@@ -467,10 +490,12 @@ const syncQueryToRoute = () => {
   delete query.keyword
   delete query.startUrl
   delete query.group
+  delete query.isPublic
   delete query.spiderId
   if (filters.keyword) query.keyword = filters.keyword
   if (filters.startUrl) query.startUrl = filters.startUrl
   if (filters.group) query.group = filters.group
+  if (filters.isPublic) query.isPublic = filters.isPublic
   if (filters.spiderId) query.spiderId = filters.spiderId
 
   void router.replace({ query })
@@ -485,7 +510,8 @@ const loadData = async () => {
       size: requestedHighlightId ? 100 : size.value,
       keyword: keyword.value,
       startUrl: urlFilter.value || undefined,
-      group: groupFilter.value || undefined
+      group: groupFilter.value || undefined,
+      isPublic: publicFilter.value ?? undefined
     })
     if (requestedHighlightId !== highlightSpiderId.value) return
     list.value = res.data?.records || []
@@ -539,6 +565,7 @@ const resetFilters = () => {
   keyword.value = ''
   urlFilter.value = ''
   groupFilter.value = ''
+  publicFilter.value = null
   highlightSpiderId.value = null
   page.value = 1
   loadData()
@@ -577,6 +604,20 @@ const handleImport = async (file: File) => {
     ElMessage.error('导入失败')
   }
   return false
+}
+
+const importInputRef = ref<HTMLInputElement | null>(null)
+
+const handleConfigCommand = (cmd: string) => {
+  if (cmd === 'export') handleExport()
+  if (cmd === 'import') importInputRef.value?.click()
+}
+
+const onImportFileChange = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) handleImport(file)
+  input.value = ''
 }
 
 const showEdit = async (row: any) => {
@@ -829,23 +870,26 @@ const handleCommand = (cmd: string, row: any) => {
 }
 
 watch(
-  [keyword, urlFilter, groupFilter],
+  [keyword, urlFilter, groupFilter, publicFilter],
   () => syncQueryToRoute()
 )
 
 watch(
-  () => [route.query.spiderId, route.query.keyword, route.query.spiderName, route.query.startUrl, route.query.group],
-  ([spiderIdValue, keywordValue, spiderNameValue, startUrlValue, groupValue]) => {
+  () => [route.query.spiderId, route.query.keyword, route.query.spiderName, route.query.startUrl, route.query.group, route.query.isPublic],
+  ([spiderIdValue, keywordValue, spiderNameValue, startUrlValue, groupValue, isPublicValue]) => {
     const id = Number(routeQueryValue(spiderIdValue))
     const routeKeyword = keywordValue ?? spiderNameValue
     const nextKeyword = routeQueryValue(routeKeyword)
     const nextStartUrl = routeQueryValue(startUrlValue)
     const nextGroup = routeQueryValue(groupValue)
+    const nextIsPublic = routeQueryValue(isPublicValue)
+    const nextPublicFilter = nextIsPublic === '0' || nextIsPublic === '1' ? Number(nextIsPublic) : null
     const nextHighlightId = Number.isFinite(id) && id > 0 ? id : null
     const routeMatchesFilters = route.query.spiderName === undefined
         && trimmedFilterValue(keyword.value) === nextKeyword
         && trimmedFilterValue(urlFilter.value) === nextStartUrl
         && trimmedFilterValue(groupFilter.value) === nextGroup
+        && (publicFilter.value ?? null) === nextPublicFilter
         && highlightSpiderId.value === nextHighlightId
     if (routeInitialized && routeMatchesFilters) {
       return
@@ -856,6 +900,7 @@ watch(
     keyword.value = nextKeyword
     urlFilter.value = nextStartUrl
     groupFilter.value = nextGroup
+    publicFilter.value = nextPublicFilter
     loadData()
   },
   { immediate: true }

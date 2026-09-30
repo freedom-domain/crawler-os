@@ -89,7 +89,7 @@ public class SpiderService {
     }
 
     @SuppressWarnings("null")
-    public IPage<Spider> page(int current, int size, String keyword, String startUrl, String group) {
+    public IPage<Spider> page(int current, int size, String keyword, String startUrl, String group, Integer isPublic) {
         current = Math.max(1, current);
         size = Math.min(Math.max(1, size), 100);
         LambdaQueryWrapper<Spider> qw = new LambdaQueryWrapper<>();
@@ -102,7 +102,9 @@ public class SpiderService {
         if (group != null && !group.isBlank()) {
             qw.eq(Spider::getGroup, group);
         }
-        if (!isAuthenticated()) {
+        if (isPublic != null) {
+            qw.eq(Spider::getIsPublic, isPublic);
+        } else if (!isAuthenticated()) {
             qw.eq(Spider::getIsPublic, 1);
         }
         qw.orderByDesc(Spider::getCreateTime).orderByDesc(Spider::getId);
@@ -332,6 +334,10 @@ public class SpiderService {
     @SuppressWarnings("null")
     public TaskStatsResponse todayTaskStats() {
         return taskMapper.selectTodayTaskStats();
+    }
+
+    public long activeTaskCount() {
+        return taskMapper.countActiveTasks();
     }
 
     @SuppressWarnings("null")

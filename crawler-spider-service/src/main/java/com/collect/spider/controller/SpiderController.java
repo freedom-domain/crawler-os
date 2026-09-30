@@ -75,8 +75,9 @@ public class SpiderController {
                                   @RequestParam(value = "size", defaultValue = "10") int size,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @RequestParam(value = "startUrl", required = false) String startUrl,
-                                  @RequestParam(value = "group", required = false) String group) {
-        return R.ok(spiderService.page(current, size, keyword, startUrl, group));
+                                  @RequestParam(value = "group", required = false) String group,
+                                  @RequestParam(value = "isPublic", required = false) Integer isPublic) {
+        return R.ok(spiderService.page(current, size, keyword, startUrl, group, isPublic));
     }
 
     @Operation(summary = "爬虫详情")
@@ -166,6 +167,12 @@ public class SpiderController {
     @GetMapping("/task/stats")
     public R<TaskStatsResponse> todayTaskStats() {
         return R.ok(spiderService.todayTaskStats());
+    }
+
+    @Operation(summary = "活跃任务数（运行中+排队中+取消中）")
+    @GetMapping("/task/active-count")
+    public R<Long> activeTaskCount() {
+        return R.ok(spiderService.activeTaskCount());
     }
 
     @Operation(summary = "获取任务并发策略")

@@ -39,7 +39,7 @@
         <span v-if="row.spiderName" class="meta-tag spider-tag" :class="{ 'spider-tag-clickable': authenticated }" @click="authenticated && row.spiderId && $emit('spider', row)">{{ row.spiderName }}</span>
         <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
         <span v-if="row.updateTime" class="meta-time update-time">
-          更新: {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
+          {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
         </span>
         <el-button
           v-if="authenticated"

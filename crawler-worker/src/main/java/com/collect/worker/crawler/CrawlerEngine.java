@@ -433,7 +433,12 @@ public class CrawlerEngine {
             docObj.setSpiderName(msg.getSpiderName());
             docObj.setSourceType(msg.getType());
             DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-            docObj.setCrawlTime(LocalDateTime.now().format(esDateFormatter));
+            // 已存在内容覆盖时：抓取时间保留首次抓取时间，更新时间设为当前时间
+            boolean isOverwrite = existingDoc != null;
+            String crawlTime = isOverwrite && existingDoc.getCrawlTime() != null
+                    ? existingDoc.getCrawlTime()
+                    : LocalDateTime.now().format(esDateFormatter);
+            docObj.setCrawlTime(crawlTime);
             docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
             docObj.setImages(List.of());
 
