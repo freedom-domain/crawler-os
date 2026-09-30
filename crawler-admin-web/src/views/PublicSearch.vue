@@ -1646,13 +1646,17 @@ onMounted(() => {
     padding: 0 5px 0 14px;
   }
   .search-btn {
-    height: 38px;
-    min-height: 38px;
-    padding: 0 16px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
   }
   .reset-search-btn {
-    height: 38px;
-    min-height: 38px;
+    height: 32px;
+    min-height: 32px;
+    width: auto;
+    padding: 0 12px;
+    font-size: 13px;
   }
   .search-icon {
     font-size: 18px;
@@ -1731,8 +1735,8 @@ onMounted(() => {
   }
   .search-row { gap: 8px; }
   .search-box { min-width: 0; }
-  .search-btn { padding: 0 14px; }
-  .reset-search-btn { width: 56px; height: 38px; margin-left: 6px; font-size: 12px; }
+  .search-btn { height: 32px; min-height: 32px; padding: 0 14px; font-size: 13px; }
+  .reset-search-btn { width: auto; height: 32px; min-height: 32px; margin-left: 6px; padding: 0 12px; font-size: 12px; }
   .header-user {
     gap: 8px;
     justify-content: center;

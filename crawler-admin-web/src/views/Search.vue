@@ -842,12 +842,53 @@ onMounted(() => {
   :deep(.content-preview-dialog) { top: 4px !important; margin: 0 auto !important; }
 }
 
+/* 窄屏：搜索/重置按钮偏大，缩小；搜索框压缩内边距/图标间距，防止有输入时按钮溢出 */
+@media (max-width: 560px) {
+  .search-box {
+    padding: 0 4px 0 10px;
+  }
+  .search-icon {
+    font-size: 18px;
+    margin-right: 8px;
+  }
+  .search-input {
+    font-size: 14px;
+  }
+  .clear-btn {
+    font-size: 20px;
+    padding: 0 3px;
+  }
+  /* 两个按钮统一固定尺寸 72×32px，确保视觉大小一致 */
+  .search-btn,
+  .reset-search-button {
+    width: 72px;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 !important;
+    font-size: 13px;
+    line-height: 1;
+    box-sizing: border-box;
+  }
+  .search-btn {
+    flex-shrink: 0;
+  }
+  .reset-search-button {
+    flex-shrink: 0;
+    margin-left: 4px;
+    --el-button-size: 32px;
+    --el-button-padding-horizontal: 0;
+    --el-button-padding-vertical: 0;
+  }
+}
+
 .search-box {
   flex: 1;
   display: flex;
   align-items: center;
   box-sizing: border-box;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
   border: 1px solid #dfe1e5;
   border-radius: 999px;
   padding: 0 6px 0 16px;
@@ -876,7 +917,8 @@ onMounted(() => {
 }
 
 .search-input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   border: none;
   outline: none;
   font-size: 15px;
@@ -914,6 +956,7 @@ onMounted(() => {
   padding: 0;
   height: 36px;
   min-height: 36px;
+  box-sizing: border-box;
   cursor: pointer;
   transition: background 0.2s ease;
 }

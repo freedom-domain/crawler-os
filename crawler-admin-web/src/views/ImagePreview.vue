@@ -369,6 +369,34 @@ const imageUrl = (objectName: string) => {
   return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
 }
 
+// 等待网格中指定范围（[start, start+count)）的图片全部加载完成后执行 cb。
+// 复用翻页时的“等图片加载完”逻辑：已 complete 的直接计数，未完成的监听 load/error。
+const waitImagesLoaded = (start: number, count: number, cb: () => void) => {
+  if (count <= 0) {
+    cb()
+    return
+  }
+  nextTick(() => {
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.grid .thumb')).slice(start, start + count)
+    if (!imgs.length) {
+      cb()
+      return
+    }
+    let done = 0
+    const finish = () => {
+      done++
+      if (done >= imgs.length) cb()
+    }
+    imgs.forEach((img) => {
+      if (img.complete) finish()
+      else {
+        img.addEventListener('load', finish, { once: true })
+        img.addEventListener('error', finish, { once: true })
+      }
+    })
+  })
+}
+
 // 通过内容 id（含爬虫信息与 url）从后端获取图片列表
 const loadImages = async () => {
   const id = contentId.value
@@ -407,10 +435,16 @@ const loadImages = async () => {
     page.value = 1
     if (!images.value.length) {
       loadError.value = '该条内容暂无图片'
+      loading.value = false
+      return
     }
+    // 等第一页图片全部加载完成后再关闭首屏加载动画
+    const firstPageCount = Math.min(pageSize.value, images.value.length)
+    waitImagesLoaded(0, firstPageCount, () => {
+      loading.value = false
+    })
   } catch {
     loadError.value = '图片加载失败，请稍后重试'
-  } finally {
     loading.value = false
   }
 }

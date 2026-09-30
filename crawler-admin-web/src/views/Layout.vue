@@ -113,7 +113,12 @@ const userStore = useUserStore()
 const collapsed = ref(false)
 const menuList = ref<any[]>([])
 const pwdDialogVisible = ref(false)
-const mobile = ref(window.innerWidth < 768)
+// 移动端判断：宽度 < 768，或小屏幕（短边 < 768）横屏——横屏时宽度过阈值但仍是手机，
+// 侧边菜单需按抽屉隐藏
+const isMobileViewport = () =>
+  window.innerWidth < 768 ||
+  (window.matchMedia('(orientation: landscape)').matches && Math.min(window.innerWidth, window.innerHeight) < 768)
+const mobile = ref(isMobileViewport())
 const drawerOpen = ref(false)
 const tabs = ref<Array<{ key: string; path: string; title: string; name?: string }>>([
   { key: '/dashboard', path: '/dashboard', title: '首页', name: 'Dashboard' }
@@ -155,7 +160,7 @@ restoreTabs()
 watch(tabs, saveTabs, { deep: true })
 
 const onResize = () => {
-  mobile.value = window.innerWidth < 768
+  mobile.value = isMobileViewport()
   if (!mobile.value) drawerOpen.value = false
 }
 window.addEventListener('resize', onResize)
