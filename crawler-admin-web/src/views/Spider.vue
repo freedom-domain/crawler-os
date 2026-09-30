@@ -46,8 +46,8 @@
 
     <div class="table-scroll-wrapper">
     <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border>
-      <el-table-column prop="id" label="ID" min-width="60"  resizable />
-      <el-table-column prop="name" label="名称" min-width="160" resizable>
+      <el-table-column prop="id" label="ID" min-width="60" fixed="left" resizable />
+      <el-table-column prop="name" label="名称" min-width="160" fixed="left" resizable>
         <template #default="{ row }">
           <el-link type="primary" @click="router.push({ name: 'Search', query: { spiderId: String(row.id) } })">
             {{ row.name }}
@@ -97,6 +97,21 @@
           />
         </template>
       </el-table-column>
+      <el-table-column prop="overwriteHtml" label="覆盖HTML" min-width="130" align="center" resizable>
+        <template #default="{ row }">
+          <el-switch
+            v-model="row.overwriteHtml"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="覆盖"
+            inactive-text="跳过"
+            size="small"
+            :loading="row._savingHtml"
+            :disabled="row._savingHtml"
+            @change="handleToggleOverwriteHtml(row)"
+          />
+        </template>
+      </el-table-column>
       <el-table-column prop="status" label="定时任务" min-width="150" align="center" resizable>
         <template #default="{ row }">
           <el-switch
@@ -112,7 +127,15 @@
           />
         </template>
       </el-table-column>
-      <el-table-column prop="schedule" label="调度" min-width="160" resizable />
+      <el-table-column prop="schedule" label="调度" min-width="180" resizable>
+        <template #default="{ row }">
+          <span
+            class="schedule-editable"
+            title="点击编辑调度表达式"
+            @click="handleEditSchedule(row)"
+          >{{ row.schedule?.trim() ? row.schedule : '-' }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
       </el-table-column>
@@ -244,7 +267,7 @@
             <el-input-number v-if="scheduleType === 'month'" v-model="scheduleDay" :min="1" :max="31" style="width: 80px" @change="generateSchedule" />
             <span v-if="scheduleType === 'month'">日</span>
           </div>
-          <el-input v-model="form.schedule" placeholder="生成的 Cron 表达式" class="schedule-result" />
+          <el-input v-model="scheduleTarget" placeholder="生成的 Cron 表达式" class="schedule-result" />
         </el-form-item>
         <el-form-item label="超时(ms)">
           <el-input-number v-model="form.timeout" :min="1000" :max="60000" :step="1000" />
@@ -253,6 +276,44 @@
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
         <el-button type="primary" @click="handleSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="scheduleDialogVisible" title="编辑调度表达式" width="560px" top="20vh">
+      <el-form label-width="110px">
+        <el-form-item label="调度表达式">
+          <div class="schedule-builder">
+            <el-select v-model="scheduleType" placeholder="选择频率" style="width: 120px" @change="generateSchedule">
+              <el-option label="每分钟" value="minute" />
+              <el-option label="每小时" value="hour" />
+              <el-option label="每天" value="day" />
+              <el-option label="每周" value="week" />
+              <el-option label="每月" value="month" />
+              <el-option label="自定义" value="custom" />
+            </el-select>
+            <el-input-number v-if="scheduleType === 'minute' || scheduleType === 'hour'" v-model="scheduleInterval" :min="1" :max="scheduleType === 'minute' ? 59 : 23" style="width: 100px" @change="generateSchedule" />
+            <span v-if="scheduleType === 'minute'">分钟</span>
+            <span v-if="scheduleType === 'hour'">小时</span>
+            <el-time-picker v-if="scheduleType === 'day' || scheduleType === 'week' || scheduleType === 'month'" v-model="scheduleTime" format="HH:mm" value-format="HH:mm" style="width: 120px" @change="generateSchedule" />
+            <el-select v-if="scheduleType === 'week'" v-model="scheduleWeekDay" placeholder="星期" style="width: 80px" @change="generateSchedule">
+              <el-option label="一" :value="1" />
+              <el-option label="二" :value="2" />
+              <el-option label="三" :value="3" />
+              <el-option label="四" :value="4" />
+              <el-option label="五" :value="5" />
+              <el-option label="六" :value="6" />
+              <el-option label="日" :value="0" />
+            </el-select>
+            <el-input-number v-if="scheduleType === 'month'" v-model="scheduleDay" :min="1" :max="31" style="width: 80px" @change="generateSchedule" />
+            <span v-if="scheduleType === 'month'">日</span>
+          </div>
+          <el-input v-model="scheduleTarget" placeholder="生成的 Cron 表达式" class="schedule-result" />
+          <div class="form-tip">留空表示不启用定时任务</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scheduleDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleScheduleSubmit">确定</el-button>
       </template>
     </el-dialog>
   </el-card>
@@ -321,25 +382,27 @@ const scheduleInterval = ref(10)
 const scheduleTime = ref('00:00')
 const scheduleWeekDay = ref(1)
 const scheduleDay = ref(1)
+const scheduleTarget = ref('')
+const scheduleDialogVisible = ref(false)
 
 const generateSchedule = () => {
   const time = scheduleTime.value || '00:00'
   const [hour, minute] = time.split(':')
   switch (scheduleType.value) {
     case 'minute':
-      form.value.schedule = `0 */${scheduleInterval.value} * * * ?`
+      scheduleTarget.value = `0 */${scheduleInterval.value} * * * ?`
       break
     case 'hour':
-      form.value.schedule = `0 ${minute} */${scheduleInterval.value} * * ?`
+      scheduleTarget.value = `0 ${minute} */${scheduleInterval.value} * * ?`
       break
     case 'day':
-      form.value.schedule = `0 ${minute} ${hour} * * ?`
+      scheduleTarget.value = `0 ${minute} ${hour} * * ?`
       break
     case 'week':
-      form.value.schedule = `0 ${minute} ${hour} ? * ${scheduleWeekDay.value}`
+      scheduleTarget.value = `0 ${minute} ${hour} ? * ${scheduleWeekDay.value}`
       break
     case 'month':
-      form.value.schedule = `0 ${minute} ${hour} ${scheduleDay.value} * ?`
+      scheduleTarget.value = `0 ${minute} ${hour} ${scheduleDay.value} * ?`
       break
   }
 }
@@ -485,6 +548,8 @@ const showCreate = () => {
   editingId.value = null
   form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
   startUrlsStr.value = ''
+  scheduleTarget.value = ''
+  scheduleType.value = ''
   createVisible.value = true
 }
 
@@ -529,6 +594,8 @@ const showEdit = async (row: any) => {
   } catch {
     startUrlsStr.value = d.startUrls || ''
   }
+  scheduleTarget.value = d.schedule || ''
+  scheduleType.value = 'custom'
   createVisible.value = true
 }
 
@@ -540,10 +607,10 @@ const handleSubmit = async () => {
   }
   try {
     if (editingId.value) {
-      await spiderUpdate(editingId.value, { ...form.value, startUrls })
+      await spiderUpdate(editingId.value, { ...form.value, startUrls, schedule: scheduleTarget.value || form.value.schedule })
       ElMessage.success('更新成功')
     } else {
-      await spiderCreate({ ...form.value, startUrls })
+      await spiderCreate({ ...form.value, startUrls, schedule: scheduleTarget.value || form.value.schedule })
       ElMessage.success('创建成功')
     }
   } catch (error) {
@@ -553,6 +620,34 @@ const handleSubmit = async () => {
   }
   createVisible.value = false
   loadData()
+}
+
+const handleEditSchedule = (row: any) => {
+  editingId.value = row.id
+  scheduleTarget.value = row.schedule || ''
+  scheduleType.value = 'custom'
+  createVisible.value = false
+  scheduleDialogVisible.value = true
+}
+
+const handleScheduleSubmit = async () => {
+  const row = list.value.find((r) => Number(r.id) === Number(editingId.value))
+  if (!row) {
+    scheduleDialogVisible.value = false
+    return
+  }
+  try {
+    const detail: any = await spiderDetail(row.id)
+    const payload = buildUpdatePayload(detail.data)
+    payload.schedule = scheduleTarget.value.trim()
+    await spiderUpdate(row.id, payload)
+    row.schedule = payload.schedule
+    ElMessage.success('调度表达式已更新')
+  } catch {
+    ElMessage.error('调度表达式更新失败')
+    return
+  }
+  scheduleDialogVisible.value = false
 }
 
 const handleStart = async (row: any) => {
@@ -597,7 +692,7 @@ const buildUpdatePayload = (detail: any) => {
   }
 }
 
-const applyToggle = async (row: any, field: 'isPublic' | 'readCache', savingKey: string) => {
+const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'overwriteHtml', savingKey: string) => {
   const oldValue = row[field]
   row[savingKey] = true
   try {
@@ -605,10 +700,12 @@ const applyToggle = async (row: any, field: 'isPublic' | 'readCache', savingKey:
     const payload = buildUpdatePayload(detail.data)
     payload[field] = oldValue
     await spiderUpdate(row.id, payload)
-    ElMessage.success(`${field === 'isPublic' ? '公开状态' : '读取缓存'}已更新`)
+    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : '覆盖HTML'
+    ElMessage.success(`${label}已更新`)
   } catch {
     row[field] = oldValue
-    ElMessage.error(`${field === 'isPublic' ? '公开状态' : '读取缓存'}切换失败`)
+    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : '覆盖HTML'
+    ElMessage.error(`${label}切换失败`)
   } finally {
     row[savingKey] = false
   }
@@ -616,6 +713,7 @@ const applyToggle = async (row: any, field: 'isPublic' | 'readCache', savingKey:
 
 const handleTogglePublic = (row: any) => applyToggle(row, 'isPublic', '_savingPublic')
 const handleToggleReadCache = (row: any) => applyToggle(row, 'readCache', '_savingCache')
+const handleToggleOverwriteHtml = (row: any) => applyToggle(row, 'overwriteHtml', '_savingHtml')
 
 const handleToggleStatus = async (row: any) => {
   const oldValue = row.status
@@ -786,6 +884,8 @@ onUnmounted(cancelScheduledFilterSearch)
 .text-muted { color: #c0c4cc; }
 
 .row-actions { display: inline-flex; align-items: center; gap: 8px; }
+.schedule-editable { cursor: pointer; color: var(--el-color-primary); border-bottom: 1px dashed var(--el-color-primary); padding: 2px 0; }
+.schedule-editable:hover { opacity: .8; }
 :deep(.el-table .el-switch__label) { white-space: nowrap; }
 
 :deep(.spider-dialog .el-dialog__body) {
