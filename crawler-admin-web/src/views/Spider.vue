@@ -35,6 +35,7 @@
       <el-form-item class="toolbar-actions">
         <div class="spider-actions">
           <el-button type="primary" :icon="Plus" @click="showCreate">新建爬虫</el-button>
+          <el-button :icon="List" @click="goToTaskPage">运行中的任务</el-button>
           <el-button @click="handleExport">导出配置</el-button>
           <el-upload :show-file-list="false" :before-upload="handleImport" accept=".json">
             <el-button>导入配置</el-button>
@@ -231,7 +232,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, VideoPlay, VideoPause, EditPen, Delete, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, Search, VideoPlay, VideoPause, EditPen, Delete, FolderOpened, List } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -600,8 +601,15 @@ const handleClearContent = async (row: any) => {
   }
 }
 
+const goToTaskPage = (row?: any) => {
+  const query: Record<string, string> = {}
+  if (row?.id) query.spiderId = String(row.id)
+  router.push({ name: 'Task', query })
+}
+
 const getRowActions = (row: any): TableRowAction[] => [
   { command: 'run', label: '执行', icon: VideoPlay, disabled: row._running },
+  { command: 'tasks', label: '查看任务', icon: List },
   { command: 'files', label: '查看文件', icon: FolderOpened },
   {
     command: 'toggle',
@@ -617,6 +625,7 @@ const getRowActions = (row: any): TableRowAction[] => [
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
     case 'run': handleRun(row); break
+    case 'tasks': goToTaskPage(row); break
     case 'files':
       router.push({ name: 'File', query: { spiderId: String(row.id) } })
       break

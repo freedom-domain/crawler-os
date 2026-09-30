@@ -30,10 +30,23 @@
       </el-form-item>
       <el-form-item class="refresh-toolbar-item task-refresh-action">
         <div class="refresh-toolbar">
-          <el-switch v-model="autoRefresh" active-text="自动刷新" />
+          <span class="auto-refresh-indicator" :class="{ active: autoRefreshing }" title="自动刷新状态"></span>
+          <el-tooltip
+            :content="hasActive() ? '正在自动刷新' : '无运行中任务，自动刷新已暂停'"
+            placement="bottom"
+            :show-after="400"
+          >
+            <el-switch
+              v-model="autoRefresh"
+              :disabled="!hasActive() && autoRefresh"
+              active-text="自动刷新"
+              inactive-text="自动刷新"
+            />
+          </el-tooltip>
           <el-select
             v-model="refreshIntervalSeconds"
             class="refresh-interval-select"
+            :disabled="!hasActive()"
             aria-label="自动刷新间隔"
             @change="saveRefreshInterval"
           >
@@ -240,16 +253,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onActivated, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
 import { Refresh, Search, VideoPause, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 const router = useRouter()
+const route = useRoute()
 const list = ref<any[]>([])
 const loading = ref(false)
 const prevStatusMap = new Map<string, string>()
@@ -566,6 +580,8 @@ const hasActive = () => list.value.some((t: any) =>
   t.status === 'RUNNING' || t.status === 'PENDING' || t.status === 'CANCELING'
 )
 
+const autoRefreshing = computed(() => autoRefresh.value && hasActive())
+
 const startTimer = () => {
   stopTimer()
   if (autoRefresh.value && hasActive()) {
@@ -589,10 +605,24 @@ watch([autoRefresh, () => list.value], () => {
   startTimer()
 })
 
+// 从爬虫页跳转过来时，自动按 spiderId 筛选
+onActivated(() => {
+  const spiderId = Number(route.query.spiderId)
+  if (Number.isInteger(spiderId) && spiderId > 0) {
+    spiderFilter.value = spiderId
+    page.value = 1
+    loadData()
+  }
+})
+
 onMounted(() => {
   durationTimer = setInterval(() => {
     currentTimeMs.value = Date.now()
   }, 1000)
+  const spiderId = Number(route.query.spiderId)
+  if (Number.isInteger(spiderId) && spiderId > 0) {
+    spiderFilter.value = spiderId
+  }
   loadData()
   loadSpiders()
   startTimer()
@@ -619,6 +649,23 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+}
+.auto-refresh-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c0c4cc;
+  transition: background .3s ease, box-shadow .3s ease;
+  flex-shrink: 0;
+}
+.auto-refresh-indicator.active {
+  background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 159, 154, .2);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(15, 159, 154, .2); }
+  50% { box-shadow: 0 0 0 6px rgba(15, 159, 154, .08); }
 }
 .refresh-toolbar :deep(.el-switch),
 .refresh-toolbar :deep(.el-switch__label) {
