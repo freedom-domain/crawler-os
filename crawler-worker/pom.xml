@@ -72,13 +72,6 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
         </dependency>
-        <!-- GlobalExceptionHandler 的方法签名引用了 HttpServletRequest。
-             crawler-common 中 jakarta.servlet-api 为 provided 作用域（不传递打包），
-             而 worker 无 web starter，需在此显式声明以保证运行时 classpath 可用。 -->
-        <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
