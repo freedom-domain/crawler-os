@@ -334,7 +334,7 @@ const logLevel = ref('')
 
 const getRowActions = (row: any): TableRowAction[] => [
   ...(['RUNNING', 'PENDING'].includes(row.status)
-    ? [{ command: 'cancel', label: '取消', icon: VideoPause }]
+    ? [{ command: 'cancel', label: '取消', icon: VideoPause, danger: true }]
     : []),
   { command: 'logs', label: '日志', icon: Document },
   ...(!['RUNNING', 'CANCELING'].includes(row.status)
