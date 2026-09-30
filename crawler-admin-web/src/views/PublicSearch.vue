@@ -17,6 +17,7 @@
             @close="historyOpen = false"
           >
             <div class="search-box header-search-box" :class="{ 'history-search-open': historyOpen && !keyword }">
+              <img class="brand-in-search" src="/crawleros-icon.svg" alt="" aria-hidden="true" />
               <el-icon class="search-icon"><Search /></el-icon>
               <input
                 v-model="keyword"
@@ -825,6 +826,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 品牌图标融入搜索框：默认隐藏，仅移动端显示 */
+.brand-in-search {
+  display: none;
+}
+
 .public-search {
   height: 100%;
   min-height: 0;
@@ -1609,8 +1615,19 @@ onMounted(() => {
     padding: 14px 16px 10px;
     gap: 12px;
   }
+  /* 移动端：品牌图标融入搜索框，隐藏放大镜和原品牌区 */
   .brand-mark {
-    justify-content: center;
+    display: none;
+  }
+  .brand-in-search {
+    display: block;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+    margin-right: 8px;
+  }
+  .header-search-box .search-icon {
+    display: none;
   }
   .header-search-wrap {
     width: 100%;
@@ -1659,8 +1676,28 @@ onMounted(() => {
 
 @media (max-width: 720px) {
   .public-search { height: 100%; min-height: 0; }
-  .ps-header { height: auto; min-height: 0; }
-  .ps-header-inner { height: auto; padding: 12px 18px 10px; }
+  /* 手机：搜索模块实底白背景，防止滚动内容透出 */
+  .ps-header {
+    height: auto;
+    min-height: 0;
+    background: #fff !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    /* 用 ::before 铺满整个 header 区域，确保 sticky 时背景完整覆盖 */
+    position: sticky;
+  }
+  .ps-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    z-index: 0;
+  }
+  .ps-header-inner { height: auto; padding: 12px 18px 10px; position: relative; z-index: 1; }
+  /* 确保内容不被 sticky header 遮挡：给 main 顶部留出 header 高度空间 */
+  .ps-main {
+    padding-top: 16px;
+  }
   .header-caption { font-size: 11px; }
   .ps-main { padding: 26px 16px 40px; }
   .search-hero { display: block; padding: 12px 0 24px; }
@@ -1676,6 +1713,10 @@ onMounted(() => {
     height: 38px;
     min-height: 38px;
     padding: 0 16px;
+  }
+  .reset-search-btn {
+    height: 38px;
+    min-height: 38px;
   }
   .search-icon {
     font-size: 18px;
@@ -1727,6 +1768,31 @@ onMounted(() => {
 }
 
 @media (max-width: 460px) {
+  /* 窄手机：搜索模块加实底背景，防止滚动内容透出 */
+  .ps-header {
+    background: #fff !important;
+    backdrop-filter: none !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+  .ps-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    z-index: 0;
+  }
+  .ps-header-inner {
+    padding: 10px 14px 8px;
+    position: relative;
+    z-index: 1;
+  }
+  /* 窄手机：搜索结果距顶部 > 搜索模块高度，防止 sticky header 遮挡 */
+  .ps-main {
+    padding-left: 14px;
+    padding-right: 14px;
+    /* header 高度 + 10px，确保内容不被遮挡且不过远 */
+    padding-top: 130px;
+  }
   .search-row { gap: 8px; }
   .search-box { min-width: 0; }
   .search-btn { padding: 0 14px; }
