@@ -111,9 +111,19 @@
         </template>
       </el-table-column>
       <el-table-column prop="schedule" label="调度" min-width="160" resizable />
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="180" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <TableRowActions :items="getRowActions(row)" @command="command => handleCommand(command, row)" />
+          <div class="row-actions">
+            <el-button
+              type="primary"
+              size="small"
+              :icon="VideoPlay"
+              :loading="row._running"
+              :disabled="row._running"
+              @click="handleRun(row)"
+            />
+            <TableRowActions :items="getRowActions(row)" @command="command => handleCommand(command, row)" />
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -674,7 +684,6 @@ const goToTaskPage = (row?: any) => {
 }
 
 const getRowActions = (row: any): TableRowAction[] => [
-  { command: 'run', label: '执行', icon: VideoPlay, disabled: row._running },
   { command: 'tasks', label: '查看任务', icon: List },
   { command: 'files', label: '查看文件', icon: FolderOpened },
   {
@@ -690,7 +699,6 @@ const getRowActions = (row: any): TableRowAction[] => [
 
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
-    case 'run': handleRun(row); break
     case 'tasks': goToTaskPage(row); break
     case 'files':
       router.push({ name: 'File', query: { spiderId: String(row.id) } })
@@ -757,6 +765,7 @@ onUnmounted(cancelScheduledFilterSearch)
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
 
+.row-actions { display: inline-flex; align-items: center; gap: 8px; }
 :deep(.el-table .el-switch__label) { white-space: nowrap; }
 
 :deep(.spider-dialog .el-dialog__body) {
