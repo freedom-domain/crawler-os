@@ -6,6 +6,7 @@
       </el-form-item>
     </el-form>
 
+    <div class="table-scroll-wrapper">
     <el-table :data="list" v-loading="loading" stripe resizable border>
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
       <el-table-column prop="name" label="角色名称" min-width="140"  resizable />
@@ -24,6 +25,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <!-- 角色新增/编辑 -->
     <el-dialog v-model="formVisible" :title="form.id ? '编辑角色' : '新增角色'" width="480px">

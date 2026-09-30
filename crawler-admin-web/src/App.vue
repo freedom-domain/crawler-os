@@ -219,6 +219,25 @@ button, input, textarea, select { font: inherit; }
 .el-loading-mask { background: rgba(255, 255, 255, .72); backdrop-filter: blur(2px); }
 .el-table__inner-wrapper::before { display: none; }
 
+/* ===== 表格自适应：不溢出容器，单滚动条查看全部列 =====
+   规则：
+   1. 容器 { overflow-x: auto } — 唯一滚动条
+   2. .el-table__body-wrapper { overflow-x: hidden !important } — 禁用表格内部滚动（避免双滚动条）
+   3. .el-table { width: max-content; min-width: 100% } — 表格宽度由列的 min-width 撑开（不压缩），最小 100% 保证铺满
+   通过 .table-scroll-wrapper 容器实现，所有页面统一生效 */
+.table-scroll-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  min-width: 0;
+}
+.table-scroll-wrapper .el-table {
+  width: max-content;
+  min-width: 100%;
+}
+.table-scroll-wrapper .el-table__body-wrapper {
+  overflow-x: hidden !important;
+}
+
 /* ===== 移动端适配 ===== */
 @media (max-width: 767px) {
   /* 弹窗：近全屏 */

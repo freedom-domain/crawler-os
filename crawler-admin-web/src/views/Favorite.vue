@@ -23,6 +23,7 @@
       </el-form-item>
     </el-form>
 
+    <div class="table-scroll-wrapper">
     <el-table :data="list" v-loading="loading" stripe resizable border>
       <el-table-column prop="title" label="标题" min-width="420" show-overflow-tooltip resizable>
         <template #default="{ row }">{{ row.title || '无标题' }}</template>
@@ -51,6 +52,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <TagEditorDialog v-model="tagVisible" :row="tagCurrentRow" :tag-options="tagOptions" @saved="handleTagsSaved" />
 

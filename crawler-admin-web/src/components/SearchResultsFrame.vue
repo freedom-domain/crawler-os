@@ -18,7 +18,6 @@
       <el-select
         :model-value="pageSize"
         class="cursor-size"
-        size="small"
         @update:model-value="$emit('update:pageSize', $event); $emit('change')"
       >
         <el-option v-for="s in pageSizes" :key="s" :label="`${s} 条/页`" :value="s" />

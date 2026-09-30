@@ -36,36 +36,38 @@
           <div><p class="panel-kicker">ACTIVITY STREAM</p><h2>最近任务</h2></div>
           <el-button link type="primary" size="small" @click="goToTaskPage">查看全部 →</el-button>
         </div>
-        <el-table :data="recentTasks" size="small" resizable border>
-          <el-table-column prop="spiderName" label="爬虫名称" min-width="150" resizable />
-          <el-table-column prop="status" label="状态" min-width="100" resizable>
+        <div class="table-scroll-wrapper">
+        <el-table :data="recentTasks" size="small" resizable border class="recent-tasks-table">
+          <el-table-column prop="spiderName" label="爬虫名称" min-width="120" resizable />
+          <el-table-column prop="status" label="状态" min-width="90" resizable>
             <template #default="{ row }"><el-tag :type="statusTag(row.status)">{{ row.status }}</el-tag></template>
           </el-table-column>
-          <el-table-column prop="startTime" label="开始时间" min-width="160" resizable>
+          <el-table-column prop="startTime" label="开始时间" min-width="150" resizable class-name="col-start-time">
             <template #default="{ row }">{{ formatDateTime(row.startTime) }}</template>
           </el-table-column>
-          <el-table-column prop="endTime" label="结束时间" min-width="160" resizable>
+          <el-table-column prop="endTime" label="结束时间" min-width="150" resizable class-name="col-end-time">
             <template #default="{ row }">{{ formatDateTime(row.endTime) }}</template>
           </el-table-column>
-          <el-table-column label="总耗时" min-width="100" align="center" resizable>
+          <el-table-column label="总耗时" min-width="90" align="center" resizable>
             <template #default="{ row }">{{ formatDuration(row.totalCostMs) }}</template>
           </el-table-column>
-          <el-table-column label="HTML" align="center" resizable>
-            <el-table-column prop="htmlSuccessCount" label="成功" min-width="60" align="center" resizable />
-            <el-table-column prop="htmlFailCount" label="失败" min-width="60" align="center" resizable />
-            <el-table-column prop="htmlExistingCount" label="已存在" min-width="70" align="center" resizable />
+          <el-table-column label="HTML" align="center" resizable class-name="col-html">
+            <el-table-column prop="htmlSuccessCount" label="成功" min-width="55" align="center" resizable />
+            <el-table-column prop="htmlFailCount" label="失败" min-width="55" align="center" resizable />
+            <el-table-column prop="htmlExistingCount" label="已存在" min-width="65" align="center" resizable />
           </el-table-column>
-          <el-table-column label="图片" align="center" resizable>
-            <el-table-column prop="imageSuccessCount" label="成功" min-width="60" align="center" resizable />
-            <el-table-column prop="imageFailCount" label="失败" min-width="60" align="center" resizable />
-            <el-table-column prop="imageExistingCount" label="已存在" min-width="70" align="center" resizable />
+          <el-table-column label="图片" align="center" resizable class-name="col-image">
+            <el-table-column prop="imageSuccessCount" label="成功" min-width="55" align="center" resizable />
+            <el-table-column prop="imageFailCount" label="失败" min-width="55" align="center" resizable />
+            <el-table-column prop="imageExistingCount" label="已存在" min-width="65" align="center" resizable />
           </el-table-column>
-          <el-table-column label="操作" width="80" align="center" resizable>
+          <el-table-column label="操作" width="70" align="center" resizable class-name="col-action">
             <template #default>
               <el-button link type="primary" @click="goToTaskPage">查看</el-button>
             </template>
           </el-table-column>
         </el-table>
+        </div>
         <div v-if="!recentTasks.length" class="panel-empty">暂无最近任务</div>
       </div>
 
@@ -214,8 +216,13 @@ onActivated(loadDashboard)
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .panel-heading h2 { margin: 0; color: #172b4d; font-size: 19px; font-weight: 800; }
 .panel-kicker { margin-bottom: 6px; color: #9fb3c8; font-size: 9px; letter-spacing: 1.6px; }
-.task-panel :deep(.el-table) { border-radius: 8px; }.task-panel :deep(.el-table th.el-table__cell) { background: #f5f9fa; }
+.task-panel { min-width: 0; }
+.task-panel :deep(.el-table) { border-radius: 8px; }
+.task-panel :deep(.el-table th.el-table__cell) { background: #f5f9fa; }
 .panel-empty { padding: 34px 0; color: #8993a4; text-align: center; font-size: 13px; }
 @media (max-width: 1000px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.dashboard-grid { grid-template-columns: 1fr; }.hero-orbit { margin-right: 4%; } }
-@media (max-width: 600px) { .dashboard-hero { min-height: 210px; padding: 26px 24px; }.dashboard-hero h1 { font-size: 27px; }.hero-orbit { display: none; }.metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }.metric-card { min-height: 126px; padding: 14px; }.stat-value { font-size: 24px; }.panel { padding: 17px 14px; }.panel-heading { margin-bottom: 14px; } }
+@media (max-width: 600px) { .dashboard-hero { min-height: 210px; padding: 26px 24px; }.dashboard-hero h1 { font-size: 27px; }.hero-orbit { display: none; }.metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }.metric-card { min-height: 126px; padding: 14px; }.stat-value { font-size: 24px; }.panel { padding: 17px 14px; }.panel-heading { margin-bottom: 14px; }
+  /* 小屏：el-table 原生横向滚动，不裁剪不隐藏 */
+  .task-panel { padding-right: 18px; }
+}
 </style>

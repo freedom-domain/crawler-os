@@ -43,6 +43,7 @@
       </el-form-item>
     </el-form>
 
+    <div class="table-scroll-wrapper">
     <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border>
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
       <el-table-column prop="name" label="名称" min-width="160" resizable>
@@ -101,6 +102,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-pagination
       v-model:current-page="page"

@@ -6,6 +6,7 @@
       </el-form-item>
     </el-form>
 
+    <div class="table-scroll-wrapper">
     <el-table :data="tree" v-loading="loading" row-key="id" default-expand-all :tree-props="{ children: 'children' }" stripe :row-class-name="permissionRowClassName" resizable border>
       <el-table-column prop="name" label="权限名称" min-width="200"  resizable />
       <el-table-column label="图标" min-width="90" align="center" resizable>
@@ -30,6 +31,7 @@
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-dialog v-model="formVisible" :title="form.id ? '编辑权限' : '新增权限'" width="480px">
       <el-form :model="form" label-width="80px">

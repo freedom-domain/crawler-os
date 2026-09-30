@@ -39,6 +39,7 @@
         </el-form-item>
       </el-form>
 
+      <div class="table-scroll-wrapper">
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable border>
         <el-table-column type="selection" width="48"  resizable />
         <el-table-column prop="id" label="ID" min-width="80" resizable />
@@ -73,6 +74,7 @@
           </template>
         </el-table-column>
       </el-table>
+      </div>
 
       <div class="pagination">
         <el-pagination
@@ -108,6 +110,35 @@
         <el-button link type="primary" size="small" @click="download(previewRow)">下载原图</el-button>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="htmlPreviewVisible" width="80%" top="5vh" class="content-preview-dialog" destroy-on-close @closed="clearHtmlPreview">
+      <template #header>
+        <div class="preview-content-header">
+          <span class="preview-title-wrap">
+            {{ htmlPreviewTitle }}
+            <a v-if="htmlPreviewBaseUrl" :href="htmlPreviewBaseUrl" target="_blank" rel="noopener noreferrer" class="preview-source-link">跳转原文</a>
+          </span>
+          <div class="preview-content-controls">
+            <el-switch
+              v-model="htmlLocalizeResources"
+              active-text="CSS/JS 本地"
+              @change="toggleHtmlLocalize"
+            />
+            <el-switch v-model="htmlShowSource" inactive-text="预览" active-text="源码" />
+          </div>
+        </div>
+      </template>
+      <div v-loading="htmlPreviewLoading">
+        <iframe
+          v-if="!htmlShowSource"
+          class="preview-container preview-html"
+          :srcdoc="htmlPreviewHtml || '<p>无正文内容</p>'"
+          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+          title="HTML 预览"
+        ></iframe>
+        <pre v-else class="preview-container detail-text code-text">{{ htmlPreviewSource || '无原始内容' }}</pre>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -119,6 +150,7 @@ import { confirm } from '@/utils/confirm'
 import { Refresh, View, Download, Delete } from '@element-plus/icons-vue'
 import { filePage, spiderPage } from '@/api'
 import request from '@/api/request'
+import { resolvePreviewHtml } from '@/utils/previewHtml'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions from '@/components/TableRowActions.vue'
 
@@ -139,6 +171,16 @@ const previewUrl = ref('')
 const previewRow = ref<any>(null)
 const previewError = ref(false)
 const deleting = ref(false)
+
+// HTML 预览
+const htmlPreviewVisible = ref(false)
+const htmlPreviewLoading = ref(false)
+const htmlPreviewTitle = ref('')
+const htmlPreviewHtml = ref('')
+const htmlPreviewSource = ref('')
+const htmlPreviewBaseUrl = ref('')
+const htmlLocalizeResources = ref(true)
+const htmlShowSource = ref(false)
 const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterFileName.value.trim() || filterTitle.value.trim()))
 
 const categoryLabel = (category: string) => ({
@@ -211,10 +253,12 @@ const download = (row: any) => {
   window.open(url, '_blank')
 }
 
-const canPreview = (row: any) => row.category === 'image' || row.contentType?.startsWith('image/')
+const canPreviewImage = (row: any) => row.category === 'image' || row.contentType?.startsWith('image/')
+const canPreviewHtml = (row: any) => row.category === 'html' || row.contentType?.includes('html')
 
 const getRowActions = (row: any) => [
-  ...(canPreview(row) ? [{ command: 'preview', label: '预览', icon: View }] : []),
+  ...(canPreviewImage(row) ? [{ command: 'previewImage', label: '预览', icon: View }] : []),
+  ...(canPreviewHtml(row) ? [{ command: 'previewHtml', label: '预览', icon: View }] : []),
   { command: 'download', label: '下载', icon: Download },
   { command: 'delete', label: '删除', icon: Delete, disabled: deleting.value, danger: true }
 ]
@@ -267,8 +311,48 @@ const remove = async (row: any) => {
   }
 }
 
+const previewHtml = async (row: any) => {
+  htmlPreviewVisible.value = true
+  htmlPreviewLoading.value = true
+  htmlPreviewTitle.value = row.title || row.fileName || 'HTML 预览'
+  htmlPreviewHtml.value = ''
+  htmlPreviewSource.value = ''
+  htmlPreviewBaseUrl.value = row.source || ''
+  htmlLocalizeResources.value = true
+  htmlShowSource.value = false
+  try {
+    const response: any = await request.get('/file/download', {
+      params: { bucket: row.bucket, objectName: row.objectName },
+      responseType: 'blob'
+    })
+    const blob = response instanceof Blob ? response : response.data
+    const text = await blob.text()
+    htmlPreviewSource.value = text
+    htmlPreviewHtml.value = resolvePreviewHtml(text, htmlPreviewBaseUrl.value, htmlLocalizeResources.value)
+  } catch (e) {
+    console.error(e)
+    htmlPreviewHtml.value = '加载失败'
+    htmlPreviewSource.value = '加载失败'
+  } finally {
+    htmlPreviewLoading.value = false
+  }
+}
+
+const toggleHtmlLocalize = (enabled: string | number | boolean) => {
+  if (!htmlPreviewSource.value || htmlPreviewSource.value === '加载失败') return
+  htmlPreviewHtml.value = resolvePreviewHtml(htmlPreviewSource.value, htmlPreviewBaseUrl.value, Boolean(enabled))
+}
+
+const clearHtmlPreview = () => {
+  htmlPreviewHtml.value = ''
+  htmlPreviewSource.value = ''
+  htmlPreviewBaseUrl.value = ''
+  htmlPreviewTitle.value = ''
+}
+
 const handleRowAction = (command: string, row: any) => {
-  if (command === 'preview') preview(row)
+  if (command === 'previewImage') preview(row)
+  if (command === 'previewHtml') previewHtml(row)
   if (command === 'download') download(row)
   if (command === 'delete') remove(row)
 }
@@ -330,7 +414,10 @@ onMounted(async () => {
     console.error(e)
   }
 })
-onUnmounted(clearPreview)
+onUnmounted(() => {
+  clearPreview()
+  clearHtmlPreview()
+})
 </script>
 
 <style scoped>
@@ -339,4 +426,83 @@ onUnmounted(clearPreview)
 .preview-body { min-height: 240px; display: flex; align-items: center; justify-content: center; }
 .preview-image { display: block; width: 100%; height: min(62vh, 620px); }
 .preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0f4; color: #5e6c84; font-size: 13px; }
+
+/* HTML 预览 */
+.preview-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #172b4d;
+  font-size: 14px;
+  font-weight: 600;
+}
+.preview-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.preview-source-link {
+  color: #1a73e8;
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: none;
+}
+.preview-source-link:hover {
+  text-decoration: underline;
+}
+.preview-content-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin-right: 28px;
+}
+.preview-content-controls :deep(.el-switch) {
+  --el-switch-on-color: #0f9f9a;
+  --el-switch-off-color: #c0c4cc;
+  height: 14px;
+  font-size: 9px;
+}
+.preview-content-controls :deep(.el-switch__label) {
+  font-size: 9px;
+  padding: 0 2px;
+  line-height: 14px;
+}
+.preview-content-controls :deep(.el-switch__core) {
+  height: 12px;
+  width: 22px;
+}
+.preview-content-controls :deep(.el-switch__core::after) {
+  width: 8px;
+  height: 8px;
+}
+.preview-container {
+  max-height: 70vh;
+  overflow-y: auto;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 16px;
+  background: #fff;
+}
+.preview-html {
+  display: block;
+  width: 100%;
+  height: 70vh;
+  padding: 0;
+  line-height: 1.8;
+  color: #303133;
+  word-break: break-word;
+}
+.preview-html img { max-width: 100%; height: auto; }
+.preview-html iframe { max-width: 100%; }
+.code-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+}
+.detail-text {
+  line-height: 1.8;
+  color: #303133;
+}
 </style>

@@ -34,7 +34,6 @@
           <el-select
             v-model="refreshIntervalSeconds"
             class="refresh-interval-select"
-            size="small"
             aria-label="自动刷新间隔"
             @change="saveRefreshInterval"
           >
@@ -45,7 +44,8 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable border>
+    <div class="table-scroll-wrapper">
+    <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable border class="task-table">
       <el-table-column type="selection" width="50"  resizable />
       <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip resizable />
       <el-table-column label="爬虫名称" min-width="160" resizable>
@@ -92,12 +92,13 @@
         <el-table-column prop="imageFailCount" label="失败" min-width="70" align="center"  resizable />
         <el-table-column prop="imageExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" min-width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-pagination
       v-model:current-page="page"
@@ -162,7 +163,7 @@
 
     <el-dialog
       v-model="logVisible"
-      :width="logFullscreen ? '100%' : '1200px'"
+      :width="logFullscreen ? '100%' : 'min(1200px, calc(100vw - 32px))'"
       :top="logFullscreen ? '0' : '5vh'"
       :class="{ 'log-fullscreen-dialog': logFullscreen }"
       destroy-on-close
@@ -178,19 +179,19 @@
         </div>
       </template>
       <div class="log-filter">
-        <el-input v-model="logKeyword" placeholder="搜索 URL / 信息" clearable size="small" style="width: 220px" @clear="reloadLogs" @keyup.enter="reloadLogs" />
-        <el-select v-model="logStatus" placeholder="状态" clearable size="small" style="width: 100px" @change="reloadLogs">
+        <el-input v-model="logKeyword" placeholder="搜索 URL / 信息" clearable size="small" class="log-filter-input" @clear="reloadLogs" @keyup.enter="reloadLogs" />
+        <el-select v-model="logStatus" placeholder="状态" clearable size="small" class="log-filter-select" @change="reloadLogs">
           <el-option label="成功" :value="1" />
           <el-option label="失败" :value="0" />
           <el-option label="已存在" :value="2" />
         </el-select>
-        <el-select v-model="logType" placeholder="类型" clearable size="small" style="width: 130px" @change="reloadLogs">
+        <el-select v-model="logType" placeholder="类型" clearable size="small" class="log-filter-select" @change="reloadLogs">
           <el-option label="HTML" value="html" />
           <el-option label="图片" value="image" />
           <el-option label="JavaScript" value="js" />
           <el-option label="CSS" value="css" />
         </el-select>
-        <el-select v-model="logLevel" placeholder="级别" clearable size="small" style="width: 100px" @change="reloadLogs">
+        <el-select v-model="logLevel" placeholder="级别" clearable size="small" class="log-filter-select" @change="reloadLogs">
           <el-option label="INFO" value="INFO" />
           <el-option label="ERROR" value="ERROR" />
         </el-select>
@@ -198,7 +199,8 @@
         <el-button size="small" @click="resetLogFilters">重置</el-button>
       </div>
       <el-empty v-if="!logLoading && logs.length === 0" description="暂无日志" :image-size="60" />
-      <el-table v-else :data="logs" v-loading="logLoading" stripe size="small" :max-height="logFullscreen ? 'calc(100vh - 190px)' : '65vh'" resizable border>
+      <div v-else class="table-scroll-wrapper">
+      <el-table :data="logs" v-loading="logLoading" stripe size="small" :max-height="logFullscreen ? 'calc(100vh - 190px)' : 'min(65vh, calc(100vh - 220px))'" resizable border>
         <el-table-column label="URL" min-width="280" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <a class="log-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
@@ -223,6 +225,7 @@
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
         </el-table-column>
       </el-table>
+      </div>
       <el-pagination
         v-show="logs.length > 0"
         v-model:current-page="logPage"
@@ -602,6 +605,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+
 .log-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
 .log-dialog-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 :deep(.log-fullscreen-dialog) { margin: 0 auto !important; height: 100vh; }
@@ -616,6 +620,10 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 12px;
 }
+.refresh-toolbar :deep(.el-switch),
+.refresh-toolbar :deep(.el-switch__label) {
+  white-space: nowrap;
+}
 .refresh-interval-select { width: 90px; }
 :deep(.concurrency-toolbar-item) { margin-left: auto !important; }
 
@@ -629,8 +637,28 @@ onUnmounted(() => {
 .log-filter {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 12px;
+}
+.log-filter-input {
+  flex: 1 1 200px;
+  min-width: 140px;
+  max-width: 280px;
+}
+.log-filter-select {
+  flex: 0 1 120px;
+  min-width: 90px;
+}
+@media (max-width: 767px) {
+  .log-filter-input {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .log-filter-select {
+    flex: 1 1 45%;
+    min-width: 0;
+  }
 }
 
 .log-url {
