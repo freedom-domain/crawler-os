@@ -163,8 +163,8 @@ const handleTagsSaved = (tags: string[]) => {
 }
 
 const getRowActions = (row: any) => [
-  { command: 'edit-tags', label: '编辑标签', icon: Edit },
-  { command: 'remove', label: '取消收藏', icon: Delete, danger: true }
+  { command: 'remove', label: '取消收藏', icon: Delete, danger: true },
+  { command: 'edit-tags', label: '编辑标签', icon: Edit }
 ]
 
 const handleRowAction = (command: string, row: any) => {
