@@ -53,7 +53,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="crawlerName" label="所属爬虫" min-width="140" show-overflow-tooltip resizable>
-          <template #default="{ row }">{{ row.crawlerName || '-' }}</template>
+          <template #default="{ row }">
+            <a v-if="row.crawlerName" class="crawler-link" href="javascript:void(0)" @click="goToSpider(row)">{{ row.crawlerName }}</a>
+            <span v-else>-</span>
+          </template>
         </el-table-column>
         <el-table-column prop="category" label="分类" min-width="100" resizable>
           <template #default="{ row }">{{ categoryLabel(row.category) }}</template>
@@ -233,6 +236,14 @@ const resetFilters = () => {
   syncSpiderFilter()
 }
 
+// 跳转爬虫页并带上爬虫 ID 和名字
+const goToSpider = (row: any) => {
+  const query: Record<string, string> = {}
+  if (row.spiderId) query.spiderId = String(row.spiderId)
+  if (row.crawlerName) query.keyword = row.crawlerName
+  router.push({ path: '/spider', query })
+}
+
 const download = (row: any) => {
   const url = `/api/file/download?bucket=${encodeURIComponent(row.bucket)}&objectName=${encodeURIComponent(row.objectName)}`
   window.open(url, '_blank')
@@ -407,6 +418,8 @@ onUnmounted(() => {
 
 <style scoped>
 .pagination { margin-top: 18px; display: flex; justify-content: center; }
+.crawler-link { color: var(--teal); text-decoration: none; }
+.crawler-link:hover { color: var(--teal-dark); text-decoration: underline; }
 .pagination :deep(.el-pagination) { margin-top: 0; }
 .preview-body { min-height: 240px; display: flex; align-items: center; justify-content: center; }
 .preview-image { display: block; width: 100%; height: min(62vh, 620px); }

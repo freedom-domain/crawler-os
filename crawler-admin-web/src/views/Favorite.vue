@@ -31,11 +31,13 @@
     <div class="table-scroll-wrapper">
     <el-table :data="list" v-loading="loading" stripe resizable border>
       <el-table-column prop="title" label="标题" min-width="420" show-overflow-tooltip resizable>
-        <template #default="{ row }">{{ row.title || '无标题' }}</template>
+        <template #default="{ row }">
+          <a class="title-link" href="javascript:void(0)" @click="openImagePreview(row)">{{ row.title || '无标题' }}</a>
+        </template>
       </el-table-column>
       <el-table-column label="来源 URL" min-width="300" show-overflow-tooltip resizable>
         <template #default="{ row }">
-          <a v-if="row.url" class="source-url" :href="row.url" target="_blank" rel="noopener noreferrer">{{ row.url }}</a>
+          <a v-if="row.url" class="source-url" href="javascript:void(0)" @click="openContentPreview(row)">{{ row.url }}</a>
           <span v-else>-</span>
         </template>
       </el-table-column>
@@ -46,7 +48,10 @@
         </template>
       </el-table-column>
       <el-table-column prop="spiderName" label="爬虫" min-width="160" show-overflow-tooltip resizable>
-        <template #default="{ row }">{{ row.spiderName || '-' }}</template>
+        <template #default="{ row }">
+          <a v-if="row.spiderName" class="title-link" href="javascript:void(0)" @click="goToSpider(row)">{{ row.spiderName }}</a>
+          <span v-else>-</span>
+        </template>
       </el-table-column>
       <el-table-column label="标签" min-width="180" resizable>
         <template #default="{ row }">
@@ -54,15 +59,12 @@
           <span v-if="!row.tags || !row.tags.length" class="tag-empty" @click="openTagEditor(row)">添加标签</span>
         </template>
       </el-table-column>
-      <el-table-column prop="crawlTime" label="抓取时间" min-width="180" resizable>
+      <el-table-column prop="crawlTime" label="收藏时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.crawlTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="90" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="row-action-cell">
-            <el-button size="small" type="danger" plain @click="remove(row)">取消收藏</el-button>
-            <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
-          </div>
+          <el-button size="small" type="danger" plain @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -99,16 +101,17 @@
 
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Refresh, Edit, View, Picture } from '@element-plus/icons-vue'
-import TableRowActions from '@/components/TableRowActions.vue'
+import { Refresh } from '@element-plus/icons-vue'
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { dictChildren, favoriteDelete, favoritePage, searchDetail, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
 import { formatDateTime } from '@/utils/dateTime'
 
+const router = useRouter()
 const list = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
@@ -139,6 +142,11 @@ const openImagePreview = (row: any) => {
   if (!win) {
     ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
   }
+}
+
+// 跳转爬虫页并带上爬虫名字
+const goToSpider = (row: any) => {
+  router.push({ path: '/spider', query: { keyword: row.spiderName } })
 }
 
 // 内容预览
@@ -246,18 +254,6 @@ const handleTagsSaved = (tags: string[]) => {
   if (tagCurrentRow.value) tagCurrentRow.value.tags = tags
 }
 
-const getRowActions = (row: any) => [
-  { command: 'preview-images', label: '预览图片', icon: Picture, disabled: !row.images || !row.images.length },
-  { command: 'preview-content', label: '预览内容', icon: View },
-  { command: 'edit-tags', label: '编辑标签', icon: Edit }
-]
-
-const handleRowAction = (command: string, row: any) => {
-  if (command === 'edit-tags') openTagEditor(row)
-  if (command === 'preview-images') openImagePreview(row)
-  if (command === 'preview-content') openContentPreview(row)
-}
-
 const openContentPreview = async (row: any) => {
   previewContentVisible.value = true
   previewContentLoading.value = true
@@ -288,9 +284,9 @@ const toggleContentLocalize = (enabled: string | number | boolean) => {
 
 const remove = async (row: any) => {
   try {
-    if (!await confirm('确定取消收藏该内容吗？')) return
+    if (!await confirm('确定删除该条收藏吗？')) return
     await favoriteDelete(row.id)
-    ElMessage.success('已取消收藏')
+    ElMessage.success('已删除')
     await loadData()
   } catch (error: any) {
     if (error !== 'cancel') console.error(error)
@@ -307,9 +303,10 @@ onMounted(() => {
 
 <style scoped>
 .pagination { margin-top: 18px; display: flex; justify-content: center; }
+.title-link { color: var(--teal); text-decoration: none; }
+.title-link:hover { color: var(--teal-dark); text-decoration: underline; }
 .source-url { color: var(--teal); text-decoration: none; }
 .source-url:hover { color: var(--teal-dark); text-decoration: underline; }
 .tag { margin-right: 6px; margin-bottom: 4px; cursor: pointer; }
 .tag-empty { color: #0f9f9a; cursor: pointer; }
-.row-action-cell { display: flex; align-items: center; gap: 8px; }
 </style>
