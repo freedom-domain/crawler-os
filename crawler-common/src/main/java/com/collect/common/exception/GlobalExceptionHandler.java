@@ -2,23 +2,31 @@ package com.collect.common.exception;
 
 import com.collect.common.result.R;
 import com.collect.common.result.ResultCode;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
 
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * 全局异常处理器。
+ *
+ * 注意：方法签名仅使用 Spring MVC 自带的 {@link WebRequest}，
+ * 不依赖 jakarta.servlet.http.HttpServletRequest。
+ * 这样即使运行在不含 servlet API 的 worker 等模块中，
+ * Spring 反射解析方法签名时也不会抛出 NoClassDefFoundError。
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BizException.class)
-    public Object handleBizException(BizException e, HttpServletRequest request) {
+    public Object handleBizException(BizException e, WebRequest request) {
         log.warn("业务异常: code={}, msg={}", e.getCode(), e.getMessage());
         if (isBinaryRequest(request)) {
             // 图片/二进制请求出错时返回 404 空响应，避免 R 无法序列化为 image/* 类型
@@ -46,7 +54,7 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public Object handleException(Exception e, HttpServletRequest request) {
+    public Object handleException(Exception e, WebRequest request) {
         log.error("系统异常", e);
         if (isBinaryRequest(request)) {
             return ResponseEntity.notFound().build();
@@ -58,8 +66,10 @@ public class GlobalExceptionHandler {
      * 判断请求是否为二进制资源（图片/文件流等）。
      * 这类请求的 Content-Type 非 JSON，GlobalExceptionHandler 无法返回 R（JSON），
      * 应返回空 404 让前端按图片加载失败处理。
+     *
+     * 使用 WebRequest 读取 Accept 头，避免依赖 jakarta.servlet。
      */
-    private boolean isBinaryRequest(HttpServletRequest request) {
+    private boolean isBinaryRequest(WebRequest request) {
         String accept = request.getHeader("Accept");
         if (accept == null || accept.isBlank()) {
             return false;
