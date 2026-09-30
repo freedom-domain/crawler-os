@@ -283,15 +283,15 @@ const endDrag = () => {
   triggerPos.value = { x: snapX, y }
 }
 
-// 移动端（竖屏）判断
-const isMobile = () => window.matchMedia('(max-width: 640px)').matches
-
-// 移动端默认每页 1 张、每行 1 张
-const applyMobileDefaults = () => {
-  if (!isMobile()) return
-  pageSize.value = 1
-  cols.value = 1
+// 移动端（竖屏）判断：≤ 860px
+const isMobile = () => window.innerWidth <= 860
+// 平板/小屏断点：861–1800px
+const isTablet = () => {
+  const w = window.innerWidth
+  return w > 860 && w <= 1800
 }
+
+
 
 // 初始化位置：右侧居中
 onMounted(() => {
@@ -301,8 +301,9 @@ onMounted(() => {
   }
   // 点击其他地方隐藏工具栏
   document.addEventListener('click', onDocumentClick)
-  // 移动端默认每页竖屏显示一张图片
-  applyMobileDefaults()
+  // ≤860 每页 1 张；861–1800 每页 2 张；>1800 按图片总数
+  lastBreakpoint = 0
+  applyBreakpointDefaults()
   window.addEventListener('resize', onResize)
   loadTagOptions()
 })
@@ -312,9 +313,34 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })
 
-// 窗口尺寸变化时：进入移动端竖屏则应用每页 1 张
+// 窗口尺寸变化时：断点切换时应用对应默认值
+// ≤860：每页 1 张、每行 1 张；861–1800：每页 2 张、每行 2 张；>1800：按图片总数
+let lastBreakpoint = 0 // 0=未记录, 1=≤860, 2=861–1800, 3=>1800
+const getBreakpoint = () => {
+  const w = window.innerWidth
+  if (w <= 860) return 1
+  if (w <= 1800) return 2
+  return 3
+}
+const applyBreakpointDefaults = () => {
+  const bp = getBreakpoint()
+  if (bp === lastBreakpoint) return
+  lastBreakpoint = bp
+  if (bp === 1) {
+    pageSize.value = 1
+    cols.value = 1
+  } else if (bp === 2) {
+    pageSize.value = 2
+    cols.value = 2
+  } else {
+    const size = images.value.length > 4 ? 3 : 4
+    pageSize.value = Math.min(size, images.value.length || size)
+    cols.value = Math.min(size, pageSize.value)
+  }
+  page.value = 1
+}
 const onResize = () => {
-  if (isMobile()) applyMobileDefaults()
+  applyBreakpointDefaults()
 }
 
 const onDocumentClick = (e: MouseEvent) => {
@@ -358,13 +384,19 @@ const loadImages = async () => {
     const rawImages: string[] = doc?.images || []
     imageObjects.value = rawImages
     images.value = rawImages.map(imageUrl).filter(Boolean)
-    // 移动端竖屏默认每页 1 张；桌面端超过 4 张时每页显示 3 张，否则每页 4 张
+    // ≤860 每页 1 张；861–1800 每页 2 张；>1800 超过 4 张时 3 张，否则 4 张
     // 约束：每页数量不超过图片总数，每行数量不超过每页数量
-    const size = isMobile() ? 1 : (images.value.length > 4 ? 3 : 4)
+    let size = 4
+    if (isMobile()) size = 1
+    else if (isTablet()) size = 2
+    else if (images.value.length > 4) size = 3
     pageSize.value = Math.min(size, images.value.length)
-    cols.value = Math.min(cols.value, pageSize.value)
     if (isMobile()) {
       cols.value = Math.min(1, pageSize.value)
+    } else if (isTablet()) {
+      cols.value = Math.min(2, pageSize.value)
+    } else {
+      cols.value = Math.min(cols.value, pageSize.value)
     }
 
     page.value = 1
@@ -508,9 +540,11 @@ const changePage = (p: number) => {
 const resetToInitial = () => {
   gridScale.value = 1
   page.value = 1
-  // 移动端竖屏默认每页 1 张，桌面端默认每页 4 张
+  // ≤860 每页 1 张；861–1800 每页 2 张；>1800 默认每页 4 张
   // 约束：每页数量不超过图片总数，每行数量不超过每页数量
-  const size = isMobile() ? 1 : 4
+  let size = 4
+  if (isMobile()) size = 1
+  else if (isTablet()) size = 2
   pageSize.value = Math.min(size, images.value.length || size)
   cols.value = Math.min(size, pageSize.value)
   loadImages()
