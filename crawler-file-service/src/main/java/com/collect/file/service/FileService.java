@@ -228,25 +228,31 @@ public class FileService {
      */
     public InputStream getThumbnail(String sourceBucket, String objectName,
                                     String thumbnailBucket, int maxWidth) {
-        if (!exists(sourceBucket, objectName)) {
-            return null;
-        }
-        // 缩略图 key 去掉 images/ 前缀，避免路径冗余
-        String base = objectName.startsWith("images/") ? objectName.substring("images/".length()) : objectName;
-        String thumbKey = "thumbnail/" + base;
+        // 缩略图 key：thumbnail/<width>/<原图去掉 images/ 前缀的路径>
+        // 同一张图不同宽度各存一份，互不覆盖
+        String base = objectName.startsWith("images/")
+                ? objectName.substring("images/".length())
+                : objectName;
+        String thumbKey = "thumbnail/" + maxWidth + "/" + base;
         ensureBucket(thumbnailBucket);
+        // 1. 缩略图已存在直接返回
         if (exists(thumbnailBucket, thumbKey)) {
             return download(thumbnailBucket, thumbKey);
         }
+        // 2. 查找原图
+        if (!exists(sourceBucket, objectName)) {
+            return null; // 原图不存在，返回 404
+        }
         try {
-            byte[] resized;
+            byte[] original;
             try (InputStream in = download(sourceBucket, objectName)) {
-                resized = resizeImageBytes(in.readAllBytes(), objectName, maxWidth);
+                original = in.readAllBytes();
             }
+            byte[] resized = resizeImageBytes(original, objectName, maxWidth);
             if (resized == null) {
                 return null;
             }
-            // 缩略图真实格式由 resizeImageBytes 决定（透明→png，否则→jpg）
+            // 3. 生成缩略图并存入 MinIO
             String actualExt = actualThumbExt(objectName, resized);
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(thumbnailBucket)

@@ -110,17 +110,11 @@ public class FileController {
         if (in == null) {
             return ResponseEntity.notFound().build();
         }
-        try {
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
-                    .contentType(fileService.thumbnailContentType(objectName))
-                    .body(new InputStreamResource(in));
-        } finally {
-            try {
-                in.close();
-            } catch (Exception ignored) {
-            }
-        }
+        // 不手动关闭流：Spring MVC 在响应体写完后才关闭，提前关闭会导致 IOException: closed
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                .contentType(fileService.thumbnailContentType(objectName))
+                .body(new InputStreamResource(in));
     }
 
     @Operation(summary = "内联访问静态资源")

@@ -14,6 +14,8 @@
           :key="idx"
           :src="thumbUrl(img, 144)"
           class="result-thumb"
+          loading="lazy"
+          decoding="async"
           @click="$emit('images', row)"
         />
       </div>
