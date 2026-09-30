@@ -4,5 +4,5 @@
  * 因此这里以 0 为基准做增量调整。
  */
 .el-message-box__header {
-  padding-top: 0 !important; /* 与 App.vue 当前一致；如需增加改为 5px / 10px 等 */
+  padding-top: 20px !important;
 }
