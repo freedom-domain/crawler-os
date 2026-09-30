@@ -52,7 +52,7 @@ export default defineConfig({
           }
           // 路由视图按页面拆 chunk
           if (id.includes('/views/')) {
-            const viewName = id.split('/views/')[1].split(/\.|\/)[0]
+            const viewName = id.split('/views/')[1].split(/\.|\//)[0]
             return `view-${viewName.toLowerCase()}`
           }
           return undefined

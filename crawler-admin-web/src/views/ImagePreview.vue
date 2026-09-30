@@ -225,20 +225,22 @@ const toolbarStyle = computed<CSSProperties>(() => {
   const vh = window.innerHeight
   // 判断按钮在左边还是右边
   const isLeft = x < vw / 2
-  // 竖向工具栏尺寸（固定宽度 180px，高度取实际渲染值）
-  const toolbarWidth = toolbarRef.value?.offsetWidth || 180
-  const toolbarHeight = toolbarRef.value?.offsetHeight || 280
+  // 竖向工具栏尺寸（小屏自适应，高度取实际渲染值）
+  const baseWidth = toolbarRef.value?.offsetWidth || (window.matchMedia('(max-width: 640px)').matches ? 160 : 180)
+  // 确保工具栏不超出屏幕宽度（留 10px 边距）
+  const toolbarWidth = Math.min(baseWidth, Math.max(100, vw - 20))
+  const toolbarHeight = Math.min(toolbarRef.value?.offsetHeight || 280, vh - 20)
   // 按钮尺寸 40px，面板与按钮间距 12px
   const triggerSize = 40
   const gap = 12
   // 垂直方向：面板与按钮中心垂直对齐，确保不超出上下边界
   let top = y + triggerSize / 2 - toolbarHeight / 2
   if (top < 10) top = 10
-  if (top + toolbarHeight > vh - 10) top = vh - 10 - toolbarHeight
+  if (top + toolbarHeight > vh - 10) top = Math.max(10, vh - 10 - toolbarHeight)
   // 水平方向：按钮在左半屏时面板向右展开，否则向左展开，并夹取在窗口内
   let left = isLeft ? x + triggerSize + gap : x - gap - toolbarWidth
   if (left < 10) left = 10
-  if (left + toolbarWidth > vw - 10) left = vw - 10 - toolbarWidth
+  if (left + toolbarWidth > vw - 10) left = Math.max(10, vw - 10 - toolbarWidth)
   return {
     position: 'fixed',
     left: `${left}px`,

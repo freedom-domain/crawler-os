@@ -138,31 +138,17 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="previewContentVisible" width="80%" top="5vh" class="content-preview-dialog" destroy-on-close>
-      <template #header>
-        <div class="preview-content-header">
-          <span>{{ previewTitle }} - 内容</span>
-          <div class="preview-content-controls">
-            <el-switch
-              v-model="localizePreviewResources"
-              active-text="CSS/JS 使用本地地址"
-              @change="togglePreviewResourceLocalization"
-            />
-            <el-switch v-model="showPreviewSource" inactive-text="内容预览" active-text="HTML 源码" />
-          </div>
-        </div>
-      </template>
-      <div v-loading="previewLoading">
-        <iframe
-          v-if="!showPreviewSource"
-          class="preview-container preview-html"
-          :srcdoc="previewHtml || '<p>无正文内容</p>'"
-          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-          title="内容预览"
-        ></iframe>
-        <pre v-else class="preview-container detail-text code-text">{{ previewSource || '无原始内容' }}</pre>
-      </div>
-    </el-dialog>
+    <ContentPreviewDialog
+      v-model:visible="previewContentVisible"
+      :title="previewTitle"
+      :html="previewHtml"
+      :source="previewSource"
+      :loading="previewLoading"
+      :source-url="previewBaseUrl"
+      v-model:localize="localizePreviewResources"
+      v-model:show-source="showPreviewSource"
+      @localize-change="togglePreviewResourceLocalization"
+    />
 
     <SearchDetailDialog
       v-model="detailVisible"
@@ -186,6 +172,7 @@ import SearchResultsFrame from '@/components/SearchResultsFrame.vue'
 import SearchHistoryDropdown from '@/components/SearchHistoryDropdown.vue'
 import SearchDetailDialog from '@/components/SearchDetailDialog.vue'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
+import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { searchContent, searchDetail, searchDelete, dictChildren, spiderPage, spiderRerun, favoriteAdd, favoriteDelete } from '@/api'
 import { Search, FullScreen, Minus, ZoomIn, ZoomOut, Promotion, RefreshLeft } from '@element-plus/icons-vue'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
@@ -1141,31 +1128,7 @@ onMounted(() => {
   object-fit: contain;
 }
 
-.preview-container {
-  max-height: 70vh;
-  overflow-y: auto;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  padding: 16px;
-  background: #fff;
-}
-
-.preview-content-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #172b4d;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.preview-content-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-right: 28px;
-}
-
+/* 预览弹窗样式已抽到 ContentPreviewDialog 组件 */
 .detail-dialog-body {
   min-height: 220px;
 }
@@ -1261,40 +1224,6 @@ onMounted(() => {
   font-size: 14px;
   color: #486581;
   font-weight: 700;
-}
-
-.detail-text {
-  white-space: pre-wrap;
-  line-height: 1.8;
-  color: #303133;
-  max-height: 42vh;
-  overflow-y: auto;
-}
-
-.code-text {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
-}
-
-.preview-html {
-  display: block;
-  width: 100%;
-  height: 70vh;
-  padding: 0;
-  line-height: 1.8;
-  color: #303133;
-  word-break: break-word;
-}
-
-.preview-html img {
-  max-width: 100%;
-  height: auto;
-}
-
-.preview-html iframe {
-  max-width: 100%;
 }
 
 .source-tag { background: #e8f7f5; color: #087f7d; }

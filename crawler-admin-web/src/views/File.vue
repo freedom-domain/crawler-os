@@ -111,34 +111,18 @@
       </div>
     </el-dialog>
 
-    <el-dialog v-model="htmlPreviewVisible" width="80%" top="5vh" class="content-preview-dialog" destroy-on-close @closed="clearHtmlPreview">
-      <template #header>
-        <div class="preview-content-header">
-          <span class="preview-title-wrap">
-            {{ htmlPreviewTitle }}
-            <a v-if="htmlPreviewBaseUrl" :href="htmlPreviewBaseUrl" target="_blank" rel="noopener noreferrer" class="preview-source-link">跳转原文</a>
-          </span>
-          <div class="preview-content-controls">
-            <el-switch
-              v-model="htmlLocalizeResources"
-              active-text="CSS/JS 本地"
-              @change="toggleHtmlLocalize"
-            />
-            <el-switch v-model="htmlShowSource" inactive-text="预览" active-text="源码" />
-          </div>
-        </div>
-      </template>
-      <div v-loading="htmlPreviewLoading">
-        <iframe
-          v-if="!htmlShowSource"
-          class="preview-container preview-html"
-          :srcdoc="htmlPreviewHtml || '<p>无正文内容</p>'"
-          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-          title="HTML 预览"
-        ></iframe>
-        <pre v-else class="preview-container detail-text code-text">{{ htmlPreviewSource || '无原始内容' }}</pre>
-      </div>
-    </el-dialog>
+    <ContentPreviewDialog
+      v-model:visible="htmlPreviewVisible"
+      :title="htmlPreviewTitle"
+      :html="htmlPreviewHtml"
+      :source="htmlPreviewSource"
+      :loading="htmlPreviewLoading"
+      :source-url="htmlPreviewBaseUrl"
+      v-model:localize="htmlLocalizeResources"
+      v-model:show-source="htmlShowSource"
+      @localize-change="toggleHtmlLocalize"
+      @closed="clearHtmlPreview"
+    />
   </div>
 </template>
 
@@ -153,6 +137,7 @@ import request from '@/api/request'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions from '@/components/TableRowActions.vue'
+import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -427,82 +412,5 @@ onUnmounted(() => {
 .preview-image { display: block; width: 100%; height: min(62vh, 620px); }
 .preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0f4; color: #5e6c84; font-size: 13px; }
 
-/* HTML 预览 */
-.preview-content-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #172b4d;
-  font-size: 14px;
-  font-weight: 600;
-}
-.preview-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.preview-source-link {
-  color: #1a73e8;
-  font-size: 12px;
-  font-weight: 400;
-  text-decoration: none;
-}
-.preview-source-link:hover {
-  text-decoration: underline;
-}
-.preview-content-controls {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  margin-right: 28px;
-}
-.preview-content-controls :deep(.el-switch) {
-  --el-switch-on-color: #0f9f9a;
-  --el-switch-off-color: #c0c4cc;
-  height: 14px;
-  font-size: 9px;
-}
-.preview-content-controls :deep(.el-switch__label) {
-  font-size: 9px;
-  padding: 0 2px;
-  line-height: 14px;
-}
-.preview-content-controls :deep(.el-switch__core) {
-  height: 12px;
-  width: 22px;
-}
-.preview-content-controls :deep(.el-switch__core::after) {
-  width: 8px;
-  height: 8px;
-}
-.preview-container {
-  max-height: 70vh;
-  overflow-y: auto;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
-  padding: 16px;
-  background: #fff;
-}
-.preview-html {
-  display: block;
-  width: 100%;
-  height: 70vh;
-  padding: 0;
-  line-height: 1.8;
-  color: #303133;
-  word-break: break-word;
-}
-.preview-html img { max-width: 100%; height: auto; }
-.preview-html iframe { max-width: 100%; }
-.code-text {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 13px;
-}
-.detail-text {
-  line-height: 1.8;
-  color: #303133;
-}
+/* 预览弹窗样式已抽到 ContentPreviewDialog 组件 */
 </style>
