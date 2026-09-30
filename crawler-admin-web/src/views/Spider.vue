@@ -97,20 +97,28 @@
           />
         </template>
       </el-table-column>
+      <el-table-column prop="status" label="定时任务" min-width="150" align="center" resizable>
+        <template #default="{ row }">
+          <el-switch
+            v-model="row.status"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="运行中"
+            inactive-text="停止"
+            size="small"
+            :loading="row._savingStatus"
+            :disabled="row._savingStatus || (row.status !== 1 && !row.schedule?.trim())"
+            @change="handleToggleStatus(row)"
+          />
+        </template>
+      </el-table-column>
+      <el-table-column prop="schedule" label="调度" min-width="160" resizable />
       <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
       </el-table-column>
       <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
       </el-table-column>
-      <el-table-column prop="status" label="定时任务" min-width="100" resizable>
-        <template #default="{ row }">
-          <el-tag :type="row.status === 1 ? 'success' : 'info'">
-            {{ row.status === 1 ? '运行中' : '停止' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="schedule" label="调度" min-width="160" resizable />
       <el-table-column label="操作" width="180" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <div class="row-actions">
@@ -256,7 +264,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, VideoPlay, VideoPause, EditPen, Delete, FolderOpened, List } from '@element-plus/icons-vue'
+import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, List } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -609,6 +617,25 @@ const applyToggle = async (row: any, field: 'isPublic' | 'readCache', savingKey:
 const handleTogglePublic = (row: any) => applyToggle(row, 'isPublic', '_savingPublic')
 const handleToggleReadCache = (row: any) => applyToggle(row, 'readCache', '_savingCache')
 
+const handleToggleStatus = async (row: any) => {
+  const oldValue = row.status
+  row._savingStatus = true
+  try {
+    if (oldValue === 1) {
+      await spiderStop(row.id)
+      ElMessage.success('定时任务已停止')
+    } else {
+      await spiderStart(row.id)
+      ElMessage.success('定时任务已启动')
+    }
+  } catch {
+    row.status = oldValue
+    ElMessage.error('定时任务切换失败')
+  } finally {
+    row._savingStatus = false
+  }
+}
+
 const handleStop = async (row: any) => {
   try {
     await spiderStop(row.id)
@@ -686,12 +713,6 @@ const goToTaskPage = (row?: any) => {
 const getRowActions = (row: any): TableRowAction[] => [
   { command: 'tasks', label: '查看任务', icon: List },
   { command: 'files', label: '查看文件', icon: FolderOpened },
-  {
-    command: 'toggle',
-    label: row.status === 1 ? '停止定时任务' : '启动定时任务',
-    icon: row.status === 1 ? VideoPause : VideoPlay,
-    disabled: row.status !== 1 && !row.schedule?.trim()
-  },
   { command: 'edit', label: '编辑', icon: EditPen },
   { command: 'clear-content', label: '清空内容', icon: Delete, divided: true, disabled: row._clearingContent },
   { command: 'delete', label: '删除', icon: Delete, divided: true, danger: true }
@@ -703,7 +724,6 @@ const handleCommand = (cmd: string, row: any) => {
     case 'files':
       router.push({ name: 'File', query: { spiderId: String(row.id) } })
       break
-    case 'toggle': row.status === 1 ? handleStop(row) : handleStart(row); break
     case 'edit': showEdit(row); break
     case 'clear-content': handleClearContent(row); break
     case 'delete': handleDelete(row); break
