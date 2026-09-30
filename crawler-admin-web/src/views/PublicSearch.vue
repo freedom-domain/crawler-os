@@ -105,6 +105,7 @@
           :rows="list"
           :authenticated="isLoggedIn"
           :image-url="imageUrl"
+          :thumb-url="thumbUrl"
           :format-time="formatTime"
           @preview="showPreviewContent"
           @detail="showDetail"
@@ -400,6 +401,14 @@ const imageUrl = (objectName: string, width?: number) => {
   if (/^https?:\/\//i.test(objectName)) return objectName
   const sizeParam = width ? `&width=${width}` : ''
   return `/api/file/image?objectName=${encodeURIComponent(objectName)}${sizeParam}`
+}
+
+// 搜索结果列表缩略图：走新缩略图接口（后端缓存于 minio thumbnail 目录，比 /image 每次缩放更快更稳）
+const thumbUrl = (objectName: string, width?: number) => {
+  if (!objectName) return ''
+  if (/^https?:\/\//i.test(objectName)) return objectName
+  const sizeParam = width ? `&width=${width}` : ''
+  return `/api/file/thumbnail?objectName=${encodeURIComponent(objectName)}${sizeParam}`
 }
 
 // 不再传递图片列表，仅传递内容 id（含爬虫信息与 url），由预览页自行从后端获取图片

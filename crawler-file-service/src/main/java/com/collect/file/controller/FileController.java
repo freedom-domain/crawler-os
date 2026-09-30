@@ -34,6 +34,9 @@ public class FileController {
     @Value("${minio.js-bucket:crawler}")
     private String jsBucket;
 
+    @Value("${minio.thumbnail-bucket:crawler}")
+    private String thumbnailBucket;
+
     @Operation(summary = "上传文件")
     @PostMapping("/upload")
     public R<FileMetadata> upload(@RequestParam("file") MultipartFile file,
@@ -82,7 +85,7 @@ public class FileController {
             if (resized != null) {
                 return ResponseEntity.ok()
                         .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
-                        .contentType(MediaType.IMAGE_JPEG)
+                        .contentType(fileService.resizedContentType(resized))
                         .body(new InputStreamResource(new java.io.ByteArrayInputStream(resized)));
             }
         }
@@ -92,6 +95,32 @@ public class FileController {
                 .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
                 .contentType(mediaType)
                 .body(new InputStreamResource(in));
+    }
+
+    @Operation(summary = "获取图片缩略图（不存在时自动生成并存入 thumbnail 目录）")
+    @GetMapping("/thumbnail")
+    public ResponseEntity<InputStreamResource> thumbnail(@RequestParam(value = "bucket", required = false) String bucket,
+                                                         @RequestParam("objectName") String objectName,
+                                                         @RequestParam(value = "width", defaultValue = "300") int width) {
+        if (bucket == null || bucket.isBlank()) {
+            bucket = imageBucket;
+        }
+        width = Math.min(Math.max(1, width), 4096);
+        InputStream in = fileService.getThumbnail(bucket, objectName, thumbnailBucket, width);
+        if (in == null) {
+            return ResponseEntity.notFound().build();
+        }
+        try {
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .contentType(fileService.thumbnailContentType(objectName))
+                    .body(new InputStreamResource(in));
+        } finally {
+            try {
+                in.close();
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     @Operation(summary = "内联访问静态资源")

@@ -12,7 +12,7 @@
         <img
           v-for="(img, idx) in row.images.slice(0, 6)"
           :key="idx"
-          :src="imageUrl(img, 144)"
+          :src="thumbUrl(img, 144)"
           class="result-thumb"
           @click="$emit('images', row)"
         />
@@ -81,6 +81,7 @@ defineProps<{
   rows: any[]
   authenticated?: boolean
   imageUrl: (objectName: string, width?: number) => string
+  thumbUrl: (objectName: string, width?: number) => string
   formatTime: (value: string) => string
 }>()
 

@@ -17,3 +17,4 @@ minio:
   image-bucket: ${MINIO_IMAGE_BUCKET:crawler-local}
   html-bucket: ${MINIO_HTML_BUCKET:crawler-local}
   js-bucket: ${MINIO_JS_BUCKET:crawler-local}
+  thumbnail-bucket: ${MINIO_THUMBNAIL_BUCKET:crawler-local}

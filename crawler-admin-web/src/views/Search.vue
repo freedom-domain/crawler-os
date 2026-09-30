@@ -79,6 +79,7 @@
         :rows="list"
         authenticated
         :image-url="imageUrl"
+        :thumb-url="thumbUrl"
         :format-time="formatTime"
         @preview="showPreviewContent"
         @detail="showDetail"
@@ -356,6 +357,15 @@ const imageUrl = (objectName: string, width?: number) => {
   if (/^https?:\/\//i.test(objectName)) return objectName
   const sizeParam = width ? `&width=${width}` : ''
   return `/api/file/image?objectName=${encodeURIComponent(objectName)}${sizeParam}`
+}
+
+// 搜索结果列表缩略图：走新缩略图接口（后端缓存于 minio thumbnail 目录，比 /image 每次缩放更快更稳）
+const thumbUrl = (objectName: string, width?: number) => {
+  if (!objectName) return ''
+  // 完整外部 URL 无法用本地缩略图，回退原图直链
+  if (/^https?:\/\//i.test(objectName)) return objectName
+  const sizeParam = width ? `&width=${width}` : ''
+  return `/api/file/thumbnail?objectName=${encodeURIComponent(objectName)}${sizeParam}`
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
