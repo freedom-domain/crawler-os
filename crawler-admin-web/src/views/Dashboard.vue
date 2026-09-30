@@ -208,7 +208,7 @@ onActivated(loadDashboard)
 .stat-value { margin-top: 4px; color: #172b4d; font-size: 29px; font-weight: 850; line-height: 1; }
 .metric-rule { width: 72px; height: 3px; margin-top: 14px; overflow: hidden; border-radius: 3px; background: #edf2f4; }
 .metric-rule span { display: block; width: 65%; height: 100%; background: var(--metric-color); }
-.metric-teal { --metric-color: #0f9f9a; --metric-soft: #d9f5ef; }.metric-blue { --metric-color: #4776b5; --metric-soft: #e7effb; }.metric-orange { --metric-color: #c78335; --metric-soft: #fff1dd; }.metric-red { --metric-color: #d96555; --metric-soft: #fce9e6; }
+.metric-teal { --metric-color: #0f9f9a; --metric-soft: #d9f5ef; }.metric-blue { --metric-color: #4d99c0; --metric-soft: #e7f2fa; }.metric-orange { --metric-color: #c08a3e; --metric-soft: #fbf2e2; }.metric-red { --metric-color: #c25f54; --metric-soft: #fce9e6; }
 .metric-clickable { cursor: pointer; transition: box-shadow .18s ease, transform .18s ease; }
 .metric-clickable:hover { box-shadow: 0 10px 24px rgba(23, 43, 77, .12); transform: translateY(-2px); }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }

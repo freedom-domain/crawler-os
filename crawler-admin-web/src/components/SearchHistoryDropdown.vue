@@ -207,13 +207,13 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px 8px;
-  border-bottom: 1px solid #f1f3f4;
+  border-bottom: 1px solid #f1f5f5;
 }
 
 .history-title {
   font-size: 13px;
   font-weight: 600;
-  color: #5f6368;
+  color: var(--ink-700);
   letter-spacing: 0.3px;
 }
 
@@ -223,15 +223,15 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   cursor: pointer;
   padding: 4px 10px;
   border-radius: 12px;
-  color: #9aa0a6;
+  color: var(--ink-500);
   font-size: 12px;
   line-height: 1;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .history-clear:hover {
-  background: #f1f3f4;
-  color: #ea4335;
+  background: #f1f5f5;
+  color: var(--coral);
 }
 
 .history-list {
@@ -247,7 +247,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-list::-webkit-scrollbar-thumb {
-  background: #dadce0;
+  background: #c8d6dd;
   border-radius: 3px;
 }
 
@@ -281,7 +281,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #9aa0a6;
+  color: var(--ink-500);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
@@ -293,8 +293,8 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-remove:hover {
-  background: #f1f3f4;
-  color: #ea4335;
+  background: #f1f5f5;
+  color: var(--coral);
 }
 
 .history-icon {
@@ -305,8 +305,8 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #f1f3f4;
-  color: #70757a;
+  background: #f1f5f5;
+  color: var(--ink-700);
 }
 
 .history-keyword {
@@ -316,22 +316,22 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
-  color: #202124;
+  color: var(--ink-950);
 }
 
 .history-time {
   flex: 0 0 auto;
   font-size: 12px;
-  color: #9aa0a6;
+  color: var(--ink-500);
 }
 
 .history-item:hover {
-  background: #f8f9fa;
+  background: #f6f9f9;
 }
 
 .history-item:hover .history-icon {
-  background: #e8f0fe;
-  color: #1a73e8;
+  background: #d9f5ef;
+  color: var(--teal-dark);
 }
 
 .history-empty {
@@ -340,11 +340,11 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   align-items: center;
   gap: 8px;
   padding: 28px 16px;
-  color: #9aa0a6;
+  color: var(--ink-500);
   font-size: 13px;
 }
 
 .history-empty-icon {
-  color: #dadce0;
+  color: #c8d6dd;
 }
 </style>

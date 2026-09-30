@@ -817,7 +817,7 @@ onMounted(() => {
   padding: 0;
   border-color: #d9e7e8;
   border-radius: 999px;
-  background: linear-gradient(135deg, #fff 0%, #f4faf9 100%);
+  background: linear-gradient(135deg, #fff 0%, #f6fbfa 100%);
   color: #52706f;
   font-weight: 600;
   box-shadow: 0 2px 7px rgba(32, 86, 84, 0.08);
@@ -889,28 +889,28 @@ onMounted(() => {
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #dfe1e5;
+  border: 1px solid #dfe7ee;
   border-radius: 999px;
   padding: 0 6px 0 16px;
   height: 48px;
   background: #fff;
   transition: box-shadow 0.2s, border-color 0.2s;
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+  box-shadow: 0 1px 2px rgba(23, 43, 77, 0.06);
 }
 
 .search-box:focus-within {
-  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.18);
-  border-color: #dfe1e5;
+  box-shadow: 0 1px 6px rgba(23, 43, 77, 0.14);
+  border-color: var(--teal);
 }
 
 .history-search-open {
   border-radius: 24px 24px 0 0;
-  box-shadow: 0 1px 6px rgba(32, 33, 36, 0.28);
-  border-color: #dadce0;
+  box-shadow: 0 1px 6px rgba(23, 43, 77, 0.18);
+  border-color: #c8d6dd;
 }
 
 .search-icon {
-  color: #9aa0a6;
+  color: var(--ink-500);
   font-size: 20px;
   margin-right: 12px;
   flex-shrink: 0;
@@ -923,17 +923,17 @@ onMounted(() => {
   outline: none;
   font-size: 15px;
   height: 100%;
-  color: #202124;
+  color: var(--ink-950);
 }
 
 .search-input::placeholder {
-  color: #9aa0a6;
+  color: var(--ink-500);
 }
 
 .clear-btn {
   border: none;
   background: none;
-  color: #9aa0a6;
+  color: var(--ink-500);
   font-size: 22px;
   cursor: pointer;
   padding: 0 4px;
@@ -941,7 +941,7 @@ onMounted(() => {
 }
 
 .clear-btn:hover {
-  color: #202124;
+  color: var(--ink-950);
 }
 
 .search-btn {
@@ -949,24 +949,27 @@ onMounted(() => {
   width: 88px;
   border: none;
   border-radius: 999px;
-  background: #1a73e8;
+  background: var(--teal);
   color: #fff;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   padding: 0;
   height: 36px;
   min-height: 36px;
   box-sizing: border-box;
+  box-shadow: 0 3px 9px rgba(15, 159, 154, 0.16);
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .search-btn:hover {
-  background: #1769d1;
+  background: var(--teal-dark);
+  box-shadow: 0 5px 12px rgba(15, 159, 154, 0.22);
+  transform: translateY(-1px);
 }
 
 .result-count {
-  color: #999;
+  color: var(--ink-700);
   font-size: 13px;
   margin-bottom: 16px;
 }
@@ -975,8 +978,8 @@ onMounted(() => {
   margin-left: 8px;
   padding: 1px 8px;
   border-radius: 10px;
-  background: #f1f3f4;
-  color: #9aa0a6;
+  background: #f1f5f5;
+  color: var(--ink-500);
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -988,7 +991,7 @@ onMounted(() => {
 
 .result-item {
   padding: 16px 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #edf0f4;
 }
 
 .result-item:last-child {
@@ -997,7 +1000,7 @@ onMounted(() => {
 
 .result-url {
   display: block;
-  color: #006621;
+  color: var(--teal-dark);
   font-size: 13px;
   margin-bottom: 4px;
   overflow: hidden;
@@ -1007,13 +1010,14 @@ onMounted(() => {
 }
 
 .result-url:hover {
+  color: var(--teal);
   text-decoration: underline;
 }
 
 .result-title {
-  color: #1a0dab;
+  color: var(--ink-950);
   font-size: 18px;
-  font-weight: 400;
+  font-weight: 700;
   margin: 0 0 6px 0;
   line-height: 1.4;
   cursor: pointer;
@@ -1021,19 +1025,19 @@ onMounted(() => {
 }
 
 .result-title:hover {
-  color: #0d47a1;
-  text-shadow: 0 1px 0 rgba(13, 71, 161, 0.08);
+  color: var(--teal-dark);
+  text-shadow: 0 1px 0 rgba(15, 159, 154, 0.08);
 }
 
 .result-title:active {
-  color: #0b3c8a;
+  color: var(--teal);
   transform: translateY(1px);
 }
 
 .result-title :deep(em) {
   font-style: normal;
-  color: #1a0dab;
-  font-weight: 700;
+  color: var(--teal);
+  font-weight: 800;
 }
 
 .result-content-line {
@@ -1043,7 +1047,7 @@ onMounted(() => {
 }
 
 .result-content {
-  color: #545454;
+  color: var(--ink-700);
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
@@ -1052,12 +1056,17 @@ onMounted(() => {
 
 .result-detail-link {
   display: inline;
-  color: #1a73e8;
+  color: var(--teal);
   font-size: 13px;
   cursor: pointer;
   margin-left: 4px;
   white-space: nowrap;
   vertical-align: baseline;
+}
+
+.result-detail-link:hover {
+  color: var(--teal-dark);
+  text-decoration: underline;
 }
 
 .result-content :deep(em) {
@@ -1082,8 +1091,8 @@ onMounted(() => {
 .result-thumb {
   width: 72px;
   height: 72px;
-  border-radius: 4px;
-  border: 1px solid #eee;
+  border-radius: 6px;
+  border: 1px solid #e3e8ee;
   cursor: pointer;
   display: block;
 }
@@ -1104,14 +1113,14 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   font-size: 13px;
-  color: #999;
+  color: var(--ink-700);
 }
 
 .meta-tag {
-  background: #f0f0f0;
+  background: #f1f5f5;
   padding: 2px 8px;
-  border-radius: 3px;
-  color: #666;
+  border-radius: 4px;
+  color: var(--ink-700);
 }
 
 .spider-tag {
@@ -1120,23 +1129,23 @@ onMounted(() => {
 }
 
 .spider-tag:hover {
-  background: #e6f4ff;
-  color: #1677ff;
+  background: #e2f6f3;
+  color: var(--teal-dark);
 }
 
 .group-tag {
-  background: #e8f4fd;
-  color: #409eff;
+  background: #d9f5ef;
+  color: var(--teal-dark);
 }
 
 .update-time {
-  color: #999;
+  color: var(--ink-500);
   font-size: 12px;
 }
 
 .empty {
   text-align: center;
-  color: #999;
+  color: var(--ink-500);
   padding: 40px 0;
   font-size: 14px;
 }
@@ -1157,8 +1166,8 @@ onMounted(() => {
   flex: 0 0 auto;
   height: auto;
   max-width: none;
-  border-radius: 4px;
-  border: 1px solid #eee;
+  border-radius: 6px;
+  border: 1px solid #e3e8ee;
   background: #fafafa;
   cursor: pointer;
   transition: width 0.2s ease, max-width 0.2s ease;
@@ -1233,7 +1242,7 @@ onMounted(() => {
 .detail-label {
   flex: 0 0 56px;
   font-size: 12px;
-  color: #909399;
+  color: #8993a4;
 }
 
 .detail-images {
@@ -1248,7 +1257,7 @@ onMounted(() => {
   width: clamp(160px, 22vw, 240px);
   height: clamp(110px, 16vw, 160px);
   border-radius: 8px;
-  border: 1px solid #eee;
+  border: 1px solid #e3e8ee;
   overflow: hidden;
 }
 

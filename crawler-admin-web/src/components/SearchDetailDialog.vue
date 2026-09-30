@@ -80,10 +80,10 @@ const visible = computed({
 .detail-time-label { color: #627d98; font-weight: 600; }
 .detail-badges { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 8px; }
 .detail-meta-item { color: #627d98; }
-.meta-tag { background: #f1f3f4; padding: 3px 8px; border-radius: 4px; color: #5f6368; font-size: 12px; font-weight: 500; }
-.group-tag { background: #e8f0fe; color: #1967d2; }
+.meta-tag { background: #f1f5f5; padding: 3px 8px; border-radius: 4px; color: var(--ink-700); font-size: 12px; font-weight: 500; }
+.group-tag { background: #d9f5ef; color: var(--teal-dark); }
 .detail-images { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 4px 0; }
-.detail-image { width: clamp(160px, 22vw, 240px); height: clamp(110px, 16vw, 160px); border-radius: 8px; border: 1px solid #eee; overflow: hidden; }
+.detail-image { width: clamp(160px, 22vw, 240px); height: clamp(110px, 16vw, 160px); border-radius: 8px; border: 1px solid #e3e8ee; overflow: hidden; }
 .detail-text { white-space: pre-wrap; line-height: 1.8; color: var(--ink-900); max-height: 42vh; overflow-y: auto; }
 .detail-content-preview { padding: 4px 0; }
 .empty { text-align: center; color: var(--ink-500); padding: 40px 0; font-size: 14px; }

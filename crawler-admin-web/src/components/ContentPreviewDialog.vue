@@ -108,7 +108,7 @@ defineEmits<{
 }
 .preview-source-url {
   display: inline;
-  color: #1a73e8;
+  color: var(--teal);
   font-size: 12px;
   font-weight: 400;
   line-height: 1.5;
@@ -160,7 +160,7 @@ defineEmits<{
   height: 70vh;
   padding: 0;
   line-height: 1.8;
-  color: #303133;
+  color: #486581;
   word-break: break-word;
 }
 .preview-html img { max-width: 100%; height: auto; }
@@ -173,7 +173,7 @@ defineEmits<{
 }
 .detail-text {
   line-height: 1.8;
-  color: #303133;
+  color: #486581;
 }
 
 /* 720 断点：开关平铺右对齐，关闭 × 留右上角 */

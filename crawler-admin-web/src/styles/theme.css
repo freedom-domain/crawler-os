@@ -1,0 +1,16 @@
+/*
+ * Element Plus 主题色覆盖
+ * 此文件必须在 element-plus/dist/index.css 之后加载，
+ * 用 !important 确保覆盖 EP 内置的 :root 变量。
+ */
+:root {
+  /* 主色：品牌青 */
+  --el-color-primary: #0f9f9a !important;
+  --el-color-primary-light-3: #47bdb8 !important;
+  --el-color-primary-light-5: #72d4cf !important;
+  --el-color-primary-light-7: #9be4df !important;
+  --el-color-primary-light-8: #b5ece8 !important;
+  --el-color-primary-light-9: #d9f5ef !important;
+  --el-color-primary-dark-2: #087b78 !important;
+  --el-color-primary-rgb: 15, 159, 154 !important;
+}

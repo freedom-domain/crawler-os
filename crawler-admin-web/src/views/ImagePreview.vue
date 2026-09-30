@@ -729,8 +729,8 @@ onBeforeUnmount(() => {
 .image-preview-page {
   height: 100%;
   min-height: 0;
-  background: #f0f2f5;
-  color: #1e293b;
+  background: #f3f7f8;
+  color: #172b4d;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
   overflow: auto;
 }
@@ -741,7 +741,7 @@ onBeforeUnmount(() => {
   min-width: 132px;
   padding: 4px;
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #dfe7ee;
   border-radius: 8px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
   animation: context-menu-in 0.12s ease-out;
@@ -760,31 +760,31 @@ onBeforeUnmount(() => {
   border: 0;
   font: inherit;
   font-size: 13px;
-  color: #374151;
+  color: #486581;
   cursor: pointer;
   transition: background 0.12s ease;
 }
 
 .context-action .el-icon {
   font-size: 14px;
-  color: #9ca3af;
+  color: #8993a4;
   flex-shrink: 0;
 }
 
 .context-action:hover {
-  background: #f3f4f6;
+  background: #f8fbfb;
 }
 
 .context-action-delete {
-  color: #dc2626;
+  color: #d65b50;
 }
 
 .context-action-delete .el-icon {
-  color: #f87171;
+  color: #ed8b80;
 }
 
 .context-action-delete:hover {
-  background: #fef2f2;
+  background: #fce9e6;
 }
 
 .context-action:focus-visible,
@@ -805,7 +805,7 @@ onBeforeUnmount(() => {
 /* ===== 工具栏 ===== */
 .toolbar-header {
   background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #e2e8f0;
+  border: 1px solid #dfe7ee;
   border-radius: 12px;
   padding: 10px;
   display: flex;
@@ -840,19 +840,19 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 7px 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #dfe7ee;
   border-radius: 8px;
-  background: #f8fafc;
+  background: #f8fbfb;
   min-width: 0;
 }
 .control-item .section-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: #8993a4;
 }
 .control-item .img-count {
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: #243b53;
   line-height: 26px;
   height: 26px;
   display: flex;
@@ -883,21 +883,21 @@ onBeforeUnmount(() => {
 }
 .section-label {
   font-size: 11px;
-  color: #94a3b8;
+  color: #8993a4;
   font-weight: 500;
   white-space: nowrap;
 }
 .img-count {
   font-size: 14px;
   font-weight: 600;
-  color: #334155;
+  color: #243b53;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
 .toolbar-divider {
   width: 1px;
   height: 24px;
-  background: #e2e8f0;
+  background: #dfe7ee;
 }
 /* +− 步进器（每页/每行张数） */
 .stepper {
@@ -910,7 +910,7 @@ onBeforeUnmount(() => {
   text-align: center;
   font-size: 13px;
   font-weight: 600;
-  color: #334155;
+  color: #243b53;
   font-variant-numeric: tabular-nums;
 }
 .icon-btn:disabled {
@@ -919,8 +919,8 @@ onBeforeUnmount(() => {
   transform: none;
 }
 .icon-btn:disabled:hover {
-  background: #f1f5f9;
-  color: #475569;
+  background: #f8fbfb;
+  color: #5e6c84;
 }
 .zoom-section {
   display: flex;
@@ -935,8 +935,8 @@ onBeforeUnmount(() => {
   height: 26px;
   border: none;
   border-radius: 50%;
-  background: #f1f5f9;
-  color: #475569;
+  background: #f8fbfb;
+  color: #5e6c84;
   font-size: 14px;
   cursor: pointer;
   display: grid;
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
   transition: all 0.2s;
 }
 .icon-btn:hover {
-  background: #3b82f6;
+  background: #0f9f9a;
   color: #fff;
   transform: scale(1.08);
 }
@@ -953,17 +953,17 @@ onBeforeUnmount(() => {
 }
 .zoom-label {
   font-size: 12px;
-  color: #64748b;
+  color: #8993a4;
   min-width: 38px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 .reset-btn {
   padding: 7px 14px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid #a9e0d7;
   border-radius: 9px;
-  background: linear-gradient(180deg, #fff 0%, #eff6ff 100%);
-  color: #2563eb;
+  background: linear-gradient(180deg, #fff 0%, #e2f6f3 100%);
+  color: #087b78;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -974,9 +974,9 @@ onBeforeUnmount(() => {
   align-self: center;
 }
 .reset-btn:hover {
-  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  background: linear-gradient(180deg, #e2f6f3 0%, #d9f5ef 100%);
+  border-color: #72e0c8;
+  color: #087b78;
   box-shadow: 0 4px 10px rgba(37, 99, 235, 0.16);
   transform: translateY(-1px);
 }
@@ -990,7 +990,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(226, 232, 240, 0.5);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.6);
-  color: #64748b;
+  color: #8993a4;
   cursor: grab;
   display: grid;
   place-items: center;
@@ -1002,23 +1002,23 @@ onBeforeUnmount(() => {
 }
 .toolbar-trigger:hover {
   background: rgba(255, 255, 255, 0.9);
-  color: #3b82f6;
+  color: #0f9f9a;
 }
 .toolbar-trigger:hover {
   background: #fff;
-  color: #3b82f6;
-  border-color: #94a3b8;
+  color: #0f9f9a;
+  border-color: #8993a4;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 .toolbar-trigger.open {
   background: #fff;
-  color: #3b82f6;
-  border-color: #3b82f6;
+  color: #0f9f9a;
+  border-color: #0f9f9a;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 .img-count {
   font-size: 13px;
-  color: #64748b;
+  color: #8993a4;
   white-space: nowrap;
 }
 
@@ -1029,19 +1029,19 @@ onBeforeUnmount(() => {
   gap: 6px;
 }
 .tool-btn {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #dfe7ee;
   border-radius: 6px;
   padding: 6px 12px;
-  background: #f1f5f9;
-  color: #1e293b;
+  background: #f8fbfb;
+  color: #172b4d;
   cursor: pointer;
   font-size: 13px;
   transition: all 0.15s;
   white-space: nowrap;
 }
 .tool-btn:hover {
-  background: #e2e8f0;
-  border-color: #cbd5e1;
+  background: #dfe7ee;
+  border-color: #dfe7ee;
 }
 .tool-btn:active {
   transform: scale(0.96);
@@ -1050,7 +1050,7 @@ onBeforeUnmount(() => {
   min-width: 48px;
   text-align: center;
   font-size: 13px;
-  color: #64748b;
+  color: #8993a4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1088,7 +1088,7 @@ onBeforeUnmount(() => {
   border-radius: 10px;
   cursor: zoom-in;
   transition: transform 0.15s, box-shadow 0.15s;
-  background: #f8fafc;
+  background: #f8fbfb;
 }
 .thumb:hover {
   transform: translateY(-2px);
@@ -1098,7 +1098,7 @@ onBeforeUnmount(() => {
   width: 100%;
   text-align: center;
   padding: 60px 0;
-  color: #64748b;
+  color: #8993a4;
   font-size: 15px;
 }
 
@@ -1120,17 +1120,17 @@ onBeforeUnmount(() => {
 }
 .page-btn {
   padding: 5px 14px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #dfe7ee;
   border-radius: 6px;
   background: #fff;
-  color: #475569;
+  color: #5e6c84;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .page-btn:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: #94a3b8;
+  background: #f8fbfb;
+  border-color: #8993a4;
 }
 .page-btn:disabled {
   opacity: 0.4;
@@ -1138,7 +1138,7 @@ onBeforeUnmount(() => {
 }
 .page-info {
   font-size: 13px;
-  color: #64748b;
+  color: #8993a4;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1154,13 +1154,13 @@ onBeforeUnmount(() => {
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #3b82f6;
+  border: 3px solid #dfe7ee;
+  border-top-color: #0f9f9a;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 .loading-text {
-  color: #64748b;
+  color: #8993a4;
   font-size: 14px;
 }
 @keyframes spin {
@@ -1229,7 +1229,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.97);
-  color: #1e293b;
+  color: #172b4d;
   font-size: 20px;
   cursor: pointer;
   display: flex;
@@ -1239,7 +1239,7 @@ onBeforeUnmount(() => {
   transition: all 0.15s;
 }
 .viewer-close:hover {
-  background: #e2e8f0;
+  background: #dfe7ee;
   transform: scale(1.08);
 }
 
@@ -1254,7 +1254,7 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.97);
-  color: #1e293b;
+  color: #172b4d;
   font-size: 26px;
   cursor: pointer;
   display: flex;
@@ -1264,7 +1264,7 @@ onBeforeUnmount(() => {
   transition: all 0.15s;
 }
 .viewer-nav:hover {
-  background: #e2e8f0;
+  background: #dfe7ee;
   transform: translateY(-50%) scale(1.08);
 }
 .viewer-nav.prev { left: 20px; }
@@ -1280,7 +1280,7 @@ onBeforeUnmount(() => {
   padding: 6px 16px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.97);
-  color: #1e293b;
+  color: #172b4d;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);

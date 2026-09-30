@@ -612,8 +612,8 @@ onUnmounted(() => {
 :deep(.log-fullscreen-dialog .el-dialog__body) { height: calc(100vh - 72px); overflow: auto; }
 .concurrency-settings { min-height: 88px; }
 .concurrency-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.concurrency-setting-row > span { color: #475569; font-weight: 600; }
-.concurrency-hint { margin-top: 14px; color: #64748b; font-size: 13px; line-height: 1.6; }
+.concurrency-setting-row > span { color: #5e6c84; font-weight: 600; }
+.concurrency-hint { margin-top: 14px; color: #8993a4; font-size: 13px; line-height: 1.6; }
 .refresh-toolbar {
   display: flex;
   align-items: center;

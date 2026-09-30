@@ -44,7 +44,7 @@ defineEmits<{
 <style scoped>
 .result-item {
   padding: 20px 0;
-  border-bottom: 1px solid #f1f3f4;
+  border-bottom: 1px solid #f1f5f5;
 }
 
 .result-item:last-child {
@@ -53,7 +53,7 @@ defineEmits<{
 
 .result-url {
   display: block;
-  color: #006621;
+  color: var(--teal-dark);
   font-size: 13px;
   margin-bottom: 4px;
   overflow: hidden;
@@ -63,13 +63,14 @@ defineEmits<{
 }
 
 .result-url:hover {
+  color: var(--teal);
   text-decoration: underline;
 }
 
 .result-title {
-  color: #1a0dab;
+  color: var(--ink-950);
   font-size: 18px;
-  font-weight: 400;
+  font-weight: 700;
   margin: 0 0 6px 0;
   line-height: 1.4;
   cursor: pointer;
@@ -109,19 +110,19 @@ defineEmits<{
 }
 
 .result-title:hover {
-  color: #0d47a1;
-  text-shadow: 0 1px 0 rgba(13, 71, 161, 0.08);
+  color: var(--teal-dark);
+  text-shadow: 0 1px 0 rgba(15, 159, 154, 0.08);
 }
 
 .result-title:active {
-  color: #0b3c8a;
+  color: var(--teal);
   transform: translateY(1px);
 }
 
 .result-title :deep(em) {
   font-style: normal;
-  color: #1a0dab;
-  font-weight: 700;
+  color: var(--teal);
+  font-weight: 800;
 }
 
 .result-content-line {
@@ -131,7 +132,7 @@ defineEmits<{
 }
 
 .result-content {
-  color: #545454;
+  color: #5e6c84;
   font-size: 14px;
   line-height: 1.6;
   margin: 0;
@@ -140,12 +141,16 @@ defineEmits<{
 
 .result-detail-link {
   display: inline;
-  color: #1a73e8;
+  color: var(--teal);
   font-size: 13px;
   cursor: pointer;
   margin-left: 4px;
   white-space: nowrap;
   vertical-align: baseline;
+}
+
+.result-detail-link:hover {
+  color: var(--teal-dark);
 }
 
 .result-detail-link:hover {
@@ -168,7 +173,7 @@ defineEmits<{
   width: 72px;
   height: 72px;
   border-radius: 4px;
-  border: 1px solid #eee;
+  border: 1px solid #e3e8ee;
   cursor: pointer;
   display: block;
 }
@@ -205,8 +210,8 @@ defineEmits<{
 }
 
 .group-tag {
-  background: #e8f0fe;
-  color: #1967d2;
+  background: #d9f5ef;
+  color: var(--teal-dark);
 }
 
 .update-time {

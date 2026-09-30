@@ -48,7 +48,7 @@
           :type="row.favorited ? 'warning' : 'primary'"
           @click.stop="$emit('favorite', row, !row.favorited)"
         >
-          <el-icon :size="16" :color="row.favorited ? '#f56c6c' : ''"><StarFilled v-if="row.favorited" /><Star v-else /></el-icon>
+          <el-icon :size="16" :color="row.favorited ? '#c79a2e' : ''"><StarFilled v-if="row.favorited" /><Star v-else /></el-icon>
           <span style="margin-left: 2px">{{ row.favorited ? '已收藏' : '收藏' }}</span>
         </el-button>
         <el-dropdown v-if="authenticated" trigger="click" popper-class="table-action-popper" @command="(command: string) => $emit('command', command, row)">
@@ -109,8 +109,8 @@ defineEmits<{
 .result-thumb {
   width: 72px;
   height: 72px;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
+  border: 1px solid #e3e8ee;
+  border-radius: 6px;
   cursor: pointer;
   display: block;
 }
@@ -130,26 +130,26 @@ defineEmits<{
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  color: #70757a;
+  color: var(--ink-700);
   font-size: 13px;
 }
 
 .meta-tag {
   padding: 2px 8px;
-  border-radius: 3px;
-  background: #f1f3f4;
-  color: #5f6368;
+  border-radius: 4px;
+  background: #f1f5f5;
+  color: var(--ink-700);
 }
 
 .group-tag {
-  background: #e8f0fe;
-  color: #1967d2;
+  background: #d9f5ef;
+  color: var(--teal-dark);
 }
 
 .spider-tag { cursor: default; }
 .spider-tag-clickable { cursor: pointer; }
 .spider-tag-clickable:hover { background: #e9f6f5; color: #0f766e; }
-.update-time { color: #999; font-size: 12px; }
+.update-time { color: var(--ink-500); font-size: 12px; }
 
 .action-item { display: inline-flex; align-items: center; gap: 8px; }
 
