@@ -209,9 +209,19 @@ public class CrawlerEngine {
                     log.info("任务状态不是运行中，停止爬取: taskId={}, status={}", taskId, latest == null ? null : latest.getStatus());
                     break;
                 }
+                // 任务被暂停时等待，直到恢复或取消（不退出循环，恢复后继续爬取剩余队列）
+                if (latest.getPausedAt() != null) {
+                    awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
+                    SpiderTask check = taskMapper.selectById(task.getId());
+                    if (check == null || !"RUNNING".equals(check.getStatus())) {
+                        execution.cancel();
+                        break;
+                    }
+                    continue;
+                }
                 // 清理已完成的 future
                 activeFutures.removeIf(f -> f.isDone());
-                // 队列为空且没有活跃任务 → 全部完成
+                // 队列为空且没有活跃任务 → 全部完成（暂停中的任务由上面的等待逻辑处理，不会到这里退出）
                 if (activeFutures.isEmpty() && urlQueue.size(taskId) == 0) break;
                 // 达到并发上限，等待至少一个任务完成
                 if (activeFutures.size() >= concurrency) {
@@ -262,11 +272,23 @@ public class CrawlerEngine {
                 executor.shutdownNow();
                 awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             }
-            urlQueue.clear(taskId);
         }
 
         LocalDateTime endTime = LocalDateTime.now();
         SpiderTask latestTask = taskMapper.selectById(task.getId());
+        boolean isPaused = latestTask != null
+                && "RUNNING".equals(latestTask.getStatus())
+                && latestTask.getPausedAt() != null;
+        if (isPaused) {
+            // 暂停时不清空队列，保留剩余URL供恢复后继续爬取
+            log.info("任务处于暂停状态，保留队列和进度: taskId={}, queueSize={}", taskId, urlQueue.size(taskId));
+            taskMapper.setSuccess(task.getId(), success.get());
+            taskMapper.setFail(task.getId(), fail.get());
+            return;
+        }
+        // 非暂停状态，清空队列
+        urlQueue.clear(taskId);
+
         if (!executorTerminated) {
             task.setStatus("FAILED");
             task.setErrorMessage("任务线程未在超时时间内结束，可能仍有页面或图片处理未完成");

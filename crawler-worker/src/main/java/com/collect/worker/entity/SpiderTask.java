@@ -21,5 +21,6 @@ public class SpiderTask extends BaseEntity {
     private Integer successCount;
     private Integer failCount;
     private String errorMessage;
+    private LocalDateTime pausedAt;
     private Long taskId;
 }

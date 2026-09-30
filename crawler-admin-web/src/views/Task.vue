@@ -78,8 +78,8 @@
             :class="`task-status-${String(row.status || '').toLowerCase()}`"
           >
             <span class="task-status-content">
-              <span class="task-status-dot"></span>
-              {{ statusLabel(row.status) }}
+              <span class="task-status-dot" :data-paused="row.status === 'RUNNING' && row.pausedAt ? '1' : undefined"></span>
+              {{ statusLabel(row.status, row) }}
             </span>
           </el-tag>
         </template>
@@ -257,8 +257,8 @@ import { ref, computed, onMounted, onUnmounted, onActivated, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { useRoute, useRouter } from 'vue-router'
-import { taskPage, taskLogs, taskCancel, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
-import { Refresh, Search, VideoPause, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
+import { taskPage, taskLogs, taskCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency } from '@/api'
+import { Refresh, Search, VideoPause, VideoPlay, Document, Delete, Minus, FullScreen } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -336,6 +336,12 @@ const getRowActions = (row: any): TableRowAction[] => [
   ...(['RUNNING', 'PENDING'].includes(row.status)
     ? [{ command: 'cancel', label: '取消', icon: VideoPause, danger: true }]
     : []),
+  ...(['RUNNING'].includes(row.status) && !row.pausedAt
+    ? [{ command: 'pause', label: '暂停', icon: VideoPause }]
+    : []),
+  ...(['RUNNING'].includes(row.status) && row.pausedAt
+    ? [{ command: 'resume', label: '恢复', icon: VideoPlay }]
+    : []),
   { command: 'logs', label: '日志', icon: Document },
   ...(!['RUNNING', 'CANCELING'].includes(row.status)
     ? [{ command: 'delete', label: '删除', icon: Delete, danger: true }]
@@ -344,6 +350,8 @@ const getRowActions = (row: any): TableRowAction[] => [
 
 const handleRowAction = (command: string, row: any) => {
   if (command === 'cancel') handleCancel(row)
+  if (command === 'pause') handlePause(row)
+  if (command === 'resume') handleResume(row)
   if (command === 'logs') showLogs(row)
   if (command === 'delete') handleDelete(row)
 }
@@ -374,7 +382,8 @@ const statusTag = (status: string) => {
   return map[status] || 'info'
 }
 
-const statusLabel = (status: string) => {
+const statusLabel = (status: string, row?: any) => {
+  if (status === 'RUNNING' && row?.pausedAt) return '已暂停'
   const map: Record<string, string> = {
     RUNNING: '运行中', SUCCESS: '成功', FAILED: '失败',
     PENDING: '排队中', CANCELING: '正在取消', CANCELED: '已取消'
@@ -561,6 +570,26 @@ const handleCancel = async (row: any) => {
   loadData()
 }
 
+const handlePause = async (row: any) => {
+  try {
+    await taskPause(row.id)
+    ElMessage.success('已暂停，正在爬取的页面完成后会停止')
+  } catch {
+    ElMessage.error('暂停失败')
+  }
+  loadData()
+}
+
+const handleResume = async (row: any) => {
+  try {
+    await taskResume(row.id)
+    ElMessage.success('已恢复，继续爬取剩余内容')
+  } catch {
+    ElMessage.error('恢复失败')
+  }
+  loadData()
+}
+
 const handleDelete = async (row: any) => {
   try {
     if (!await confirm('确定删除该任务及其日志吗？', { title: '删除确认', danger: true })) return
@@ -577,7 +606,8 @@ const handleDelete = async (row: any) => {
 }
 
 const hasActive = () => list.value.some((t: any) =>
-  t.status === 'RUNNING' || t.status === 'PENDING' || t.status === 'CANCELING'
+  t.status === 'RUNNING' || t.status === 'PENDING' || t.status === 'CANCELING' ||
+  (t.status === 'RUNNING' && t.pausedAt)
 )
 
 const autoRefreshing = computed(() => autoRefresh.value && hasActive())
@@ -678,6 +708,11 @@ onUnmounted(() => {
 .task-status-content { display: inline-flex; align-items: center; gap: 7px; }
 .task-status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
 .task-status-running .task-status-dot { box-shadow: 0 0 0 3px rgb(64 158 255 / 16%); }
+.task-status-running .task-status-dot[data-paused] { background: #e6a23c; animation: paused-pulse 1.6s ease-in-out infinite; }
+@keyframes paused-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgb(230 162 60 / 30%); }
+  50% { box-shadow: 0 0 0 6px rgb(230 162 60 / 12%); }
+}
 .task-status-success .task-status-dot { box-shadow: 0 0 0 3px rgb(103 194 58 / 16%); }
 .task-status-failed .task-status-dot { box-shadow: 0 0 0 3px rgb(245 108 108 / 16%); }
 

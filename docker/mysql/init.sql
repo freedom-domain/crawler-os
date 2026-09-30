@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS spider_task (
     success_count INT DEFAULT 0,
     fail_count INT DEFAULT 0,
     error_message TEXT,
+    paused_at DATETIME NULL,
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
     update_time DATETIME,

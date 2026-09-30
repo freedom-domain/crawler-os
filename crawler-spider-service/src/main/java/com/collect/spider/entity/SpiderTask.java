@@ -40,6 +40,8 @@ public class SpiderTask extends BaseEntity {
     @TableField(exist = false)
     private Integer imageExistingCount;
     private String errorMessage;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime pausedAt;
     private Long taskId;
     @JsonIgnore
     @TableField("task_message")

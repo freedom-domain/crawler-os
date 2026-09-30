@@ -52,6 +52,8 @@ export const taskStats = () => request.get('/spider/task/stats')
 export const taskDetail = (id: number) => request.get(`/spider/task/${id}`)
 export const taskLogs = (id: number, params: any) => request.get(`/spider/task/${id}/logs`, { params })
 export const taskCancel = (id: number) => request.put(`/spider/task/${id}/cancel`)
+export const taskPause = (id: number) => request.put(`/spider/task/${id}/pause`)
+export const taskResume = (id: number) => request.put(`/spider/task/${id}/resume`)
 export const taskDelete = (id: number) => request.delete(`/spider/task/${id}`)
 
 export const searchContent = (params: any) => request.get('/search', { params })

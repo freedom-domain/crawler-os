@@ -136,7 +136,6 @@ button, input, textarea, select { font: inherit; }
   flex-shrink: 0;
   width: 1em !important;
   height: 1em !important;
-  font-size: 32px;
 }
 
 .el-message-box__status.el-message-box-icon--primary { color: var(--teal); }

@@ -111,4 +111,10 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
 
     @Delete("DELETE FROM spider_task WHERE id = #{id}")
     void physicalDeleteById(@Param("id") Long id);
+
+    @Update("UPDATE spider_task SET paused_at = NOW(), update_time = NOW() WHERE id = #{id} AND deleted = 0")
+    int setPaused(@Param("id") Long id);
+
+    @Update("UPDATE spider_task SET paused_at = NULL, update_time = NOW() WHERE id = #{id} AND deleted = 0")
+    int clearPaused(@Param("id") Long id);
 }

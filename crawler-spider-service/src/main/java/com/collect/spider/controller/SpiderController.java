@@ -213,6 +213,20 @@ public class SpiderController {
         return R.ok();
     }
 
+    @Operation(summary = "暂停任务")
+    @PutMapping("/task/{id}/pause")
+    public R<Void> pause(@PathVariable("id") Long id) {
+        spiderService.pauseTask(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "恢复任务")
+    @PutMapping("/task/{id}/resume")
+    public R<Void> resume(@PathVariable("id") Long id) {
+        spiderService.resumeTask(id);
+        return R.ok();
+    }
+
     @Operation(summary = "删除任务")
     @DeleteMapping("/task/{id}")
     public R<Void> deleteTask(@PathVariable("id") Long id) {

@@ -383,6 +383,38 @@ public class SpiderService {
     }
 
     @Transactional(rollbackFor = Exception.class)
+    public void pauseTask(Long id) {
+        requireTaskCreationGuard();
+        SpiderTask task = taskMapper.selectByIdForUpdate(id);
+        if (task == null) {
+            throw new BizException("任务不存在");
+        }
+        if (!"RUNNING".equals(task.getStatus())) {
+            throw new BizException("仅运行中的任务可暂停");
+        }
+        taskMapper.setPaused(id);
+        log.info("任务已暂停: id={}, taskId={}", id, task.getTaskId());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void resumeTask(Long id) {
+        requireTaskCreationGuard();
+        SpiderTask task = taskMapper.selectByIdForUpdate(id);
+        if (task == null) {
+            throw new BizException("任务不存在");
+        }
+        if (task.getPausedAt() == null) {
+            throw new BizException("任务未暂停");
+        }
+        taskMapper.clearPaused(id);
+        // 重新发送Kafka消息，让worker重新拾起任务继续爬取
+        if (task.getTaskMessage() != null && !task.getTaskMessage().isBlank()) {
+            sendTaskAfterCommit(task.getTaskMessage());
+        }
+        log.info("任务已恢复并重新派发: id={}, taskId={}", id, task.getTaskId());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public void cancelTask(Long id) {
         requireTaskCreationGuard();
         SpiderTask task = taskMapper.selectByIdForUpdate(id);
@@ -395,6 +427,16 @@ public class SpiderService {
             task.setEndTime(endTime);
             taskMapper.updateById(task);
         } else if ("RUNNING".equals(task.getStatus())) {
+            // 暂停中的任务直接取消，无需等待worker退出
+            if (task.getPausedAt() != null) {
+                task.setStatus("CANCELED");
+                task.setPausedAt(null);
+                task.setEndTime(LocalDateTime.now());
+                taskMapper.updateById(task);
+                taskMapper.clearPaused(id);
+                log.info("暂停中的任务已直接取消: id={}, taskId={}", id, task.getTaskId());
+                return;
+            }
             task.setStatus("CANCELING");
             taskMapper.updateById(task);
         }
