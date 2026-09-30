@@ -36,7 +36,7 @@
 
     <template #meta>
       <div class="result-meta">
-        <span v-if="row.spiderName" class="meta-tag spider-tag" @click="row.spiderId && $emit('spider', row)">{{ row.spiderName }}</span>
+        <span v-if="row.spiderName" class="meta-tag spider-tag" :class="{ 'spider-tag-clickable': authenticated }" @click="authenticated && row.spiderId && $emit('spider', row)">{{ row.spiderName }}</span>
         <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
         <span v-if="row.updateTime" class="meta-time update-time">
           更新: {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
@@ -146,7 +146,9 @@ defineEmits<{
   color: #1967d2;
 }
 
-.spider-tag { cursor: pointer; }
+.spider-tag { cursor: default; }
+.spider-tag-clickable { cursor: pointer; }
+.spider-tag-clickable:hover { background: #e9f6f5; color: #0f766e; }
 .update-time { color: #999; font-size: 12px; }
 
 .action-item { display: inline-flex; align-items: center; gap: 8px; }

@@ -112,6 +112,7 @@
           @detail="showDetail"
           @images="openAllImages"
           @tag="openTagEditor"
+          @spider="handleSpiderClick"
           @favorite="toggleFavorite"
           @command="handleCommand"
         />
@@ -719,6 +720,13 @@ const handleDelete = async (row: any) => {
     page.value--
   }
   loadData()
+}
+
+const handleSpiderClick = (row: any) => {
+  if (!row.spiderId) return
+  const query = new URLSearchParams({ spiderId: String(row.spiderId) })
+  if (row.spiderName) query.set('spiderName', row.spiderName)
+  window.open(`/spider?${query.toString()}`, '_blank')
 }
 
 const handleCommand = (command: string, row: any) => {
