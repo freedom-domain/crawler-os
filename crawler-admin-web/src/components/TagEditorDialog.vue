@@ -75,8 +75,5 @@ const save = async () => {
 .tag-editor-select { min-width: 0; flex: 1; }
 .tag-editor-actions { display: flex; flex-shrink: 0; gap: 8px; }
 :global(.tag-editor-popper) { z-index: 3100 !important; }
-@media (max-width: 520px) {
-  .tag-editor-row { align-items: stretch; flex-direction: column; }
-  .tag-editor-actions { justify-content: flex-end; }
-}
+
 </style>

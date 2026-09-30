@@ -71,7 +71,7 @@
 
     <!-- 图片列表：直接显示图片，无卡片容器，每行张数可输入，支持分页 -->
     <div v-else class="grid-wrapper">
-      <div class="grid" :style="gridStyle">
+      <div class="grid" :class="{ 'grid-loading': pageLoading }" :style="gridStyle">
         <img
           v-for="(img, idx) in pageImages"
           :key="idx"
@@ -83,6 +83,10 @@
           @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
         />
         <div v-if="!images.length" class="empty-state">暂无图片</div>
+      </div>
+      <!-- 翻页加载动画（覆盖在网格上） -->
+      <div v-if="pageLoading" class="page-loading-overlay">
+        <div class="loading-spinner"></div>
       </div>
 
       <div
@@ -179,6 +183,7 @@ const tagCurrentRow = ref<{ id: string; tags: string[] } | null>(null)
 const tagOptions = ref<any[]>([])
 const imageMenu = ref({ visible: false, x: 0, y: 0, index: -1 })
 const loading = ref(false)
+const pageLoading = ref(false)
 const loadError = ref('')
 const gridScale = ref(1)
 // 每行显示的图片张数（+− 步进调整）
@@ -434,7 +439,13 @@ const handleTagsSaved = (tags: string[]) => {
 
 const openImageMenu = (event: MouseEvent, index: number) => {
   if (!userStore.token && !sourceUrl.value) return
-  imageMenu.value = { visible: true, x: event.clientX, y: event.clientY, index }
+  const menuW = 152
+  const menuH = 110
+  let x = event.clientX
+  let y = event.clientY
+  if (x + menuW > window.innerWidth - 4) x = Math.max(4, window.innerWidth - menuW - 4)
+  if (y + menuH > window.innerHeight - 4) y = Math.max(4, window.innerHeight - menuH - 4)
+  imageMenu.value = { visible: true, x, y, index }
 }
 
 const openSourcePage = () => {
@@ -531,9 +542,33 @@ const pageStart = computed(() => (page.value - 1) * pageSize.value)
 const pageImages = computed(() => images.value.slice(pageStart.value, pageStart.value + pageSize.value))
 
 const changePage = (p: number) => {
-  page.value = Math.min(totalPages.value, Math.max(1, p))
+  const next = Math.min(totalPages.value, Math.max(1, p))
+  if (next === page.value) return
+  page.value = next
   // 切换页码后回到顶部
   window.scrollTo({ top: 0 })
+  // 翻页加载动画：等本页图片全部加载完再消失
+  pageLoading.value = true
+  nextTick(() => {
+    const imgs = document.querySelectorAll<HTMLImageElement>('.grid .thumb')
+    if (!imgs.length) {
+      pageLoading.value = false
+      return
+    }
+    let loaded = 0
+    const done = () => {
+      loaded++
+      if (loaded >= imgs.length) pageLoading.value = false
+    }
+    imgs.forEach((img) => {
+      if (img.complete) {
+        done()
+      } else {
+        img.addEventListener('load', done, { once: true })
+        img.addEventListener('error', done, { once: true })
+      }
+    })
+  })
 }
 
 // 重置：走页面初始化逻辑（重新加载图片，所有页面参数恢复初始默认值）
@@ -669,52 +704,45 @@ onBeforeUnmount(() => {
 .image-context-menu {
   position: fixed;
   z-index: 100;
-  min-width: 160px;
-  padding: 6px;
-  background: #163b59;
-  border: 1px solid rgba(114, 224, 200, 0.18);
-  border-radius: 9px;
-  box-shadow: 0 14px 30px rgba(16, 42, 67, 0.24);
-  backdrop-filter: blur(14px);
-  animation: context-menu-in 0.14s ease-out;
+  min-width: 132px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.10);
+  animation: context-menu-in 0.12s ease-out;
 }
 
 .context-action {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 7px;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 5px;
   text-align: left;
   background: transparent;
   border: 0;
   font: inherit;
   font-size: 13px;
-  font-weight: 600;
-  color: #d9e2ec;
+  color: #374151;
   cursor: pointer;
-  transition: color 0.16s ease, background 0.16s ease;
+  transition: background 0.12s ease;
 }
 
 .context-action .el-icon {
-  font-size: 16px;
-  color: #72e0c8;
+  font-size: 14px;
+  color: #9ca3af;
   flex-shrink: 0;
 }
 
 .context-action:hover {
-  color: #fff;
-  background: rgba(114, 224, 200, 0.16);
+  background: #f3f4f6;
 }
 
-.context-action-tag .el-icon {
-  color: #93b4fd;
-}
-
-.context-action-source .el-icon {
-  color: #72e0c8;
+.context-action-delete {
+  color: #dc2626;
 }
 
 .context-action-delete .el-icon {
@@ -722,12 +750,7 @@ onBeforeUnmount(() => {
 }
 
 .context-action-delete:hover {
-  color: #fca5a5;
-  background: rgba(248, 113, 113, 0.12);
-}
-
-.context-action-delete:hover .el-icon {
-  color: #f87171;
+  background: #fef2f2;
 }
 
 .context-action:focus-visible,
@@ -737,14 +760,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes context-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @supports (min-height: 100dvh) {
@@ -1005,6 +1022,7 @@ onBeforeUnmount(() => {
 
 /* ===== 图片网格 ===== */
 .grid-wrapper {
+  position: relative;
   padding: 20px 24px;
   width: 100%;
 }
@@ -1013,6 +1031,20 @@ onBeforeUnmount(() => {
   /* 列数由页面输入控制（gridTemplateColumns 通过内联样式设置） */
   gap: 14px;
   justify-items: center;
+}
+.grid.grid-loading {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.page-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
 }
 .thumb {
   display: block;
