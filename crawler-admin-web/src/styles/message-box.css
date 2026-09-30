@@ -3,5 +3,5 @@
  * 标题顶部 padding 增加 5px
  */
 .el-message-box__header {
-  padding-top: 25px !important; /* 默认 20px + 5px */
+  padding-top: 30px !important; /* 默认 20px + 10px */
 }
