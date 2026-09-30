@@ -93,7 +93,7 @@ button, input, textarea, select { font: inherit; }
 }
 .el-message-box__header {
   margin-right: 0;
-  padding: 8px 28px;
+  padding: 0 28px 14px;
   border-bottom: 1px solid #eef2f4;
   display: flex;
   align-items: center;
@@ -105,7 +105,7 @@ button, input, textarea, select { font: inherit; }
   font-weight: 700;
   letter-spacing: .3px;
   flex: 1;
-  line-height: 1;
+  line-height: 1.5;
 }
 .el-message-box__headerbtn {
   position: static;
@@ -133,10 +133,12 @@ button, input, textarea, select { font: inherit; }
   margin: 0;
   background: transparent;
   color: red;
-  font-size: 68px;
+  flex-shrink: 0;
   width: 1em !important;
   height: 1em !important;
+  font-size: 16px;
 }
+
 .el-message-box__status.el-message-box-icon--primary { color: var(--teal); }
 .el-message-box__status.el-message-box-icon--success { color: #198b60; }
 .el-message-box__status.el-message-box-icon--info { color: #5279b7; }
@@ -295,7 +297,7 @@ button, input, textarea, select { font: inherit; }
   .el-card__body { padding: 14px; }
   /* 消息提示 */
   .el-message { min-width: 0; margin-left: auto; margin-right: auto; width: max-content; max-width: calc(100vw - 32px); }
-  .el-message-box__header { padding: 20px 18px 0; }
+  .el-message-box__header { padding: 0 18px 14px; }
   .el-message-box__content { padding: 14px 18px 22px; }
   .el-message-box__container { gap: 12px; }
   .el-message-box__btns { padding: 5px; gap: 10px; }

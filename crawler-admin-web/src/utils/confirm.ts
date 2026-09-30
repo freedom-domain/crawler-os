@@ -15,14 +15,32 @@ export async function confirm(message: string, options: ConfirmOptions = {}): Pr
     danger = false
   } = options
 
+  const promise = ElMessageBox.confirm(message, title, {
+    type: danger ? 'error' : 'warning',
+    confirmButtonText: confirmText,
+    cancelButtonText: cancelText,
+    confirmButtonClass: danger ? 'el-button--danger' : '',
+    distinguishCancelAndClose: true
+  })
+
+  // 弹窗渲染后，根据内容区实际高度动态设置图标尺寸
+  const applyIconSize = () => {
+    const box = document.querySelector('.el-message-box')
+    if (!box) return
+    const msgEl = box.querySelector('.el-message-box__message') as HTMLElement
+    if (!msgEl) return
+    const status = box.querySelector('.el-message-box__status') as HTMLElement
+    if (!status) return
+    const lineHeight = 25.2 // font-size 14px × line-height 1.8
+    const lineCount = Math.max(1, Math.round(msgEl.offsetHeight / lineHeight))
+    const size = Math.min(16 * Math.pow(2, lineCount - 1), 32)
+    status.style.fontSize = `${size}px`
+  }
+  // 300ms 后 DOM 已渲染完成
+  setTimeout(applyIconSize, 300)
+
   try {
-    await ElMessageBox.confirm(message, title, {
-      type: danger ? 'error' : 'warning',
-      confirmButtonText: confirmText,
-      cancelButtonText: cancelText,
-      confirmButtonClass: danger ? 'el-button--danger' : '',
-      distinguishCancelAndClose: true
-    })
+    await promise
     return true
   } catch {
     return false
