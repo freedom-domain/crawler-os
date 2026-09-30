@@ -497,17 +497,29 @@ public class SearchService {
 
     @SuppressWarnings("null")
         public Page<SearchResult> favorites(int current, int size, String title, String url,
-                            String spiderName, String tag) throws java.io.IOException {
+                            String spiderName, String spiderGroup, String tag) throws java.io.IOException {
         Long userId = LoginUtils.getUserId();
         PageRequest pageRequest = PageRequest.of(current - 1, size);
         List<UserFavorite> favorites = userFavoriteMapper.selectList(new LambdaQueryWrapper<UserFavorite>()
             .eq(UserFavorite::getUserId, userId)
             .orderByDesc(UserFavorite::getCreateTime));
 
+        // 爬虫分组：从数据库读取该分组下的爬虫 ID
+        List<Long> groupSpiderIds = null;
+        if (spiderGroup != null && !spiderGroup.isBlank()) {
+            groupSpiderIds = spiderMapper.selectList(
+                    new LambdaQueryWrapper<Spider>().eq(Spider::getGroup, spiderGroup)
+            ).stream().map(Spider::getId).collect(Collectors.toList());
+            if (groupSpiderIds.isEmpty()) {
+                return new PageImpl<>(List.of(), pageRequest, 0);
+            }
+        }
+
         List<SearchResult> results = new java.util.ArrayList<>();
         String normalizedTitle = normalizeFilter(title);
         String normalizedUrl = normalizeFilter(url);
         String normalizedSpiderName = normalizeFilter(spiderName);
+        String normalizedGroup = normalizeFilter(spiderGroup);
         String normalizedTag = normalizeFilter(tag);
         for (UserFavorite favorite : favorites) {
             SpiderContentDoc doc = elasticsearchClient
@@ -523,13 +535,21 @@ public class SearchService {
             result.setAuthor(doc.getAuthor());
             result.setSpiderId(doc.getSpiderId());
             result.setSpiderName(doc.getSpiderName());
+            // 从数据库带出爬虫分组
+            if (doc.getSpiderId() != null) {
+                result.setSpiderGroup(loadSpiderGroups(List.of(doc.getSpiderId())).get(doc.getSpiderId()));
+            }
             result.setSourceType(doc.getSourceType());
             result.setCrawlTime(doc.getCrawlTime());
             result.setUpdateTime(doc.getUpdateTime());
             result.setImages(doc.getImages());
             result.setTags(parseTags(favorite.getTags()));
             result.setFavorited(true);
-            if (!matchesFavorite(result, normalizedTitle, normalizedUrl, normalizedSpiderName, normalizedTag)) {
+            // 分组过滤
+            if (groupSpiderIds != null && (doc.getSpiderId() == null || !groupSpiderIds.contains(doc.getSpiderId()))) {
+                continue;
+            }
+            if (!matchesFavorite(result, normalizedTitle, normalizedUrl, normalizedSpiderName, normalizedGroup, normalizedTag)) {
                 continue;
             }
             results.add(result);
@@ -539,10 +559,11 @@ public class SearchService {
         return new PageImpl<>(results.subList(fromIndex, toIndex), pageRequest, results.size());
     }
 
-    private boolean matchesFavorite(SearchResult result, String title, String url, String spiderName, String tag) {
+    private boolean matchesFavorite(SearchResult result, String title, String url, String spiderName, String spiderGroup, String tag) {
         return (title.isEmpty() || containsIgnoreCase(result.getTitle(), title))
                 && (url.isEmpty() || containsIgnoreCase(result.getUrl(), url))
                 && (spiderName.isEmpty() || containsIgnoreCase(result.getSpiderName(), spiderName))
+                && (spiderGroup.isEmpty() || containsIgnoreCase(result.getSpiderGroup(), spiderGroup))
                 && (tag.isEmpty() || result.getTags().stream().anyMatch(value -> containsIgnoreCase(value, tag)));
     }
 

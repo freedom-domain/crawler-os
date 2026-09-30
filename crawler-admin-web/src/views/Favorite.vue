@@ -8,8 +8,13 @@
         <el-input v-model="url" clearable placeholder="来源 URL" style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
       </el-form-item>
       <el-form-item>
+        <el-select v-model="spiderGroup" clearable placeholder="分组" style="width: 140px" @change="onGroupChange">
+          <el-option v-for="g in groupOptions" :key="g" :label="g" :value="g" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
         <el-select v-model="spiderName" clearable filterable placeholder="爬虫" style="width: 160px" @change="refresh">
-          <el-option v-for="spider in spiderOptions" :key="spider.id" :label="spider.name" :value="spider.name" />
+          <el-option v-for="spider in filteredSpiderOptions" :key="spider.id" :label="spider.name" :value="spider.name" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -34,6 +39,12 @@
           <span v-else>-</span>
         </template>
       </el-table-column>
+      <el-table-column prop="spiderGroup" label="分组" min-width="100" resizable>
+        <template #default="{ row }">
+          <el-tag v-if="row.spiderGroup" size="small">{{ row.spiderGroup }}</el-tag>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="spiderName" label="爬虫" min-width="160" show-overflow-tooltip resizable>
         <template #default="{ row }">{{ row.spiderName || '-' }}</template>
       </el-table-column>
@@ -46,15 +57,30 @@
       <el-table-column prop="crawlTime" label="抓取时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.crawlTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="180" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
+          <div class="row-action-cell">
+            <el-button size="small" type="danger" plain @click="remove(row)">取消收藏</el-button>
+            <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
+          </div>
         </template>
       </el-table-column>
     </el-table>
     </div>
 
     <TagEditorDialog v-model="tagVisible" :row="tagCurrentRow" :tag-options="tagOptions" @saved="handleTagsSaved" />
+
+    <ContentPreviewDialog
+      v-model:visible="previewContentVisible"
+      :title="previewContentTitle"
+      :html="previewContentHtml"
+      :source="previewContentSource"
+      :loading="previewContentLoading"
+      :source-url="previewContentBaseUrl"
+      v-model:localize="previewContentLocalize"
+      v-model:show-source="previewContentShowSource"
+      @localize-change="toggleContentLocalize"
+    />
 
     <el-empty v-if="!loading && !list.length" description="暂无收藏" />
     <el-pagination
@@ -72,13 +98,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Refresh, Edit, Delete } from '@element-plus/icons-vue'
+import { Refresh, Edit, View, Picture } from '@element-plus/icons-vue'
 import TableRowActions from '@/components/TableRowActions.vue'
-import { dictChildren, favoriteDelete, favoritePage, spiderPage } from '@/api'
+import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
+import { dictChildren, favoriteDelete, favoritePage, searchDetail, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
+import { resolvePreviewHtml } from '@/utils/previewHtml'
 import { formatDateTime } from '@/utils/dateTime'
 
 const list = ref<any[]>([])
@@ -89,11 +117,50 @@ const total = ref(0)
 const title = ref('')
 const url = ref('')
 const spiderName = ref('')
+const spiderGroup = ref('')
 const tag = ref('')
 const spiderOptions = ref<any[]>([])
+const groupOptions = ref<string[]>([])
 const tagVisible = ref(false)
 const tagCurrentRow = ref<any>(null)
 const tagOptions = ref<any[]>([])
+
+// 图片预览：跳转到独立的 /image-preview 页面
+const openImagePreview = (row: any) => {
+  if (!row.id) {
+    ElMessage.info('该条内容暂无图片')
+    return
+  }
+  const query: Record<string, string> = {
+    id: String(row.id),
+    title: String(row.title || '图片预览')
+  }
+  const win = window.open(`/image-preview?${new URLSearchParams(query).toString()}`, '_blank')
+  if (!win) {
+    ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
+  }
+}
+
+// 内容预览
+const previewContentVisible = ref(false)
+const previewContentLoading = ref(false)
+const previewContentTitle = ref('')
+const previewContentHtml = ref('')
+const previewContentSource = ref('')
+const previewContentBaseUrl = ref('')
+const previewContentLocalize = ref(true)
+const previewContentShowSource = ref(false)
+
+const imageUrl = (objectName: string) => {
+  if (!objectName) return ''
+  if (/^https?:\/\//i.test(objectName)) return objectName
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
+}
+
+const filteredSpiderOptions = computed(() => {
+  if (!spiderGroup.value) return spiderOptions.value
+  return spiderOptions.value.filter((s: any) => s.group === spiderGroup.value)
+})
 
 const normalizedFilter = (value: unknown) => typeof value === 'string' ? value.trim() || undefined : undefined
 
@@ -106,6 +173,7 @@ const loadData = async () => {
       title: normalizedFilter(title.value),
       url: normalizedFilter(url.value),
       spiderName: normalizedFilter(spiderName.value),
+      spiderGroup: normalizedFilter(spiderGroup.value),
       tag: normalizedFilter(tag.value)
     })
     const data = res?.data
@@ -126,7 +194,13 @@ const resetFilters = () => {
   title.value = ''
   url.value = ''
   spiderName.value = ''
+  spiderGroup.value = ''
   tag.value = ''
+  refresh()
+}
+
+const onGroupChange = () => {
+  spiderName.value = ''
   refresh()
 }
 
@@ -153,6 +227,16 @@ const loadSpiderOptions = async () => {
   }
 }
 
+const loadGroupOptions = async () => {
+  try {
+    const res: any = await dictChildren('spider-group')
+    const children = res.data || []
+    groupOptions.value = children.map((c: any) => c.value || c.label).filter(Boolean)
+  } catch {
+    groupOptions.value = []
+  }
+}
+
 const openTagEditor = (row: any) => {
   tagCurrentRow.value = row
   tagVisible.value = true
@@ -163,13 +247,43 @@ const handleTagsSaved = (tags: string[]) => {
 }
 
 const getRowActions = (row: any) => [
-  { command: 'remove', label: '取消收藏', icon: Delete, danger: true },
+  { command: 'preview-images', label: '预览图片', icon: Picture, disabled: !row.images || !row.images.length },
+  { command: 'preview-content', label: '预览内容', icon: View },
   { command: 'edit-tags', label: '编辑标签', icon: Edit }
 ]
 
 const handleRowAction = (command: string, row: any) => {
   if (command === 'edit-tags') openTagEditor(row)
-  if (command === 'remove') remove(row)
+  if (command === 'preview-images') openImagePreview(row)
+  if (command === 'preview-content') openContentPreview(row)
+}
+
+const openContentPreview = async (row: any) => {
+  previewContentVisible.value = true
+  previewContentLoading.value = true
+  previewContentTitle.value = row.title || '内容预览'
+  previewContentHtml.value = ''
+  previewContentSource.value = ''
+  previewContentBaseUrl.value = ''
+  previewContentLocalize.value = true
+  previewContentShowSource.value = false
+  try {
+    const res: any = await searchDetail(row.id)
+    const rawHtml = res.data?.rawHtml || res.data?.content || '无原始内容'
+    previewContentSource.value = rawHtml
+    previewContentBaseUrl.value = res.data?.url || row.url || ''
+    previewContentHtml.value = resolvePreviewHtml(rawHtml, previewContentBaseUrl.value, previewContentLocalize.value)
+  } catch {
+    previewContentHtml.value = '加载失败'
+    previewContentSource.value = '加载失败'
+  } finally {
+    previewContentLoading.value = false
+  }
+}
+
+const toggleContentLocalize = (enabled: string | number | boolean) => {
+  if (!previewContentSource.value || previewContentSource.value === '加载失败') return
+  previewContentHtml.value = resolvePreviewHtml(previewContentSource.value, previewContentBaseUrl.value, Boolean(enabled))
 }
 
 const remove = async (row: any) => {
@@ -186,6 +300,7 @@ const remove = async (row: any) => {
 onMounted(() => {
   loadTagOptions()
   loadSpiderOptions()
+  loadGroupOptions()
   loadData()
 })
 </script>
@@ -196,4 +311,5 @@ onMounted(() => {
 .source-url:hover { color: var(--teal-dark); text-decoration: underline; }
 .tag { margin-right: 6px; margin-bottom: 4px; cursor: pointer; }
 .tag-empty { color: #0f9f9a; cursor: pointer; }
+.row-action-cell { display: flex; align-items: center; gap: 8px; }
 </style>

@@ -133,9 +133,10 @@ public class SearchController {
                                            @RequestParam(value = "title", required = false) String title,
                                            @RequestParam(value = "url", required = false) String url,
                                            @RequestParam(value = "spiderName", required = false) String spiderName,
+                                           @RequestParam(value = "spiderGroup", required = false) String spiderGroup,
                                            @RequestParam(value = "tag", required = false) String tag) throws IOException {
         requirePermission("search:query");
-        return R.ok(searchService.favorites(current, size, title, url, spiderName, tag));
+        return R.ok(searchService.favorites(current, size, title, url, spiderName, spiderGroup, tag));
     }
 
     @Operation(summary = "取消收藏")
