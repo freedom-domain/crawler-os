@@ -53,6 +53,8 @@ defineEmits<{
 
 .result-url {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   color: var(--teal-dark);
   font-size: 13px;
   margin-bottom: 4px;
@@ -68,6 +70,9 @@ defineEmits<{
 }
 
 .result-title {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
   color: var(--ink-950);
   font-size: 18px;
   font-weight: 700;

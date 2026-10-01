@@ -1288,6 +1288,8 @@ onMounted(() => {
 
 .result-url {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   color: var(--teal-dark);
   font-size: 13px;
   margin-bottom: 4px;
@@ -1304,6 +1306,8 @@ onMounted(() => {
 
 .result-title {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   color: var(--ink-950);
   font-size: 19px;
   font-weight: 700;
