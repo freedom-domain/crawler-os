@@ -62,7 +62,7 @@ public class FileController {
     }
 
     @Operation(summary = "内联访问图片（用于浏览器预览）")
-    @GetMapping("/image")
+    @GetMapping(value = "/image", produces = MediaType.IMAGE_PNG_VALUE)
     public ResponseEntity<InputStreamResource> image(@RequestParam(value = "bucket", required = false) String bucket,
                                                      @RequestParam("objectName") String objectName,
                                                      @RequestParam(value = "width", required = false) Integer width) {

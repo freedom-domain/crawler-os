@@ -58,20 +58,14 @@
       </div>
     </div>
 
-    <!-- 加载动画 -->
-    <div v-if="loading" class="loading-state">
-      <div class="loading-spinner"></div>
-      <span class="loading-text">图片加载中…</span>
-    </div>
-
-    <!-- 加载失败 -->
-    <div v-else-if="loadError" class="empty-state">
+    <!-- 加载失败（无 loading，避免遮挡） -->
+    <div v-if="loadError" class="empty-state">
       {{ loadError }}
     </div>
 
-    <!-- 图片列表：直接显示图片，无卡片容器，每行张数可输入，支持分页 -->
-    <div v-else class="grid-wrapper">
-      <div class="grid" :class="{ 'grid-loading': pageLoading }" :style="gridStyle">
+    <!-- 图片列表：立即渲染（loading 时盖在上面的遮罩挡住），每行张数可输入，支持分页 -->
+    <div v-else class="grid-wrapper" :class="{ 'pagination-open': totalPages > 1 }">
+      <div class="grid" :style="gridStyle">
         <img
           v-for="(img, idx) in pageImages"
           :key="idx"
@@ -84,11 +78,6 @@
         />
         <div v-if="!images.length" class="empty-state">暂无图片</div>
       </div>
-      <!-- 翻页加载动画（覆盖在网格上） -->
-      <div v-if="pageLoading" class="page-loading-overlay">
-        <div class="loading-spinner"></div>
-      </div>
-
       <div
         v-if="imageMenu.visible"
         class="image-context-menu"
@@ -109,12 +98,18 @@
         </button>
       </div>
 
-      <!-- 分页控件 -->
-      <div v-if="totalPages > 1" class="pagination">
+      <!-- 分页控件：首屏 + 本页图片都加载完成且多页时显示 -->
+      <div v-if="!loading && currentPageLoaded && totalPages > 1" class="pagination">
         <button type="button" class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
         <span class="page-info">第 {{ page }} / {{ totalPages }} 页</span>
         <button type="button" class="page-btn" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
       </div>
+    </div>
+
+    <!-- 首屏加载动画：盖在网格之上的全屏遮罩（网格已在渲染，图片在遮罩后面加载） -->
+    <div v-if="loading" class="loading-mask">
+      <div class="loading-spinner"></div>
+      <span class="loading-text">图片加载中…</span>
     </div>
 
     <!-- 全屏查看器 -->
@@ -183,7 +178,6 @@ const tagCurrentRow = ref<{ id: string; tags: string[] } | null>(null)
 const tagOptions = ref<any[]>([])
 const imageMenu = ref({ visible: false, x: 0, y: 0, index: -1 })
 const loading = ref(false)
-const pageLoading = ref(false)
 const loadError = ref('')
 const gridScale = ref(1)
 // 每行显示的图片张数（+− 步进调整）
@@ -219,7 +213,7 @@ const triggerStyle = computed<CSSProperties>(() => ({
   top: `${triggerPos.value.y}px`,
   transform: 'none',
   right: 'auto',
-  zIndex: 20
+  zIndex: 25
 }))
 
 const toolbarRef = ref<HTMLElement | null>(null)
@@ -253,7 +247,7 @@ const toolbarStyle = computed<CSSProperties>(() => {
     right: 'auto',
     width: `${toolbarWidth}px`,
     transform: 'none',
-    zIndex: 20
+    zIndex: 25
   } as CSSProperties
 })
 
@@ -288,9 +282,10 @@ const endDrag = () => {
   triggerPos.value = { x: snapX, y }
 }
 
-// 移动端（竖屏）判断：≤ 860px
+// 移动端断点：≤ 860px（与 CSS @media (max-width: 640px) 的视觉断点保持一致，
+// 即竖屏手机/小屏 pad 都按"移动端"处理，每页 1 张）
 const isMobile = () => window.innerWidth <= 860
-// 平板/小屏断点：861–1800px
+// 平板/小屏断点：861–1800px（横屏 pad / 小屏笔记本，每页 2 张）
 const isTablet = () => {
   const w = window.innerWidth
   return w > 860 && w <= 1800
@@ -318,36 +313,43 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
 })
 
-// 窗口尺寸变化时：断点切换时应用对应默认值
-// ≤860：每页 1 张、每行 1 张；861–1800：每页 2 张、每行 2 张；>1800：按图片总数
-let lastBreakpoint = 0 // 0=未记录, 1=≤860, 2=861–1800, 3=>1800
+// 窗口尺寸 = 可视窗口尺寸（window.innerWidth/innerHeight，即 viewport 实际渲染区域，
+// 已扣除滚动条、浏览器 UI 等，与 CSS 媒体查询 @media 的判断基准一致）。
+// 分页计算基于可视窗口宽度断点：
+// ≤860px 每页 1 张；861–1800px 每页 2 张；>1800px 每页 3~4 张。
 const getBreakpoint = () => {
   const w = window.innerWidth
   if (w <= 860) return 1
   if (w <= 1800) return 2
   return 3
 }
-const applyBreakpointDefaults = () => {
+let lastBreakpoint = 0 // 0=未记录, 1=≤860, 2=861–1800, 3=>1800
+const applyBreakpointDefaults = (force = false) => {
   const bp = getBreakpoint()
-  if (bp === lastBreakpoint) return
+  if (!force && bp === lastBreakpoint) return
   lastBreakpoint = bp
+  // 无图时不计算（避免 images.length=0 导致 pageSize=0）
+  if (!images.value.length) return
+  // 约束：每页数量不超过图片总数（避免 1 张图却算出 1 页、pageSize 比实际大）
+  const clampSize = (s: number) => Math.min(s, images.value.length || s)
   if (bp === 1) {
-    pageSize.value = 1
-    cols.value = 1
+    pageSize.value = clampSize(1)
+    cols.value = clampSize(1)
   } else if (bp === 2) {
-    pageSize.value = 2
-    cols.value = 2
+    pageSize.value = clampSize(2)
+    cols.value = clampSize(2)
   } else {
     const size = images.value.length > 4 ? 3 : 4
-    pageSize.value = Math.min(size, images.value.length || size)
-    cols.value = Math.min(size, pageSize.value)
+    pageSize.value = clampSize(size)
+    cols.value = clampSize(size)
   }
-  page.value = 1
+  // 当前页码不能超过总页数（图片总数变化 / 断点切换后兜底）
+  page.value = Math.min(page.value, Math.max(1, Math.ceil(images.value.length / pageSize.value)))
 }
 const onResize = () => {
+  // 可视窗口尺寸变化时：断点切换应用默认值（无图时函数内部直接返回）
   applyBreakpointDefaults()
 }
-
 const onDocumentClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   // 如果点击的不是触发按钮或工具栏，则隐藏
@@ -361,43 +363,22 @@ watch(title, (t) => {
   document.title = t || '图片预览'
 })
 
-// ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据
+// ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据。
+// 用 /thumbnail 接口（而非 /image 原图接口）：原图接口返回 application/octet-stream，
+// 浏览器会下载到临时存储且不会把 <img> 置为 complete，导致加载动画永远不关闭；
+// 缩略图接口正常返回 image/* Content-Type，浏览器可内联渲染。
 const imageUrl = (objectName: string) => {
   if (!objectName) return ''
   // 兼容旧数据：若已是完整 URL 则直接返回
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
+  return `/api/file/thumbnail?objectName=${encodeURIComponent(objectName)}&width=800`
 }
 
-// 等待网格中指定范围（[start, start+count)）的图片全部加载完成后执行 cb。
-// 复用翻页时的“等图片加载完”逻辑：已 complete 的直接计数，未完成的监听 load/error。
-const waitImagesLoaded = (start: number, count: number, cb: () => void) => {
-  if (count <= 0) {
-    cb()
-    return
-  }
-  nextTick(() => {
-    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('.grid .thumb')).slice(start, start + count)
-    if (!imgs.length) {
-      cb()
-      return
-    }
-    let done = 0
-    const finish = () => {
-      done++
-      if (done >= imgs.length) cb()
-    }
-    imgs.forEach((img) => {
-      if (img.complete) finish()
-      else {
-        img.addEventListener('load', finish, { once: true })
-        img.addEventListener('error', finish, { once: true })
-      }
-    })
-  })
-}
-
-// 通过内容 id（含爬虫信息与 url）从后端获取图片列表
+// 图片预览页整体流程：
+// 1. 刚进去 → 请求页面数据（loading 遮罩显示加载动画）
+// 2. 请求完成 → 获取可视窗口尺寸（window.innerWidth）计算分页（applyBreakpointDefaults）
+// 3. 本页图片全部加载完成 → 加载动画消失（loading=false）
+// 4. 执行初始化（currentPageLoaded=true → 分页条显示，网格可交互）
 const loadImages = async () => {
   const id = contentId.value
   if (!id) {
@@ -407,42 +388,40 @@ const loadImages = async () => {
 
   loading.value = true
   loadError.value = ''
+  currentPageLoaded.value = false
   try {
+    // 1. 请求页面数据
     const res: any = await searchDetail(id)
     const doc = res.data
     contentTags.value = doc?.tags || []
     sourceUrl.value = typeof doc?.url === 'string' ? doc.url.trim() : ''
-    // 加载前保持传递过来的 title 不变，仅在未传递 title 时才使用文档中的 title
     if (!title.value && doc?.title) title.value = doc.title
     const rawImages: string[] = doc?.images || []
     imageObjects.value = rawImages
     images.value = rawImages.map(imageUrl).filter(Boolean)
-    // ≤860 每页 1 张；861–1800 每页 2 张；>1800 超过 4 张时 3 张，否则 4 张
-    // 约束：每页数量不超过图片总数，每行数量不超过每页数量
-    let size = 4
-    if (isMobile()) size = 1
-    else if (isTablet()) size = 2
-    else if (images.value.length > 4) size = 3
-    pageSize.value = Math.min(size, images.value.length)
-    if (isMobile()) {
-      cols.value = Math.min(1, pageSize.value)
-    } else if (isTablet()) {
-      cols.value = Math.min(2, pageSize.value)
-    } else {
-      cols.value = Math.min(cols.value, pageSize.value)
-    }
 
-    page.value = 1
     if (!images.value.length) {
       loadError.value = '该条内容暂无图片'
       loading.value = false
       return
     }
-    // 等第一页图片全部加载完成后再关闭首屏加载动画
-    const firstPageCount = Math.min(pageSize.value, images.value.length)
-    waitImagesLoaded(0, firstPageCount, () => {
-      loading.value = false
-    })
+
+    // 2. 等网格渲染到 DOM 后，复用旋转逻辑（onResize 同款）：
+    //    用当前可视窗口尺寸强制重算分页（force=true 绕过 lastBreakpoint 短路）。
+    //    不在请求完成时算：onMounted 时 window.innerWidth 可能是旧值（移动端动态视口 /
+    //    旋转未稳定），网格渲染后再算才能保证拿到正确的当前宽度。
+    await nextTick()
+    applyBreakpointDefaults(true)
+
+    // 3. 等本页图片全部加载完成（loading 遮罩盖在上面）
+    const expected = Math.min(pageSize.value, images.value.length)
+    await waitForPageLoaded(expected)
+
+    // 4. 加载动画消失 + 执行初始化（分页条显示，网格可交互）
+    loading.value = false
+    currentPageLoaded.value = true
+
+
   } catch {
     loadError.value = '图片加载失败，请稍后重试'
     loading.value = false
@@ -538,9 +517,7 @@ const deleteSelectedImage = async () => {
 onMounted(() => {
   const t = route.query.title as string
   if (t) title.value = t
-
   loadImages()
-
   // 绑定键盘事件
   document.addEventListener('keydown', onKeydown)
 })
@@ -575,34 +552,39 @@ const totalPages = computed(() => Math.max(1, Math.ceil(images.value.length / pa
 const pageStart = computed(() => (page.value - 1) * pageSize.value)
 const pageImages = computed(() => images.value.slice(pageStart.value, pageStart.value + pageSize.value))
 
+// 本页图片加载状态：请求完成后初始 false，等本页图片全部 complete 后置 true
+// （load/error 都置 complete，所以 404 的图也算完成）
+const currentPageLoaded = ref(false)
+
+// 等当前页（前 expected 张）图片全部加载完成，返回 Promise。
+// 以 img.complete 为准，含 8 秒兜底，避免任何异常下永不 resolve。
+const waitForPageLoaded = (expected: number) => new Promise<void>((resolve) => {
+  if (!expected) {
+    resolve()
+    return
+  }
+  let elapsed = 0
+  const timer = setInterval(() => {
+    elapsed += 80
+    const els = Array.from(document.querySelectorAll<HTMLImageElement>('.grid .thumb'))
+    const ok = els.length >= expected && els.slice(0, expected).every((img) => img.complete)
+    if (ok) {
+      clearInterval(timer)
+      resolve()
+    } else if (elapsed >= 8000) {
+      // 兜底：8 秒内没全部 complete，放行，避免一直不结束
+      clearInterval(timer)
+      resolve()
+    }
+  }, 80)
+})
+
 const changePage = (p: number) => {
   const next = Math.min(totalPages.value, Math.max(1, p))
   if (next === page.value) return
   page.value = next
   // 切换页码后回到顶部
   window.scrollTo({ top: 0 })
-  // 翻页加载动画：等本页图片全部加载完再消失
-  pageLoading.value = true
-  nextTick(() => {
-    const imgs = document.querySelectorAll<HTMLImageElement>('.grid .thumb')
-    if (!imgs.length) {
-      pageLoading.value = false
-      return
-    }
-    let loaded = 0
-    const done = () => {
-      loaded++
-      if (loaded >= imgs.length) pageLoading.value = false
-    }
-    imgs.forEach((img) => {
-      if (img.complete) {
-        done()
-      } else {
-        img.addEventListener('load', done, { once: true })
-        img.addEventListener('error', done, { once: true })
-      }
-    })
-  })
 }
 
 // 重置：走页面初始化逻辑（重新加载图片，所有页面参数恢复初始默认值）
@@ -1066,24 +1048,12 @@ onBeforeUnmount(() => {
   gap: 14px;
   justify-items: center;
 }
-.grid.grid-loading {
-  opacity: 0.5;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-}
-.page-loading-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  pointer-events: none;
-}
 .thumb {
   display: block;
   width: 100%;
-  height: 100vh;
+  /* 可视窗口高 - 上下 padding（40px）- 分页条悬浮区（约 60px），
+     避免图片撑满视口后盖住 fixed bottom 的分页条 */
+  height: calc(100vh - 100px);
   object-fit: contain;
   border-radius: 10px;
   cursor: zoom-in;
@@ -1118,6 +1088,10 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
   backdrop-filter: blur(8px);
 }
+/* 多页时：网格底部留白，避免首屏图片盖住悬浮分页条 */
+.grid-wrapper.pagination-open {
+  padding-bottom: 80px;
+}
 .page-btn {
   padding: 5px 14px;
   border: 1px solid #dfe7ee;
@@ -1142,14 +1116,17 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* ===== 加载动画 ===== */
-.loading-state {
+/* ===== 首屏加载遮罩（盖在网格之上，网格已在渲染，图片在遮罩后加载） ===== */
+.loading-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 100px 0;
+  background: #f3f7f8;
 }
 .loading-spinner {
   width: 40px;
@@ -1348,10 +1325,12 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
     font-size: 13px;
   }
-  .thumb { height: calc(100dvh - 32px); }
+  .thumb { height: calc(100dvh - 80px); }
   .viewer-stage img { max-width: calc(100vw - 60px); max-height: calc(100dvh - 100px); }
   .viewer-nav.prev { left: 10px; }
   .viewer-nav.next { right: 10px; }
   .viewer-nav { width: 38px; height: 38px; font-size: 22px; }
 }
+
+
 </style>
