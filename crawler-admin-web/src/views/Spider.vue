@@ -786,6 +786,11 @@ const handleStop = async (row: any) => {
 }
 
 const handleRun = async (row: any) => {
+  try {
+    if (!await confirm(`确定执行爬虫「${row.name}」的爬取任务吗？`, { title: '执行任务', confirmText: '确认执行' })) return
+  } catch {
+    return
+  }
   row._running = true
   try {
     const res: any = await spiderRun(row.id)
