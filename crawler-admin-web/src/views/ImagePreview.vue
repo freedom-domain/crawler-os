@@ -363,15 +363,13 @@ watch(title, (t) => {
   document.title = t || '图片预览'
 })
 
-// ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取图片数据。
-// 用 /thumbnail 接口（而非 /image 原图接口）：原图接口返回 application/octet-stream，
-// 浏览器会下载到临时存储且不会把 <img> 置为 complete，导致加载动画永远不关闭；
-// 缩略图接口正常返回 image/* Content-Type，浏览器可内联渲染。
+// ES 中存储的是 MinIO 相对路径（objectName），通过后端接口获取原图。
+// 用 /image 接口（原图）：不带 width 参数，返回原始尺寸图片。
 const imageUrl = (objectName: string) => {
   if (!objectName) return ''
   // 兼容旧数据：若已是完整 URL 则直接返回
   if (/^https?:\/\//i.test(objectName)) return objectName
-  return `/api/file/thumbnail?objectName=${encodeURIComponent(objectName)}&width=800`
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
 }
 
 // 图片预览页整体流程：
