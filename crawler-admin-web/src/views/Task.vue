@@ -450,6 +450,7 @@ const taskDurationMs = (task: any) => {
 }
 
 const loadData = async () => {
+  if (loading.value) return
   loading.value = true
   try {
     const params: any = { current: page.value, size: size.value, status: statusFilter.value }
@@ -473,6 +474,10 @@ const loadData = async () => {
     total.value = res.data?.total || 0
   } finally {
     loading.value = false
+    // 请求结束后按最新状态重建刷新定时器：
+    // 覆盖"刷新进行中状态激活（remoteActive 变 true）但定时器被跳过"的情况，
+    // 以及间隔/开关变化后的定时器重建
+    startTimer()
   }
 }
 
