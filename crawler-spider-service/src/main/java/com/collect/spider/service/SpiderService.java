@@ -39,6 +39,8 @@ public class SpiderService {
     private static final int MAX_TASK_CONCURRENCY = 20;
     private static final int MIN_URL_CONCURRENCY = 1;
     private static final int MAX_URL_CONCURRENCY = 50;
+    /** CANCELING 状态超过该时长视为卡死（worker 消费不到 / 未结束），兜底置为 CANCELED */
+    private static final int STUCK_CANCELING_MINUTES = 30;
 
     @Value("${app.kafka.spider-task-topic}")
     private String spiderTaskTopic;
@@ -427,17 +429,19 @@ public class SpiderService {
         if (task == null) {
             throw new BizException("任务不存在");
         }
+        LocalDateTime now = LocalDateTime.now();
         if ("PENDING".equals(task.getStatus())) {
-            LocalDateTime endTime = LocalDateTime.now();
+            // 排队中直接取消，无需等待派发
             task.setStatus("CANCELED");
-            task.setEndTime(endTime);
+            task.setEndTime(now);
             taskMapper.updateById(task);
+            log.info("排队任务已取消: id={}, taskId={}", id, task.getTaskId());
         } else if ("RUNNING".equals(task.getStatus())) {
             // 暂停中的任务直接取消，无需等待worker退出
             if (task.getPausedAt() != null) {
                 task.setStatus("CANCELED");
                 task.setPausedAt(null);
-                task.setEndTime(LocalDateTime.now());
+                task.setEndTime(now);
                 taskMapper.updateById(task);
                 taskMapper.clearPaused(id);
                 log.info("暂停中的任务已直接取消: id={}, taskId={}", id, task.getTaskId());
@@ -445,6 +449,17 @@ public class SpiderService {
             }
             task.setStatus("CANCELING");
             taskMapper.updateById(task);
+            log.info("任务已置为 CANCELING，等待 worker 消费: id={}, taskId={}", id, task.getTaskId());
+        } else if ("CANCELING".equals(task.getStatus())) {
+            // 重复取消请求：若已超过卡死阈值（worker 大概率已消费不到），直接兜底置为 CANCELED；
+            // 否则维持 CANCELING，等待 worker 正常完成
+            LocalDateTime stuckBefore = now.minusMinutes(STUCK_CANCELING_MINUTES);
+            if (task.getStartTime() == null || task.getStartTime().isBefore(stuckBefore)) {
+                taskMapper.markCancelingTaskCanceled(id, now);
+                log.warn("重复取消的卡死任务已兜底置为 CANCELED: id={}, taskId={}", id, task.getTaskId());
+            } else {
+                log.info("任务已在取消中，维持 CANCELING 等待 worker 完成: id={}, taskId={}", id, task.getTaskId());
+            }
         }
     }
 
@@ -476,6 +491,40 @@ public class SpiderService {
         msg.setConcurrency(getMaxConcurrency());
         msg.setUrlConcurrency(getUrlConcurrency());
         return msg;
+    }
+
+    /**
+     * 卡死取消任务兜底：
+     * 任务进入 CANCELING 后，由 worker 消费取消（worker 完成爬取时把状态写为 CANCELED）。
+     * 若 Kafka 消息丢失 / worker 挂掉 / 任务长时间未结束，任务会永远停在 CANCELING，
+     * 并持续占用并发槽位（countActiveTasks 包含 CANCELING），阻塞后续任务派发。
+     * 这里周期性扫描：进入 CANCELING 超过阈值仍未结束的任务，直接置为 CANCELED。
+     */
+    @Scheduled(fixedDelayString = "${app.spider.cancel-stuck-check-delay-ms:60000}")
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelStuckCancelingTasks() {
+        LocalDateTime stuckBefore = LocalDateTime.now().minusMinutes(STUCK_CANCELING_MINUTES);
+        int stuck = taskMapper.countStuckCancelingTasks(stuckBefore);
+        if (stuck <= 0) {
+            return;
+        }
+        log.warn("检测到卡死的取消任务，开始兜底处理: count={}, stuckBefore={}", stuck, stuckBefore);
+        int handled = 0;
+        for (int i = 0; i < stuck; i++) {
+            SpiderTask task = taskMapper.selectOldestStuckCancelingTask(stuckBefore);
+            if (task == null) {
+                break;
+            }
+            int updated = taskMapper.markCancelingTaskCanceled(task.getId(), LocalDateTime.now());
+            if (updated > 0) {
+                handled++;
+                log.warn("卡死取消任务已兜底置为 CANCELED: id={}, taskId={}, startTime={}",
+                        task.getId(), task.getTaskId(), task.getStartTime());
+            }
+        }
+        if (handled > 0) {
+            log.warn("卡死取消任务兜底处理完成: handled={}", handled);
+        }
     }
 
     @Scheduled(fixedDelayString = "${app.spider.queue-poll-delay-ms:1000}")

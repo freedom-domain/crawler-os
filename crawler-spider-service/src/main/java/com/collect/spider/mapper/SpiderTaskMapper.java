@@ -117,4 +117,23 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
 
     @Update("UPDATE spider_task SET paused_at = NULL, update_time = NOW() WHERE id = #{id} AND deleted = 0")
     int clearPaused(@Param("id") Long id);
+
+    @Select("SELECT COUNT(*) FROM spider_task "
+            + "WHERE deleted = 0 AND status = 'CANCELING' "
+            + "AND (start_time IS NULL OR start_time < #{stuckBefore})")
+    int countStuckCancelingTasks(@Param("stuckBefore") java.time.LocalDateTime stuckBefore);
+
+    @Select("SELECT * FROM spider_task "
+            + "WHERE deleted = 0 AND status = 'CANCELING' "
+            + "AND (start_time IS NULL OR start_time < #{stuckBefore}) "
+            + "ORDER BY start_time ASC LIMIT 1")
+    SpiderTask selectOldestStuckCancelingTask(@Param("stuckBefore") java.time.LocalDateTime stuckBefore);
+
+    @Update("UPDATE spider_task SET status = 'CANCELED', "
+            + "end_time = COALESCE(end_time, #{endTime}), "
+            + "total_cost_ms = CASE WHEN start_time IS NULL THEN 0 "
+            + "ELSE GREATEST(0, TIMESTAMPDIFF(SECOND, start_time, #{endTime}) * 1000) END, "
+            + "paused_at = NULL, update_time = NOW() "
+            + "WHERE id = #{id} AND deleted = 0 AND status = 'CANCELING'")
+    int markCancelingTaskCanceled(@Param("id") Long id, @Param("endTime") java.time.LocalDateTime endTime);
 }
