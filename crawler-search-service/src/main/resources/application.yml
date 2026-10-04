@@ -14,11 +14,10 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:192.168.31.2}:${MYSQL_PORT:3306}/${MYSQL_DB:crawler_platform}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:mysql_FxYHD4}
-  data:
-    elasticsearch:
-      uris: ${ES_URLS:http://192.168.31.2:9200}
-      username: ${ES_USER:elastic}
-      password: ${ES_PASSWORD:Elastic_dnw7WH}
+  elasticsearch:
+    uris: ${ES_URLS:http://192.168.31.2:9200}
+    username: ${ES_USER:elastic}
+    password: ${ES_PASSWORD:Elastic_dnw7WH}
 
 app:
   es:

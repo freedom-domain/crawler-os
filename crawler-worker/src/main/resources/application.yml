@@ -25,11 +25,10 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: latest
-  data:
-    elasticsearch:
-      uris: ${ES_URLS:http://192.168.31.2:9200}
-      username: ${ES_USER:elastic}
-      password: ${ES_PASSWORD:Elastic_dnw7WH}
+  elasticsearch:
+    uris: ${ES_URLS:http://192.168.31.2:9200}
+    username: ${ES_USER:elastic}
+    password: ${ES_PASSWORD:Elastic_dnw7WH}
     redis:
       host: ${REDIS_HOST:192.168.31.2}
       port: ${REDIS_PORT:6379}

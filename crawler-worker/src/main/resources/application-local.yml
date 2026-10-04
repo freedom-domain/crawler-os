@@ -13,11 +13,11 @@ spring:
     consumer:
       group-id: worker-consumer-group-local
       auto-offset-reset: latest
+  elasticsearch:
+    uris: ${ES_URLS:http://192.168.31.2:9200}
+    username: ${ES_USER:elastic}
+    password: ${ES_PASSWORD:Elastic_dnw7WH}
   data:
-    elasticsearch:
-      uris: ${ES_URLS:http://192.168.31.2:9200}
-      username: ${ES_USER:elastic}
-      password: ${ES_PASSWORD:Elastic_dnw7WH}
     redis:
       host: 192.168.31.2
       port: 6379
