@@ -6,12 +6,13 @@ import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.annotation.Transient;
+import org.springframework.data.elasticsearch.annotations.WriteTypeHint;
 
 import java.util.List;
 
 
 @Data
-@Document(indexName = "spider_content", createIndex = false)
+@Document(indexName = "spider_content", createIndex = false, writeTypeHint = WriteTypeHint.FALSE)
 public class SpiderContentDoc {
 
     @Id
