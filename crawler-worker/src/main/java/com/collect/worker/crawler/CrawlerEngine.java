@@ -400,13 +400,13 @@ public class CrawlerEngine {
             ContentParser parsed = ContentParser.parse(doc.get(), url, msg.getContentSelector());
             String newHtml = doc.get();
             String newHtmlHash = md5(newHtml);
+            // 读取缓存命中：内容视为已存在且未变化，跳过 ES 变更比对（不联网）
             boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
-            // 读取缓存且未开启"未命中联网"时不扩展：起始URL范围已按 MinIO 缓存发现，
-            // 扩展只会产生未缓存的URL，入队后也会被跳过，直接不扩展
-            boolean noOnline = readCache && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline());
-            if (!msg.isSingleUrl() && depth < maxDepth && !noOnline) {
+            // 读取缓存时允许从已缓存页面扩展 URL；未命中联网=跳过时，
+            // 扩展出的未缓存 URL 入队后会在处理阶段被跳过，不联网。
+            if (!msg.isSingleUrl() && depth < maxDepth) {
                 List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
                 next.removeIf(nextUrl -> {
                     String normalized = UrlQueueService.normalizeUrl(nextUrl);
@@ -424,15 +424,17 @@ public class CrawlerEngine {
                 log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
             }
 
+            // 仅未命中缓存的页面才做 ES 变更比对（需要读取 MinIO 旧 HTML）；
+            // 缓存命中时直接按"内容未变化"处理，避免额外网络/存储查询
             boolean contentUnchanged = false;
             SpiderContentDoc existingDoc = null;
-            if (!isConfiguredStartUrl(url, msg.getStartUrls())) {
+            if (!cacheHit && !isConfiguredStartUrl(url, msg.getStartUrls())) {
                 // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
                 CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
                 SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                         criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
                 existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
-                if (existingDoc != null && !cacheHit) {
+                if (existingDoc != null) {
                     // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
                     String oldHtml = readHtmlFromMinio(url);
                     if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
