@@ -380,7 +380,7 @@ public class CrawlerEngine {
             boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
             String cachedHtml = readCache
                     ? minioHelper.getHtmlIfExists(htmlBucket,
-                            "html/" + ObjectNameUtils.base64Url(url) + ".html")
+                            "html/" + ObjectNameUtils.hashUrl(url) + ".html")
                     : null;
             boolean cacheHit = cachedHtml != null;
             if (cacheHit) {
@@ -587,14 +587,12 @@ public class CrawlerEngine {
         }
         try {
             for (String objectName : minioHelper.listObjectNamesByPrefixAndSuffix(htmlBucket, "html/", ".html")) {
-                String base64Part = objectName.substring("html/".length(), objectName.length() - ".html".length());
-                String url;
-                try {
-                    url = new String(java.util.Base64.getUrlDecoder().decode(base64Part),
-                            java.nio.charset.StandardCharsets.UTF_8);
-                } catch (IllegalArgumentException e) {
+                String hashPart = objectName.substring("html/".length(), objectName.length() - ".html".length());
+                FileMetadata metadata = fileMetadataMapper.selectByObject(htmlBucket, objectName);
+                if (metadata == null || metadata.getSource() == null || metadata.getSource().isBlank()) {
                     continue;
                 }
+                String url = metadata.getSource();
                 String host = extractHost(url);
                 if (host == null || !hosts.contains(host)) {
                     continue;
@@ -740,7 +738,7 @@ public class CrawlerEngine {
                 }
                 try {
                     String ext = guessExt(src, null);
-                    String objectName = "images/" + ObjectNameUtils.base64Url(src) + ext;
+                    String objectName = "images/" + ObjectNameUtils.hashUrl(src) + ext;
                     // 不覆盖时，若图片已存在则跳过下载
                     if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                         skipped++;
@@ -755,7 +753,7 @@ public class CrawlerEngine {
                     // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
                     String realExt = guessExt(src, data);
                     if (!realExt.equals(ext)) {
-                        objectName = "images/" + ObjectNameUtils.base64Url(src) + realExt;
+                        objectName = "images/" + ObjectNameUtils.hashUrl(src) + realExt;
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skipped++;
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
@@ -890,7 +888,7 @@ public class CrawlerEngine {
 
     /**
      * 按需上传页面 HTML 原文，并将页面引用的 JS/CSS 文件上传到资源目录。
-     * 对象名基于 URL 的 Base64 编码；资源是否覆盖与 HTML 使用同一个覆盖开关。
+     * 对象名基于 URL 的 MD5 哈希；资源是否覆盖与 HTML 使用同一个覆盖开关。
      * saveResources=false 时（读取缓存命中且未开启覆盖HTML）只处理 HTML，
      * 页面引用的 JS/CSS 全部直接从 MinIO 复用，不回源。
      */
@@ -900,7 +898,7 @@ public class CrawlerEngine {
                                TaskExecutionContext execution) {
         if (execution.isCancelled()) return;
         try {
-            String urlHash = ObjectNameUtils.base64Url(url);
+            String urlHash = ObjectNameUtils.hashUrl(url);
             if (saveHtml) {
                 String htmlObject = "html/" + urlHash + ".html";
                 minioHelper.putHtml(htmlBucket, htmlObject, html);
@@ -917,7 +915,7 @@ public class CrawlerEngine {
                     continue;
                 }
                 String extension = extensionFromUrl(jsUrl);
-                String objectName = "js/" + ObjectNameUtils.base64Url(jsUrl)
+                String objectName = "js/" + ObjectNameUtils.hashUrl(jsUrl)
                         + (extension.isEmpty() ? ".js" : extension);
                 enqueueResource(resourceQueue, processedResourceUrls,
                         new WebResource(jsUrl, "js", objectName, "application/javascript"));
@@ -927,7 +925,7 @@ public class CrawlerEngine {
                 if (cssUrl == null) {
                     continue;
                 }
-                String objectName = "css/" + ObjectNameUtils.base64Url(cssUrl) + ".css";
+                String objectName = "css/" + ObjectNameUtils.hashUrl(cssUrl) + ".css";
                 enqueueResource(resourceQueue, processedResourceUrls,
                         new WebResource(cssUrl, "css", objectName, "text/css"));
             }
@@ -1054,7 +1052,7 @@ public class CrawlerEngine {
     private String readHtmlFromMinio(String url) {
         try {
             return minioHelper.getHtmlIfExists(htmlBucket,
-                    "html/" + ObjectNameUtils.base64Url(url) + ".html");
+                    "html/" + ObjectNameUtils.hashUrl(url) + ".html");
         } catch (Exception e) {
             log.debug("从 MinIO 读取 HTML 失败: url={}", url, e);
             return null;

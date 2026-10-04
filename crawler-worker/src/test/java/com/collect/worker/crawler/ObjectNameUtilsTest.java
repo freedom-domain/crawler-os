@@ -3,23 +3,23 @@ package com.collect.worker.crawler;
 import com.collect.common.util.ObjectNameUtils;
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class ObjectNameUtilsTest {
 
     @Test
-    void encodesUtf8AsFilenameSafeBase64WithoutPadding() {
+    void generatesFixedLengthMd5HexWithoutUrlUnsafeChars() {
         String value = "https://example.com/路径?a=1&b=2";
 
-        String encoded = ObjectNameUtils.base64Url(value);
+        String encoded = ObjectNameUtils.hashUrl(value);
 
-        assertEquals(value, new String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8));
+        assertEquals(32, encoded.length());
         assertFalse(encoded.contains("/"));
         assertFalse(encoded.contains("+"));
         assertFalse(encoded.contains("="));
+        assertEquals(encoded, ObjectNameUtils.hashUrl(value));
+        assertNotEquals(encoded, ObjectNameUtils.hashUrl(value + "?t=1"));
     }
 }

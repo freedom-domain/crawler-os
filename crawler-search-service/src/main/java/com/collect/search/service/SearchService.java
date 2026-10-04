@@ -409,10 +409,10 @@ public class SearchService {
         }
         if (doc != null) {
             doc.setTags(loadUserTags(currentUserId()).getOrDefault(id, List.of()));
-            // HTML 原文存储在 MinIO（对象名 = html/{base64url(url)}.html），详情时按需读取
+            // HTML 原文存储在 MinIO（对象名 = html/{md5(url)}.html），详情时按需读取
             if (doc.getUrl() != null && !doc.getUrl().isBlank()) {
                 String rawHtml = minioHelper.readHtml(htmlBucket,
-                        "html/" + ObjectNameUtils.base64Url(doc.getUrl()) + ".html");
+                        "html/" + ObjectNameUtils.hashUrl(doc.getUrl()) + ".html");
                 doc.setRawHtml(rawHtml);
             }
         }
