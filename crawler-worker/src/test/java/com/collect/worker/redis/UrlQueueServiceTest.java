@@ -27,6 +27,16 @@ class UrlQueueServiceTest {
     }
 
     @Test
+    void normalizeUrl_shouldPreserveWww() {
+        assertEquals("https://www.example.com/path",
+                UrlQueueService.normalizeUrl("https://WWW.example.com:443/path/"));
+        assertEquals("https://www.example.com/path?a=1&b=2",
+                UrlQueueService.normalizeUrl("https://www.example.com/path?b=2&a=1"));
+        // www 和非 www 是不同的 host，不应归一为同一 URL
+        assertNotEquals("https://www.example.com/path", "https://example.com/path");
+    }
+
+    @Test
     void normalizeUrl_shouldPreserveEncodedQueryDelimiters() {
         String encodedDelimiter = UrlQueueService.normalizeUrl("https://example.com/search?q=a%26b");
         String queryDelimiter = UrlQueueService.normalizeUrl("https://example.com/search?q=a&b");

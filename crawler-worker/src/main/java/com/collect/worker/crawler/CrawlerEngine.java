@@ -675,8 +675,7 @@ public class CrawlerEngine {
 
     private String normalizeHost(String host) {
         if (host == null || host.isBlank()) return null;
-        String normalized = host.toLowerCase(java.util.Locale.ROOT);
-        return normalized.startsWith("www.") ? normalized.substring(4) : normalized;
+        return host.toLowerCase(java.util.Locale.ROOT);
     }
 
     private boolean isAllowedByRobots(String url, TaskMessage msg, Map<String, RobotsRules> robotsCache,

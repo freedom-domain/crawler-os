@@ -46,9 +46,6 @@ public class UrlQueueService {
             if (host.isEmpty()) {
                 return null;
             }
-            if (host.startsWith("www.")) {
-                host = host.substring(4);
-            }
             int port = uri.getPort();
             if ("http".equals(scheme) && port == 80) {
                 port = -1;
