@@ -505,10 +505,10 @@ public class SpiderService {
     public void forceCancelTask(Long id) {
         SpiderTask task = taskMapper.selectById(id);
         if (task == null || task.getDeleted() == 1) {
-            throw new BusinessException("任务不存在");
+            throw new BizException("任务不存在");
         }
         if (!"CANCELING".equals(task.getStatus()) && !"RUNNING".equals(task.getStatus())) {
-            throw new BusinessException("只有运行中或取消中的任务可以强制取消");
+            throw new BizException("只有运行中或取消中的任务可以强制取消");
         }
         LocalDateTime now = LocalDateTime.now();
         taskMapper.markCancelingTaskCanceled(id, now);
