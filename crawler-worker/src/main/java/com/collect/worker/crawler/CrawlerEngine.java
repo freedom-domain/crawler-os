@@ -6,9 +6,11 @@ import com.collect.common.mq.TaskMessage;
 import com.collect.common.util.ObjectNameUtils;
 import com.collect.worker.es.SpiderContentDoc;
 import com.collect.worker.entity.FileMetadata;
+import com.collect.worker.entity.Spider;
 import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
 import com.collect.worker.mapper.FileMetadataMapper;
+import com.collect.worker.mapper.SpiderMapper;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
 import com.collect.worker.minio.MinioHelper;
@@ -89,6 +91,7 @@ public class CrawlerEngine {
 
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
+    private final SpiderMapper spiderMapper;
     private final ElasticsearchOperations elasticsearchOperations;
     private final UrlQueueService urlQueue;
     private final MinioHelper minioHelper;
@@ -113,11 +116,13 @@ public class CrawlerEngine {
     private String jsBucket;
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
+                         SpiderMapper spiderMapper,
                          ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
                          MinioHelper minioHelper, FileMetadataMapper fileMetadataMapper,
                          KafkaTemplate<String, String> kafkaTemplate) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
+        this.spiderMapper = spiderMapper;
         this.elasticsearchOperations = elasticsearchOperations;
         this.urlQueue = urlQueue;
         this.minioHelper = minioHelper;
@@ -192,6 +197,8 @@ public class CrawlerEngine {
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger fail = new AtomicInteger(0);
         Set<String> processedResourceUrls = ConcurrentHashMap.newKeySet();
+        // 读取缓存模式下缓存命中的页面URL（任务结束后合并回爬虫配置的起始URL）
+        Set<String> cachedStartUrls = ConcurrentHashMap.newKeySet();
         Set<Future<?>> activeFutures = ConcurrentHashMap.newKeySet();
         boolean executorTerminated = true;
 
@@ -200,6 +207,10 @@ public class CrawlerEngine {
                 String normalizedStartUrl = UrlQueueService.normalizeUrl(startUrl);
                 if (normalizedStartUrl == null || normalizedStartUrl.isBlank()) continue;
                 urlQueue.enqueueIfAbsent(taskId, normalizedStartUrl, 0);
+            }
+            // 读取缓存模式下，起始URL也优先从缓存发现：MinIO 中与已配置起始URL同域名的HTML对象
+            if (Integer.valueOf(1).equals(msg.getReadCache())) {
+                enqueueCachedUrlsByDomain(taskId, msg.getStartUrls());
             }
 
             while (true) {
@@ -256,7 +267,7 @@ public class CrawlerEngine {
                 final int crawlDepth = depth;
                 Future<?> future = executor.submit(() ->
                         crawlUrl(crawlUrl, crawlDepth, maxDepth, msg, task, taskId, success, fail,
-                                robotsCache, processedResourceUrls, execution)
+                                robotsCache, processedResourceUrls, cachedStartUrls, execution)
                 );
                 activeFutures.add(future);
             }
@@ -288,6 +299,11 @@ public class CrawlerEngine {
         }
         // 非暂停状态，清空队列
         urlQueue.clear(taskId);
+        // 读取缓存模式：任务结束后，把本次缓存命中的页面URL合并回爬虫配置的起始URL，
+        // 使下次运行仍从缓存读取（缓存发现以配置的起始URL为基准，配置变化后不会复活旧缓存URL）
+        if (Integer.valueOf(1).equals(msg.getReadCache())) {
+            mergeCachedStartUrls(msg.getSpiderId(), cachedStartUrls);
+        }
 
         if (!executorTerminated) {
             task.setStatus("FAILED");
@@ -349,6 +365,7 @@ public class CrawlerEngine {
                            Long taskId, AtomicInteger success, AtomicInteger fail,
                            Map<String, RobotsRules> robotsCache,
                            Set<String> processedResourceUrls,
+                           Set<String> cachedStartUrls,
                            TaskExecutionContext execution) {
         try {
             // 任务状态不是运行中（如被取消）时停止爬取
@@ -370,6 +387,9 @@ public class CrawlerEngine {
                             "html/" + ObjectNameUtils.base64Url(url) + ".html")
                     : null;
             boolean cacheHit = cachedHtml != null;
+            if (cacheHit) {
+                cachedStartUrls.add(url);
+            }
             Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg, execution);
             long cost = System.currentTimeMillis() - start;
 
@@ -533,6 +553,111 @@ public class CrawlerEngine {
         return normalizedUrl != null && startUrls != null && startUrls.stream()
                 .map(UrlQueueService::normalizeUrl)
                 .anyMatch(normalizedUrl::equals);
+    }
+
+    /**
+     * 读取缓存模式：从 MinIO 的 html/ 目录发现已缓存的页面URL并入队。
+     * 只收录与已配置起始URL同域名的缓存（避免跨域污染）。
+     * 发现失败时记录日志，不影响任务。
+     */
+    private void enqueueCachedUrlsByDomain(Long taskId, List<String> startUrls) {
+        Set<String> hosts = new java.util.HashSet<>();
+        for (String startUrl : startUrls) {
+            try {
+                URI uri = URI.create(startUrl);
+                String host = uri.getHost();
+                if (host != null && !host.isBlank()) {
+                    hosts.add(host.toLowerCase(java.util.Locale.ROOT));
+                }
+            } catch (Exception e) {
+                log.debug("起始URL域名解析失败: {}", startUrl);
+            }
+        }
+        if (hosts.isEmpty()) {
+            return;
+        }
+        try {
+            for (String objectName : minioHelper.listObjectNamesByPrefixAndSuffix(htmlBucket, "html/", ".html")) {
+                String base64Part = objectName.substring("html/".length(), objectName.length() - ".html".length());
+                String url;
+                try {
+                    url = new String(java.util.Base64.getUrlDecoder().decode(base64Part),
+                            java.nio.charset.StandardCharsets.UTF_8);
+                } catch (IllegalArgumentException e) {
+                    continue;
+                }
+                String host = extractHost(url);
+                if (host == null || !hosts.contains(host)) {
+                    continue;
+                }
+                String normalized = UrlQueueService.normalizeUrl(url);
+                if (normalized != null && !normalized.isBlank()) {
+                    urlQueue.enqueueIfAbsent(taskId, normalized, 0);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("从缓存发现起始URL失败: spider hosts={}", hosts, e);
+        }
+    }
+
+    /**
+     * 任务结束后把缓存命中的URL合并进爬虫配置的起始URL（只增不删，保留人工配置）。
+     */
+    private void mergeCachedStartUrls(Long spiderId, Set<String> cachedUrls) {
+        if (cachedUrls == null || cachedUrls.isEmpty()) {
+            return;
+        }
+        try {
+            Spider spider = spiderMapper.selectById(spiderId);
+            if (spider == null) {
+                return;
+            }
+            List<String> existing;
+            try {
+                existing = com.alibaba.fastjson2.JSON.parseArray(spider.getStartUrls(), String.class);
+            } catch (Exception e) {
+                existing = new java.util.ArrayList<>();
+            }
+            if (existing == null) {
+                existing = new java.util.ArrayList<>();
+            }
+            Set<String> existingNormalized = new java.util.HashSet<>();
+            for (String u : existing) {
+                String n = UrlQueueService.normalizeUrl(u);
+                if (n != null) {
+                    existingNormalized.add(n);
+                }
+            }
+            List<String> merged = new java.util.ArrayList<>(existing);
+            int added = 0;
+            for (String u : cachedUrls) {
+                String n = UrlQueueService.normalizeUrl(u);
+                if (n != null && !existingNormalized.add(n)) {
+                    continue;
+                }
+                merged.add(u);
+                added++;
+            }
+            if (added == 0) {
+                return;
+            }
+            Spider update = new Spider();
+            update.setId(spider.getId());
+            update.setStartUrls(com.alibaba.fastjson2.JSON.toJSONString(merged));
+            spiderMapper.updateById(update);
+            log.info("已将缓存发现的URL合并回爬虫起始URL: spiderId={}, added={}", spiderId, added);
+        } catch (Exception e) {
+            log.warn("合并缓存URL回爬虫起始URL失败: spiderId={}", spiderId, e);
+        }
+    }
+
+    private String extractHost(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            return host == null ? null : host.toLowerCase(java.util.Locale.ROOT);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String normalizeHost(String host) {

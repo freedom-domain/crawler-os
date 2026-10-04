@@ -248,7 +248,7 @@
         </el-form-item>
         <el-form-item label="读取缓存">
           <el-switch v-model="form.readCache" :active-value="1" :inactive-value="0" active-text="缓存" inactive-text="联网" />
-          <div class="form-tip">开启后优先读取已缓存的 HTML；命中时不覆盖已缓存的 HTML 和资源，并可补充缺少的资源，未命中时联网抓取并按原逻辑保存</div>
+          <div class="form-tip">开启后优先读取已缓存的 HTML；命中时不覆盖已缓存的 HTML 和资源，并可补充缺少的资源，未命中时联网抓取并按原逻辑保存。起始URL 也会从缓存中读取：与起始URL 同域名的已缓存页面自动加入本次爬取范围，并合并回起始URL 配置</div>
         </el-form-item>
         <el-form-item label="最大深度">
           <el-input-number v-model="form.maxDepth" :min="0" :max="5" />

@@ -191,6 +191,24 @@ public class MinioHelper {
     }
 
     /**
+     * 列出 bucket 中指定前缀下所有以指定后缀结尾的对象名（不递归，用于按前缀扫描同目录文件）。
+     */
+    public List<String> listObjectNamesByPrefixAndSuffix(String bucket, String prefix, String suffix) throws Exception {
+        List<String> names = new ArrayList<>();
+        for (Result<Item> result : minioClient.listObjects(ListObjectsArgs.builder()
+                .bucket(bucket)
+                .prefix(prefix)
+                .recursive(false)
+                .build())) {
+            String name = result.get().objectName();
+            if (name.endsWith(suffix)) {
+                names.add(name);
+            }
+        }
+        return names;
+    }
+
+    /**
      * 同 bucket 内复制对象（服务端 copy，不经过本地）。
      */
     public void copyObject(String bucket, String srcObject, String dstObject) throws Exception {
