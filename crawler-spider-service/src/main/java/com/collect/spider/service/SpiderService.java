@@ -498,6 +498,24 @@ public class SpiderService {
     }
 
     /**
+     * 强制取消：立即把 CANCELING 任务置为 CANCELED，不等待 worker 完成。
+     * 适用于 worker 已挂、Kafka 消息丢失、或用户想立即释放并发槽位的场景。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void forceCancelTask(Long id) {
+        SpiderTask task = taskMapper.selectById(id);
+        if (task == null || task.getDeleted() == 1) {
+            throw new BusinessException("任务不存在");
+        }
+        if (!"CANCELING".equals(task.getStatus()) && !"RUNNING".equals(task.getStatus())) {
+            throw new BusinessException("只有运行中或取消中的任务可以强制取消");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        taskMapper.markCancelingTaskCanceled(id, now);
+        log.warn("任务已强制取消: id={}, taskId={}, previousStatus={}", id, task.getTaskId(), task.getStatus());
+    }
+
+    /**
      * 卡死取消任务兜底：
      * 任务进入 CANCELING 后，由 worker 消费取消（worker 完成爬取时把状态写为 CANCELED）。
      * 若 Kafka 消息丢失 / worker 挂掉 / 任务长时间未结束，任务会永远停在 CANCELING，

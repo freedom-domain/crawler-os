@@ -266,7 +266,7 @@ import { ref, computed, onMounted, onUnmounted, onActivated, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { useRoute, useRouter } from 'vue-router'
-import { taskPage, taskLogs, taskCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency, taskActiveCount } from '@/api'
+import { taskPage, taskLogs, taskCancel, taskForceCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency, taskActiveCount } from '@/api'
 import { Refresh, Search, VideoPause, VideoPlay, Document, Delete, Minus, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -347,6 +347,9 @@ const getRowActions = (row: any): TableRowAction[] => [
   ...(['RUNNING', 'PENDING'].includes(row.status)
     ? [{ command: 'cancel', label: '取消', icon: VideoPause, danger: true }]
     : []),
+  ...(['CANCELING'].includes(row.status)
+    ? [{ command: 'force-cancel', label: '强制取消', icon: VideoPause, danger: true }]
+    : []),
   ...(['RUNNING'].includes(row.status) && !row.pausedAt
     ? [{ command: 'pause', label: '暂停', icon: VideoPause }]
     : []),
@@ -361,6 +364,7 @@ const getRowActions = (row: any): TableRowAction[] => [
 
 const handleRowAction = (command: string, row: any) => {
   if (command === 'cancel') handleCancel(row)
+  if (command === 'force-cancel') handleForceCancel(row)
   if (command === 'pause') handlePause(row)
   if (command === 'resume') handleResume(row)
   if (command === 'logs') showLogs(row)
@@ -594,6 +598,22 @@ const handleCancel = async (row: any) => {
     ElMessage.success('已提交取消请求')
   } catch {
     ElMessage.error('取消失败')
+  }
+  loadData()
+}
+
+const handleForceCancel = async (row: any) => {
+  try {
+    if (!await confirm('强制取消会立即终止任务，不再等待 worker 完成。已抓数据保留，但未完成的部分会丢失。', { title: '强制取消', confirmText: '立即终止', cancelText: '继续等待', danger: true })) return
+  } catch {
+    return
+  }
+
+  try {
+    await taskForceCancel(row.id)
+    ElMessage.success('任务已强制取消')
+  } catch {
+    ElMessage.error('强制取消失败')
   }
   loadData()
 }

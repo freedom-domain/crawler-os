@@ -220,6 +220,13 @@ public class SpiderController {
         return R.ok();
     }
 
+    @Operation(summary = "强制取消任务（立即置为 CANCELED，不等待 worker）")
+    @PutMapping("/task/{id}/force-cancel")
+    public R<Void> forceCancel(@PathVariable("id") Long id) {
+        spiderService.forceCancelTask(id);
+        return R.ok();
+    }
+
     @Operation(summary = "暂停任务")
     @PutMapping("/task/{id}/pause")
     public R<Void> pause(@PathVariable("id") Long id) {
