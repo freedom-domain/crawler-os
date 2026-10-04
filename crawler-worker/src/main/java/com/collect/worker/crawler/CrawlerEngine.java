@@ -390,10 +390,10 @@ public class CrawlerEngine {
             if (cacheHit) {
                 cachedStartUrls.add(url);
             }
-            if (readCache && !cacheHit) {
-                // 读取缓存模式：所有内容只从 MinIO 获取，未缓存的页面不联网
+            if (readCache && !cacheHit && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline())) {
+                // 读取缓存模式且未开启"未命中联网"：只从 MinIO 获取，未缓存的页面直接跳过
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                        "缓存未命中，跳过（读取缓存模式不联网）", 0);
+                        "缓存未命中，跳过（未开启未命中联网）", 0);
                 log.info("读取缓存模式，缓存未命中，跳过: url={}", url);
                 success.incrementAndGet();
                 return;
@@ -407,9 +407,10 @@ public class CrawlerEngine {
             boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
-            // 读取缓存模式不联网：起始URL范围已按 MinIO 缓存发现，链接扩展只会产生
-            // 未缓存的URL，入队后也会被跳过，因此不再扩展
-            if (!msg.isSingleUrl() && depth < maxDepth && !readCache) {
+            // 读取缓存且未开启"未命中联网"时不扩展：起始URL范围已按 MinIO 缓存发现，
+            // 扩展只会产生未缓存的URL，入队后也会被跳过，直接不扩展
+            boolean noOnline = readCache && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline());
+            if (!msg.isSingleUrl() && depth < maxDepth && !noOnline) {
                 List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
                 next.removeIf(nextUrl -> {
                     String normalized = UrlQueueService.normalizeUrl(nextUrl);
@@ -680,8 +681,11 @@ public class CrawlerEngine {
 
     private boolean isAllowedByRobots(String url, TaskMessage msg, Map<String, RobotsRules> robotsCache,
                                      TaskExecutionContext execution) {
-        // 读取缓存模式不联网：不请求 robots.txt
-        if (Integer.valueOf(1).equals(msg.getReadCache())) return true;
+        // 读取缓存模式且未开启"未命中联网"时不联网：不请求 robots.txt
+        if (Integer.valueOf(1).equals(msg.getReadCache())
+                && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline())) {
+            return true;
+        }
         if (!Integer.valueOf(1).equals(msg.getFollowRobots())) return true;
         try {
             URI uri = URI.create(url);

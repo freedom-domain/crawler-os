@@ -22,6 +22,7 @@ public class TaskMessage implements Serializable {
     private Integer overwriteHtml;
     private Integer overwriteImage;
     private Integer readCache;
+    private Integer readCacheMissOnline;
     private Integer maxDepth;
     private boolean singleUrl;
     private Integer timeout;

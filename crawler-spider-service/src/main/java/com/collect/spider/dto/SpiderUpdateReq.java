@@ -36,6 +36,10 @@ public class SpiderUpdateReq {
     private Integer overwriteImage = 0;
     private Integer readCache = 0;
 
+    @Min(value = 0, message = "缓存未命中联网配置只能设置为0或1")
+    @Max(value = 1, message = "缓存未命中联网配置只能设置为0或1")
+    private Integer readCacheMissOnline = 0;
+
     @Min(value = 0, message = "是否公开只能设置为0或1")
     @Max(value = 1, message = "是否公开只能设置为0或1")
     private Integer isPublic = 0;

@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS spider (
     overwrite_html TINYINT DEFAULT 0,
     overwrite_image TINYINT DEFAULT 0,
     read_cache TINYINT NOT NULL DEFAULT 0,
+    read_cache_miss_online TINYINT NOT NULL DEFAULT 0,
     is_public TINYINT NOT NULL DEFAULT 0,
     group VARCHAR(64),
     schedule VARCHAR(64),

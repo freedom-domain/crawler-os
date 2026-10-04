@@ -248,7 +248,11 @@
         </el-form-item>
         <el-form-item label="读取缓存">
           <el-switch v-model="form.readCache" :active-value="1" :inactive-value="0" active-text="缓存" inactive-text="联网" />
-          <div class="form-tip">开启后所有页面内容只从 MinIO 缓存获取，全程不联网：缓存未命中的页面直接跳过。起始URL 也会从缓存中读取：与起始URL 同域名的已缓存页面自动加入本次爬取范围，并合并回起始URL 配置；不扩展新页面</div>
+          <div class="form-tip">开启后页面内容优先从 MinIO 缓存获取；起始URL 也会从缓存中读取：与起始URL 同域名的已缓存页面自动加入本次爬取范围，并合并回起始URL 配置</div>
+        </el-form-item>
+        <el-form-item v-if="form.readCache === 1" label="未命中联网">
+          <el-switch v-model="form.readCacheMissOnline" :active-value="1" :inactive-value="0" active-text="联网" inactive-text="跳过" />
+          <div class="form-tip">读取缓存时未命中缓存的页面如何处理：开启则联网抓取并按原逻辑保存，关闭则直接跳过（全程不联网，不扩展新页面）</div>
         </el-form-item>
         <el-form-item label="最大深度">
           <el-input-number v-model="form.maxDepth" :min="0" :max="5" />
@@ -394,7 +398,7 @@ const isHttpUrl = (value: string): boolean => {
 }
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0
+  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0
 })
 
 // 调度表达式生成器
@@ -573,7 +577,7 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
   startUrlsStr.value = ''
   scheduleTarget.value = ''
   scheduleType.value = ''
@@ -626,7 +630,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
-    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0,
+    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0, readCacheMissOnline: d.readCacheMissOnline ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0
   }
   try {
@@ -723,6 +727,7 @@ const buildUpdatePayload = (detail: any) => {
     overwriteHtml: detail.overwriteHtml ?? 0,
     overwriteImage: detail.overwriteImage ?? 0,
     readCache: detail.readCache ?? 0,
+    readCacheMissOnline: detail.readCacheMissOnline ?? 0,
     isPublic: detail.isPublic ?? 0,
     group: detail.group || '',
     schedule: detail.schedule || '',
