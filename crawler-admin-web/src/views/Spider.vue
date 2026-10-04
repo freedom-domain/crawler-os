@@ -117,6 +117,21 @@
           />
         </template>
       </el-table-column>
+      <el-table-column prop="readCacheMissOnline" label="未命中联网" min-width="140" align="center" resizable>
+        <template #default="{ row }">
+          <el-switch
+            v-model="row.readCacheMissOnline"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="联网"
+            inactive-text="跳过"
+            size="small"
+            :loading="row._savingCacheMiss"
+            :disabled="row._savingCacheMiss || row.readCache !== 1"
+            @change="handleToggleReadCacheMissOnline(row)"
+          />
+        </template>
+      </el-table-column>
       <el-table-column prop="overwriteHtml" label="覆盖HTML" min-width="130" align="center" resizable>
         <template #default="{ row }">
           <el-switch
@@ -738,7 +753,7 @@ const buildUpdatePayload = (detail: any) => {
   }
 }
 
-const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'overwriteHtml', savingKey: string) => {
+const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'readCacheMissOnline' | 'overwriteHtml', savingKey: string) => {
   const oldValue = row[field]
   row[savingKey] = true
   try {
@@ -746,11 +761,11 @@ const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'overwrit
     const payload = buildUpdatePayload(detail.data)
     payload[field] = oldValue
     await spiderUpdate(row.id, payload)
-    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : '覆盖HTML'
+    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : field === 'readCacheMissOnline' ? '未命中联网' : '覆盖HTML'
     ElMessage.success(`${label}已更新`)
   } catch {
     row[field] = oldValue
-    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : '覆盖HTML'
+    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : field === 'readCacheMissOnline' ? '未命中联网' : '覆盖HTML'
     ElMessage.error(`${label}切换失败`)
   } finally {
     row[savingKey] = false
@@ -759,6 +774,7 @@ const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'overwrit
 
 const handleTogglePublic = (row: any) => applyToggle(row, 'isPublic', '_savingPublic')
 const handleToggleReadCache = (row: any) => applyToggle(row, 'readCache', '_savingCache')
+const handleToggleReadCacheMissOnline = (row: any) => applyToggle(row, 'readCacheMissOnline', '_savingCacheMiss')
 const handleToggleOverwriteHtml = (row: any) => applyToggle(row, 'overwriteHtml', '_savingHtml')
 
 const handleToggleStatus = async (row: any) => {
