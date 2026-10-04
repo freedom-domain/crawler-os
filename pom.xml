@@ -42,7 +42,7 @@
         <elasticsearch-client.version>9.2.1</elasticsearch-client.version>
         <webmagic.version>0.9.0</webmagic.version>
         <okhttp.version>4.12.0</okhttp.version>
-        <springdoc.version>4.0.0</springdoc.version>
+        <springdoc.version>3.1.1</springdoc.version>
         <fastjson2.version>2.0.65</fastjson2.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
     </properties>

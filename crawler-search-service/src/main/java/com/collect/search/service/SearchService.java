@@ -10,7 +10,9 @@ import co.elastic.clients.elasticsearch.core.OpenPointInTimeRequest;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.elasticsearch.core.search.HighlightField;
 import co.elastic.clients.elasticsearch.core.search.PointInTimeReference;
+import co.elastic.clients.util.NamedValue;
 import co.elastic.clients.elasticsearch._types.Time;
 import com.collect.search.dto.SearchResult;
 import com.collect.search.entity.Spider;
@@ -121,7 +123,7 @@ public class SearchService {
         if (hasImages) {
             // 直接依据图片数组是否包含实际元素过滤，空数组不计入结果。
             boolBuilder.must(m -> m.script(s -> s.script(script -> script
-                    .source("doc.containsKey('images') && doc['images'].size() > 0"))));
+                    .source(src -> src.scriptString("doc.containsKey('images') && doc['images'].size() > 0")))));
         }
 
         if (favoriteOnly) {
@@ -219,8 +221,8 @@ public class SearchService {
                     .postTags("</em>")
                     .fragmentSize(200)
                     .numberOfFragments(3)
-                    .fields("title", f -> f)
-                    .fields("content", f -> f)
+                    .fields(NamedValue.of("title", HighlightField.of(f -> f)))
+                    .fields(NamedValue.of("content", HighlightField.of(f -> f)))
             );
         }
 
