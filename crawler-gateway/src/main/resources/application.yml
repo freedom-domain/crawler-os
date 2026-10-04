@@ -10,47 +10,49 @@ spring:
         server-addr: ${NACOS_ADDR:192.168.31.2:8848}
         namespace: ${NACOS_NAMESPACE:crawler-default}
     gateway:
-      discovery:
-        locator:
-          enabled: false
-      routes:
-        - id: user-service
-          uri: lb://crawler-user-service
-          predicates:
-            - Path=/api/user/**
-        - id: dict-service
-          uri: lb://crawler-user-service
-          predicates:
-            - Path=/api/dict/**
-        - id: role-service
-          uri: lb://crawler-user-service
-          predicates:
-            - Path=/api/role/**
-        - id: permission-service
-          uri: lb://crawler-user-service
-          predicates:
-            - Path=/api/permission/**
-        - id: spider-service
-          uri: lb://crawler-spider-service
-          predicates:
-            - Path=/api/spider/**
-        - id: search-service
-          uri: lb://crawler-search-service
-          predicates:
-            - Path=/api/search/**
-        - id: file-service
-          uri: lb://crawler-file-service
-          predicates:
-            - Path=/api/file/**
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOriginPatterns: "*"
-            allowedMethods: "*"
-            allowedHeaders: "*"
-            exposedHeaders: "Authorization,Content-Disposition"
-            allowCredentials: true
-            maxAge: 3600
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false
+          routes:
+            - id: user-service
+              uri: lb://crawler-user-service
+              predicates:
+                - Path=/api/user/**
+            - id: dict-service
+              uri: lb://crawler-user-service
+              predicates:
+                - Path=/api/dict/**
+            - id: role-service
+              uri: lb://crawler-user-service
+              predicates:
+                - Path=/api/role/**
+            - id: permission-service
+              uri: lb://crawler-user-service
+              predicates:
+                - Path=/api/permission/**
+            - id: spider-service
+              uri: lb://crawler-spider-service
+              predicates:
+                - Path=/api/spider/**
+            - id: search-service
+              uri: lb://crawler-search-service
+              predicates:
+                - Path=/api/search/**
+            - id: file-service
+              uri: lb://crawler-file-service
+              predicates:
+                - Path=/api/file/**
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOriginPatterns: "*"
+                allowedMethods: "*"
+                allowedHeaders: "*"
+                exposedHeaders: "Authorization,Content-Disposition"
+                allowCredentials: true
+                maxAge: 3600
   data:
     redis:
       host: ${REDIS_HOST:192.168.31.2}
