@@ -468,7 +468,9 @@ public class CrawlerEngine {
             success.incrementAndGet();
 
             // Persist the page before downloading static assets so slow asset hosts cannot delay it.
-            saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, processedResourceUrls, execution);
+            // 读取缓存命中时，HTML 和 JS/CSS 资源都直接从 MinIO 复用，不再回源。
+            boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
+            saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, saveResources, processedResourceUrls, execution);
             updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
                     msg, task, overwriteImage, execution);
         } catch (InterruptedException e) {
@@ -924,9 +926,12 @@ public class CrawlerEngine {
     /**
      * 按需上传页面 HTML 原文，并将页面引用的 JS/CSS 文件上传到资源目录。
      * 对象名基于 URL 的 Base64 编码；资源是否覆盖与 HTML 使用同一个覆盖开关。
+     * saveResources=false 时（读取缓存命中且未开启覆盖HTML）只处理 HTML，
+     * 页面引用的 JS/CSS 全部直接从 MinIO 复用，不回源。
      */
     private void saveHtmlAndJs(Html doc, String url, String html, TaskMessage msg,
-                               SpiderTask task, boolean saveHtml, Set<String> processedResourceUrls,
+                               SpiderTask task, boolean saveHtml, boolean saveResources,
+                               Set<String> processedResourceUrls,
                                TaskExecutionContext execution) {
         if (execution.isCancelled()) return;
         try {
@@ -936,6 +941,9 @@ public class CrawlerEngine {
                 minioHelper.putHtml(htmlBucket, htmlObject, html);
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
                         "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
+            }
+            if (!saveResources) {
+                return;
             }
             Map<String, WebResource> resourceQueue = new java.util.LinkedHashMap<>();
             for (String source : doc.$("script[src]", "src").all()) {
