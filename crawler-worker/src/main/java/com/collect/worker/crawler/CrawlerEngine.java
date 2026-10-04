@@ -299,11 +299,7 @@ public class CrawlerEngine {
         }
         // 非暂停状态，清空队列
         urlQueue.clear(taskId);
-        // 读取缓存模式：任务结束后，把本次缓存命中的页面URL合并回爬虫配置的起始URL，
-        // 使下次运行仍从缓存读取（缓存发现以配置的起始URL为基准，配置变化后不会复活旧缓存URL）
-        if (Integer.valueOf(1).equals(msg.getReadCache())) {
-            mergeCachedStartUrls(msg.getSpiderId(), cachedStartUrls);
-        }
+
 
         if (!executorTerminated) {
             task.setStatus("FAILED");
@@ -616,53 +612,7 @@ public class CrawlerEngine {
     /**
      * 任务结束后把缓存命中的URL合并进爬虫配置的起始URL（只增不删，保留人工配置）。
      */
-    private void mergeCachedStartUrls(Long spiderId, Set<String> cachedUrls) {
-        if (cachedUrls == null || cachedUrls.isEmpty()) {
-            return;
-        }
-        try {
-            Spider spider = spiderMapper.selectById(spiderId);
-            if (spider == null) {
-                return;
-            }
-            List<String> existing;
-            try {
-                existing = com.alibaba.fastjson2.JSON.parseArray(spider.getStartUrls(), String.class);
-            } catch (Exception e) {
-                existing = new java.util.ArrayList<>();
-            }
-            if (existing == null) {
-                existing = new java.util.ArrayList<>();
-            }
-            Set<String> existingNormalized = new java.util.HashSet<>();
-            for (String u : existing) {
-                String n = UrlQueueService.normalizeUrl(u);
-                if (n != null) {
-                    existingNormalized.add(n);
-                }
-            }
-            List<String> merged = new java.util.ArrayList<>(existing);
-            int added = 0;
-            for (String u : cachedUrls) {
-                String n = UrlQueueService.normalizeUrl(u);
-                if (n != null && !existingNormalized.add(n)) {
-                    continue;
-                }
-                merged.add(u);
-                added++;
-            }
-            if (added == 0) {
-                return;
-            }
-            Spider update = new Spider();
-            update.setId(spider.getId());
-            update.setStartUrls(com.alibaba.fastjson2.JSON.toJSONString(merged));
-            spiderMapper.updateById(update);
-            log.info("已将缓存发现的URL合并回爬虫起始URL: spiderId={}, added={}", spiderId, added);
-        } catch (Exception e) {
-            log.warn("合并缓存URL回爬虫起始URL失败: spiderId={}", spiderId, e);
-        }
-    }
+
 
     private String extractHost(String url) {
         try {
