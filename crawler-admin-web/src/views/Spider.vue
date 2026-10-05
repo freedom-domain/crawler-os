@@ -272,6 +272,18 @@
         <el-form-item label="最大深度">
           <el-input-number v-model="form.maxDepth" :min="0" :max="5" />
         </el-form-item>
+        <el-form-item label="自定义Header">
+          <div class="header-editor">
+            <div v-if="headerRows.length === 0" class="header-editor-empty">未配置 Header，点击下方按钮添加</div>
+            <div v-for="(row, index) in headerRows" :key="index" class="header-editor-row">
+              <el-input v-model="row.name" placeholder="名称，如 X-Api-Key" class="header-editor-name" />
+              <el-input v-model="row.value" placeholder="值" class="header-editor-value" />
+              <el-button type="danger" :icon="Delete" circle @click="removeHeaderRow(index)" />
+            </div>
+            <el-button type="primary" plain :icon="Plus" @click="addHeaderRow">添加 Header</el-button>
+          </div>
+          <div class="form-tip">配置后，该爬虫发起的每次 HTTP 请求都会带上这些 Header；同名 Header 会覆盖内置默认值</div>
+        </el-form-item>
         <el-form-item label="遵循 robots.txt">
           <el-switch v-model="form.followRobots" :active-value="1" :inactive-value="0" active-text="是" inactive-text="否" />
           <div class="form-tip">开启后，遵循目标站点 robots.txt 中的 Disallow 规则</div>
@@ -411,9 +423,28 @@ const isHttpUrl = (value: string): boolean => {
     return false
   }
 }
+
+// 自定义 Header 编辑器：UI 用 [{name, value}] 行，提交时序列化成 "名称: 值\n" 文本存 form.headers
+const headerRows = ref<{ name: string; value: string }[]>([])
+const parseHeadersToRows = (text: string) => {
+  if (!text || !text.trim()) return []
+  return text.split('\n').map(line => line.split('#', 2)[0].trim()).filter(Boolean).map(line => {
+    const idx = line.indexOf(':')
+    if (idx <= 0) return null
+    return { name: line.substring(0, idx).trim(), value: line.substring(idx + 1).trim() }
+  }).filter((row): row is { name: string; value: string } => row != null && Boolean(row.name))
+}
+const serializeHeaderRows = () =>
+  headerRows.value.filter(r => Boolean(r.name.trim()) && Boolean(r.value.trim()))
+    .map(r => `${r.name.trim()}: ${r.value.trim()}`)
+    .join('\n')
+const addHeaderRow = () => headerRows.value.push({ name: '', value: '' })
+const removeHeaderRow = (index: number) => headerRows.value.splice(index, 1)
+const syncHeadersToForm = () => { form.value.headers = serializeHeaderRows() }
+watch(headerRows, syncHeadersToForm, { deep: true })
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0
+  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: ''
 })
 
 // 调度表达式生成器
@@ -592,7 +623,8 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0 }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '' }
+  headerRows.value = []
   startUrlsStr.value = ''
   scheduleTarget.value = ''
   scheduleType.value = ''
@@ -646,8 +678,9 @@ const showEdit = async (row: any) => {
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
     contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0, readCacheMissOnline: d.readCacheMissOnline ?? 0,
-    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0
+    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0, headers: d.headers || ''
   }
+  headerRows.value = parseHeadersToRows(d.headers || '')
   try {
     const urls = JSON.parse(d.startUrls || '[]')
     startUrlsStr.value = urls.join(', ')
@@ -749,7 +782,8 @@ const buildUpdatePayload = (detail: any) => {
     maxDepth: detail.maxDepth ?? 2,
     timeout: detail.timeout ?? 15000,
     followRobots: detail.followRobots ?? 0,
-    skipTlsVerify: detail.skipTlsVerify ?? 0
+    skipTlsVerify: detail.skipTlsVerify ?? 0,
+    headers: detail.headers || ''
   }
 }
 
@@ -984,5 +1018,28 @@ onUnmounted(cancelScheduledFilterSearch)
 }
 .schedule-result {
   width: 100%;
+}
+.header-editor {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.header-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-editor-name {
+  width: 38%;
+  flex: 0 0 auto;
+}
+.header-editor-value {
+  flex: 1 1 auto;
+}
+.header-editor-empty {
+  font-size: 12px;
+  color: #c0c4cc;
+  padding: 4px 0;
 }
 </style>

@@ -49,7 +49,7 @@
             "name": "Run Node.js Admin Web",
             "request": "launch",
             "cwd": "${workspaceFolder}/crawler-admin-web",
-            "runtimeExecutable": "npm",
+            "runtimeExecutable": "/config/.nvm/versions/node/v22.23.3/bin/npm",
             "runtimeArgs": [
                 "run",
                 "dev"

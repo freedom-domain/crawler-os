@@ -99,6 +99,7 @@ public class CrawlerEngine {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final OkHttpClient verifiedHttpClient;
     private final OkHttpClient unverifiedHttpClient;
+    private final java.util.Map<String, OkHttpClient> httpClientCache = new ConcurrentHashMap<>();
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
@@ -132,11 +133,84 @@ public class CrawlerEngine {
         this.unverifiedHttpClient = buildHttpClient(true);
     }
 
+    /**
+     * 解析爬虫配置的自定义 Header：每行一个 "名称: 值"，以 # 开头的行为注释，
+     * 空行/无效行忽略。解析失败时返回空列表（不影响请求）。
+     */
+    static List<Map.Entry<String, String>> parseConfiguredHeaders(String headers) {
+        List<Map.Entry<String, String>> result = new java.util.ArrayList<>();
+        if (headers == null || headers.isBlank()) {
+            return result;
+        }
+        for (String rawLine : headers.split("\\R")) {
+            String line = rawLine.split("#", 2)[0].trim();
+            if (line.isEmpty()) {
+                continue;
+            }
+            int idx = line.indexOf(':');
+            if (idx <= 0) {
+                continue;
+            }
+            String name = line.substring(0, idx).trim();
+            String value = line.substring(idx + 1).trim();
+            if (name.isEmpty() || value.isEmpty()) {
+                continue;
+            }
+            result.add(new java.util.AbstractMap.SimpleImmutableEntry<>(name, value));
+        }
+        return result;
+    }
+
+    /**
+     * 应用爬虫配置的自定义 Header 到指定请求；与内置 Header 冲突时，配置的 Header 优先。
+     */
+    static Request applyConfiguredHeaders(Request request, String headers) {
+        List<Map.Entry<String, String>> headerList = parseConfiguredHeaders(headers);
+        if (headerList.isEmpty()) {
+            return request;
+        }
+        Request.Builder builder = request.newBuilder();
+        for (Map.Entry<String, String> entry : headerList) {
+            builder.header(entry.getKey(), entry.getValue());
+        }
+        return builder.build();
+    }
+
+    private Request buildRequest(String url, TaskMessage msg) {
+        // 自定义 Header 由 httpClient(msg) 上的 Interceptor 统一注入（含重定向跳数），此处只设内置 Header
+        return new Request.Builder()
+                .url(url)
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
+                .build();
+    }
+
     static OkHttpClient buildHttpClient(boolean skipTlsVerify) {
+        return buildHttpClient(skipTlsVerify, null);
+    }
+
+    /**
+     * 构建 HTTP 客户端。headers 不为空时，通过 Interceptor 把自定义 Header 注入到
+     * 每一次请求（含 OkHttp 自动跟随的 302 重定向跳数）——
+     * OkHttp 原生 followRedirects 跟随重定向时会丢弃自定义 Header，
+     * 导致"第一次请求带了 Header、跟随重定向的那次没带"，目标站点
+     * 因此判定未登录而返回登录页。Interceptor 方案可让自定义 Header
+     * 在所有跳数上一致生效。
+     */
+    static OkHttpClient buildHttpClient(boolean skipTlsVerify, String headers) {
+        List<Map.Entry<String, String>> headerList = parseConfiguredHeaders(headers);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .followRedirects(true);
+        if (!headerList.isEmpty()) {
+            builder.addInterceptor(chain -> {
+                Request.Builder reqBuilder = chain.request().newBuilder();
+                for (Map.Entry<String, String> entry : headerList) {
+                    reqBuilder.header(entry.getKey(), entry.getValue());
+                }
+                return chain.proceed(reqBuilder.build());
+            });
+        }
         if (!skipTlsVerify) {
             return builder.build();
         }
@@ -168,9 +242,15 @@ public class CrawlerEngine {
     }
 
     private OkHttpClient httpClient(TaskMessage msg) {
-        return Integer.valueOf(1).equals(msg.getSkipTlsVerify())
-                ? unverifiedHttpClient
-                : verifiedHttpClient;
+        boolean skipTls = Integer.valueOf(1).equals(msg.getSkipTlsVerify());
+        String headers = msg.getHeaders();
+        // 未配置自定义 Header 时，复用共享客户端，避免不必要的 Interceptor 开销
+        if (headers == null || headers.isBlank()) {
+            return skipTls ? unverifiedHttpClient : verifiedHttpClient;
+        }
+        // 按 (skipTls, headers) 缓存带 Header 的客户端，任务内复用
+        String key = (skipTls ? "unverified" : "verified") + "|" + headers;
+        return httpClientCache.computeIfAbsent(key, k -> buildHttpClient(skipTls, headers));
     }
 
     @SuppressWarnings("null")
@@ -651,10 +731,7 @@ public class CrawlerEngine {
 
     private RobotsRules loadRobotsRules(String robotsUrl, TaskMessage msg, TaskExecutionContext execution) {
         try {
-            Request request = new Request.Builder()
-                    .url(robotsUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
-                    .build();
+            Request request = buildRequest(robotsUrl, msg);
             return executeRequest(httpClient(msg), request, execution, response -> {
                 if (!response.isSuccessful() || response.body() == null) return RobotsRules.allowAll();
                 return RobotsRules.parse(response.body().string());
@@ -1062,10 +1139,7 @@ public class CrawlerEngine {
     }
 
     private byte[] downloadBytes(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
-        Request request = new Request.Builder()
-                .url(src)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
-                .build();
+        Request request = buildRequest(src, msg);
         return executeRequest(httpClient(msg), request, execution, response -> {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
@@ -1118,10 +1192,7 @@ public class CrawlerEngine {
     }
 
     private byte[] downloadImage(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
-        Request request = new Request.Builder()
-                .url(src)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
-                .build();
+        Request request = buildRequest(src, msg);
         return executeRequest(httpClient(msg), request, execution, response -> {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
@@ -1170,6 +1241,7 @@ public class CrawlerEngine {
     }
 
     private Html fetch(String url, TaskMessage msg, TaskExecutionContext execution) throws Exception {
+        // 自定义 Header 由 httpClient(msg) 上的 Interceptor 统一注入（含重定向跳数），此处只设内置 Header
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
@@ -1188,8 +1260,11 @@ public class CrawlerEngine {
 
     private <T> T executeRequest(OkHttpClient client, Request request,
                                  TaskExecutionContext execution, ResponseReader<T> reader) throws Exception {
+        log.info("HTTP 请求: {} {} | headers={}", request.method(), request.url(), request.headers());
         Call call = execution.register(client.newCall(request));
         try (Response response = call.execute()) {
+            log.info("HTTP 响应: {} {} | code={} headers={}", request.method(), request.url(),
+                    response.code(), response.headers());
             return reader.read(response);
         } finally {
             execution.unregister(call);
