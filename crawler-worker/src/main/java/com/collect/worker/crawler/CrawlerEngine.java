@@ -1260,11 +1260,8 @@ public class CrawlerEngine {
 
     private <T> T executeRequest(OkHttpClient client, Request request,
                                  TaskExecutionContext execution, ResponseReader<T> reader) throws Exception {
-        log.info("HTTP 请求: {} {} | headers={}", request.method(), request.url(), request.headers());
         Call call = execution.register(client.newCall(request));
         try (Response response = call.execute()) {
-            log.info("HTTP 响应: {} {} | code={} headers={}", request.method(), request.url(),
-                    response.code(), response.headers());
             return reader.read(response);
         } finally {
             execution.unregister(call);
