@@ -100,6 +100,7 @@ public class CrawlerEngine {
     private final OkHttpClient verifiedHttpClient;
     private final OkHttpClient unverifiedHttpClient;
     private final java.util.Map<String, OkHttpClient> httpClientCache = new ConcurrentHashMap<>();
+    private final java.util.Map<String, List<String>> excludedUrlsCache = new ConcurrentHashMap<>();
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
@@ -286,11 +287,15 @@ public class CrawlerEngine {
             for (String startUrl : msg.getStartUrls()) {
                 String normalizedStartUrl = UrlQueueService.normalizeUrl(startUrl);
                 if (normalizedStartUrl == null || normalizedStartUrl.isBlank()) continue;
+                if (isExcludedUrl(normalizedStartUrl, msg)) {
+                    log.info("起始URL命中排除规则，跳过: {}", normalizedStartUrl);
+                    continue;
+                }
                 urlQueue.enqueueIfAbsent(taskId, normalizedStartUrl, 0);
             }
             // 读取缓存模式下，起始URL也优先从缓存发现：MinIO 中与已配置起始URL同域名的HTML对象
             if (Integer.valueOf(1).equals(msg.getReadCache())) {
-                enqueueCachedUrlsByDomain(taskId, msg.getStartUrls());
+                enqueueCachedUrlsByDomain(taskId, msg.getStartUrls(), msg);
             }
 
             while (true) {
@@ -498,6 +503,7 @@ public class CrawlerEngine {
                 for (String nextUrl : next) {
                     String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
                     if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
+                    if (isExcludedUrl(normalizedNextUrl, msg)) continue;
                     if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache, execution)) continue;
                     if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
                 }
@@ -624,6 +630,58 @@ public class CrawlerEngine {
         return false;
     }
 
+    /**
+     * 判断 URL 是否命中爬虫配置的排除规则。支持：
+     * - 精确匹配（归一化后相等）
+     * - 路径前缀匹配（如 "/tags/" 排除该目录下所有页面）
+     * 排除规则来自 TaskMessage.excludedUrls（JSON 数组），按字符串缓存解析结果。
+     */
+    private boolean isExcludedUrl(String url, TaskMessage msg) {
+        List<String> rules = getExcludedRules(msg);
+        if (rules.isEmpty()) {
+            return false;
+        }
+        String normalized = UrlQueueService.normalizeUrl(url);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        for (String rule : rules) {
+            String normalizedRule = UrlQueueService.normalizeUrl(rule);
+            if (normalizedRule == null || normalizedRule.isBlank()) {
+                continue;
+            }
+            if (normalized.equals(normalizedRule)) {
+                return true;
+            }
+            if (normalized.startsWith(normalizedRule)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> getExcludedRules(TaskMessage msg) {
+        String raw = msg.getExcludedUrls();
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        return excludedUrlsCache.computeIfAbsent(raw, r -> {
+            try {
+                List<String> parsed = JSON.parseArray(r, String.class);
+                if (parsed == null) {
+                    return List.of();
+                }
+                return parsed.stream()
+                        .filter(s -> s != null && !s.isBlank())
+                        .map(String::trim)
+                        .toList();
+            } catch (Exception e) {
+                log.warn("解析 excludedUrls 失败，忽略排除规则: {}", r, e);
+                return List.of();
+            }
+        });
+    }
+
     private boolean isSameDomain(String url, List<String> startUrls) {
         try {
             URI target = URI.create(url);
@@ -651,7 +709,7 @@ public class CrawlerEngine {
      * 只收录与已配置起始URL同域名的缓存（避免跨域污染）。
      * 发现失败时记录日志，不影响任务。
      */
-    private void enqueueCachedUrlsByDomain(Long taskId, List<String> startUrls) {
+    private void enqueueCachedUrlsByDomain(Long taskId, List<String> startUrls, TaskMessage msg) {
         Set<String> hosts = new java.util.HashSet<>();
         for (String startUrl : startUrls) {
             try {
@@ -680,7 +738,7 @@ public class CrawlerEngine {
                     continue;
                 }
                 String normalized = UrlQueueService.normalizeUrl(url);
-                if (normalized != null && !normalized.isBlank()) {
+                if (normalized != null && !normalized.isBlank() && !isExcludedUrl(normalized, msg)) {
                     urlQueue.enqueueIfAbsent(taskId, normalized, 0);
                 }
             }

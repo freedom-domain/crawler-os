@@ -34,6 +34,7 @@ public class Spider extends BaseEntity {
     private Integer maxDepth;
     private Integer timeout;
     private String headers;
+    private String excludedUrls;
     private Integer followRobots;
     private Integer skipTlsVerify;
     private Integer enabled;

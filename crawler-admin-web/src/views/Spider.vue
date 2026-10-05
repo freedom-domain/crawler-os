@@ -284,6 +284,18 @@
           </div>
           <div class="form-tip">配置后，该爬虫发起的每次 HTTP 请求都会带上这些 Header；同名 Header 会覆盖内置默认值</div>
         </el-form-item>
+        <el-form-item label="排除URL">
+          <el-select
+            v-model="form.excludedUrls"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            placeholder="输入URL或路径前缀后回车，如 /tags/ 或 https://example.com/page"
+            style="width: 100%"
+          />
+          <div class="form-tip">命中规则的URL不会被抓取；支持精确URL或路径前缀（如 /tags/ 排除该目录下所有页面）</div>
+        </el-form-item>
         <el-form-item label="遵循 robots.txt">
           <el-switch v-model="form.followRobots" :active-value="1" :inactive-value="0" active-text="是" inactive-text="否" />
           <div class="form-tip">开启后，遵循目标站点 robots.txt 中的 Disallow 规则</div>
@@ -442,9 +454,23 @@ const addHeaderRow = () => headerRows.value.push({ name: '', value: '' })
 const removeHeaderRow = (index: number) => headerRows.value.splice(index, 1)
 const syncHeadersToForm = () => { form.value.headers = serializeHeaderRows() }
 watch(headerRows, syncHeadersToForm, { deep: true })
+
+// 排除URL：后端存 JSON 数组字符串，前端用数组（el-select 动态标签）
+const parseExcludedUrls = (text: string): string[] => {
+  if (!text || !text.trim()) return []
+  try {
+    const parsed: unknown = JSON.parse(text)
+    if (Array.isArray(parsed)) {
+      return parsed.filter((u): u is string => typeof u === 'string' && Boolean(u.trim()))
+    }
+  } catch {
+    // 兼容旧数据：逗号分隔
+  }
+  return String(text).split(',').map(s => s.trim()).filter(Boolean)
+}
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: ''
+  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] as string[]
 })
 
 // 调度表达式生成器
@@ -623,7 +649,7 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '' }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] }
   headerRows.value = []
   startUrlsStr.value = ''
   scheduleTarget.value = ''
@@ -678,7 +704,7 @@ const showEdit = async (row: any) => {
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
     contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0, readCacheMissOnline: d.readCacheMissOnline ?? 0,
-    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0, headers: d.headers || ''
+    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0, headers: d.headers || '', excludedUrls: parseExcludedUrls(d.excludedUrls)
   }
   headerRows.value = parseHeadersToRows(d.headers || '')
   try {
@@ -783,7 +809,8 @@ const buildUpdatePayload = (detail: any) => {
     timeout: detail.timeout ?? 15000,
     followRobots: detail.followRobots ?? 0,
     skipTlsVerify: detail.skipTlsVerify ?? 0,
-    headers: detail.headers || ''
+    headers: detail.headers || '',
+    excludedUrls: parseExcludedUrls(detail.excludedUrls)
   }
 }
 

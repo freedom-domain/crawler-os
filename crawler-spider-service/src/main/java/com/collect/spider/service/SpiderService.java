@@ -78,6 +78,7 @@ public class SpiderService {
         spider.setMaxDepth(req.getMaxDepth());
         spider.setTimeout(req.getTimeout());
         spider.setHeaders(req.getHeaders());
+        spider.setExcludedUrls(req.getExcludedUrls() == null ? null : JSON.toJSONString(req.getExcludedUrls()));
         spider.setFollowRobots(req.getFollowRobots());
         spider.setSkipTlsVerify(req.getSkipTlsVerify() == null ? 0 : req.getSkipTlsVerify());
         spider.setEnabled(req.getEnabled());
@@ -150,6 +151,8 @@ public class SpiderService {
             config.setMaxDepth(spider.getMaxDepth());
             config.setTimeout(spider.getTimeout());
             config.setHeaders(spider.getHeaders());
+            config.setExcludedUrls(spider.getExcludedUrls() == null || spider.getExcludedUrls().isBlank()
+                    ? null : JSON.parseArray(spider.getExcludedUrls(), String.class));
             config.setFollowRobots(spider.getFollowRobots());
             config.setSkipTlsVerify(spider.getSkipTlsVerify() == null ? 0 : spider.getSkipTlsVerify());
             config.setEnabled(spider.getEnabled());
@@ -222,6 +225,7 @@ public class SpiderService {
         exist.setMaxDepth(req.getMaxDepth());
         exist.setTimeout(req.getTimeout());
         exist.setHeaders(req.getHeaders());
+        exist.setExcludedUrls(req.getExcludedUrls() == null ? null : JSON.toJSONString(req.getExcludedUrls()));
         exist.setFollowRobots(req.getFollowRobots());
         exist.setSkipTlsVerify(req.getSkipTlsVerify() == null ? 0 : req.getSkipTlsVerify());
         try {
@@ -490,6 +494,7 @@ public class SpiderService {
         msg.setMaxDepth(spider.getMaxDepth());
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());
+        msg.setExcludedUrls(spider.getExcludedUrls());
         msg.setFollowRobots(spider.getFollowRobots());
         msg.setSkipTlsVerify(spider.getSkipTlsVerify() == null ? 0 : spider.getSkipTlsVerify());
         msg.setConcurrency(getMaxConcurrency());

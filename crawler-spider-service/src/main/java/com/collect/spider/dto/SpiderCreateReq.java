@@ -54,6 +54,8 @@ public class SpiderCreateReq {
 
     private String headers;
 
+    private List<String> excludedUrls;
+
     private Integer followRobots = 0;
 
     @Min(value = 0, message = "TLS证书校验配置只能设置为0或1")
