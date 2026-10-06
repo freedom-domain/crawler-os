@@ -33,7 +33,7 @@
             :src="imageUrl(img)"
             :preview-src-list="detail.images.map(imageUrl)"
             :initial-index="idx"
-            fit="cover"
+            fit="contain"
             class="detail-image"
             preview-teleported
             hide-on-click-modal
@@ -82,14 +82,13 @@ const visible = computed({
 .detail-meta-item { color: #627d98; }
 .meta-tag { background: #f1f5f5; padding: 3px 8px; border-radius: 4px; color: var(--ink-700); font-size: 12px; font-weight: 500; }
 .group-tag { background: #d9f5ef; color: var(--teal-dark); }
-.detail-images { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 4px 0; }
-.detail-image { width: clamp(180px, 24vw, 320px); height: clamp(130px, 17vw, 220px); border-radius: 8px; border: 1px solid #e3e8ee; overflow: hidden; }
+.detail-images { display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 4px 0; }
+.detail-image { width: 100%; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #e3e8ee; }
 .detail-text { white-space: pre-wrap; line-height: 1.8; color: var(--ink-900); max-height: 42vh; overflow-y: auto; }
 .detail-content-preview { padding: 4px 0; }
 .empty { text-align: center; color: var(--ink-500); padding: 40px 0; font-size: 14px; }
 
 @media (max-width: 720px) {
   .detail-images { gap: 8px; }
-  .detail-image { width: calc(50% - 4px); height: 160px; }
 }
 </style>
