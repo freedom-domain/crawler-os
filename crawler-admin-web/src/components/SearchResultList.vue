@@ -109,6 +109,8 @@ defineEmits<{
 .result-thumb {
   width: 72px;
   height: 72px;
+  object-fit: contain;
+  background: #fff;
   border: 1px solid #e3e8ee;
   border-radius: 6px;
   cursor: pointer;
