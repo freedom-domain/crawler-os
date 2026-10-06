@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="搜索结果详情" width="min(800px, calc(100vw - 32px))" top="5vh" destroy-on-close>
+  <el-dialog v-model="visible" title="搜索结果详情" width="min(1100px, calc(100vw - 32px))" top="5vh" destroy-on-close>
     <template #header>
       <div class="detail-title-row">
         <div class="detail-dialog-title">{{ detail?.title || '搜索结果详情' }}</div>
@@ -83,13 +83,13 @@ const visible = computed({
 .meta-tag { background: #f1f5f5; padding: 3px 8px; border-radius: 4px; color: var(--ink-700); font-size: 12px; font-weight: 500; }
 .group-tag { background: #d9f5ef; color: var(--teal-dark); }
 .detail-images { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; padding: 4px 0; }
-.detail-image { width: clamp(160px, 22vw, 240px); height: clamp(110px, 16vw, 160px); border-radius: 8px; border: 1px solid #e3e8ee; overflow: hidden; }
+.detail-image { width: clamp(180px, 24vw, 320px); height: clamp(130px, 17vw, 220px); border-radius: 8px; border: 1px solid #e3e8ee; overflow: hidden; }
 .detail-text { white-space: pre-wrap; line-height: 1.8; color: var(--ink-900); max-height: 42vh; overflow-y: auto; }
 .detail-content-preview { padding: 4px 0; }
 .empty { text-align: center; color: var(--ink-500); padding: 40px 0; font-size: 14px; }
 
 @media (max-width: 720px) {
   .detail-images { gap: 8px; }
-  .detail-image { width: calc(50% - 4px); height: 120px; }
+  .detail-image { width: calc(50% - 4px); height: 160px; }
 }
 </style>
