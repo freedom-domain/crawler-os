@@ -839,18 +839,21 @@ const handleToggleReadCacheMissOnline = (row: any) => applyToggle(row, 'readCach
 const handleToggleOverwriteHtml = (row: any) => applyToggle(row, 'overwriteHtml', '_savingHtml')
 
 const handleToggleStatus = async (row: any) => {
-  const oldValue = row.status
+  // el-switch @change 触发时 v-model 已变为目标值（row.status = 新值）
   row._savingStatus = true
   try {
-    if (oldValue === 1) {
-      await spiderStop(row.id)
-      ElMessage.success('定时任务已停止')
-    } else {
+    if (row.status === 1) {
+      // 目标状态：运行中 → 启动定时任务
       await spiderStart(row.id)
       ElMessage.success('定时任务已启动')
+    } else {
+      // 目标状态：停止 → 停止定时任务
+      await spiderStop(row.id)
+      ElMessage.success('定时任务已停止')
     }
   } catch {
-    row.status = oldValue
+    // 失败时回滚：v-model 已改变，需取反恢复
+    row.status = row.status === 1 ? 0 : 1
     ElMessage.error('定时任务切换失败')
   } finally {
     row._savingStatus = false
