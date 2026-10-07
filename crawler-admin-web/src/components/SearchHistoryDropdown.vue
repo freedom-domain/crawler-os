@@ -180,20 +180,20 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   border-top: 0;
   border-radius: 0 0 24px 24px;
   background: #fff;
-  box-shadow: 0 8px 24px rgba(32, 33, 36, 0.14);
+  box-shadow: 0 12px 32px rgba(23, 43, 77, 0.14), 0 2px 6px rgba(23, 43, 77, 0.06);
   transform-origin: top center;
   overflow: hidden;
 }
 
 .history-fade-enter-active,
 .history-fade-leave-active {
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transition: opacity 0.18s cubic-bezier(.4, 0, .2, 1), transform 0.18s cubic-bezier(.4, 0, .2, 1);
 }
 
 .history-fade-enter-from,
 .history-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px) scaleY(0.96);
+  transform: translateY(-8px) scaleY(0.94);
 }
 
 .history-panel {
@@ -206,15 +206,26 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px 8px;
+  padding: 12px 18px 9px;
   border-bottom: 1px solid #f1f5f5;
 }
 
 .history-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 700;
   color: var(--ink-700);
-  letter-spacing: 0.3px;
+  letter-spacing: .06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.history-title::before {
+  content: '';
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--teal) 0%, var(--teal-dark) 100%);
 }
 
 .history-clear {
@@ -307,6 +318,11 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   border-radius: 50%;
   background: #f1f5f5;
   color: var(--ink-700);
+  transition: background .15s ease, color .15s ease, transform .15s ease;
+}
+
+.history-item:hover .history-icon {
+  transform: scale(1.06);
 }
 
 .history-keyword {
@@ -326,11 +342,15 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-item:hover {
-  background: #f6f9f9;
+  background: #f3faf9;
 }
 
 .history-item:hover .history-icon {
   background: #d9f5ef;
+  color: var(--teal-dark);
+}
+
+.history-item:hover .history-keyword {
   color: var(--teal-dark);
 }
 

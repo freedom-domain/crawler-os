@@ -72,6 +72,7 @@ defineEmits<{
 
 .result-list {
   min-height: 100px;
+  margin-bottom: 8px;
 }
 
 .results-pagination {
@@ -84,12 +85,20 @@ defineEmits<{
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 14px;
+  padding: 10px 0 4px;
+  border-top: 1px solid #eef3f4;
 }
 
 .cursor-total {
   color: var(--ink-500);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cursor-total b {
+  color: var(--teal-dark);
+  font-weight: 700;
 }
 
 .cursor-page {
@@ -97,6 +106,7 @@ defineEmits<{
   font-size: 13px;
   min-width: 56px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .cursor-size {
@@ -104,8 +114,22 @@ defineEmits<{
 }
 
 .empty {
-  padding: 48px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 72px 0;
   color: var(--ink-500);
   text-align: center;
+  font-size: 14px;
+}
+
+.empty::before {
+  content: '';
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #eef5f4;
+  border: 1px solid #e2ecec;
 }
 </style>

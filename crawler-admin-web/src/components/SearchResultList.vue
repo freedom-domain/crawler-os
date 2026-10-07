@@ -112,16 +112,34 @@ defineEmits<{
   object-fit: contain;
   background: #fff;
   border: 1px solid #e3e8ee;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   display: block;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.result-thumb:hover {
+  transform: translateY(-2px);
+  border-color: var(--teal);
+  box-shadow: 0 6px 14px rgba(15, 159, 154, .14);
 }
 
 .result-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+}
+
+.result-tags :deep(.el-tag) {
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.result-tags :deep(.el-tag--small) {
+  padding: 0 10px;
+  height: 24px;
+  line-height: 22px;
 }
 
 .tag-item { cursor: default; }

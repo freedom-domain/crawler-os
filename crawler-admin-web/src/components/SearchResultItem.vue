@@ -43,7 +43,7 @@ defineEmits<{
 
 <style scoped>
 .result-item {
-  padding: 20px 0;
+  padding: 22px 0;
   border-bottom: 1px solid #f1f5f5;
 }
 
@@ -57,7 +57,8 @@ defineEmits<{
   max-width: 100%;
   color: var(--teal-dark);
   font-size: 13px;
-  margin-bottom: 4px;
+  font-weight: 500;
+  margin-bottom: 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -76,20 +77,22 @@ defineEmits<{
   color: var(--ink-950);
   font-size: 18px;
   font-weight: 700;
-  margin: 0 0 6px 0;
-  line-height: 1.4;
+  margin: 0 0 7px 0;
+  line-height: 1.42;
   cursor: pointer;
   transition: color 0.2s ease, text-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .result-image-count {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-family: inherit;
   margin-left: 10px;
-  padding: 2px 9px;
+  padding: 3px 10px;
   border: 1px solid #b7e7dc;
   border-radius: 999px;
-  background: #e8f7f3;
+  background: linear-gradient(135deg, #eefaf7 0%, #e4f5f2 100%);
   color: #087f70;
   font-size: 12px;
   font-weight: 600;
@@ -97,10 +100,13 @@ defineEmits<{
   vertical-align: middle;
   white-space: nowrap;
   cursor: pointer;
+  transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
 }
 
 .result-image-count:hover {
-  background: #d7f1e9;
+  background: linear-gradient(135deg, #e2f5f0 0%, #d7f1e9 100%);
+  box-shadow: 0 4px 10px rgba(15, 129, 124, .16);
+  transform: translateY(-1px);
 }
 
 .result-image-count:focus-visible {
@@ -139,7 +145,7 @@ defineEmits<{
 .result-content {
   color: #5e6c84;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.7;
   margin: 0;
   display: inline;
 }
@@ -177,10 +183,19 @@ defineEmits<{
 .result-thumb {
   width: 72px;
   height: 72px;
-  border-radius: 4px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
   border: 1px solid #e3e8ee;
   cursor: pointer;
   display: block;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.result-thumb:hover {
+  transform: translateY(-2px);
+  border-color: var(--teal);
+  box-shadow: 0 6px 14px rgba(15, 159, 154, .14);
 }
 
 .result-tags {
@@ -205,9 +220,11 @@ defineEmits<{
 
 .meta-tag {
   background: #eef2f5;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
   color: var(--ink-700);
+  font-weight: 550;
+  font-size: 12px;
 }
 
 .spider-tag {
@@ -232,7 +249,7 @@ defineEmits<{
     overflow-wrap: anywhere;
   }
   .result-item {
-    padding: 16px 0;
+    padding: 18px 0;
   }
   .result-thumb {
     width: 64px;
