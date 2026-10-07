@@ -896,7 +896,7 @@ const handleRun = async (row: any) => {
 
 const handleDelete = async (row: any) => {
   try {
-    if (!await confirm('确定删除该爬虫？', { title: '删除确认', danger: true })) return
+    if (!await confirm(`确定删除爬虫「${row.name}」吗？`, { title: '删除确认', danger: true })) return
   } catch {
     return
   }
