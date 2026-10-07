@@ -148,4 +148,76 @@ class ImageXpathSelectorTest {
                 "https://example.com/first.jpg",
                 "https://example.com/second.jpg"), sources);
     }
+
+    @Test
+    void noscriptImagesShouldBeExtractedWhenNoDomMatch() {
+        String rawHtml = """
+                <html><body>
+                <noscript><img decoding="async" width="1080" height="1401"
+                  src="https://www.61ok.com/imgs/2024/02/2024021104510128.png"
+                  alt="test" class="wp-image-10891"/></noscript>
+                </body></html>
+                """;
+        var document = new Html(rawHtml, "https://www.61ok.com/page");
+
+        // 选择器匹配不到 noscript 内容 → 回退到正则提取
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://www.61ok.com/page", ".content", "");
+
+        assertEquals(java.util.List.of(
+                "https://www.61ok.com/imgs/2024/02/2024021104510128.png"), sources);
+    }
+
+    @Test
+    void noscriptImagesShouldBeExtractedWhenXpathFindsNothing() {
+        String rawHtml = """
+                <html><body>
+                <div class="content">no images here</div>
+                <noscript><img src="/lazy.jpg"/></noscript>
+                </body></html>
+                """;
+        var document = new Html(rawHtml, "https://example.com/page");
+
+        // XPath 匹配不到 img → 回退到 noscript 正则
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://example.com/page", ".content", "//img/@src");
+
+        assertEquals(java.util.List.of("https://example.com/lazy.jpg"), sources);
+    }
+
+    @Test
+    void noscriptImagesShouldNotBeExtractedWhenDomHasImages() {
+        String rawHtml = """
+                <html><body>
+                <div class="content"><img src="/dom.jpg"/></div>
+                <noscript><img src="/noscript.jpg"/></noscript>
+                </body></html>
+                """;
+        var document = new Html(rawHtml, "https://example.com/page");
+
+        // DOM 已有图片 → noscript 是 JS 禁用时的回退，不重复提取
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://example.com/page", ".content", "");
+
+        assertEquals(java.util.List.of("https://example.com/dom.jpg"), sources);
+    }
+
+    @Test
+    void extractNoscriptImageSourcesShouldHandleRelativeAndAbsoluteUrls() {
+        String rawHtml = """
+                <noscript><img src="/relative.png"/><img src="https://cdn.example.com/abs.jpg"/></noscript>
+                """;
+        var sources = CrawlerEngine.extractNoscriptImageSources(rawHtml, "https://example.com/page");
+        assertEquals(java.util.List.of(
+                "https://example.com/relative.png",
+                "https://cdn.example.com/abs.jpg"), sources);
+    }
+
+    @Test
+    void extractNoscriptImageSourcesShouldReturnEmptyForNullOrNoNoscript() {
+        assertEquals(java.util.List.of(), CrawlerEngine.extractNoscriptImageSources(null, "https://x.com"));
+        assertEquals(java.util.List.of(), CrawlerEngine.extractNoscriptImageSources("", "https://x.com"));
+        assertEquals(java.util.List.of(), CrawlerEngine.extractNoscriptImageSources(
+                "<div>no noscript here</div>", "https://x.com"));
+    }
 }

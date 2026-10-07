@@ -925,6 +925,40 @@ public class CrawlerEngine {
         return uploadedUrls;
     }
 
+    private static final java.util.regex.Pattern NOSCRPT_IMG_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "<noscript\\b[^>]*>(?s)(.*?)(?:</noscript>|$)",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern IMG_SRC_PATTERN =
+            java.util.regex.Pattern.compile(
+                    "<img\\b[^>]*\\bsrc\\s*=\\s*[\"']([^\"']+)[\"']",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * 从 <noscript> 标签中用正则提取图片 src。
+     * HTML 解析器把 noscript 内容当作文本节点处理，JS 选择器和 XPath 均无法匹配其中的 <img>，
+     * 因此需要从原始 HTML 中直接正则提取。
+     */
+    static List<String> extractNoscriptImageSources(String rawHtml, String pageUrl) {
+        List<String> result = new java.util.ArrayList<>();
+        if (rawHtml == null || rawHtml.isEmpty()) {
+            return result;
+        }
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        var matcher = NOSCRPT_IMG_PATTERN.matcher(rawHtml);
+        while (matcher.find()) {
+            String content = matcher.group(1);
+            if (content == null) continue;
+            var imgMatcher = IMG_SRC_PATTERN.matcher(content);
+            while (imgMatcher.find()) {
+                String src = imgMatcher.group(1);
+                addAbsoluteImageSource(seen, pageUrl, src);
+            }
+        }
+        result.addAll(seen);
+        return result;
+    }
+
     static List<String> extractImageSources(Html doc, String pageUrl, String selector, String xpath) {
         if (doc == null) {
             return List.of();
@@ -940,7 +974,9 @@ public class CrawlerEngine {
         if (hasSelector) {
             List<Selectable> matched = doc.$(selector).nodes();
             if (matched.isEmpty()) {
-                return List.of();
+                // 选择器未命中 DOM 元素时，回退到 noscript 正则提取
+                // （选择器本意是定位内容区域，noscript 中的图片可能属于同一内容）
+                return extractNoscriptImageSources(doc.get(), pageUrl);
             }
             if (hasXpath) {
                 // 选择器 + XPath：在选择器命中的元素范围内按 XPath 定位图片
@@ -949,20 +985,24 @@ public class CrawlerEngine {
                         sources.addAll(extractImageSourcesByXpath(scope, pageUrl, expression));
                     }
                 }
-                return new java.util.ArrayList<>(sources);
-            }
-            // 仅选择器：取命中元素自身及内部的 <img>
-            for (Selectable scope : matched) {
-                for (String source : scope.xpath("//img/@src").all()) {
-                    addAbsoluteImageSource(sources, pageUrl, source);
+            } else {
+                // 仅选择器：取命中元素自身及内部的 <img>
+                for (Selectable scope : matched) {
+                    for (String source : scope.xpath("//img/@src").all()) {
+                        addAbsoluteImageSource(sources, pageUrl, source);
+                    }
                 }
             }
-            return new java.util.ArrayList<>(sources);
+        } else {
+            // 仅 XPath：直接在整页范围内按 XPath 定位图片
+            for (String expression : xpaths) {
+                sources.addAll(extractImageSourcesByXpath(doc, pageUrl, expression));
+            }
         }
 
-        // 仅 XPath：直接在整页范围内按 XPath 定位图片
-        for (String expression : xpaths) {
-            sources.addAll(extractImageSourcesByXpath(doc, pageUrl, expression));
+        // 回退：DOM 匹配无结果时，从 noscript 正则提取
+        if (sources.isEmpty()) {
+            sources.addAll(extractNoscriptImageSources(doc.get(), pageUrl));
         }
         return new java.util.ArrayList<>(sources);
     }
