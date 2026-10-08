@@ -16,7 +16,6 @@
             <div class="detail-badges">
               <span v-if="detail.spiderName" class="meta-tag">{{ detail.spiderName }}</span>
               <span v-if="detail.spiderGroup" class="meta-tag group-tag">{{ detail.spiderGroup }}</span>
-              <span class="detail-meta-item">来源：{{ detail.sourceType || '未知' }}</span>
               <span class="detail-meta-item">标签：{{ detail.tags?.length ? detail.tags.join(' / ') : '无' }}</span>
             </div>
           </div>
@@ -83,7 +82,7 @@ const visible = computed({
 .meta-tag { background: #f1f5f5; padding: 3px 8px; border-radius: 4px; color: var(--ink-700); font-size: 12px; font-weight: 500; }
 .group-tag { background: #d9f5ef; color: var(--teal-dark); }
 .detail-images { display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding: 4px 0; }
-.detail-image { width: 240px; height: auto; border-radius: 8px; border: 1px solid #e3e8ee; display: block; flex-shrink: 0; }
+.detail-image { width: 320px; height: auto; border-radius: 8px; border: 1px solid #e3e8ee; display: block; flex-shrink: 0; }
 .detail-text { white-space: pre-wrap; line-height: 1.8; color: var(--ink-900); max-height: 42vh; overflow-y: auto; }
 .detail-content-preview { padding: 4px 0; }
 .empty { text-align: center; color: var(--ink-500); padding: 40px 0; font-size: 14px; }

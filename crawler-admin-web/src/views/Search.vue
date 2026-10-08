@@ -906,7 +906,7 @@ onMounted(() => {
 .history-search-open {
   border-radius: 24px 24px 0 0;
   box-shadow: 0 1px 6px rgba(23, 43, 77, 0.18);
-  border-color: #c8d6dd;
+  border-color: #dfe7ee;
 }
 
 .search-icon {

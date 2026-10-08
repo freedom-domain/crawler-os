@@ -176,7 +176,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   max-width: 100%;
   box-sizing: border-box;
   padding: 0;
-  border: 1px solid #c8d6dd;
+  border: 1px solid var(--teal-dark);
   border-top: 0;
   border-radius: 0 0 24px 24px;
   background: #fff;

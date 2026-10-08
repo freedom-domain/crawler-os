@@ -324,6 +324,7 @@ const getBreakpoint = () => {
   return 3
 }
 let lastBreakpoint = 0 // 0=未记录, 1=≤860, 2=861–1800, 3=>1800
+let paramsDirty = false // 手动调整过参数后，resize 时强制重算
 const applyBreakpointDefaults = (force = false) => {
   const bp = getBreakpoint()
   if (!force && bp === lastBreakpoint) return
@@ -347,7 +348,8 @@ const applyBreakpointDefaults = (force = false) => {
   page.value = Math.min(page.value, Math.max(1, Math.ceil(images.value.length / pageSize.value)))
 }
 const onResize = () => {
-  // 可视窗口尺寸变化时：断点切换应用默认值（无图时函数内部直接返回）
+  // 手动调整过参数后，窗口尺寸变化不再触发重算（只有重置才恢复自适应）
+  if (paramsDirty) return
   applyBreakpointDefaults()
 }
 const onDocumentClick = (e: MouseEvent) => {
@@ -536,6 +538,7 @@ const stepPageSize = (delta: number) => {
   // 每行张数不能超过每页张数
   if (cols.value > pageSize.value) cols.value = pageSize.value
   page.value = 1
+  paramsDirty = true
 }
 
 // ===== 每行张数（+− 步进，1~每页张数）=====
@@ -543,6 +546,7 @@ const stepCols = (delta: number) => {
   const next = Math.min(pageSize.value, Math.max(1, cols.value + delta))
   if (next === cols.value) return
   cols.value = next
+  paramsDirty = true
 }
 
 // ===== 分页 =====
@@ -589,6 +593,7 @@ const changePage = (p: number) => {
 const resetToInitial = () => {
   gridScale.value = 1
   page.value = 1
+  paramsDirty = false
   // ≤860 每页 1 张；861–1800 每页 2 张；>1800 默认每页 4 张
   // 约束：每页数量不超过图片总数，每行数量不超过每页数量
   let size = 4
@@ -609,6 +614,7 @@ const gridStyle = computed<CSSProperties>(() => ({
 // ===== 网格缩放 =====
 const gridZoom = (delta: number) => {
   gridScale.value = Math.min(3, Math.max(0.4, Number((gridScale.value + delta).toFixed(2))))
+  paramsDirty = true
 }
 
 // ===== 查看器 =====
