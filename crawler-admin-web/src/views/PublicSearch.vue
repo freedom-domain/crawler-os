@@ -822,6 +822,8 @@ onMounted(() => {
   } else {
     loadData()
   }
+  // 初始化完成后回到顶部，避免搜索结果被遮挡
+  window.scrollTo({ top: 0 })
 })
 </script>
 
@@ -1779,7 +1781,7 @@ onMounted(() => {
 }
 
 @media (max-width: 720px) {
-  .public-search { height: 100%; min-height: 0; }
+  .public-search { height: 100%; min-height: 0; overflow-x: hidden; }
   /* 手机：搜索模块实底白背景，防止滚动内容透出 */
   .ps-header {
     height: auto;
@@ -1787,8 +1789,9 @@ onMounted(() => {
     background: #fff !important;
     backdrop-filter: none !important;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-    /* 用 ::before 铺满整个 header 区域，确保 sticky 时背景完整覆盖 */
     position: sticky;
+    top: 0;
+    z-index: 100;
   }
   .ps-header::before {
     content: '';
@@ -1798,12 +1801,9 @@ onMounted(() => {
     z-index: 0;
   }
   .ps-header-inner { height: auto; padding: 12px 18px 10px; position: relative; z-index: 1; }
-  /* 确保内容不被 sticky header 遮挡：给 main 顶部留出 header 高度空间 */
-  .ps-main {
-    padding-top: 16px;
-  }
   .header-caption { font-size: 11px; }
-  .ps-main { padding: 26px 16px 40px; }
+  /* 搜索结果距顶部留出 header 高度空间，防止 sticky header 遮挡 */
+  .ps-main { padding: 100px 16px 40px; }
   .search-hero { display: block; padding: 12px 0 24px; }
   .hero-copy { padding-bottom: 24px; }
   .hero-copy h1 { font-size: 32px; }

@@ -762,6 +762,8 @@ onMounted(() => {
   } else {
     loadData()
   }
+  // 初始化完成后回到顶部，避免搜索结果被遮挡
+  window.scrollTo({ top: 0 })
 })
 </script>
 
@@ -840,6 +842,11 @@ onMounted(() => {
   .search-row { flex-wrap: wrap; }
   .search-row .el-select { width: 100% !important; }
   :deep(.content-preview-dialog) { top: 4px !important; margin: 0 auto !important; }
+  /* 手机：搜索工具栏实底白背景，防止滚动内容透出 */
+  .el-card {
+    background: #fff !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
 }
 
 /* 窄屏：搜索/重置按钮偏大，缩小；搜索框压缩内边距/图标间距，防止有输入时按钮溢出 */
@@ -897,7 +904,6 @@ onMounted(() => {
   transition: box-shadow 0.2s, border-color 0.2s;
   box-shadow: 0 1px 2px rgba(23, 43, 77, 0.06);
 }
-
 .search-box:focus-within {
   box-shadow: 0 1px 6px rgba(23, 43, 77, 0.14);
   border-color: var(--teal);
