@@ -417,8 +417,9 @@ const loadImages = async () => {
     await nextTick()
     applyBreakpointDefaults(true)
 
-    // 3. 等本页可见图片全部加载完成（loading 遮罩盖在上面）
-    await waitForPageLoaded()
+    // 3. 等本页图片全部加载完成（loading 遮罩盖在上面）
+    const expected = Math.min(pageSize.value, images.value.length)
+    await waitForPageLoaded(expected)
 
     // 4. 加载动画消失 + 执行初始化（分页条显示，网格可交互）
     loading.value = false
@@ -562,23 +563,18 @@ const pageImages = computed(() => images.value.slice(pageStart.value, pageStart.
 const currentPageLoaded = ref(false)
 const pageLoading = ref(false)
 
-// 判断图片是否已进入可视区域（含上下少量缓冲区，避免边界抖动）
-const isVisibleInViewport = (img: HTMLImageElement): boolean => {
-  const rect = img.getBoundingClientRect()
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight
-  const buffer = 80
-  return rect.bottom >= -buffer && rect.top <= viewportHeight + buffer
-}
-
-// 等当前页内可见图片全部加载完成，返回 Promise。
+// 等当前页（前 expected 张）图片全部加载完成，返回 Promise。
 // 以 img.complete 为准，含 8 秒兜底，避免任何异常下永不 resolve。
-const waitForPageLoaded = () => new Promise<void>((resolve) => {
+const waitForPageLoaded = (expected: number) => new Promise<void>((resolve) => {
+  if (!expected) {
+    resolve()
+    return
+  }
   let elapsed = 0
   const timer = setInterval(() => {
     elapsed += 80
     const els = Array.from(document.querySelectorAll<HTMLImageElement>('.grid .thumb'))
-    const visibleEls = els.filter(isVisibleInViewport)
-    const ok = visibleEls.length > 0 && visibleEls.every((img) => img.complete)
+    const ok = els.length >= expected && els.slice(0, expected).every((img) => img.complete)
     if (ok) {
       clearInterval(timer)
       resolve()
@@ -599,7 +595,8 @@ const changePage = async (p: number) => {
   currentPageLoaded.value = false
   try {
     await nextTick()
-    await waitForPageLoaded()
+    const expected = Math.min(pageSize.value, images.value.length)
+    await waitForPageLoaded(expected)
   } finally {
     pageLoading.value = false
     currentPageLoaded.value = true
