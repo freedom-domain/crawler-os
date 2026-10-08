@@ -72,7 +72,7 @@
           class="thumb"
           :src="img"
           :alt="`图片 ${pageStart + idx + 1}`"
-          loading="lazy"
+          loading="eager"
           @click="openViewer(pageStart + idx)"
           @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
         />
