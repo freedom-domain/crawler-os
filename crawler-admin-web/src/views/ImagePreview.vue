@@ -73,7 +73,6 @@
           :src="img"
           :alt="`图片 ${pageStart + idx + 1}`"
           loading="eager"
-          @click="openViewer(pageStart + idx)"
           @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
         />
         <div v-if="!images.length" class="empty-state">暂无图片</div>
