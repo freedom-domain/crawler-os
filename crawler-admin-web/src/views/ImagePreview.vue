@@ -98,7 +98,7 @@
       </div>
 
       <!-- 分页控件：本页图片加载完成且多页时显示 -->
-      <div v-if="!pageLoading && currentPageLoaded && totalPages > 1" class="pagination">
+      <div v-if="currentPageLoaded && totalPages > 1" class="pagination">
         <button type="button" class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
         <span class="page-info">第 {{ page }} / {{ totalPages }} 页</span>
         <button type="button" class="page-btn" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
@@ -109,11 +109,6 @@
     <div v-if="loading" class="loading-mask">
       <div class="loading-spinner"></div>
       <span class="loading-text">图片加载中…</span>
-    </div>
-
-    <!-- 翻页加载动画：本页图片切换时盖在网格上方，全部加载完成后消失 -->
-    <div v-if="pageLoading" class="page-loading-mask">
-      <div class="loading-spinner"></div>
     </div>
 
     <!-- 全屏查看器 -->
@@ -558,13 +553,11 @@ const totalPages = computed(() => Math.max(1, Math.ceil(images.value.length / pa
 const pageStart = computed(() => (page.value - 1) * pageSize.value)
 const pageImages = computed(() => images.value.slice(pageStart.value, pageStart.value + pageSize.value))
 
-// 本页图片加载状态：请求完成后初始 false，等本页图片全部 complete 后置 true
-// （load/error 都置 complete，所以 404 的图也算完成）
+// 本页图片加载完成标记（首屏加载完成后置 true，翻页不需要再等）
 const currentPageLoaded = ref(false)
-const pageLoading = ref(false)
 
-// 等当前页（前 expected 张）图片全部加载完成，返回 Promise。
-// 以 img.complete 为准，含 8 秒兜底，避免任何异常下永不 resolve。
+// 等当前页图片全部加载完成，返回 Promise。
+// 以 img.complete 为准，80ms 轮询，1 秒超时兜底（避免异常卡住）。
 const waitForPageLoaded = (expected: number) => new Promise<void>((resolve) => {
   if (!expected) {
     resolve()
@@ -578,29 +571,19 @@ const waitForPageLoaded = (expected: number) => new Promise<void>((resolve) => {
     if (ok) {
       clearInterval(timer)
       resolve()
-    } else if (elapsed >= 8000) {
-      // 兜底：8 秒内没全部 complete，放行，避免一直不结束
+    } else if (elapsed >= 1000) {
+      // 兜底：1 秒内没全部 complete，放行
       clearInterval(timer)
       resolve()
     }
   }, 80)
 })
 
-const changePage = async (p: number) => {
+const changePage = (p: number) => {
   const next = Math.min(totalPages.value, Math.max(1, p))
-  if (next === page.value || pageLoading.value) return
+  if (next === page.value) return
   page.value = next
   window.scrollTo({ top: 0 })
-  pageLoading.value = true
-  currentPageLoaded.value = false
-  try {
-    await nextTick()
-    const expected = Math.min(pageSize.value, images.value.length)
-    await waitForPageLoaded(expected)
-  } finally {
-    pageLoading.value = false
-    currentPageLoaded.value = true
-  }
 }
 
 // 重置：走页面初始化逻辑（重新加载图片，所有页面参数恢复初始默认值）
@@ -1132,18 +1115,6 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: #8993a4;
   font-variant-numeric: tabular-nums;
-}
-
-/* ===== 翻页加载遮罩（本页图片切换时盖在网格上方，半透明 + spinner） ===== */
-.page-loading-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(243, 247, 248, 0.72);
-  backdrop-filter: blur(2px);
 }
 
 /* ===== 首屏加载遮罩（盖在网格之上，网格已在渲染，图片在遮罩后加载） ===== */
