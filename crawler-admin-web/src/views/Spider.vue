@@ -147,6 +147,21 @@
           />
         </template>
       </el-table-column>
+      <el-table-column prop="overwriteImage" label="覆盖图片" min-width="130" align="center" resizable>
+        <template #default="{ row }">
+          <el-switch
+            v-model="row.overwriteImage"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="覆盖"
+            inactive-text="跳过"
+            size="small"
+            :loading="row._savingImage"
+            :disabled="row._savingImage"
+            @change="handleToggleOverwriteImage(row)"
+          />
+        </template>
+      </el-table-column>
       <el-table-column prop="status" label="定时任务" min-width="150" align="center" resizable>
         <template #default="{ row }">
           <el-switch
@@ -814,19 +829,26 @@ const buildUpdatePayload = (detail: any) => {
   }
 }
 
-const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'readCacheMissOnline' | 'overwriteHtml', savingKey: string) => {
+const TOGGLE_FIELD_LABELS: Record<string, string> = {
+  isPublic: '公开状态',
+  readCache: '读取缓存',
+  readCacheMissOnline: '未命中联网',
+  overwriteHtml: '覆盖HTML',
+  overwriteImage: '覆盖图片'
+}
+
+const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'readCacheMissOnline' | 'overwriteHtml' | 'overwriteImage', savingKey: string) => {
   const oldValue = row[field]
+  const label = TOGGLE_FIELD_LABELS[field]
   row[savingKey] = true
   try {
     const detail: any = await spiderDetail(row.id)
     const payload = buildUpdatePayload(detail.data)
     payload[field] = oldValue
     await spiderUpdate(row.id, payload)
-    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : field === 'readCacheMissOnline' ? '未命中联网' : '覆盖HTML'
     ElMessage.success(`${label}已更新`)
   } catch {
     row[field] = oldValue
-    const label = field === 'isPublic' ? '公开状态' : field === 'readCache' ? '读取缓存' : field === 'readCacheMissOnline' ? '未命中联网' : '覆盖HTML'
     ElMessage.error(`${label}切换失败`)
   } finally {
     row[savingKey] = false
@@ -837,6 +859,7 @@ const handleTogglePublic = (row: any) => applyToggle(row, 'isPublic', '_savingPu
 const handleToggleReadCache = (row: any) => applyToggle(row, 'readCache', '_savingCache')
 const handleToggleReadCacheMissOnline = (row: any) => applyToggle(row, 'readCacheMissOnline', '_savingCacheMiss')
 const handleToggleOverwriteHtml = (row: any) => applyToggle(row, 'overwriteHtml', '_savingHtml')
+const handleToggleOverwriteImage = (row: any) => applyToggle(row, 'overwriteImage', '_savingImage')
 
 const handleToggleStatus = async (row: any) => {
   // el-switch @change 触发时 v-model 已变为目标值（row.status = 新值）
