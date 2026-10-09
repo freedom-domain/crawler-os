@@ -70,8 +70,8 @@ public class SearchService {
      */
     @SuppressWarnings("null")
     public Page<SearchResult> search(String keyword, Long spiderId, String spiderGroup, String tag,
-                                     boolean favoriteOnly, boolean hasImages, int size,
-                                     String pitId, List<Object> searchAfter) {
+                                     boolean favoriteOnly, boolean hasImages, boolean searchContent,
+                                     int size, String pitId, List<Object> searchAfter) {
         PageRequest pageRequest = PageRequest.of(0, size);
         Long userId = currentUserId();
         java.util.Map<String, List<String>> userTags = loadUserTags(userId);
@@ -93,9 +93,15 @@ public class SearchService {
 
         if (keyword != null && !keyword.isBlank()) {
             String kw = keyword;
-            boolBuilder.should(s -> s.match(mt -> mt.field("title").query(kw)));
-            boolBuilder.should(s -> s.match(mt -> mt.field("content").query(kw)));
-            boolBuilder.minimumShouldMatch("1");
+            if (searchContent) {
+                // 勾选正文搜索：匹配标题或正文（should + minimumShouldMatch=1）
+                boolBuilder.should(s -> s.match(mt -> mt.field("title").query(kw)));
+                boolBuilder.should(s -> s.match(mt -> mt.field("content").query(kw)));
+                boolBuilder.minimumShouldMatch("1");
+            } else {
+                // 未勾选：只匹配标题
+                boolBuilder.must(m -> m.match(mt -> mt.field("title").query(kw)));
+            }
         } else {
             boolBuilder.must(m -> m.matchAll(mt -> mt));
         }
@@ -216,14 +222,24 @@ public class SearchService {
         }
 
         if (hasKeyword) {
-            reqBuilder.highlight(h -> h
-                    .preTags("<em>")
-                    .postTags("</em>")
-                    .fragmentSize(200)
-                    .numberOfFragments(3)
-                    .fields(NamedValue.of("title", HighlightField.of(f -> f)))
-                    .fields(NamedValue.of("content", HighlightField.of(f -> f)))
-            );
+            if (searchContent) {
+                reqBuilder.highlight(h -> h
+                        .preTags("<em>")
+                        .postTags("</em>")
+                        .fragmentSize(200)
+                        .numberOfFragments(3)
+                        .fields(NamedValue.of("title", HighlightField.of(f -> f)))
+                        .fields(NamedValue.of("content", HighlightField.of(f -> f)))
+                );
+            } else {
+                reqBuilder.highlight(h -> h
+                        .preTags("<em>")
+                        .postTags("</em>")
+                        .fragmentSize(200)
+                        .numberOfFragments(3)
+                        .fields(NamedValue.of("title", HighlightField.of(f -> f)))
+                );
+            }
         }
 
         SearchRequest request = reqBuilder.build();
@@ -261,7 +277,11 @@ public class SearchService {
                 sr.setFavorited(userTags.containsKey(doc.getId()));
                 if (hit.highlight() != null) {
                     sr.setTitleHl(hit.highlight().get("title") != null ? String.join(" ", hit.highlight().get("title")) : doc.getTitle());
-                    sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));
+                    if (searchContent) {
+                        sr.setContentHl(hit.highlight().get("content") != null ? String.join(" ", hit.highlight().get("content")) : snippet(doc.getContent()));
+                    } else {
+                        sr.setContentHl(snippet(doc.getContent()));
+                    }
                 } else {
                     sr.setTitleHl(doc.getTitle());
                     sr.setContentHl(snippet(doc.getContent()));

@@ -65,6 +65,7 @@ public class SearchController {
                                               @RequestParam(value = "tag", required = false) String tag,
                                               @RequestParam(value = "favoriteOnly", defaultValue = "false") boolean favoriteOnly,
                                               @RequestParam(value = "hasImages", defaultValue = "false") boolean hasImages,
+                                              @RequestParam(value = "searchContent", defaultValue = "false") boolean searchContent,
                                               @RequestParam(value = "size", defaultValue = "20") int size,
                                               @RequestParam(value = "pitId", required = false) String pitId,
                                               @RequestParam(value = "searchAfter", required = false) String searchAfter) {
@@ -89,7 +90,7 @@ public class SearchController {
                         .collect(java.util.stream.Collectors.toList());
             }
         }
-        Page<SearchResult> result = searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, size, pitId, after);
+        Page<SearchResult> result = searchService.search(keyword, spiderId, spiderGroup, tag, favoriteOnly, hasImages, searchContent, size, pitId, after);
         String nextPitId = result instanceof SearchService.PagedSearchResult paged ? paged.getPitId() : null;
         return R.ok(new SearchPageResponse(result.getContent(), result.getTotalElements(), nextPitId));
     }

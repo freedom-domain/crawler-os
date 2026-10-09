@@ -1,5 +1,5 @@
 <template>
-  <div ref="publicSearchRef" class="public-search">
+  <div ref="publicSearchRef" class="public-search" style="position: relative;">
     <div class="public-search__bg" aria-hidden="true"></div>
     <header class="ps-header">
       <div class="ps-header-inner">
@@ -29,17 +29,17 @@
                 @keyup.enter="doSearch"
               />
               <button v-if="keyword" class="clear-btn" @click="keyword = ''; doSearch()">&times;</button>
-              <button class="more-conditions-btn" type="button" @click="showFilters = !showFilters" :aria-expanded="showFilters">
-                <svg class="toggle-chevron" viewBox="0 0 24 24" aria-hidden="true" :class="{ 'is-open': showFilters }">
-                  <path d="M6 9.5 12 15.5 18 9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-              <button class="search-btn" type="button" @click="doSearch">搜索</button>
-              <button class="reset-search-btn" type="button" @click="resetSearch">
+              <button class="reset-search-btn" type="button" title="重置" aria-label="重置" @click="resetSearch">
                 <el-icon><RefreshLeft /></el-icon>
                 <span>重置</span>
               </button>
+              <button class="search-btn" type="button" @click="doSearch">搜索</button>
             </div>
+            <button class="more-conditions-btn" type="button" title="更多筛选条件" aria-label="更多筛选条件" @click="showFilters = !showFilters" :aria-expanded="showFilters">
+              <svg class="toggle-chevron" viewBox="0 0 24 24" aria-hidden="true" :class="{ 'is-open': showFilters }">
+                <path d="M7 10 12 15 17 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </SearchHistoryDropdown>
         </div>
 
@@ -74,6 +74,7 @@
           <el-select v-if="isLoggedIn" v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
             <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
           </el-select>
+          <el-checkbox v-model="searchContentFlag" @change="doSearch">同时搜索正文内容</el-checkbox>
           <el-checkbox v-if="isLoggedIn" v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
           <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
         </div>
@@ -242,6 +243,7 @@ const openAdminSearch = () => {
   if (filterTag.value) query.tag = filterTag.value
   if (favoriteOnly.value && isLoggedIn.value) query.favoriteOnly = 'true'
   if (hasImages.value) query.hasImages = 'true'
+  if (searchContentFlag.value) query.searchContent = 'true'
 
   const search = new URLSearchParams(query).toString()
   window.open(`/search?${search}`, 'crawler-admin-search')
@@ -291,6 +293,7 @@ const pitId = ref('')
 const searchAfter = ref('')
 const hasMore = ref(false)
 const keyword = ref('')
+const searchContentFlag = ref(false)
 const showFilters = ref(false)
 const filterSpider = ref<number | ''>('')
 const spiderOptions = ref<any[]>([])
@@ -435,6 +438,7 @@ const syncSearchQuery = () => {
       ...(filterTag.value ? { tag: filterTag.value } : {}),
       ...(favoriteOnly.value && isLoggedIn.value ? { favoriteOnly: 'true' } : {}),
       ...(hasImages.value ? { hasImages: 'true' } : {}),
+      ...(searchContentFlag.value ? { searchContent: 'true' } : {}),
       page: String(page.value),
       size: String(size.value)
     }
@@ -478,6 +482,7 @@ const resetSearch = () => {
   filterTag.value = ''
   favoriteOnly.value = false
   hasImages.value = false
+  searchContentFlag.value = false
   doSearch()
 }
 
@@ -487,7 +492,7 @@ const selectHistory = (value: string) => {
 }
 
 const buildSearchParams = (pit = '', after = '') => {
-  const params: any = { size: size.value, keyword: keyword.value }
+  const params: any = { size: size.value, keyword: keyword.value, searchContent: searchContentFlag.value }
   if (filterSpider.value) params.spiderId = filterSpider.value
   if (filterGroup.value) params.spiderGroup = filterGroup.value
   if (filterTag.value) params.tag = filterTag.value
@@ -804,6 +809,7 @@ onMounted(() => {
   filterTag.value = String(route.query.tag || '')
   favoriteOnly.value = route.query.favoriteOnly === 'true'
   hasImages.value = route.query.hasImages === 'true'
+  searchContentFlag.value = route.query.searchContent === 'true'
   const requestedPage = Number(route.query.page)
   page.value = Number.isInteger(requestedPage) && requestedPage > 0
     ? Math.min(requestedPage, 50)
@@ -929,19 +935,9 @@ onMounted(() => {
 .header-user {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
-  padding: 7px 8px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.92);
-  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
-}
-
-.header-user:hover {
-  border-color: #c3d8d7;
-  background: #f4faf9;
-  box-shadow: 0 3px 10px rgba(23, 43, 77, .06);
+  padding: 0;
 }
 
 .user-account {
@@ -1007,8 +1003,21 @@ onMounted(() => {
 }
 
 .header-login-button {
-  border-radius: 4px;
-  padding: 0 15px;
+  height: 32px;
+  margin: 0;
+  padding: 0 16px;
+  border: none;
+  border-radius: 999px;
+  background: #0f9f9a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.header-login-button:hover {
+  background: #087b78;
+  box-shadow: 0 1px 4px rgba(15, 159, 154, 0.3);
 }
 
 .user-dropdown :deep(.el-dropdown__caret-button) {
@@ -1058,29 +1067,34 @@ onMounted(() => {
 }
 
 .more-conditions-btn {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
   border: none;
   background: transparent;
-  color: var(--ink-700);
+  color: #5f6368;
   cursor: pointer;
   padding: 0;
-  margin-left: 6px;
-  margin-right: 12px;
-  height: 20px;
-  width: 20px;
+  height: 24px;
+  width: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: color 0.2s ease;
+  border-radius: 50%;
+  transition: color 0.18s ease, background 0.18s ease;
 }
 
 .more-conditions-btn:hover {
-  color: var(--teal);
+  color: var(--teal, #0f9f9a);
+  background: rgba(15, 159, 154, 0.08);
 }
 
 .toggle-chevron {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   display: block;
   transition: transform 0.2s ease;
 }
@@ -1089,15 +1103,12 @@ onMounted(() => {
   transform: rotate(180deg);
 }
 
-.more-conditions-btn:hover {
-  color: var(--teal);
-}
-
 .header-filter-panel {
   border-top: 1px solid #edf2f4;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .98) 0%, rgba(249, 253, 252, .96) 100%);
-  padding: 16px 24px 20px;
-  box-shadow: 0 6px 18px rgba(23, 43, 77, .05);
+  background: rgba(255, 255, 255, .97);
+  backdrop-filter: blur(12px);
+  padding: 14px 24px 16px;
+  box-shadow: 0 6px 18px rgba(23, 43, 77, .08);
   animation: filter-panel-slide .22s cubic-bezier(.4, 0, .2, 1);
 }
 
@@ -1247,61 +1258,64 @@ onMounted(() => {
   flex-shrink: 0;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #12ab9e 0%, #0f9f9a 55%, #0b8b87 100%);
+  background: #0f9f9a;
   color: #fff;
   font-size: 14px;
-  font-weight: 600;
-  padding: 0 24px;
-  height: 44px;
-  min-height: 44px;
-  box-shadow: 0 4px 12px rgba(15, 159, 154, .22), inset 0 1px 0 rgba(255, 255, 255, .18);
+  font-weight: 500;
+  padding: 0 22px;
+  height: 40px;
+  min-height: 40px;
+  box-shadow: none;
   cursor: pointer;
-  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .search-btn:hover {
-  background: linear-gradient(135deg, #0f9f9a 0%, #0b8b87 55%, #087b78 100%);
-  box-shadow: 0 7px 18px rgba(15, 159, 154, .3), inset 0 1px 0 rgba(255, 255, 255, .14);
-  transform: translateY(-1px);
+  background: #087b78;
+  box-shadow: 0 1px 4px rgba(15, 159, 154, 0.25);
 }
 
 .search-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 3px 8px rgba(15, 159, 154, .22);
+  background: #066b67;
+  box-shadow: none;
 }
 
+/* 重置按钮：搜索框内，搜索按钮左侧，Google 式无边框纯文字按钮 */
 .reset-search-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   flex-shrink: 0;
-  width: 72px;
-  height: 44px;
-  margin-left: 8px;
-  padding: 0;
-  border: 1px solid #d9e7e8;
+  height: 34px;
+  margin: 0 10px 0 4px;
+  padding: 0 10px;
+  border: none;
   border-radius: 999px;
-  background: linear-gradient(135deg, #fff 0%, #f6fbfa 100%);
-  color: #52706f;
-  font-size: 14px;
-  font-weight: 600;
+  background: transparent;
+  color: #5f6368;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 2px 7px rgba(32, 86, 84, 0.08);
-  transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.reset-search-btn :deep(.el-icon) {
+  font-size: 15px;
 }
 
 .reset-search-btn:hover {
-  border-color: #9bd4cd;
-  background: #eef9f7;
-  color: #0f817c;
-  box-shadow: 0 4px 10px rgba(15, 129, 124, 0.12);
-  transform: translateY(-1px);
+  background: #f1f3f4;
+  color: #202124;
+}
+
+.reset-search-btn:active {
+  background: #e8eaed;
 }
 
 .reset-search-btn:focus-visible {
-  outline: 2px solid rgba(15, 129, 124, 0.35);
-  outline-offset: 2px;
+  outline: 2px solid rgba(95, 99, 104, 0.4);
+  outline-offset: 1px;
 }
 
 .results-heading {
@@ -1820,11 +1834,11 @@ onMounted(() => {
     font-size: 13px;
   }
   .reset-search-btn {
-    height: 32px;
-    min-height: 32px;
-    width: auto;
-    padding: 0 12px;
-    font-size: 13px;
+    height: 30px;
+    min-height: 30px;
+    margin-left: 8px;
+    padding: 0 10px;
+    font-size: 12px;
   }
   .search-icon {
     font-size: 18px;
@@ -1904,7 +1918,7 @@ onMounted(() => {
   .search-row { gap: 8px; }
   .search-box { min-width: 0; }
   .search-btn { height: 32px; min-height: 32px; padding: 0 14px; font-size: 13px; }
-  .reset-search-btn { width: auto; height: 32px; min-height: 32px; margin-left: 6px; padding: 0 12px; font-size: 12px; }
+  .reset-search-btn { height: 28px; min-height: 28px; margin-left: 6px; padding: 0 10px; font-size: 12px; }
   .header-user {
     gap: 8px;
     justify-content: center;

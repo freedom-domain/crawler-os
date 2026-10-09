@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Semaphore;
 
 @Slf4j
 @Component
@@ -23,12 +22,12 @@ public class TaskConsumer {
     @Value("${app.kafka.spider-task-consumer-concurrency:20}")
     private int maxConcurrentTasks;
 
-    private Semaphore taskSlots;
+    private final Object slotLock = new Object();
+    private int runningTasks = 0;
     private final ExecutorService taskExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
 
     @PostConstruct
     void init() {
-        taskSlots = new Semaphore(maxConcurrentTasks, true);
         log.info("任务消费者初始化: 最大并发任务数={}", maxConcurrentTasks);
     }
 
@@ -45,20 +44,32 @@ public class TaskConsumer {
             log.error("任务消息解析失败: {}", message, e);
             return;
         }
-        try {
-            taskSlots.acquire();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.error("等待任务槽位被中断: taskId={}", msg.getTaskId());
-            return;
+
+        // 任务配置的并发数（全局最大并发任务数），每个任务占用 1 个槽位
+        synchronized (slotLock) {
+            while (runningTasks >= maxConcurrentTasks) {
+                log.info("任务槽位已满，等待: taskId={}, running={}/{}", msg.getTaskId(), runningTasks, maxConcurrentTasks);
+                try {
+                    slotLock.wait(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("等待任务槽位被中断: taskId={}", msg.getTaskId());
+                    return;
+                }
+            }
+            runningTasks++;
         }
+
         taskExecutor.submit(() -> {
             try {
                 crawlerEngine.execute(msg);
             } catch (Exception e) {
                 log.error("任务执行异常: taskId={}", msg.getTaskId(), e);
             } finally {
-                taskSlots.release();
+                synchronized (slotLock) {
+                    runningTasks--;
+                    slotLock.notifyAll();
+                }
             }
         });
     }
