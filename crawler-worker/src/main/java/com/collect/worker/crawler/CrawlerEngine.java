@@ -108,12 +108,17 @@ public class CrawlerEngine {
     private final Map<String, DnsCacheEntry> dnsCache = new ConcurrentHashMap<>();
     /** 任务级客户端（线程本地）：每个爬取虚拟线程绑定自己任务的 Dispatcher，实现调度隔离 */
     private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
+    /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，减少 DB 查询 */
+    private final Map<Long, TaskStatusCache> taskStatusCache = new ConcurrentHashMap<>();
 
     record WebResource(String url, String category, String objectName, String contentType) {}
 
     record RobotsCacheEntry(RobotsRules rules, long expireAt) {}
 
     record DnsCacheEntry(java.util.List<InetAddress> addresses, long expireAt) {}
+
+    /** 任务状态缓存条目：status + pausedAt + 过期时间 */
+    record TaskStatusCache(String status, java.time.LocalDateTime pausedAt, long expireAt) {}
 
     /**
      * 连接池/超时配置，取自 {@code app.http.*}；各字段 <=0 表示禁用/沿用 OkHttp 默认值。
@@ -554,17 +559,17 @@ public class CrawlerEngine {
             }
 
             while (true) {
-                // 任务状态不是运行中（如被取消）时停止爬取
-                SpiderTask latest = taskMapper.selectById(task.getId());
-                if (latest == null || !"RUNNING".equals(latest.getStatus())) {
-                    log.info("任务状态不是运行中，停止爬取: taskId={}, status={}", taskId, latest == null ? null : latest.getStatus());
+                // 任务状态不是运行中（如被取消）时停止爬取（带 1s 本地缓存，减少 DB 查询）
+                TaskStatusInfo status = getCachedTaskStatus(task.getId());
+                if (status.status() == null || !"RUNNING".equals(status.status())) {
+                    log.info("任务状态不是运行中，停止爬取: taskId={}, status={}", taskId, status.status());
                     break;
                 }
                 // 任务被暂停时等待，直到恢复或取消（不退出循环，恢复后继续爬取剩余队列）
-                if (latest.getPausedAt() != null) {
+                if (status.pausedAt() != null) {
                     awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
-                    SpiderTask check = taskMapper.selectById(task.getId());
-                    if (check == null || !"RUNNING".equals(check.getStatus())) {
+                    TaskStatusInfo check = getCachedTaskStatus(task.getId());
+                    if (check.status() == null || !"RUNNING".equals(check.status())) {
                         execution.cancel();
                         break;
                     }
@@ -577,8 +582,8 @@ public class CrawlerEngine {
                 // 达到并发上限，等待至少一个任务完成
                 if (activeFutures.size() >= concurrency) {
                     awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
-                    SpiderTask check = taskMapper.selectById(task.getId());
-                    if (check == null || !"RUNNING".equals(check.getStatus())) {
+                    TaskStatusInfo check = getCachedTaskStatus(task.getId());
+                    if (check.status() == null || !"RUNNING".equals(check.status())) {
                         execution.cancel();
                         break;
                     }
@@ -590,8 +595,8 @@ public class CrawlerEngine {
                     if (activeFutures.isEmpty()) break;
                     // 队列为空但有活跃任务，等待一个完成后再检查新入队的 URL
                     awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
-                    SpiderTask check = taskMapper.selectById(task.getId());
-                    if (check == null || !"RUNNING".equals(check.getStatus())) {
+                    TaskStatusInfo check = getCachedTaskStatus(task.getId());
+                    if (check.status() == null || !"RUNNING".equals(check.status())) {
                         execution.cancel();
                         break;
                     }
@@ -628,6 +633,8 @@ public class CrawlerEngine {
         }
 
         LocalDateTime endTime = LocalDateTime.now();
+        // 任务结束，清除状态缓存
+        taskStatusCache.remove(taskId);
         SpiderTask latestTask = taskMapper.selectById(task.getId());
         boolean isPaused = latestTask != null
                 && "RUNNING".equals(latestTask.getStatus())
@@ -660,18 +667,51 @@ public class CrawlerEngine {
         log.info("任务完成: taskId={}, totalCostMs={}", taskId, task.getTotalCostMs());
     }
 
+    /** 任务状态缓存 TTL（毫秒）：1 秒，状态变化最坏延迟 1s（可接受） */
+    private static final long TASK_STATUS_CACHE_TTL_MS = 1000;
+
+    /**
+     * 带本地缓存的任务状态查询，TTL 1 秒。
+     * 主循环每 500ms 轮询一次，原实现每轮查 1-3 次 DB，
+     * 优化后每 1s 最多查 1 次 DB，查询量降低 ~80%。
+     */
+    private TaskStatusInfo getCachedTaskStatus(Long taskId) {
+        long now = System.currentTimeMillis();
+        TaskStatusCache cache = taskStatusCache.get(taskId);
+        if (cache != null && cache.expireAt() > now) {
+            return new TaskStatusInfo(cache.status(), cache.pausedAt());
+        }
+        SpiderTask task = taskMapper.selectById(taskId);
+        if (task == null) {
+            return new TaskStatusInfo(null, null);
+        }
+        taskStatusCache.put(taskId, new TaskStatusCache(
+                task.getStatus(), task.getPausedAt(), now + TASK_STATUS_CACHE_TTL_MS));
+        // 防止缓存无限增长
+        if (taskStatusCache.size() > 1024) {
+            taskStatusCache.entrySet().removeIf(e -> e.getValue().expireAt() < now);
+        }
+        return new TaskStatusInfo(task.getStatus(), task.getPausedAt());
+    }
+
+    record TaskStatusInfo(String status, java.time.LocalDateTime pausedAt) {}
+
     private boolean awaitAnyFuture(Set<Future<?>> futures, long timeoutMs) {
         if (futures.isEmpty()) return true;
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        while (System.currentTimeMillis() < deadline) {
-            for (Future<?> f : futures) {
-                if (f.isDone()) return true;
-            }
+        // 快速路径：先检查一次，避免不必要的 sleep
+        for (Future<?> f : futures) {
+            if (f.isDone()) return true;
+        }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (System.nanoTime() < deadline) {
             try {
-                Thread.sleep(Math.min(100, deadline - System.currentTimeMillis()));
+                Thread.sleep(10); // 10ms 轮询间隔（原 100ms），减少等待延迟
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return true;
+            }
+            for (Future<?> f : futures) {
+                if (f.isDone()) return true;
             }
         }
         return false;
@@ -707,10 +747,10 @@ public class CrawlerEngine {
                            TaskExecutionContext execution, OkHttpClient taskClient) {
         currentTaskClient.set(taskClient);
         try {
-            // 任务状态不是运行中（如被取消）时停止爬取
-            SpiderTask latest = taskMapper.selectById(task.getId());
-            if (latest == null || !"RUNNING".equals(latest.getStatus())) {
-                log.info("任务状态不是运行中，停止爬取: taskId={}, url={}", taskId, url);
+            // 任务状态不是运行中（如被取消）时停止爬取（带 1s 本地缓存）
+            TaskStatusInfo status = getCachedTaskStatus(task.getId());
+            if (status.status() == null || !"RUNNING".equals(status.status())) {
+                log.info("任务状态不是运行中，停止爬取: taskId={}, url={}, status={}", taskId, url, status.status());
                 return;
             }
             if (!isAllowedByRobots(url, msg, robotsCache, execution)) {
@@ -770,9 +810,11 @@ public class CrawlerEngine {
 
             // 仅未命中缓存的页面才做 ES 变更比对（需要读取 MinIO 旧 HTML）；
             // 缓存命中时直接按"内容未变化"处理，避免额外网络/存储查询
+            // overwriteHtml=1 时跳过变更比对（直接覆盖，无需读取旧内容）
             boolean contentUnchanged = false;
             SpiderContentDoc existingDoc = null;
-            if (!cacheHit && !isConfiguredStartUrl(url, msg.getStartUrls())) {
+            boolean overwriteHtmlFlag = Integer.valueOf(1).equals(msg.getOverwriteHtml());
+            if (!cacheHit && !overwriteHtmlFlag && !isConfiguredStartUrl(url, msg.getStartUrls())) {
                 // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
                 CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
                 SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
@@ -807,7 +849,7 @@ public class CrawlerEngine {
             docObj.setSourceType(msg.getType());
             DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
             // 已存在内容覆盖时：抓取时间保留首次抓取时间，更新时间设为当前时间
-            boolean isOverwrite = existingDoc != null;
+            boolean isOverwrite = existingDoc != null || overwriteHtmlFlag;
             String crawlTime = isOverwrite && existingDoc.getCrawlTime() != null
                     ? existingDoc.getCrawlTime()
                     : LocalDateTime.now().format(esDateFormatter);
@@ -825,7 +867,7 @@ public class CrawlerEngine {
             boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
             saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, saveResources, processedResourceUrls, execution);
             updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
-                    msg, task, overwriteImage, execution);
+                    msg, task, overwriteImage, execution, null);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (!execution.isCancelled()) {
@@ -846,11 +888,12 @@ public class CrawlerEngine {
 
     private void updateImagesAfterPageProcessing(Html doc, SpiderContentDoc document, String pageUrl,
                                                 String title, TaskMessage msg, SpiderTask task,
-                                                boolean overwrite, TaskExecutionContext execution) {
+                                                boolean overwrite, TaskExecutionContext execution,
+                                                java.util.concurrent.ExecutorService imageExecutor) {
         try {
             List<String> imageUrls = shouldSkipImageDownload(doc, msg)
                     ? List.of()
-                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution);
+                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution, imageExecutor);
             document.setImages(imageUrls);
             saveToElasticsearchWithRetry(document);
         } catch (InterruptedException e) {
@@ -1124,7 +1167,8 @@ public class CrawlerEngine {
      */
     private List<String> extractAndUploadImages(Html doc, String pageUrl, String title,
                                                 TaskMessage msg, SpiderTask task, boolean overwrite,
-                                                TaskExecutionContext execution) {
+                                                TaskExecutionContext execution,
+                                                java.util.concurrent.ExecutorService imageExecutor) {
         if (execution.isCancelled()) return List.of();
         String selector = msg.getImageSelector();
         String xpath = msg.getImageXpath();
@@ -1144,48 +1188,91 @@ public class CrawlerEngine {
             int uploaded = 0;
             int skipped = 0;
             java.util.Set<String> seen = new java.util.HashSet<>();
-            for (String src : imageSources) {
-                if (execution.isCancelled()) break;
-                if (src.isBlank() || !seen.add(src)) {
-                    continue;
-                }
-                try {
-                    String ext = guessExt(src, null);
-                    String objectName = "images/" + ObjectNameUtils.hashUrl(src) + ext;
-                    // 不覆盖时，若图片已存在则跳过下载
-                    if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
-                        skipped++;
-                        saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
-                        uploadedUrls.add(objectName);
-                        continue;
-                    }
-                    byte[] data = downloadImage(src, msg, execution);
-                    if (execution.isCancelled() || data == null || data.length == 0) {
-                        continue;
-                    }
-                    // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
-                    String realExt = guessExt(src, data);
-                    if (!realExt.equals(ext)) {
-                        objectName = "images/" + ObjectNameUtils.hashUrl(src) + realExt;
-                        if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
-                            skipped++;
-                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, src);
-                            uploadedUrls.add(objectName);
-                            continue;
-                        }
-                    }
-                    // 覆盖模式下 putObject 会直接覆盖已存在的对象
-                    minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
-                        saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
-                            msg.getSpiderId(), title, pageUrl);
-                    uploaded++;
-                    // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
-                    uploadedUrls.add(objectName);
-                } catch (Exception e) {
+            // 并行下载图片：每页最多 8 张并发，减少总耗时
+            int maxImageConcurrency = 8;
+            java.util.concurrent.Semaphore imageSemaphore = new java.util.concurrent.Semaphore(maxImageConcurrency);
+            java.util.List<java.util.concurrent.CompletableFuture<Void>> imageFutures = new java.util.ArrayList<>();
+            java.util.concurrent.atomic.AtomicInteger uploadedCounter = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.concurrent.atomic.AtomicInteger skippedCounter = new java.util.concurrent.atomic.AtomicInteger();
+            java.util.List<String> uploadedUrlsSync = java.util.Collections.synchronizedList(uploadedUrls);
+            // 如果没有传入 executor，使用共享的虚拟线程池
+            java.util.concurrent.ExecutorService imgExec = imageExecutor != null
+                    ? imageExecutor
+                    : java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+            boolean createdExecutor = imageExecutor == null;
+            try {
+                for (String src : imageSources) {
                     if (execution.isCancelled()) break;
-                    log.warn("图片下载/上传失败: src={}", src, e);
+                    if (src.isBlank() || !seen.add(src)) {
+                        continue;
+                    }
+                    imageSemaphore.acquireUninterruptibly();
+                    if (execution.isCancelled()) {
+                        imageSemaphore.release();
+                        break;
+                    }
+                    final String imageSrc = src;
+                    imageFutures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
+                        try {
+                            String ext = guessExt(imageSrc, null);
+                            String objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + ext;
+                            // 不覆盖时，若图片已存在则跳过下载
+                            if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                                skippedCounter.incrementAndGet();
+                                saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                                uploadedUrlsSync.add(objectName);
+                                return;
+                            }
+                            byte[] data = downloadImage(imageSrc, msg, execution);
+                            if (execution.isCancelled() || data == null || data.length == 0) {
+                                return;
+                            }
+                            // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
+                            String realExt = guessExt(imageSrc, data);
+                            if (!realExt.equals(ext)) {
+                                objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + realExt;
+                                if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                                    skippedCounter.incrementAndGet();
+                                    saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                                    uploadedUrlsSync.add(objectName);
+                                    return;
+                                }
+                            }
+                            // 覆盖模式下 putObject 会直接覆盖已存在的对象
+                            minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
+                            saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
+                                msg.getSpiderId(), title, pageUrl);
+                            uploadedCounter.incrementAndGet();
+                            // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
+                            uploadedUrlsSync.add(objectName);
+                        } catch (Exception e) {
+                            if (!execution.isCancelled()) {
+                                log.warn("图片下载/上传失败: src={}", imageSrc, e);
+                            }
+                        } finally {
+                            imageSemaphore.release();
+                        }
+                    }, imgExec));
+                }
+                // 等待所有图片下载完成
+                for (java.util.concurrent.CompletableFuture<Void> f : imageFutures) {
+                    try {
+                        f.get(60, java.util.concurrent.TimeUnit.SECONDS);
+                    } catch (java.util.concurrent.TimeoutException e) {
+                        log.warn("图片下载超时，跳过剩余图片: url={}", pageUrl);
+                        break;
+                    } catch (Exception e) {
+                        if (execution.isCancelled()) break;
+                        log.warn("图片处理异常: url={}", pageUrl, e);
+                    }
+                }
+            } finally {
+                if (createdExecutor) {
+                    imgExec.shutdown();
                 }
             }
+            uploaded = uploadedCounter.get();
+            skipped = skippedCounter.get();
             long imgCost = System.currentTimeMillis() - imgStart;
             if (uploaded > 0 || skipped > 0) {
                 String msg2 = skipped > 0
@@ -1720,7 +1807,12 @@ public class CrawlerEngine {
         logMsg.setCostMs(costMs);
         logMsg.setCreateTime(LocalDateTime.now());
         try {
-            kafkaTemplate.send(taskLogTopic, JSON.toJSONString(logMsg));
+            // 异步发送：不阻塞爬取线程，Kafka 内部有批量 flush 机制
+            kafkaTemplate.send(taskLogTopic, JSON.toJSONString(logMsg))
+                    .exceptionally(ex -> {
+                        log.warn("任务日志发送 Kafka 失败: taskId={}, url={}", taskId, url, ex);
+                        return null;
+                    });
         } catch (Exception e) {
             // Kafka 发送失败时降级为直接写库，保证日志不丢
             log.warn("任务日志发送 Kafka 失败，降级直接写库: taskId={}, url={}", taskId, url, e);

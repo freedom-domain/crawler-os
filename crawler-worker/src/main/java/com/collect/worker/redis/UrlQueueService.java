@@ -3,6 +3,8 @@ package com.collect.worker.redis;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -10,7 +12,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -27,6 +31,28 @@ public class UrlQueueService {
             "jpe", "jpeg", "jpg", "pjp", "pjpeg", "png", "svg", "tif",
             "tiff", "webp"
     );
+
+    /**
+     * 入队脚本：SADD visited + EXPIRE + RPUSH queue + EXPIRE，合并为 1 次 RTT。
+     * 返回 1=入队成功，0=已存在（跳过）。
+     */
+    private static final RedisScript<Long> ENQUEUE_SCRIPT = new DefaultRedisScript<>(
+            "local added = redis.call('SADD', KEYS[1], ARGV[1]) " +
+            "if added == 0 then return 0 end " +
+            "redis.call('EXPIRE', KEYS[1], ARGV[2]) " +
+            "redis.call('RPUSH', KEYS[2], ARGV[3]) " +
+            "redis.call('EXPIRE', KEYS[2], ARGV[2]) " +
+            "return 1", Long.class);
+
+    /**
+     * 认领脚本：SADD processing + EXPIRE，合并为 1 次 RTT。
+     * 返回 1=认领成功，0=已被其他 worker 认领。
+     */
+    private static final RedisScript<Long> CLAIM_SCRIPT = new DefaultRedisScript<>(
+            "local added = redis.call('SADD', KEYS[1], ARGV[1]) " +
+            "if added == 0 then return 0 end " +
+            "redis.call('EXPIRE', KEYS[1], ARGV[2]) " +
+            "return 1", Long.class);
 
     public static String normalizeUrl(String rawUrl) {
         if (rawUrl == null) {
@@ -112,12 +138,6 @@ public class UrlQueueService {
         return String.join("&", params);
     }
 
-    private void push(Long taskId, String url) {
-        String key = KEY_PREFIX + taskId;
-        redis.opsForList().rightPush(key, url);
-        redis.expire(key, TTL_HOURS, TimeUnit.HOURS);
-    }
-
     public String pop(Long taskId) {
         String key = KEY_PREFIX + taskId;
         return redis.opsForList().leftPop(key);
@@ -134,38 +154,74 @@ public class UrlQueueService {
         redis.delete(KEY_PREFIX + taskId + ":processing");
     }
 
+    /**
+     * 原子入队：Lua 脚本合并 SADD + EXPIRE + RPUSH + EXPIRE 为 1 次 RTT。
+     * 原实现需 4 次 RTT，优化后 1 次。
+     * 使用内存缓存避免重复 normalizeUrl 解析。
+     */
     public boolean enqueueIfAbsent(Long taskId, String url, int depth) {
         if (isImageUrl(url)) {
             return false;
         }
-        String normalized = normalizeUrl(url);
+        String normalized = normalizeUrlCached(url);
         if (normalized == null || normalized.isBlank()) {
             return false;
         }
-        String key = KEY_PREFIX + taskId + ":visited";
-        Long added = redis.opsForSet().add(key, normalized);
-        redis.expire(key, TTL_HOURS, TimeUnit.HOURS);
-        if (!Long.valueOf(1L).equals(added)) {
-            return false;
-        }
-        push(taskId, normalized + "\t" + depth);
-        return true;
+        String visitedKey = KEY_PREFIX + taskId + ":visited";
+        String queueKey = KEY_PREFIX + taskId;
+        Long result = redis.execute(ENQUEUE_SCRIPT,
+                List.of(visitedKey, queueKey),
+                normalized, String.valueOf(TTL_HOURS * 3600), normalized + "\t" + depth);
+        return Long.valueOf(1L).equals(result);
     }
 
     /**
-     * 原子认领待处理 URL，兼容旧队列中已经存在的重复项。
+     * 原子认领：Lua 脚本合并 SADD + EXPIRE 为 1 次 RTT。
+     * 原实现需 2 次 RTT，优化后 1 次。
+     * 使用内存缓存避免重复 normalizeUrl 解析。
      */
+    private final Map<String, String> normalizeCache = new ConcurrentHashMap<>();
+
+    /** 归一化缓存上限：防止无限增长（每个任务约 10k URL，20 任务 = 200k，取 500k 安全值） */
+    private static final int NORMALIZE_CACHE_MAX = 500_000;
+
+    /**
+     * 带内存缓存的 URL 归一化：同一 URL 多次调用只解析一次。
+     * {@link #normalizeUrl} 是纯函数（相同输入 → 相同输出），缓存安全。
+     */
+    private String normalizeUrlCached(String url) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        String cached = normalizeCache.get(url);
+        if (cached != null) {
+            return cached;
+        }
+        String result = normalizeUrl(url);
+        if (result != null) {
+            if (normalizeCache.size() < NORMALIZE_CACHE_MAX) {
+                normalizeCache.put(url, result);
+            } else {
+                // 缓存满了，清空重建（简单粗暴但安全，避免锁竞争）
+                normalizeCache.clear();
+                normalizeCache.put(url, result);
+            }
+        }
+        return result;
+    }
+
     public boolean claimForProcessing(Long taskId, String url) {
         if (isImageUrl(url)) {
             return false;
         }
-        String normalized = normalizeUrl(url);
+        String normalized = normalizeUrlCached(url);
         if (normalized == null || normalized.isBlank()) {
             return false;
         }
-        String key = KEY_PREFIX + taskId + ":processing";
-        Long added = redis.opsForSet().add(key, normalized);
-        redis.expire(key, TTL_HOURS, TimeUnit.HOURS);
-        return Long.valueOf(1L).equals(added);
+        String processingKey = KEY_PREFIX + taskId + ":processing";
+        Long result = redis.execute(CLAIM_SCRIPT,
+                List.of(processingKey),
+                normalized, String.valueOf(TTL_HOURS * 3600));
+        return Long.valueOf(1L).equals(result);
     }
 }

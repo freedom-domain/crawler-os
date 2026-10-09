@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -28,13 +30,20 @@ public class MinioHelper {
 
     private final MinioClient minioClient;
 
+    /** 已确认存在的 bucket 集合：避免每次上传都查一次 bucketExists（省 1 次 MinIO RTT/文件） */
+    private final Set<String> knownBuckets = ConcurrentHashMap.newKeySet();
+
     public void ensureBucket(String bucket) {
+        if (knownBuckets.contains(bucket)) {
+            return;
+        }
         try {
             boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
             if (!exists) {
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
                 log.info("创建 MinIO bucket: {}", bucket);
             }
+            knownBuckets.add(bucket);
         } catch (Exception e) {
             throw new RuntimeException("MinIO bucket 操作失败: " + e.getMessage(), e);
         }
