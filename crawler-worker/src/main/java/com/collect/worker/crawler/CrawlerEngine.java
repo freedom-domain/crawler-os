@@ -17,6 +17,8 @@ import com.collect.worker.minio.MinioHelper;
 import com.collect.worker.redis.UrlQueueService;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -55,6 +57,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CrawlerEngine {
 
     private static final long TASK_CANCEL_POLL_INTERVAL_MS = 500;
+    /** 空闲连接保留时长（OkHttp 默认 5 分钟，爬取空闲站点可提前回收，避免连接泄漏到超时） */
+    private static final int HTTP_KEEP_ALIVE_MINUTES = 2;
+    /** 空闲连接上限（OkHttp 默认 5，远小于任务级 URL 并发上限 50，连接复用率过低导致频繁新建连接） */
+    private static final int HTTP_MAX_IDLE_CONNECTIONS = 512;
+    /** 进程内最大任务级并发数（= Kafka 消费者并发数，见 app.kafka.spider-task-consumer-concurrency） */
+    private static final int TASK_CONCURRENCY = 20;
+    /** 全部客户端合计的最大并发连接数（含排队请求；超过后请求在 Dispatcher 中排队） */
+    private static final int MAX_CONCURRENT_REQUESTS = TASK_CONCURRENCY * 50;
+    /** 带自定义 Header 的客户端缓存上限 */
+    private static final int MAX_CACHED_HTTP_CLIENTS = 128;
+    /** 单客户端的最大并发请求数（每个任务最多 50 个 URL 并发，10 个客户端足够覆盖所有任务） */
+    private static final int MAX_CONCURRENT_REQUESTS_PER_CLIENT = 200;
 
     record WebResource(String url, String category, String objectName, String contentType) {}
 
@@ -132,6 +146,12 @@ public class CrawlerEngine {
         this.kafkaTemplate = kafkaTemplate;
         this.verifiedHttpClient = buildHttpClient(false);
         this.unverifiedHttpClient = buildHttpClient(true);
+        // 客户端缓存上限：自定义 Header 的客户端按 (skipTls, headers) 无限缓存，
+        // 任务量增长后旧 Header 组合的客户端及其连接池会一直留在内存里，这里做上限保护
+        if (httpClientCache.size() > MAX_CACHED_HTTP_CLIENTS) {
+            log.warn("HTTP 客户端缓存达到上限，清空重建（连接池随之回收）: size={}", httpClientCache.size());
+            httpClientCache.clear();
+        }
     }
 
     /**
@@ -202,7 +222,13 @@ public class CrawlerEngine {
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
-                .followRedirects(true);
+                .followRedirects(true)
+                .connectionPool(new ConnectionPool(HTTP_MAX_IDLE_CONNECTIONS,
+                        HTTP_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES));
+        Dispatcher dispatcher = new Dispatcher();
+        dispatcher.setMaxRequests(MAX_CONCURRENT_REQUESTS);
+        dispatcher.setMaxRequestsPerHost(MAX_CONCURRENT_REQUESTS_PER_CLIENT);
+        builder.dispatcher(dispatcher);
         if (!headerList.isEmpty()) {
             builder.addInterceptor(chain -> {
                 Request.Builder reqBuilder = chain.request().newBuilder();
@@ -252,6 +278,21 @@ public class CrawlerEngine {
         // 按 (skipTls, headers) 缓存带 Header 的客户端，任务内复用
         String key = (skipTls ? "unverified" : "verified") + "|" + headers;
         return httpClientCache.computeIfAbsent(key, k -> buildHttpClient(skipTls, headers));
+    }
+
+    /**
+     * 应用关闭时释放连接池：取消空闲连接、停止 Dispatcher 的后台线程。
+     * 未关闭时，连接池的空闲连接要等 keep-alive 超时才释放，Dispatcher 线程也会存活到进程退出。
+     */
+    @jakarta.annotation.PreDestroy
+    public void shutdown() {
+        List<OkHttpClient> all = new java.util.ArrayList<>(httpClientCache.values());
+        all.add(verifiedHttpClient);
+        all.add(unverifiedHttpClient);
+        for (OkHttpClient client : all) {
+            client.connectionPool().evictAll();
+            client.dispatcher().executorService().shutdown();
+        }
     }
 
     @SuppressWarnings("null")

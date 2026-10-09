@@ -1007,7 +1007,7 @@ onMounted(() => {
 }
 
 .header-login-button {
-  border-radius: 9px;
+  border-radius: 4px;
   padding: 0 15px;
 }
 
