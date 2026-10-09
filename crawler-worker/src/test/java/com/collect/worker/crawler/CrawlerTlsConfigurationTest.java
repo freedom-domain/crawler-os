@@ -16,7 +16,8 @@ class CrawlerTlsConfigurationTest {
 
     @Test
     void buildHttpClient_shouldKeepCertificateAndHostnameValidationEnabledByDefault() throws Exception {
-        OkHttpClient verifiedClient = CrawlerEngine.buildHttpClient(false);
+        OkHttpClient verifiedClient = CrawlerEngine.buildHttpClient(false, null,
+                CrawlerEngine.PoolSettings.defaults());
         SSLSession unverifiedSession = mock(SSLSession.class);
         when(unverifiedSession.getPeerCertificates())
                 .thenThrow(new SSLPeerUnverifiedException("Peer certificate is unverified"));
@@ -26,8 +27,10 @@ class CrawlerTlsConfigurationTest {
 
     @Test
     void buildHttpClient_shouldSkipCertificateAndHostnameValidationWhenConfigured() throws Exception {
-        OkHttpClient verifiedClient = CrawlerEngine.buildHttpClient(false);
-        OkHttpClient unverifiedClient = CrawlerEngine.buildHttpClient(true);
+        OkHttpClient verifiedClient = CrawlerEngine.buildHttpClient(false, null,
+                CrawlerEngine.PoolSettings.defaults());
+        OkHttpClient unverifiedClient = CrawlerEngine.buildHttpClient(true, null,
+                CrawlerEngine.PoolSettings.defaults());
         SSLSession unverifiedSession = mock(SSLSession.class);
         when(unverifiedSession.getPeerCertificates())
                 .thenThrow(new SSLPeerUnverifiedException("Peer certificate is unverified"));

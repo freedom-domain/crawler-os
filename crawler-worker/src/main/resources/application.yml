@@ -43,6 +43,21 @@ app:
     task-log-consumer-group: task-log-consumer-group
   es:
     content-index: ${ES_CONTENT_INDEX:spider_content}
+  http:
+    # OkHttp 连接池/超时配置（crawler-worker）
+    connect-timeout-seconds: ${HTTP_CONNECT_TIMEOUT_SECONDS:15}   # 连接建立超时
+    read-timeout-seconds: ${HTTP_READ_TIMEOUT_SECONDS:30}         # 读取超时
+    max-idle-connections: ${HTTP_MAX_IDLE_CONNECTIONS:512}        # 空闲连接上限，0=禁用连接池，-1=OkHttp默认(5)
+    keep-alive-minutes: ${HTTP_KEEP_ALIVE_MINUTES:2}              # 空闲连接保留时长（分钟）
+    max-concurrent-requests: ${HTTP_MAX_CONCURRENT_REQUESTS:2000} # 全部客户端合计的最大并发请求数（含排队），<=0=默认(64)
+    max-concurrent-requests-per-client: ${HTTP_MAX_CONCURRENT_REQUESTS_PER_CLIENT:200} # 单客户端每主机并发上限，<=0=默认(5)
+    max-concurrent-requests-per-task: ${HTTP_MAX_CONCURRENT_REQUESTS_PER_TASK:100}     # 单任务最大并发请求数（任务级 Dispatcher），防止一个任务独占全局槽位
+    max-concurrent-requests-per-task-per-host: ${HTTP_MAX_CONCURRENT_REQUESTS_PER_TASK_PER_HOST:50} # 单任务每主机并发上限
+    max-cached-clients: ${HTTP_MAX_CACHED_CLIENTS:128}            # 带自定义 Header 的客户端缓存上限
+    max-response-bytes: ${HTTP_MAX_RESPONSE_BYTES:10485760}       # 响应体大小上限（字节），0=不限制
+    retry-on-io-error: ${HTTP_RETRY_ON_IO_ERROR:1}                # 瞬时网络错误重试次数（仅幂等请求），0=不重试
+    dns-cache-ttl-seconds: ${HTTP_DNS_CACHE_TTL_SECONDS:300}      # 本地 DNS 缓存 TTL（秒），0=禁用
+    pool-metrics-log-seconds: ${HTTP_POOL_METRICS_LOG_SECONDS:60} # 连接池监控日志间隔（秒），0=关闭
 
 mybatis-plus:
   global-config:

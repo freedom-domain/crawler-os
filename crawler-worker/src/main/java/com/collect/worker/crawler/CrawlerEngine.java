@@ -18,10 +18,12 @@ import com.collect.worker.redis.UrlQueueService;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Call;
 import okhttp3.ConnectionPool;
+import okhttp3.Dns;
 import okhttp3.Dispatcher;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import io.minio.StatObjectResponse;
 import us.codecraft.webmagic.selector.Html;
 import us.codecraft.webmagic.selector.HtmlNode;
@@ -38,6 +40,7 @@ import org.springframework.stereotype.Component;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509TrustManager;
 import javax.net.ssl.TrustManager;
+import java.net.InetAddress;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
@@ -57,20 +60,75 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CrawlerEngine {
 
     private static final long TASK_CANCEL_POLL_INTERVAL_MS = 500;
-    /** 空闲连接保留时长（OkHttp 默认 5 分钟，爬取空闲站点可提前回收，避免连接泄漏到超时） */
-    private static final int HTTP_KEEP_ALIVE_MINUTES = 2;
-    /** 空闲连接上限（OkHttp 默认 5，远小于任务级 URL 并发上限 50，连接复用率过低导致频繁新建连接） */
-    private static final int HTTP_MAX_IDLE_CONNECTIONS = 512;
-    /** 进程内最大任务级并发数（= Kafka 消费者并发数，见 app.kafka.spider-task-consumer-concurrency） */
-    private static final int TASK_CONCURRENCY = 20;
-    /** 全部客户端合计的最大并发连接数（含排队请求；超过后请求在 Dispatcher 中排队） */
-    private static final int MAX_CONCURRENT_REQUESTS = TASK_CONCURRENCY * 50;
+    /** 空闲连接保留时长（分钟）；<=0 表示禁用连接池 */
+    @Value("${app.http.keep-alive-minutes:2}")
+    private int httpKeepAliveMinutes;
+    /** 空闲连接上限；0 表示禁用连接池，-1 表示使用 OkHttp 默认值(5) */
+    @Value("${app.http.max-idle-connections:512}")
+    private int httpMaxIdleConnections;
+    /** 全部客户端合计的最大并发请求数（含排队）；<=0 表示使用 OkHttp 默认值(64) */
+    @Value("${app.http.max-concurrent-requests:2000}")
+    private int httpMaxConcurrentRequests;
+    /** 单客户端的最大并发请求数；<=0 表示使用 OkHttp 默认值(5) */
+    @Value("${app.http.max-concurrent-requests-per-client:200}")
+    private int httpMaxConcurrentRequestsPerClient;
+    /** 连接建立超时（秒） */
+    @Value("${app.http.connect-timeout-seconds:15}")
+    private int httpConnectTimeoutSeconds;
+    /** 读取超时（秒） */
+    @Value("${app.http.read-timeout-seconds:30}")
+    private int httpReadTimeoutSeconds;
     /** 带自定义 Header 的客户端缓存上限 */
-    private static final int MAX_CACHED_HTTP_CLIENTS = 128;
-    /** 单客户端的最大并发请求数（每个任务最多 50 个 URL 并发，10 个客户端足够覆盖所有任务） */
-    private static final int MAX_CONCURRENT_REQUESTS_PER_CLIENT = 200;
+    @Value("${app.http.max-cached-clients:128}")
+    private int httpMaxCachedClients;
+    /** 响应体大小上限（字节）；0=不限制。超限截断并丢弃，防止大页面撑爆堆内存 */
+    @Value("${app.http.max-response-bytes:10485760}")
+    private long httpMaxResponseBytes;
+    /** 瞬时网络错误（IOException）重试次数，仅对幂等请求生效；0=不重试 */
+    @Value("${app.http.retry-on-io-error:1}")
+    private int httpRetryOnIoError;
+    /** 本地 DNS 缓存 TTL（秒）；0=禁用 DNS 缓存。爬取多域名时避免重复 DNS 查询 */
+    @Value("${app.http.dns-cache-ttl-seconds:300}")
+    private long httpDnsCacheTtlSeconds;
+    /** 连接池监控日志间隔（秒）；0=关闭 */
+    @Value("${app.http.pool-metrics-log-seconds:60}")
+    private int httpPoolMetricsLogSeconds;
+    /** 单任务最大并发请求数（任务级 Dispatcher 上限），防止一个任务独占全局并发槽位 */
+    @Value("${app.http.max-concurrent-requests-per-task:100}")
+    private int httpMaxConcurrentRequestsPerTask;
+    /** 单任务每主机最大并发请求数 */
+    @Value("${app.http.max-concurrent-requests-per-task-per-host:50}")
+    private int httpMaxConcurrentRequestsPerTaskPerHost;
+
+    /** 所有客户端共享的连接池：不同 header/TLS 组合的客户端复用同一条 TCP 连接 */
+    private ConnectionPool sharedConnectionPool;
+    /** 进程级 robots 缓存（按 authority），跨任务复用，TTL 30 分钟 */
+    private final Map<String, RobotsCacheEntry> robotsCacheByHost = new ConcurrentHashMap<>();
+    /** 本地 DNS 缓存（name -> (addresses, expireAt)） */
+    private final Map<String, DnsCacheEntry> dnsCache = new ConcurrentHashMap<>();
+    /** 任务级客户端（线程本地）：每个爬取虚拟线程绑定自己任务的 Dispatcher，实现调度隔离 */
+    private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
 
     record WebResource(String url, String category, String objectName, String contentType) {}
+
+    record RobotsCacheEntry(RobotsRules rules, long expireAt) {}
+
+    record DnsCacheEntry(java.util.List<InetAddress> addresses, long expireAt) {}
+
+    /**
+     * 连接池/超时配置，取自 {@code app.http.*}；各字段 <=0 表示禁用/沿用 OkHttp 默认值。
+     */
+    record PoolSettings(int connectTimeoutSeconds,
+                        int readTimeoutSeconds,
+                        int maxIdleConnections,
+                        int keepAliveMinutes,
+                        int maxConcurrentRequests,
+                        int maxConcurrentRequestsPerClient) {
+        /** 测试/无配置场景下的默认值 */
+        static PoolSettings defaults() {
+            return new PoolSettings(15, 30, 512, 2, 2000, 200);
+        }
+    }
 
     @FunctionalInterface
     private interface ResponseReader<T> {
@@ -144,14 +202,121 @@ public class CrawlerEngine {
         this.minioHelper = minioHelper;
         this.fileMetadataMapper = fileMetadataMapper;
         this.kafkaTemplate = kafkaTemplate;
-        this.verifiedHttpClient = buildHttpClient(false);
-        this.unverifiedHttpClient = buildHttpClient(true);
+        this.sharedConnectionPool = new ConnectionPool(
+                Math.max(0, httpMaxIdleConnections),
+                Math.max(1, httpKeepAliveMinutes), TimeUnit.MINUTES);
+        this.verifiedHttpClient = buildClientWithDnsAndRetry(
+                buildHttpClient(false, null, poolSettings(), sharedConnectionPool));
+        this.unverifiedHttpClient = buildClientWithDnsAndRetry(
+                buildHttpClient(true, null, poolSettings(), sharedConnectionPool));
         // 客户端缓存上限：自定义 Header 的客户端按 (skipTls, headers) 无限缓存，
         // 任务量增长后旧 Header 组合的客户端及其连接池会一直留在内存里，这里做上限保护
-        if (httpClientCache.size() > MAX_CACHED_HTTP_CLIENTS) {
+        if (httpClientCache.size() > Math.max(1, httpMaxCachedClients)) {
             log.warn("HTTP 客户端缓存达到上限，清空重建（连接池随之回收）: size={}", httpClientCache.size());
             httpClientCache.clear();
         }
+    }
+
+    private PoolSettings poolSettings() {
+        return new PoolSettings(httpConnectTimeoutSeconds, httpReadTimeoutSeconds,
+                httpMaxIdleConnections, httpKeepAliveMinutes,
+                httpMaxConcurrentRequests, httpMaxConcurrentRequestsPerClient);
+    }
+
+    /**
+     * 给客户端叠加：本地 DNS 缓存（{@code app.http.dns-cache-ttl-seconds} > 0 时）
+     * 和瞬时网络错误重试（{@code app.http.retry-on-io-error} > 0 时，仅幂等请求）。
+     * 基于 {@link OkHttpClient#newBuilder()} 派生，连接池/Dispatcher/超时/TLS 均继承自原客户端。
+     */
+    private OkHttpClient buildClientWithDnsAndRetry(OkHttpClient base) {
+        OkHttpClient.Builder builder = base.newBuilder();
+        if (httpDnsCacheTtlSeconds > 0) {
+            builder.dns(dnsWithCache());
+        }
+        if (httpRetryOnIoError > 0) {
+            builder.addInterceptor(retryOnIoErrorInterceptor());
+        }
+        return builder.build();
+    }
+
+    /**
+     * 为单个任务创建带独立 Dispatcher 的客户端（方案 A：连接池共享 + 调度隔离）。
+     *
+     * <p>每个任务一个 {@link Dispatcher}，单任务并发上限
+     * {@code app.http.max-concurrent-requests-per-task}（默认 100），
+     * 单任务每主机上限 {@code app.http.max-concurrent-requests-per-task-per-host}（默认 50）。
+     * 连接池、DNS 缓存、重试 Interceptor、TLS 配置均继承自共享客户端，
+     * 仅 Dispatcher 按任务隔离——防止一个任务的慢请求独占全局并发槽位。
+     *
+     * <p>任务结束时调用 {@code client.dispatcher().executorService().shutdown()} 释放线程。
+     * 同一任务的多个虚拟线程共享同一个 taskClient（通过 {@link #taskClientFor} 缓存）。
+     */
+    private OkHttpClient taskClientFor(TaskMessage msg) {
+        boolean skipTls = Integer.valueOf(1).equals(msg.getSkipTlsVerify());
+        String headers = msg.getHeaders();
+        // 选择基础客户端（含 header Interceptor + DNS + 重试 + 共享连接池）
+        OkHttpClient base = (headers == null || headers.isBlank())
+                ? (skipTls ? unverifiedHttpClient : verifiedHttpClient)
+                : httpClientCache.computeIfAbsent(
+                        (skipTls ? "unverified" : "verified") + "|" + headers,
+                        k -> buildClientWithDnsAndRetry(
+                                buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool)));
+        // 派生任务级客户端：独立 Dispatcher，其余全部继承
+        Dispatcher taskDispatcher = new Dispatcher();
+        taskDispatcher.setMaxRequests(Math.max(1, httpMaxConcurrentRequestsPerTask));
+        taskDispatcher.setMaxRequestsPerHost(Math.max(1, httpMaxConcurrentRequestsPerTaskPerHost));
+        return base.newBuilder().dispatcher(taskDispatcher).build();
+    }
+
+    /** 带本地 TTL 缓存的 DNS 解析器；缓存条目按 host 去重，过期自动清除 */
+    private Dns dnsWithCache() {
+        return hostname -> {
+            long now = System.currentTimeMillis();
+            DnsCacheEntry entry = dnsCache.get(hostname);
+            if (entry != null && entry.expireAt() > now) {
+                return entry.addresses();
+            }
+            java.util.List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
+            if (addresses != null && !addresses.isEmpty()) {
+                dnsCache.put(hostname, new DnsCacheEntry(addresses,
+                        now + httpDnsCacheTtlSeconds * 1000L));
+            }
+            // 防止缓存无限增长：超出 1024 条时清空（简单粗暴但安全）
+            if (dnsCache.size() > 1024) {
+                dnsCache.clear();
+            }
+            return addresses;
+        };
+    }
+
+    /**
+     * 瞬时网络错误重试：{@link java.io.IOException}（连接重置、读超时等）
+     * 且请求幂等（GET/HEAD）时自动重试。非幂等请求不重试，避免重复提交。
+     */
+    private okhttp3.Interceptor retryOnIoErrorInterceptor() {
+        return chain -> {
+            Request request = chain.request();
+            if (!request.method().equals("GET") && !request.method().equals("HEAD")) {
+                return chain.proceed(request);
+            }
+            int maxAttempts = httpRetryOnIoError + 1;
+            for (int attempt = 1; ; attempt++) {
+                Response response;
+                try {
+                    response = chain.proceed(request);
+                    // 5xx 也视为瞬时错误，幂等请求重试
+                    if (response.code() >= 500 && attempt < maxAttempts) {
+                        response.close();
+                        continue;
+                    }
+                    return response;
+                } catch (java.io.IOException e) {
+                    if (attempt >= maxAttempts) throw e;
+                    log.debug("瞬时网络错误，重试 {}/{}: {} - {}",
+                            attempt, maxAttempts - 1, request.url(), e.getMessage());
+                }
+            }
+        };
     }
 
     /**
@@ -205,30 +370,57 @@ public class CrawlerEngine {
                 .build();
     }
 
-    static OkHttpClient buildHttpClient(boolean skipTlsVerify) {
-        return buildHttpClient(skipTlsVerify, null);
-    }
-
     /**
-     * 构建 HTTP 客户端。headers 不为空时，通过 Interceptor 把自定义 Header 注入到
+     * 构建 HTTP 客户端，池/超时/Dispatcher 配置取自 {@code app.http.*}
+     * （{@link PoolSettings}）；池大小 <=0 表示禁用连接池，
+     * Dispatcher 上限 <=0 表示沿用 OkHttp 默认值。
+     *
+     * <p>headers 不为空时，通过 Interceptor 把自定义 Header 注入到
      * 每一次请求（含 OkHttp 自动跟随的 302 重定向跳数）——
      * OkHttp 原生 followRedirects 跟随重定向时会丢弃自定义 Header，
      * 导致"第一次请求带了 Header、跟随重定向的那次没带"，目标站点
      * 因此判定未登录而返回登录页。Interceptor 方案可让自定义 Header
      * 在所有跳数上一致生效。
      */
-    static OkHttpClient buildHttpClient(boolean skipTlsVerify, String headers) {
+    static OkHttpClient buildHttpClient(boolean skipTlsVerify,
+                                        String headers,
+                                        PoolSettings settings) {
+        return buildHttpClient(skipTlsVerify, headers, settings, null);
+    }
+
+    /**
+     * 构建 HTTP 客户端。{@code sharedPool} 不为 null 时所有客户端共享同一连接池
+     * （不同 header/TLS 组合的客户端可复用同一条 TCP 连接）；为 null 时按
+     * {@code settings} 自建独立连接池（测试场景）。
+     *
+     * <p>headers 不为空时，通过 Interceptor 把自定义 Header 注入到
+     * 每一次请求（含 OkHttp 自动跟随的 302 重定向跳数）——
+     * OkHttp 原生 followRedirects 跟随重定向时会丢弃自定义 Header，
+     * 导致"第一次请求带了 Header、跟随重定向的那次没带"，目标站点
+     * 因此判定未登录而返回登录页。Interceptor 方案可让自定义 Header
+     * 在所有跳数上一致生效。
+     */
+    static OkHttpClient buildHttpClient(boolean skipTlsVerify,
+                                        String headers,
+                                        PoolSettings settings,
+                                        ConnectionPool sharedPool) {
         List<Map.Entry<String, String>> headerList = parseConfiguredHeaders(headers);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
+                .connectTimeout(Math.max(1, settings.connectTimeoutSeconds()), TimeUnit.SECONDS)
+                .readTimeout(Math.max(1, settings.readTimeoutSeconds()), TimeUnit.SECONDS)
                 .followRedirects(true)
-                .connectionPool(new ConnectionPool(HTTP_MAX_IDLE_CONNECTIONS,
-                        HTTP_KEEP_ALIVE_MINUTES, TimeUnit.MINUTES));
-        Dispatcher dispatcher = new Dispatcher();
-        dispatcher.setMaxRequests(MAX_CONCURRENT_REQUESTS);
-        dispatcher.setMaxRequestsPerHost(MAX_CONCURRENT_REQUESTS_PER_CLIENT);
-        builder.dispatcher(dispatcher);
+                .connectionPool(sharedPool != null ? sharedPool
+                        : new ConnectionPool(
+                                Math.max(0, settings.maxIdleConnections()),
+                                Math.max(1, settings.keepAliveMinutes()), TimeUnit.MINUTES));
+        if (settings.maxConcurrentRequests() > 0) {
+            Dispatcher dispatcher = new Dispatcher();
+            dispatcher.setMaxRequests(settings.maxConcurrentRequests());
+            if (settings.maxConcurrentRequestsPerClient() > 0) {
+                dispatcher.setMaxRequestsPerHost(settings.maxConcurrentRequestsPerClient());
+            }
+            builder.dispatcher(dispatcher);
+        }
         if (!headerList.isEmpty()) {
             builder.addInterceptor(chain -> {
                 Request.Builder reqBuilder = chain.request().newBuilder();
@@ -269,15 +461,35 @@ public class CrawlerEngine {
     }
 
     private OkHttpClient httpClient(TaskMessage msg) {
+        // 优先使用线程本地的任务级客户端（带独立 Dispatcher，调度隔离）
+        OkHttpClient taskClient = currentTaskClient.get();
+        if (taskClient != null) {
+            return taskClient;
+        }
+        // 非爬取线程（如 robots 预加载）回退到共享客户端
         boolean skipTls = Integer.valueOf(1).equals(msg.getSkipTlsVerify());
         String headers = msg.getHeaders();
-        // 未配置自定义 Header 时，复用共享客户端，避免不必要的 Interceptor 开销
         if (headers == null || headers.isBlank()) {
             return skipTls ? unverifiedHttpClient : verifiedHttpClient;
         }
-        // 按 (skipTls, headers) 缓存带 Header 的客户端，任务内复用
         String key = (skipTls ? "unverified" : "verified") + "|" + headers;
-        return httpClientCache.computeIfAbsent(key, k -> buildHttpClient(skipTls, headers));
+        return httpClientCache.computeIfAbsent(key, k ->
+                buildClientWithDnsAndRetry(buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool)));
+    }
+
+    /**
+     * 连接池监控日志：每 {@code app.http.pool-metrics-log-seconds} 秒打印一次
+     * 活跃/排队请求数、缓存客户端数，便于生产定位连接泄漏。
+     * 间隔 <=0 时不打印（避免空转）。
+     */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelayString =
+            "${app.http.pool-metrics-log-seconds:60000}")
+    public void logPoolMetrics() {
+        if (httpPoolMetricsLogSeconds <= 0) return;
+        int running = verifiedHttpClient.dispatcher().runningCallsCount();
+        int queued = verifiedHttpClient.dispatcher().queuedCallsCount();
+        log.debug("http-pool: running={}, queued={}, cachedClients={}, dnsCacheEntries={}, robotsCacheEntries={}",
+                running, queued, httpClientCache.size(), dnsCache.size(), robotsCacheByHost.size());
     }
 
     /**
@@ -313,6 +525,8 @@ public class CrawlerEngine {
         if (concurrency < 1) concurrency = 1;
         if (concurrency > 50) concurrency = 50;
         ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        // 方案 A：任务级 Dispatcher（连接池共享 + 调度隔离），任务结束即释放
+        final OkHttpClient taskClient = taskClientFor(msg);
         TaskExecutionContext execution = new TaskExecutionContext();
         Map<String, RobotsRules> robotsCache = new ConcurrentHashMap<>();
 
@@ -393,7 +607,7 @@ public class CrawlerEngine {
                 final int crawlDepth = depth;
                 Future<?> future = executor.submit(() ->
                         crawlUrl(crawlUrl, crawlDepth, maxDepth, msg, task, taskId, success, fail,
-                                robotsCache, processedResourceUrls, cachedStartUrls, execution)
+                                robotsCache, processedResourceUrls, cachedStartUrls, execution, taskClient)
                 );
                 activeFutures.add(future);
             }
@@ -409,6 +623,8 @@ public class CrawlerEngine {
                 executor.shutdownNow();
                 awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             }
+            // 释放任务级 Dispatcher 的后台线程（连接池仍由共享池管理，不在此释放）
+            taskClient.dispatcher().executorService().shutdown();
         }
 
         LocalDateTime endTime = LocalDateTime.now();
@@ -488,7 +704,8 @@ public class CrawlerEngine {
                            Map<String, RobotsRules> robotsCache,
                            Set<String> processedResourceUrls,
                            Set<String> cachedStartUrls,
-                           TaskExecutionContext execution) {
+                           TaskExecutionContext execution, OkHttpClient taskClient) {
+        currentTaskClient.set(taskClient);
         try {
             // 任务状态不是运行中（如被取消）时停止爬取
             SpiderTask latest = taskMapper.selectById(task.getId());
@@ -622,6 +839,8 @@ public class CrawlerEngine {
             fail.incrementAndGet();
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
+        } finally {
+            currentTaskClient.remove();
         }
     }
 
@@ -807,6 +1026,9 @@ public class CrawlerEngine {
         return host.toLowerCase(java.util.Locale.ROOT);
     }
 
+    /** 进程级 robots 缓存 TTL（毫秒）：同一 authority 的 robots 规则 30 分钟内跨任务复用 */
+    private static final long ROBOTS_CACHE_TTL_MS = 30 * 60 * 1000L;
+
     private boolean isAllowedByRobots(String url, TaskMessage msg, Map<String, RobotsRules> robotsCache,
                                      TaskExecutionContext execution) {
         // 读取缓存模式且未开启"未命中联网"时不联网：不请求 robots.txt
@@ -818,9 +1040,22 @@ public class CrawlerEngine {
         try {
             URI uri = URI.create(url);
             if (uri.getHost() == null) return false;
+            String authority = uri.getAuthority();
+            if (authority == null) return false;
+            // 进程级缓存：按 authority 复用（同一 authority 下路径规则一致），TTL 30 分钟
+            long now = System.currentTimeMillis();
+            RobotsCacheEntry entry = robotsCacheByHost.get(authority);
+            if (entry != null && entry.expireAt() > now) {
+                return entry.rules().isAllowed(uri.getRawPath());
+            }
             String scheme = uri.getScheme() == null ? "https" : uri.getScheme();
-            String robotsUrl = scheme + "://" + uri.getAuthority() + "/robots.txt";
-            RobotsRules rules = robotsCache.computeIfAbsent(robotsUrl, key -> loadRobotsRules(key, msg, execution));
+            String robotsUrl = scheme + "://" + authority + "/robots.txt";
+            RobotsRules rules = loadRobotsRules(robotsUrl, msg, execution);
+            robotsCacheByHost.put(authority, new RobotsCacheEntry(rules, now + ROBOTS_CACHE_TTL_MS));
+            // 防止缓存无限增长
+            if (robotsCacheByHost.size() > 4096) {
+                robotsCacheByHost.entrySet().removeIf(e -> e.getValue().expireAt() < now);
+            }
             return rules.isAllowed(uri.getRawPath());
         } catch (Exception e) {
             log.debug("robots.txt 检查失败，放行 URL: {}", url, e);
@@ -1400,11 +1635,61 @@ public class CrawlerEngine {
     private <T> T executeRequest(OkHttpClient client, Request request,
                                  TaskExecutionContext execution, ResponseReader<T> reader) throws Exception {
         Call call = execution.register(client.newCall(request));
-        try (Response response = call.execute()) {
+        Response raw = call.execute();
+        Response response = wrapWithSizeLimit(raw);
+        try {
             return reader.read(response);
         } finally {
+            response.close();
             execution.unregister(call);
         }
+    }
+
+    /**
+     * 给响应套一层大小上限：{@code app.http.max-response-bytes} > 0 时，
+     * 超过上限的响应体在读取时抛 {@link IllegalStateException}，防止大页面撑爆堆内存。
+     * 响应头/状态码不变，调用方无感知（只会在读 body 时失败）。
+     */
+    private Response wrapWithSizeLimit(Response original) throws java.io.IOException {
+        if (httpMaxResponseBytes <= 0 || original.body() == null) {
+            return original;
+        }
+        long contentLength = original.body().contentLength();
+        if (contentLength > httpMaxResponseBytes) {
+            // Content-Length 明确超限：直接拒绝，不读 body
+            original.close();
+            throw new IllegalStateException(
+                    "HTTP 响应体超过大小上限 " + httpMaxResponseBytes + " bytes (Content-Length="
+                            + contentLength + ")，已丢弃");
+        }
+        // Content-Length 未声明或 <= 上限时：流式读取到 Buffer，超限则截断
+        ResponseBody sourceBody = original.body();
+        final long limit = httpMaxResponseBytes;
+        final okio.Buffer buf = new okio.Buffer();
+        final okio.BufferedSource src = sourceBody.source();
+        try {
+            while (true) {
+                long remaining = limit - buf.size();
+                if (remaining <= 0) break;
+                long n = src.read(buf, remaining);
+                if (n == -1) break;
+            }
+        } catch (java.io.IOException e) {
+            original.close();
+            throw e;
+        }
+        original.close();
+        ResponseBody limitedBody = new ResponseBody() {
+            @Override
+            public okhttp3.MediaType contentType() { return sourceBody.contentType(); }
+
+            @Override
+            public long contentLength() { return buf.size(); }
+
+            @Override
+            public okio.BufferedSource source() { return buf; }
+        };
+        return original.newBuilder().body(limitedBody).build();
     }
 
     private String md5(String input) {
