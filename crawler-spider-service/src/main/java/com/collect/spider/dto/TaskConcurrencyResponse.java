@@ -6,4 +6,5 @@ import lombok.Data;
 public class TaskConcurrencyResponse {
     private int maxConcurrency;
     private int urlConcurrency;
+    private int retentionDays;
 }

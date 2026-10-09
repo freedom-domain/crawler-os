@@ -169,13 +169,28 @@
         <p class="concurrency-hint">
           单个任务内同时抓取的 URL 数量。值越大抓取越快，但对目标站点压力越大。
         </p>
+        <div class="concurrency-setting-row">
+          <span>任务保留天数</span>
+          <el-input-number
+            v-model="retentionDays"
+            :min="1"
+            :max="365"
+            :step="1"
+            controls-position="right"
+            :disabled="!concurrencyLoaded || concurrencyLoading || concurrencySaving"
+            aria-label="任务保留天数"
+          />
+        </div>
+        <p class="concurrency-hint">
+          已完成任务记录（含日志）的保留天数，超期后每日凌晨自动清理。默认 30 天。
+        </p>
       </div>
       <template #footer>
         <el-button :disabled="concurrencySaving" @click="closeConcurrencyDialog">取消</el-button>
         <el-button
           type="primary"
           :loading="concurrencySaving"
-          :disabled="!concurrencyLoaded || concurrencyLoading || (maxConcurrency === savedMaxConcurrency && urlConcurrency === savedUrlConcurrency)"
+          :disabled="!concurrencyLoaded || concurrencyLoading || (maxConcurrency === savedMaxConcurrency && urlConcurrency === savedUrlConcurrency && retentionDays === savedRetentionDays)"
           @click="saveConcurrency"
         >
           保存策略
@@ -294,6 +309,8 @@ const maxConcurrency = ref(1)
 const savedMaxConcurrency = ref(1)
 const urlConcurrency = ref(8)
 const savedUrlConcurrency = ref(8)
+const retentionDays = ref(30)
+const savedRetentionDays = ref(30)
 const concurrencyLoading = ref(false)
 const concurrencySaving = ref(false)
 const concurrencyLoaded = ref(false)
@@ -516,6 +533,9 @@ const loadConcurrency = async () => {
     savedMaxConcurrency.value = max
     urlConcurrency.value = Number.isInteger(url) && url >= 1 && url <= 50 ? url : 8
     savedUrlConcurrency.value = urlConcurrency.value
+    const retention = Number(res.data?.retentionDays)
+    retentionDays.value = Number.isInteger(retention) && retention >= 1 && retention <= 365 ? retention : 30
+    savedRetentionDays.value = retentionDays.value
     concurrencyLoaded.value = true
   } catch {
     ElMessage.error('读取任务并发策略失败')
@@ -532,6 +552,7 @@ const openConcurrencyDialog = async () => {
 const closeConcurrencyDialog = () => {
   maxConcurrency.value = savedMaxConcurrency.value
   urlConcurrency.value = savedUrlConcurrency.value
+  retentionDays.value = savedRetentionDays.value
   concurrencyDialogVisible.value = false
 }
 
@@ -544,15 +565,20 @@ const saveConcurrency = async () => {
     ElMessage.warning('URL 并发数需设置为 1 到 50 的整数')
     return
   }
+  if (!Number.isInteger(retentionDays.value) || retentionDays.value < 1 || retentionDays.value > 365) {
+    ElMessage.warning('任务保留天数需设置为 1 到 365 的整数')
+    return
+  }
   concurrencySaving.value = true
   try {
-    await updateTaskConcurrency(maxConcurrency.value, urlConcurrency.value)
+    await updateTaskConcurrency(maxConcurrency.value, urlConcurrency.value, retentionDays.value)
     savedMaxConcurrency.value = maxConcurrency.value
     savedUrlConcurrency.value = urlConcurrency.value
-    ElMessage.success('任务并发策略已更新')
+    savedRetentionDays.value = retentionDays.value
+    ElMessage.success('任务策略已更新')
     concurrencyDialogVisible.value = false
   } catch {
-    ElMessage.error('更新任务并发策略失败')
+    ElMessage.error('更新任务策略失败')
   } finally {
     concurrencySaving.value = false
   }

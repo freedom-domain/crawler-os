@@ -185,9 +185,10 @@ public class SpiderController {
     @Operation(summary = "更新任务并发策略")
     @PutMapping("/task/concurrency")
     public R<Void> updateTaskConcurrency(@RequestParam("maxConcurrency") int maxConcurrency,
-                                         @RequestParam("urlConcurrency") int urlConcurrency) {
+                                         @RequestParam("urlConcurrency") int urlConcurrency,
+                                         @RequestParam("retentionDays") int retentionDays) {
         requirePermission("spider:run");
-        spiderService.updateTaskConcurrency(maxConcurrency, urlConcurrency);
+        spiderService.updateTaskConcurrency(maxConcurrency, urlConcurrency, retentionDays);
         return R.ok();
     }
 

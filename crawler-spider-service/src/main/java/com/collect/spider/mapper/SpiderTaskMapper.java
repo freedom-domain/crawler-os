@@ -12,6 +12,8 @@ import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.List;
+
 @Mapper
 public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
 
@@ -24,8 +26,11 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
     @Select("SELECT url_concurrency FROM spider_task_creation_guard WHERE id = 1")
     Integer selectUrlConcurrency();
 
-    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency}, url_concurrency = #{urlConcurrency} WHERE id = 1")
-    int updateConcurrency(@Param("maxConcurrency") int maxConcurrency, @Param("urlConcurrency") int urlConcurrency);
+    @Select("SELECT retention_days FROM spider_task_creation_guard WHERE id = 1")
+    Integer selectRetentionDays();
+
+    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency}, url_concurrency = #{urlConcurrency}, retention_days = #{retentionDays} WHERE id = 1")
+    int updateConcurrency(@Param("maxConcurrency") int maxConcurrency, @Param("urlConcurrency") int urlConcurrency, @Param("retentionDays") int retentionDays);
 
     @Select("SELECT * FROM spider_task WHERE id = #{id} AND deleted = 0 FOR UPDATE")
     SpiderTask selectByIdForUpdate(@Param("id") Long id);
@@ -108,6 +113,9 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
             @Result(column = "image_existing_count", property = "imageExistingCount")
         })
     SpiderTask selectTaskById(@Param("id") Long id);
+
+    @Select("SELECT id FROM spider_task WHERE deleted = 0 AND create_time < #{cutoff}")
+    List<Long> selectExpiredTaskIds(@Param("cutoff") java.time.LocalDateTime cutoff);
 
     @Delete("DELETE FROM spider_task WHERE id = #{id}")
     void physicalDeleteById(@Param("id") Long id);

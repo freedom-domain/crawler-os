@@ -41,6 +41,10 @@ public class SpiderService {
     private static final int MAX_URL_CONCURRENCY = 50;
     /** CANCELING 状态超过该时长视为卡死（worker 消费不到 / 未结束），兜底置为 CANCELED */
     private static final int STUCK_CANCELING_MINUTES = 30;
+    private static final int MIN_RETENTION_DAYS = 1;
+    private static final int MAX_RETENTION_DAYS = 365;
+    /** 默认任务保留天数（DB 列缺失时的兜底） */
+    private static final int DEFAULT_RETENTION_DAYS = 30;
 
     @Value("${app.kafka.spider-task-topic}")
     private String spiderTaskTopic;
@@ -589,22 +593,27 @@ public class SpiderService {
         TaskConcurrencyResponse resp = new TaskConcurrencyResponse();
         resp.setMaxConcurrency(getMaxConcurrency());
         resp.setUrlConcurrency(getUrlConcurrency());
+        resp.setRetentionDays(getRetentionDays());
         return resp;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void updateTaskConcurrency(int maxConcurrency, int urlConcurrency) {
+    public void updateTaskConcurrency(int maxConcurrency, int urlConcurrency, int retentionDays) {
         if (maxConcurrency < MIN_TASK_CONCURRENCY || maxConcurrency > MAX_TASK_CONCURRENCY) {
             throw new BizException("任务并发数必须在 1 到 20 之间");
         }
         if (urlConcurrency < MIN_URL_CONCURRENCY || urlConcurrency > MAX_URL_CONCURRENCY) {
             throw new BizException("URL 并发数必须在 1 到 50 之间");
         }
+        if (retentionDays < MIN_RETENTION_DAYS || retentionDays > MAX_RETENTION_DAYS) {
+            throw new BizException("任务保留天数必须在 1 到 365 之间");
+        }
         requireTaskCreationGuard();
-        if (taskMapper.updateConcurrency(maxConcurrency, urlConcurrency) != 1) {
+        if (taskMapper.updateConcurrency(maxConcurrency, urlConcurrency, retentionDays) != 1) {
             throw new BizException("任务并发策略保存失败");
         }
-        log.info("任务并发策略已更新: maxConcurrency={}, urlConcurrency={}", maxConcurrency, urlConcurrency);
+        log.info("任务策略已更新: maxConcurrency={}, urlConcurrency={}, retentionDays={}",
+                maxConcurrency, urlConcurrency, retentionDays);
     }
 
     private void sendTaskAfterCommit(String payload) {
@@ -644,5 +653,40 @@ public class SpiderService {
             return 8;
         }
         return urlConcurrency;
+    }
+
+    private int getRetentionDays() {
+        Integer retentionDays = taskMapper.selectRetentionDays();
+        if (retentionDays == null
+                || retentionDays < MIN_RETENTION_DAYS
+                || retentionDays > MAX_RETENTION_DAYS) {
+            return DEFAULT_RETENTION_DAYS;
+        }
+        return retentionDays;
+    }
+
+    /**
+     * 每日凌晨 3 点清理超过保留天数的已完成任务（含日志）。
+     * 仅物理删除 create_time 早于 cutoff 且状态为终态（SUCCESS/FAILED/CANCELED）的任务，
+     * 不影响仍在排队或运行中的任务。
+     */
+    @Scheduled(cron = "${app.spider.cleanup-cron:0 0 3 * * ?}")
+    @Transactional(rollbackFor = Exception.class)
+    public void cleanupExpiredTasks() {
+        int retentionDays = getRetentionDays();
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        List<Long> expiredIds = taskMapper.selectExpiredTaskIds(cutoff);
+        if (expiredIds == null || expiredIds.isEmpty()) {
+            return;
+        }
+        log.info("开始清理过期任务: cutoff={}, retentionDays={}, count={}", cutoff, retentionDays, expiredIds.size());
+        int cleaned = 0;
+        for (Long id : expiredIds) {
+            int deletedLogs = logMapper.physicalDeleteByTaskId(id);
+            taskMapper.physicalDeleteById(id);
+            cleaned++;
+            log.debug("已清理过期任务: id={}, 日志数={}", id, deletedLogs);
+        }
+        log.info("过期任务清理完成: cleaned={}", cleaned);
     }
 }
