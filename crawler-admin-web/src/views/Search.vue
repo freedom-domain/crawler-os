@@ -87,6 +87,7 @@
         @images="openAllImages"
         @tag="openTagEditor"
         @spider="row => goToSpider(row.spiderId, row.spiderName)"
+        @group="onGroupClick"
         @favorite="toggleFavorite"
         @command="handleCommand"
       />
@@ -765,6 +766,12 @@ const spiderGroupedOptions = computed(() => {
 
 // 选择分组后刷新（分组在服务端解析为该分组下的爬虫 ID 进行查询）
 const onGroupChange = () => {
+  doSearch()
+}
+
+// 点击结果列表的分组标签 → 按该分组筛选
+const onGroupClick = (g: string) => {
+  filterGroup.value = g
   doSearch()
 }
 

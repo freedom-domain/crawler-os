@@ -136,6 +136,7 @@
           @images="openAllImages"
           @tag="openTagEditor"
           @spider="handleSpiderClick"
+          @group="onGroupClick"
           @favorite="toggleFavorite"
           @command="handleCommand"
         />
@@ -814,6 +815,12 @@ const spiderGroupedOptions = computed(() => {
 })
 
 const onGroupChange = () => {
+  doSearch()
+}
+
+// 点击结果列表的分组标签 → 按该分组筛选
+const onGroupClick = (g: string) => {
+  filterGroup.value = g
   doSearch()
 }
 

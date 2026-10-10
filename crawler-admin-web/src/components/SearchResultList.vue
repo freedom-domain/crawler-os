@@ -51,10 +51,13 @@
 
     <template #meta>
       <div class="result-meta">
-        <span v-if="row.spiderName" class="meta-tag spider-tag" :class="{ 'spider-tag-clickable': authenticated }" @click="authenticated && row.spiderId && $emit('spider', row)">{{ row.spiderName }}</span>
-        <span v-if="row.spiderGroup" class="meta-tag group-tag">{{ row.spiderGroup }}</span>
-        <span v-if="row.updateTime" class="meta-time update-time">
-          {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
+        <span v-if="row.spiderName" class="meta-tag spider-tag" :class="{ 'spider-tag-clickable': authenticated }" @click="authenticated && row.spiderId && $emit('spider', row)">
+          <svg class="tag-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+          {{ row.spiderName }}
+        </span>
+        <span v-if="row.spiderGroup" class="meta-tag group-tag group-tag-clickable" @click="$emit('group', row.spiderGroup)">
+          <svg class="tag-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+          {{ row.spiderGroup }}
         </span>
         <button
           v-if="authenticated"
@@ -108,13 +111,15 @@
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        <span v-if="row.updateTime" class="meta-time update-time">
+          {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
+        </span>
       </div>
     </template>
   </SearchResultItem>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
 import SearchResultItem from '@/components/SearchResultItem.vue'
 import { ArrowDown, Star, StarFilled, Edit, RefreshRight, Delete, MoreFilled } from '@element-plus/icons-vue'
 import { formatTimeAgo } from '@/utils/dateTime'
@@ -133,6 +138,7 @@ defineEmits<{
   (event: 'images', row: any): void
   (event: 'tag', row: any): void
   (event: 'spider', row: any): void
+  (event: 'group', group: string): void
   (event: 'favorite', row: any, value: boolean): void
   (event: 'command', command: string, row: any): void
 }>()
@@ -141,42 +147,6 @@ defineEmits<{
 const setDropdownOpen = (row: any, visible: boolean) => {
   row._dropdownOpen = visible
 }
-
-// 移动端：把时间 DOM 节点移到 URL 后面（其他元素不动）；桌面端不移动
-const MOBILE_MAX = 720
-const movedTimes: { item: HTMLElement; time: HTMLElement }[] = []
-
-const repositionTimes = () => {
-  const items = Array.from(document.querySelectorAll<HTMLElement>('.result-item'))
-  if (items.length === 0) return
-  if (window.innerWidth <= MOBILE_MAX) {
-    items.forEach((item) => {
-      const url = item.querySelector<HTMLElement>('.result-url')
-      const time = item.querySelector<HTMLElement>('.update-time')
-      if (!url || !time) return
-      // 时间已经在 URL 后面则跳过
-      if (url.nextElementSibling === time) return
-      // 把时间移到 URL 后面
-      url.insertAdjacentElement('afterend', time)
-      movedTimes.push({ item, time })
-    })
-  } else {
-    // 桌面端：恢复原顺序，把时间移回 .result-meta 容器末尾
-    movedTimes.forEach(({ item, time }) => {
-      const meta = item.querySelector<HTMLElement>('.result-meta')
-      if (meta) meta.appendChild(time)
-    })
-    movedTimes.length = 0
-  }
-}
-
-onMounted(() => {
-  repositionTimes()
-  window.addEventListener('resize', repositionTimes)
-})
-onUnmounted(() => {
-  window.removeEventListener('resize', repositionTimes)
-})
 </script>
 
 <style scoped>
@@ -282,20 +252,52 @@ onUnmounted(() => {
 }
 
 .meta-tag {
-  padding: 2px 8px;
-  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: .2px;
+  line-height: 1;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.meta-tag .tag-icon {
+  flex-shrink: 0;
+  opacity: .7;
+}
+
+.spider-tag {
   background: #f1f5f5;
   color: var(--ink-700);
+  border: 1px solid #e3e8ee;
 }
+
+.spider-tag-clickable { cursor: pointer; }
+.spider-tag-clickable:hover {
+  background: #e9f6f5;
+  color: #0f766e;
+  border-color: #b7e7dc;
+  box-shadow: 0 1px 4px rgba(15, 129, 124, .1);
+}
+.spider-tag-clickable:hover .tag-icon { opacity: 1; }
 
 .group-tag {
   background: #d9f5ef;
   color: var(--teal-dark);
+  border: 1px solid #b7e7dc;
 }
+.group-tag-clickable { cursor: pointer; }
+.group-tag-clickable:hover {
+  background: #c9ece5;
+  color: #075e55;
+  border-color: #8ed6c8;
+  box-shadow: 0 1px 4px rgba(15, 129, 124, .15);
+}
+.group-tag-clickable:hover .tag-icon { opacity: 1; }
 
-.spider-tag { cursor: default; }
-.spider-tag-clickable { cursor: pointer; }
-.spider-tag-clickable:hover { background: #e9f6f5; color: #0f766e; }
 .update-time { color: var(--ink-500); font-size: 12px; }
 
 /* 操作触发按钮：胶囊样式 + hover 浮起 */
@@ -496,17 +498,6 @@ onUnmounted(() => {
 @media (max-width: 460px) {
   .result-thumb { width: 64px; height: 64px; }
   .result-meta { gap: 8px; }
-}
-</style>
-
-<!--
-  移动端：时间从 .result-meta 容器移出来单独排到 URL 后面（非 scoped）。
-  由 JS 在移动端把 .update-time 节点 insertBefore 到 .result-url 之后，
-  其他元素不动。这里只补充时间的视觉间距。
--->
-<style>
-@media (max-width: 720px) {
-  .result-item .update-time { margin-top: 2px; }
 }
 </style>
 
