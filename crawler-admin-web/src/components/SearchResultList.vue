@@ -463,6 +463,21 @@ const setDropdownOpen = (row: any, visible: boolean) => {
 </style>
 
 <!--
+  移动端：时间排到 URL 后面，其他元素保持原序（非 scoped）。
+  .result-item 及其子元素通过插槽渲染进 SearchResultItem 内部 DOM，
+  scoped 选择器（带 data-v）匹配不到，必须用全局选择器。
+  方案：flex column + order。所有直接子元素默认 order:0 保持原序，
+  只有 .update-time 的 .result-meta 给 order:1 排到 .result-url 后面。
+-->
+<style>
+@media (max-width: 720px) {
+  .result-item { display: flex; flex-direction: column; }
+  /* 时间所在的 .result-meta 排到 .result-url（order:0）后面 */
+  .result-item > .result-meta { order: 1; }
+}
+</style>
+
+<!--
   操作下拉菜单样式（全局，非 scoped）
   el-dropdown 弹层通过 teleport 渲染到 body，脱离了组件 DOM 树，
   scoped 样式的 :deep() 无法匹配到这些节点，必须用全局选择器。
