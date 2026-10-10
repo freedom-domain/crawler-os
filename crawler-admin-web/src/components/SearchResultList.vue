@@ -114,6 +114,7 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import SearchResultItem from '@/components/SearchResultItem.vue'
 import { ArrowDown, Star, StarFilled, Edit, RefreshRight, Delete, MoreFilled } from '@element-plus/icons-vue'
 import { formatTimeAgo } from '@/utils/dateTime'
@@ -140,6 +141,42 @@ defineEmits<{
 const setDropdownOpen = (row: any, visible: boolean) => {
   row._dropdownOpen = visible
 }
+
+// 移动端：把时间 DOM 节点移到 URL 后面（其他元素不动）；桌面端不移动
+const MOBILE_MAX = 720
+const movedTimes: { item: HTMLElement; time: HTMLElement }[] = []
+
+const repositionTimes = () => {
+  const items = Array.from(document.querySelectorAll<HTMLElement>('.result-item'))
+  if (items.length === 0) return
+  if (window.innerWidth <= MOBILE_MAX) {
+    items.forEach((item) => {
+      const url = item.querySelector<HTMLElement>('.result-url')
+      const time = item.querySelector<HTMLElement>('.update-time')
+      if (!url || !time) return
+      // 时间已经在 URL 后面则跳过
+      if (url.nextElementSibling === time) return
+      // 把时间移到 URL 后面
+      url.insertAdjacentElement('afterend', time)
+      movedTimes.push({ item, time })
+    })
+  } else {
+    // 桌面端：恢复原顺序，把时间移回 .result-meta 容器末尾
+    movedTimes.forEach(({ item, time }) => {
+      const meta = item.querySelector<HTMLElement>('.result-meta')
+      if (meta) meta.appendChild(time)
+    })
+    movedTimes.length = 0
+  }
+}
+
+onMounted(() => {
+  repositionTimes()
+  window.addEventListener('resize', repositionTimes)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', repositionTimes)
+})
 </script>
 
 <style scoped>
@@ -463,17 +500,13 @@ const setDropdownOpen = (row: any, visible: boolean) => {
 </style>
 
 <!--
-  移动端：时间排到 URL 后面，其他元素保持原序（非 scoped）。
-  .result-item 及其子元素通过插槽渲染进 SearchResultItem 内部 DOM，
-  scoped 选择器（带 data-v）匹配不到，必须用全局选择器。
-  方案：flex column + order。所有直接子元素默认 order:0 保持原序，
-  只有 .update-time 的 .result-meta 给 order:1 排到 .result-url 后面。
+  移动端：时间从 .result-meta 容器移出来单独排到 URL 后面（非 scoped）。
+  由 JS 在移动端把 .update-time 节点 insertBefore 到 .result-url 之后，
+  其他元素不动。这里只补充时间的视觉间距。
 -->
 <style>
 @media (max-width: 720px) {
-  .result-item { display: flex; flex-direction: column; }
-  /* 时间所在的 .result-meta 排到 .result-url（order:0）后面 */
-  .result-item > .result-meta { order: 1; }
+  .result-item .update-time { margin-top: 2px; }
 }
 </style>
 
