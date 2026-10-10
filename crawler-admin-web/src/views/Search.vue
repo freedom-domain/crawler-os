@@ -41,6 +41,7 @@
           <el-select v-model="filterTag" placeholder="标签" clearable style="width: 160px" @change="doSearch">
             <el-option v-for="t in tagOptions" :key="t.id" :label="t.label" :value="t.label" />
           </el-select>
+          <el-checkbox v-model="searchContentFlag" @change="doSearch">同时搜索正文内容</el-checkbox>
           <el-checkbox v-model="favoriteOnly" @change="doSearch">只看我的收藏</el-checkbox>
           <el-checkbox v-model="hasImages" @change="doSearch">只看有图片</el-checkbox>
         </div>
@@ -190,6 +191,7 @@ const openPublicSearch = () => {
   if (filterSpider.value) query.spiderId = String(filterSpider.value)
   if (filterGroup.value) query.group = filterGroup.value
   if (filterTag.value) query.tag = filterTag.value
+  if (searchContentFlag.value) query.searchContent = 'true'
   if (favoriteOnly.value) query.favoriteOnly = 'true'
   if (hasImages.value) query.hasImages = 'true'
 
@@ -213,6 +215,7 @@ const spiderOptions = ref<any[]>([])
 const filterGroup = ref('')
 const groupOptions = ref<string[]>([])
 const filterTag = ref('')
+const searchContentFlag = ref(false)
 const favoriteOnly = ref(false)
 const hasImages = ref(false)
 const historyOpen = ref(false)
@@ -400,6 +403,7 @@ const syncSearchQuery = () => {
       ...(filterSpider.value ? { spiderId: String(filterSpider.value) } : {}),
       ...(filterGroup.value ? { group: filterGroup.value } : {}),
       ...(filterTag.value ? { tag: filterTag.value } : {}),
+      ...(searchContentFlag.value ? { searchContent: 'true' } : {}),
       ...(favoriteOnly.value ? { favoriteOnly: 'true' } : {}),
       ...(hasImages.value ? { hasImages: 'true' } : {}),
       page: String(page.value),
@@ -424,6 +428,7 @@ const resetSearch = () => {
   filterGroup.value = ''
   filterSpider.value = ''
   filterTag.value = ''
+  searchContentFlag.value = false
   favoriteOnly.value = false
   hasImages.value = false
   doSearch()
@@ -439,6 +444,7 @@ const buildSearchParams = (pit = '', after = '') => {
   if (filterSpider.value) params.spiderId = filterSpider.value
   if (filterGroup.value) params.spiderGroup = filterGroup.value
   if (filterTag.value) params.tag = filterTag.value
+  if (searchContentFlag.value) params.searchContent = true
   if (favoriteOnly.value) params.favoriteOnly = true
   if (hasImages.value) params.hasImages = true
   if (pit) params.pitId = pit
@@ -742,6 +748,7 @@ onMounted(() => {
   keyword.value = String(route.query.keyword || '')
   filterGroup.value = String(route.query.group || '')
   filterTag.value = String(route.query.tag || '')
+  searchContentFlag.value = route.query.searchContent === 'true'
   favoriteOnly.value = route.query.favoriteOnly === 'true'
   hasImages.value = route.query.hasImages === 'true'
   const requestedPage = Number(route.query.page)

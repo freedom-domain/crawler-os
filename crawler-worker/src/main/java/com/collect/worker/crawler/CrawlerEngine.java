@@ -530,6 +530,11 @@ public class CrawlerEngine {
         if (concurrency < 1) concurrency = 1;
         if (concurrency > 50) concurrency = 50;
         ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        // 任务级共享图片下载线程池 + 限流信号量：图片并发计入任务总并发，
+        // 保证每任务线程数不超过 urlConcurrency 配置
+        final ExecutorService imageExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        final java.util.concurrent.Semaphore imageSemaphore =
+                new java.util.concurrent.Semaphore(concurrency);
         // 方案 A：任务级 Dispatcher（连接池共享 + 调度隔离），任务结束即释放
         final OkHttpClient taskClient = taskClientFor(msg);
         TaskExecutionContext execution = new TaskExecutionContext();
@@ -612,7 +617,8 @@ public class CrawlerEngine {
                 final int crawlDepth = depth;
                 Future<?> future = executor.submit(() ->
                         crawlUrl(crawlUrl, crawlDepth, maxDepth, msg, task, taskId, success, fail,
-                                robotsCache, processedResourceUrls, cachedStartUrls, execution, taskClient)
+                                robotsCache, processedResourceUrls, cachedStartUrls, execution, taskClient,
+                                imageExecutor, imageSemaphore)
                 );
                 activeFutures.add(future);
             }
@@ -630,6 +636,10 @@ public class CrawlerEngine {
             }
             // 释放任务级 Dispatcher 的后台线程（连接池仍由共享池管理，不在此释放）
             taskClient.dispatcher().executorService().shutdown();
+            // 释放任务级图片下载线程池
+            if (!awaitExecutorTermination(imageExecutor, 30, TimeUnit.SECONDS)) {
+                imageExecutor.shutdownNow();
+            }
         }
 
         LocalDateTime endTime = LocalDateTime.now();
@@ -744,7 +754,9 @@ public class CrawlerEngine {
                            Map<String, RobotsRules> robotsCache,
                            Set<String> processedResourceUrls,
                            Set<String> cachedStartUrls,
-                           TaskExecutionContext execution, OkHttpClient taskClient) {
+                           TaskExecutionContext execution, OkHttpClient taskClient,
+                           java.util.concurrent.ExecutorService imageExecutor,
+                           java.util.concurrent.Semaphore imageSemaphore) {
         currentTaskClient.set(taskClient);
         try {
             // 任务状态不是运行中（如被取消）时停止爬取（带 1s 本地缓存）
@@ -867,7 +879,7 @@ public class CrawlerEngine {
             boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
             saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, saveResources, processedResourceUrls, execution);
             updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
-                    msg, task, overwriteImage, execution, null);
+                    msg, task, overwriteImage, execution, imageExecutor, imageSemaphore);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (!execution.isCancelled()) {
@@ -889,11 +901,13 @@ public class CrawlerEngine {
     private void updateImagesAfterPageProcessing(Html doc, SpiderContentDoc document, String pageUrl,
                                                 String title, TaskMessage msg, SpiderTask task,
                                                 boolean overwrite, TaskExecutionContext execution,
-                                                java.util.concurrent.ExecutorService imageExecutor) {
+                                                java.util.concurrent.ExecutorService imageExecutor,
+                                                java.util.concurrent.Semaphore imageSemaphore) {
         try {
             List<String> imageUrls = shouldSkipImageDownload(doc, msg)
                     ? List.of()
-                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution, imageExecutor);
+                    : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution,
+                            imageExecutor, imageSemaphore);
             document.setImages(imageUrls);
             saveToElasticsearchWithRetry(document);
         } catch (InterruptedException e) {
@@ -1168,7 +1182,8 @@ public class CrawlerEngine {
     private List<String> extractAndUploadImages(Html doc, String pageUrl, String title,
                                                 TaskMessage msg, SpiderTask task, boolean overwrite,
                                                 TaskExecutionContext execution,
-                                                java.util.concurrent.ExecutorService imageExecutor) {
+                                                java.util.concurrent.ExecutorService imageExecutor,
+                                                java.util.concurrent.Semaphore imageSemaphore) {
         if (execution.isCancelled()) return List.of();
         String selector = msg.getImageSelector();
         String xpath = msg.getImageXpath();
@@ -1188,20 +1203,13 @@ public class CrawlerEngine {
             int uploaded = 0;
             int skipped = 0;
             java.util.Set<String> seen = new java.util.HashSet<>();
-            // 并行下载图片：每页最多 8 张并发，减少总耗时
-            int maxImageConcurrency = 8;
-            java.util.concurrent.Semaphore imageSemaphore = new java.util.concurrent.Semaphore(maxImageConcurrency);
+            // 并行下载图片：使用任务级共享 Semaphore（= urlConcurrency）限流，
+            // 图片线程计入任务总并发，保证每任务线程数不超过配置值
             java.util.List<java.util.concurrent.CompletableFuture<Void>> imageFutures = new java.util.ArrayList<>();
             java.util.concurrent.atomic.AtomicInteger uploadedCounter = new java.util.concurrent.atomic.AtomicInteger();
             java.util.concurrent.atomic.AtomicInteger skippedCounter = new java.util.concurrent.atomic.AtomicInteger();
             java.util.List<String> uploadedUrlsSync = java.util.Collections.synchronizedList(uploadedUrls);
-            // 如果没有传入 executor，使用共享的虚拟线程池
-            java.util.concurrent.ExecutorService imgExec = imageExecutor != null
-                    ? imageExecutor
-                    : java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-            boolean createdExecutor = imageExecutor == null;
-            try {
-                for (String src : imageSources) {
+            for (String src : imageSources) {
                     if (execution.isCancelled()) break;
                     if (src.isBlank() || !seen.add(src)) {
                         continue;
@@ -1252,23 +1260,18 @@ public class CrawlerEngine {
                         } finally {
                             imageSemaphore.release();
                         }
-                    }, imgExec));
-                }
-                // 等待所有图片下载完成
-                for (java.util.concurrent.CompletableFuture<Void> f : imageFutures) {
-                    try {
-                        f.get(60, java.util.concurrent.TimeUnit.SECONDS);
-                    } catch (java.util.concurrent.TimeoutException e) {
-                        log.warn("图片下载超时，跳过剩余图片: url={}", pageUrl);
-                        break;
-                    } catch (Exception e) {
-                        if (execution.isCancelled()) break;
-                        log.warn("图片处理异常: url={}", pageUrl, e);
-                    }
-                }
-            } finally {
-                if (createdExecutor) {
-                    imgExec.shutdown();
+                    }, imageExecutor));
+            }
+            // 等待所有图片下载完成
+            for (java.util.concurrent.CompletableFuture<Void> f : imageFutures) {
+                try {
+                    f.get(60, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (java.util.concurrent.TimeoutException e) {
+                    log.warn("图片下载超时，跳过剩余图片: url={}", pageUrl);
+                    break;
+                } catch (Exception e) {
+                    if (execution.isCancelled()) break;
+                    log.warn("图片处理异常: url={}", pageUrl, e);
                 }
             }
             uploaded = uploadedCounter.get();
