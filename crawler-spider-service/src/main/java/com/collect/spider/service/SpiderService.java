@@ -453,6 +453,8 @@ public class SpiderService {
                 task.setStatus("CANCELED");
                 task.setPausedAt(null);
                 task.setEndTime(now);
+                task.setTotalCostMs(task.getStartTime() == null ? 0L
+                        : java.time.Duration.between(task.getStartTime(), now).toMillis());
                 taskMapper.updateById(task);
                 taskMapper.clearPaused(id);
                 log.info("暂停中的任务已直接取消: id={}, taskId={}", id, task.getTaskId());

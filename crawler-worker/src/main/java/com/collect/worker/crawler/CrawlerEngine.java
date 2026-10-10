@@ -862,7 +862,7 @@ public class CrawlerEngine {
             DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
             // 已存在内容覆盖时：抓取时间保留首次抓取时间，更新时间设为当前时间
             boolean isOverwrite = existingDoc != null || overwriteHtmlFlag;
-            String crawlTime = isOverwrite && existingDoc.getCrawlTime() != null
+            String crawlTime = isOverwrite && existingDoc != null && existingDoc.getCrawlTime() != null
                     ? existingDoc.getCrawlTime()
                     : LocalDateTime.now().format(esDateFormatter);
             docObj.setCrawlTime(crawlTime);
