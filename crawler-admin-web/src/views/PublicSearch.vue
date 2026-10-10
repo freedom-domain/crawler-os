@@ -44,16 +44,33 @@
         </div>
 
         <div class="header-user">
-          <el-dropdown v-if="isLoggedIn" trigger="click" class="user-dropdown">
-            <span class="user-account" tabindex="0">
-              <el-icon><UserFilled /></el-icon>
+          <el-dropdown
+            v-if="isLoggedIn"
+            trigger="click"
+            class="user-dropdown"
+            popper-class="user-dropdown-popper"
+            :show-timeout="100"
+            :hide-timeout="100"
+            @update:visible="userMenuOpen = $event"
+          >
+            <span
+              class="user-account"
+              :class="{ 'is-open': userMenuOpen }"
+              tabindex="0"
+              :aria-expanded="userMenuOpen"
+            >
+              <el-icon class="user-avatar"><UserFilled /></el-icon>
               <span class="user-nickname">{{ userStore.nickname || userStore.username }}</span>
               <el-icon class="user-dropdown-arrow"><ArrowDown /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item :icon="Setting" @click="openAdminSearch">后台管理</el-dropdown-item>
-                <el-dropdown-item :icon="SwitchButton" divided @click="handleLogout">登出</el-dropdown-item>
+                <el-dropdown-item class="user-menu-item" @click="openAdminSearch">
+                  <el-icon class="user-menu-icon user-menu-icon--admin"><Setting /></el-icon>后台管理
+                </el-dropdown-item>
+                <el-dropdown-item class="user-menu-item user-menu-item--danger" @click="handleLogout">
+                  <el-icon class="user-menu-icon user-menu-icon--logout"><SwitchButton /></el-icon>登出
+                </el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -250,6 +267,8 @@ const openAdminSearch = () => {
 }
 const userStore = useUserStore()
 const isLoggedIn = computed(() => Boolean(userStore.token))
+// 用户下拉菜单打开状态：仅由点击（visible 变化）驱动，hover 不旋转箭头
+const userMenuOpen = ref(false)
 
 const loginVisible = ref(false)
 const loginLoading = ref(false)

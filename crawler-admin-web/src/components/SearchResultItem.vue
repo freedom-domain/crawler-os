@@ -7,8 +7,24 @@
         v-if="row.images?.length"
         type="button"
         class="result-image-count"
+        :title="`点击查看全部 ${row.images.length} 张图片`"
         @click.stop="$emit('images', row)"
-      >图片 <strong>{{ row.images.length }}</strong> 张</button>
+      >
+        <span class="result-image-count__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2.5"/>
+            <circle cx="8.5" cy="8.5" r="1.6"/>
+            <path d="M21 15.5l-4.8-4.8a1.5 1.5 0 0 0-2.1 0L5 19.5"/>
+          </svg>
+        </span>
+        <span class="result-image-count__text">{{ row.images.length }}</span>
+        <span class="result-image-count__label">张图片</span>
+        <span class="result-image-count__chevron" aria-hidden="true">
+          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 2.5l4 3.5-4 3.5"/>
+          </svg>
+        </span>
+      </button>
     </h3>
     <div class="result-content-line">
       <p class="result-content" v-html="row.contentHl || (row.content?.substring(0, 200) + '...')"></p>
@@ -45,10 +61,24 @@ defineEmits<{
 .result-item {
   padding: 22px 0;
   border-bottom: 1px solid #f1f5f5;
+  transition: opacity .24s ease, transform .24s ease,
+    padding .28s ease, max-height .28s ease, border-bottom-width .2s ease;
 }
 
 .result-item:last-child {
   border-bottom: none;
+}
+
+/* 删除时平滑淡出：高度折叠 + 透明 + 右移，配合父级 setTimeout 移除 */
+.row-removing {
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(24px);
+  max-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom-width: 0 !important;
+  pointer-events: none;
 }
 
 .result-url {
@@ -84,15 +114,16 @@ defineEmits<{
 }
 
 .result-image-count {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-family: inherit;
   margin-left: 10px;
-  padding: 3px 10px;
+  padding: 3px 8px 3px 6px;
   border: 1px solid #b7e7dc;
   border-radius: 999px;
-  background: linear-gradient(135deg, #eefaf7 0%, #e4f5f2 100%);
+  background: linear-gradient(135deg, #f2fcfa 0%, #e4f5f2 100%);
   color: #087f70;
   font-size: 12px;
   font-weight: 600;
@@ -100,13 +131,45 @@ defineEmits<{
   vertical-align: middle;
   white-space: nowrap;
   cursor: pointer;
-  transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
+  overflow: hidden;
+  transition: background .2s ease, box-shadow .2s ease, transform .2s ease,
+    border-color .2s ease, color .2s ease;
+}
+
+/* 悬停扫光 */
+.result-image-count::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 70%;
+  height: 100%;
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 100%
+  );
+  transform: skewX(-20deg);
+  transition: left .55s ease;
+  pointer-events: none;
 }
 
 .result-image-count:hover {
-  background: linear-gradient(135deg, #e2f5f0 0%, #d7f1e9 100%);
-  box-shadow: 0 4px 10px rgba(15, 129, 124, .16);
+  background: linear-gradient(135deg, #d9f3ed 0%, #c9ece5 100%);
+  border-color: #8ed6c8;
+  box-shadow: 0 4px 12px rgba(15, 129, 124, .2), 0 1px 2px rgba(15, 129, 124, .08);
   transform: translateY(-1px);
+  color: #075e55;
+}
+
+.result-image-count:hover::after {
+  left: 130%;
+}
+
+.result-image-count:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(15, 129, 124, .18);
 }
 
 .result-image-count:focus-visible {
@@ -114,10 +177,55 @@ defineEmits<{
   outline-offset: 2px;
 }
 
-.result-image-count strong {
-  color: #075e55;
-  font-size: 13px;
+.result-image-count__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .65);
+  box-shadow: inset 0 0 0 1px rgba(8, 127, 112, .12);
+  color: #0a8074;
+  flex-shrink: 0;
+}
+
+.result-image-count__text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #0a8577 0%, #087f70 100%);
+  color: #fff;
+  font-size: 11.5px;
   font-weight: 800;
+  letter-spacing: .3px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 2px rgba(7, 94, 85, .22);
+}
+
+.result-image-count__label {
+  color: #0a6a60;
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.result-image-count__chevron {
+  display: inline-flex;
+  align-items: center;
+  color: #0a8074;
+  opacity: .55;
+  margin-left: -2px;
+  transition: transform .2s ease, opacity .2s ease;
+}
+
+.result-image-count:hover .result-image-count__chevron {
+  transform: translateX(2px);
+  opacity: 1;
 }
 
 .result-title:hover {

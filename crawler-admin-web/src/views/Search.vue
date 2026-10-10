@@ -638,6 +638,9 @@ const handleCommand = async (command: string, row: any) => {
 }
 
 const toggleFavorite = async (row: any, shouldFavorite: boolean) => {
+  if (row._favLoading) return
+  row._favLoading = true
+  const prev = row.favorited
   try {
     if (shouldFavorite) {
       await favoriteAdd(row.id)
@@ -645,41 +648,75 @@ const toggleFavorite = async (row: any, shouldFavorite: boolean) => {
       await favoriteDelete(row.id)
     }
     row.favorited = shouldFavorite
+    // 触发星星弹跳动画（300ms 后清除标记）
+    row._favJustChanged = true
+    setTimeout(() => { row._favJustChanged = false }, 450)
     ElMessage.success(shouldFavorite ? '已收藏' : '已取消收藏')
   } catch {
+    row.favorited = prev
     ElMessage.error(shouldFavorite ? '收藏失败' : '取消收藏失败')
+  } finally {
+    row._favLoading = false
   }
 }
 
 const handleRerun = async (row: any) => {
   if (!row.spiderId || !row.url) return
+  if (row._rerunning) {
+    ElMessage.info('重新爬取任务进行中，请稍候')
+    return
+  }
   try {
     if (!await confirm(`确定重新爬取该记录？\n${row.url}`, { title: '重新爬取' })) return
+  } catch {
+    return
+  }
+  row._rerunning = true
+  try {
     const res: any = await spiderRerun(row.spiderId, row.url)
     ElMessage.success(res.data?.status === 'PENDING' ? '重新爬取任务已加入等待队列' : '重新爬取任务已派发')
   } catch (error: any) {
     if (error === 'cancel' || error === 'close') return
     ElMessage.error(error?.message || '重新爬取失败')
+  } finally {
+    row._rerunning = false
   }
 }
 
 const handleDelete = async (row: any) => {
+  if (row._deleting) return
   try {
     if (!await confirm('确定删除该条数据？', { title: '删除确认', danger: true })) return
   } catch {
     return
   }
+  row._deleting = true
   try {
     await searchDelete(row.id)
     ElMessage.success('删除成功')
   } catch {
     ElMessage.error('删除失败')
+    row._deleting = false
+    return
   }
-  if (list.value.length === 1 && page.value > 1) {
-    page.value--
-    syncSearchQuery()
+  // 平滑移除：先标记淡出，动画结束后刷新列表
+  const idx = list.value.findIndex((r: any) => r.id === row.id)
+  if (idx !== -1) {
+    row._removed = true
+    setTimeout(() => {
+      if (list.value.length === 1 && page.value > 1) {
+        page.value--
+        syncSearchQuery()
+      }
+      loadData()
+    }, 260)
+  } else {
+    if (list.value.length === 1 && page.value > 1) {
+      page.value--
+      syncSearchQuery()
+    }
+    loadData()
   }
-  loadData()
 }
 
 const loadGroupOptions = async () => {
