@@ -1201,11 +1201,11 @@ public class CrawlerEngine {
 
             java.util.Set<String> seen = new java.util.HashSet<>();
             // 并行下载图片：使用任务级共享 Semaphore（= urlConcurrency）限流，
-            // 图片线程计入任务总并发。等待所有 future 完成，不超时跳过，确保所有图片都下载。
-            java.util.List<java.util.concurrent.CompletableFuture<Void>> imageFutures = new java.util.ArrayList<>();
+            // 图片线程计入任务总并发。每个 future 返回 objectName（失败返回 null），
+            // 按原始 imageSources 顺序收集结果，保证顺序不乱。
+            java.util.List<java.util.concurrent.CompletableFuture<String>> imageFutures = new java.util.ArrayList<>();
             java.util.concurrent.atomic.AtomicInteger uploadedCounter = new java.util.concurrent.atomic.AtomicInteger();
             java.util.concurrent.atomic.AtomicInteger skippedCounter = new java.util.concurrent.atomic.AtomicInteger();
-            java.util.List<String> uploadedUrlsSync = java.util.Collections.synchronizedList(uploadedUrls);
             for (String src : imageSources) {
                 if (execution.isCancelled()) break;
                 if (src.isBlank() || !seen.add(src)) {
@@ -1217,7 +1217,7 @@ public class CrawlerEngine {
                     break;
                 }
                 final String imageSrc = src;
-                imageFutures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
+                imageFutures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                     try {
                         String ext = guessExt(imageSrc, null);
                         String objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + ext;
@@ -1225,12 +1225,11 @@ public class CrawlerEngine {
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skippedCounter.incrementAndGet();
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
-                            uploadedUrlsSync.add(objectName);
-                            return;
+                            return objectName;
                         }
                         byte[] data = downloadImage(imageSrc, msg, execution);
                         if (execution.isCancelled() || data == null || data.length == 0) {
-                            return;
+                            return null;
                         }
                         // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
                         String realExt = guessExt(imageSrc, data);
@@ -1239,8 +1238,7 @@ public class CrawlerEngine {
                             if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                                 skippedCounter.incrementAndGet();
                                 saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
-                                uploadedUrlsSync.add(objectName);
-                                return;
+                                return objectName;
                             }
                         }
                         // 覆盖模式下 putObject 会直接覆盖已存在的对象
@@ -1249,20 +1247,24 @@ public class CrawlerEngine {
                             msg.getSpiderId(), title, pageUrl);
                         uploadedCounter.incrementAndGet();
                         // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
-                        uploadedUrlsSync.add(objectName);
+                        return objectName;
                     } catch (Exception e) {
                         if (!execution.isCancelled()) {
                             log.warn("图片下载/上传失败: src={}", imageSrc, e);
                         }
+                        return null;
                     } finally {
                         imageSemaphore.release();
                     }
                 }, imageExecutor));
             }
-            // 等待所有图片下载完成（不超时跳过，确保所有图片都处理完）
-            for (java.util.concurrent.CompletableFuture<Void> f : imageFutures) {
+            // 按原始顺序收集结果，保证图片顺序不乱
+            for (java.util.concurrent.CompletableFuture<String> f : imageFutures) {
                 try {
-                    f.join();
+                    String objectName = f.join();
+                    if (objectName != null) {
+                        uploadedUrls.add(objectName);
+                    }
                 } catch (Exception e) {
                     if (execution.isCancelled()) break;
                     log.warn("图片处理异常: url={}", pageUrl, e);
