@@ -530,8 +530,7 @@ public class CrawlerEngine {
         if (concurrency < 1) concurrency = 1;
         if (concurrency > 50) concurrency = 50;
         ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-        // 任务级共享图片下载线程池 + 限流信号量：图片并发计入任务总并发，
-        // 保证每任务线程数不超过 urlConcurrency 配置
+        // 任务级图片下载线程池：并行下载图片
         final ExecutorService imageExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
         final java.util.concurrent.Semaphore imageSemaphore =
                 new java.util.concurrent.Semaphore(concurrency);
@@ -1200,82 +1199,77 @@ public class CrawlerEngine {
                 log.info("页面未匹配到图片: url={}, selector={}, xpath={}", pageUrl, selector, xpath);
             }
 
-            int uploaded = 0;
-            int skipped = 0;
             java.util.Set<String> seen = new java.util.HashSet<>();
             // 并行下载图片：使用任务级共享 Semaphore（= urlConcurrency）限流，
-            // 图片线程计入任务总并发，保证每任务线程数不超过配置值
+            // 图片线程计入任务总并发。等待所有 future 完成，不超时跳过，确保所有图片都下载。
             java.util.List<java.util.concurrent.CompletableFuture<Void>> imageFutures = new java.util.ArrayList<>();
             java.util.concurrent.atomic.AtomicInteger uploadedCounter = new java.util.concurrent.atomic.AtomicInteger();
             java.util.concurrent.atomic.AtomicInteger skippedCounter = new java.util.concurrent.atomic.AtomicInteger();
             java.util.List<String> uploadedUrlsSync = java.util.Collections.synchronizedList(uploadedUrls);
             for (String src : imageSources) {
-                    if (execution.isCancelled()) break;
-                    if (src.isBlank() || !seen.add(src)) {
-                        continue;
-                    }
-                    imageSemaphore.acquireUninterruptibly();
-                    if (execution.isCancelled()) {
-                        imageSemaphore.release();
-                        break;
-                    }
-                    final String imageSrc = src;
-                    imageFutures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
-                        try {
-                            String ext = guessExt(imageSrc, null);
-                            String objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + ext;
-                            // 不覆盖时，若图片已存在则跳过下载
+                if (execution.isCancelled()) break;
+                if (src.isBlank() || !seen.add(src)) {
+                    continue;
+                }
+                imageSemaphore.acquireUninterruptibly();
+                if (execution.isCancelled()) {
+                    imageSemaphore.release();
+                    break;
+                }
+                final String imageSrc = src;
+                imageFutures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        String ext = guessExt(imageSrc, null);
+                        String objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + ext;
+                        // 不覆盖时，若图片已存在则跳过下载
+                        if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
+                            skippedCounter.incrementAndGet();
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                            uploadedUrlsSync.add(objectName);
+                            return;
+                        }
+                        byte[] data = downloadImage(imageSrc, msg, execution);
+                        if (execution.isCancelled() || data == null || data.length == 0) {
+                            return;
+                        }
+                        // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
+                        String realExt = guessExt(imageSrc, data);
+                        if (!realExt.equals(ext)) {
+                            objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + realExt;
                             if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                                 skippedCounter.incrementAndGet();
                                 saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
                                 uploadedUrlsSync.add(objectName);
                                 return;
                             }
-                            byte[] data = downloadImage(imageSrc, msg, execution);
-                            if (execution.isCancelled() || data == null || data.length == 0) {
-                                return;
-                            }
-                            // 下载后若扩展名与魔数判断不一致，则用实际扩展名重新命名
-                            String realExt = guessExt(imageSrc, data);
-                            if (!realExt.equals(ext)) {
-                                objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + realExt;
-                                if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
-                                    skippedCounter.incrementAndGet();
-                                    saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
-                                    uploadedUrlsSync.add(objectName);
-                                    return;
-                                }
-                            }
-                            // 覆盖模式下 putObject 会直接覆盖已存在的对象
-                            minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
-                            saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
-                                msg.getSpiderId(), title, pageUrl);
-                            uploadedCounter.incrementAndGet();
-                            // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
-                            uploadedUrlsSync.add(objectName);
-                        } catch (Exception e) {
-                            if (!execution.isCancelled()) {
-                                log.warn("图片下载/上传失败: src={}", imageSrc, e);
-                            }
-                        } finally {
-                            imageSemaphore.release();
                         }
-                    }, imageExecutor));
+                        // 覆盖模式下 putObject 会直接覆盖已存在的对象
+                        minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
+                        saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
+                            msg.getSpiderId(), title, pageUrl);
+                        uploadedCounter.incrementAndGet();
+                        // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
+                        uploadedUrlsSync.add(objectName);
+                    } catch (Exception e) {
+                        if (!execution.isCancelled()) {
+                            log.warn("图片下载/上传失败: src={}", imageSrc, e);
+                        }
+                    } finally {
+                        imageSemaphore.release();
+                    }
+                }, imageExecutor));
             }
-            // 等待所有图片下载完成
+            // 等待所有图片下载完成（不超时跳过，确保所有图片都处理完）
             for (java.util.concurrent.CompletableFuture<Void> f : imageFutures) {
                 try {
-                    f.get(60, java.util.concurrent.TimeUnit.SECONDS);
-                } catch (java.util.concurrent.TimeoutException e) {
-                    log.warn("图片下载超时，跳过剩余图片: url={}", pageUrl);
-                    break;
+                    f.join();
                 } catch (Exception e) {
                     if (execution.isCancelled()) break;
                     log.warn("图片处理异常: url={}", pageUrl, e);
                 }
             }
-            uploaded = uploadedCounter.get();
-            skipped = skippedCounter.get();
+            int uploaded = uploadedCounter.get();
+            int skipped = skippedCounter.get();
             long imgCost = System.currentTimeMillis() - imgStart;
             if (uploaded > 0 || skipped > 0) {
                 String msg2 = skipped > 0
