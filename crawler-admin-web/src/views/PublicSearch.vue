@@ -1043,34 +1043,78 @@ onMounted(() => {
   display: none;
 }
 
+/* 用户区：青色胶囊质感（与搜索页操作按钮同系列） */
 .user-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 8px;
+  border: 1px solid #d3e9e6;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ffffff 0%, #f4fbfa 100%);
+  color: var(--ink-700);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, border-radius 0.15s ease;
-  padding: 4px 6px;
-  border-radius: 8px;
+  transition: background .2s ease, box-shadow .2s ease, border-color .2s ease, color .2s ease;
 }
 
 .user-account:hover {
-  background: rgba(66, 133, 244, 0.08);
+  border-color: #8ed6c8;
+  background: linear-gradient(135deg, #eefaf7 0%, #e4f5f2 100%);
+  box-shadow: 0 3px 9px rgba(15, 129, 124, .14);
+  color: #075e55;
 }
 
 .user-account:focus-visible {
-  outline: 2px solid rgba(66, 133, 244, 0.35);
-  outline-offset: -2px;
+  outline: 2px solid #087f70;
+  outline-offset: 2px;
+}
+
+/* 仅当菜单打开（JS 驱动 .is-open）时：按钮高亮 + 箭头旋转 180° */
+.user-account.is-open {
+  border-color: #6fccc0;
+  background: linear-gradient(135deg, #e2f4f0 0%, #d5efe9 100%);
+  box-shadow: 0 3px 10px rgba(15, 129, 124, .18);
+  color: #064f47;
+}
+
+.user-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .8);
+  box-shadow: inset 0 0 0 1px rgba(8, 127, 112, .14);
+  color: var(--teal);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.user-nickname {
+  font-size: 13px;
+  color: var(--ink-900);
+  font-weight: 600;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .user-dropdown-arrow {
-  font-size: 12px;
-  color: var(--ink-500);
-  transition: transform 0.2s ease, color 0.2s ease;
+  font-size: 11px;
+  color: var(--teal);
+  opacity: .7;
+  transition: transform 0.22s ease, opacity .2s ease;
 }
 
-.user-dropdown:hover .user-dropdown-arrow {
+/* 箭头仅在菜单打开时旋转 180°（.is-open 由 visible 事件驱动，hover 不触发） */
+.user-account.is-open .user-dropdown-arrow {
   transform: rotate(180deg);
-}
-
-.user-account:hover .user-dropdown-arrow {
-  color: var(--teal-dark);
+  opacity: 1;
 }
 
 .header-search-box {
@@ -1998,5 +2042,65 @@ onMounted(() => {
   :deep(.login-dialog) {
     width: calc(100vw - 24px) !important;
   }
+}
+</style>
+
+<!--
+  用户下拉菜单样式（全局，非 scoped）
+  el-dropdown 弹层通过 teleport 渲染到 body，scoped :deep 匹配不到，
+  通过 popper-class="user-dropdown-popper" 限定作用范围。
+-->
+<style>
+.user-dropdown-popper .el-dropdown-menu {
+  min-width: 140px;
+  border-radius: 10px;
+  padding: 5px 0;
+  box-shadow: 0 8px 24px rgba(15, 30, 40, .12);
+  border: 1px solid #edf3f2;
+  background: #fff;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item {
+  border-radius: 6px;
+  margin: 1px 5px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #3d4f60;
+  transition: background .15s ease, color .15s ease;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item:hover {
+  background: #eefaf7;
+  color: #075e55;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item .user-menu-icon {
+  font-size: 15px;
+  color: #6b7c8d;
+  margin-right: 8px;
+  transition: color .15s ease, transform .2s ease;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item:hover .user-menu-icon--admin {
+  color: #0a8074;
+  transform: scale(1.1);
+}
+
+.user-dropdown-popper .el-dropdown-menu__item.user-menu-item--danger {
+  color: #e05c5c;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item.user-menu-item--danger .user-menu-icon--logout {
+  color: #e05c5c;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item.user-menu-item--danger:hover {
+  background: #fdecec;
+  color: #c8342e;
+}
+
+.user-dropdown-popper .el-dropdown-menu__item.user-menu-item--danger:hover .user-menu-icon--logout {
+  color: #c8342e;
+  transform: scale(1.1);
 }
 </style>
