@@ -1,11 +1,15 @@
 package com.collect.worker.crawler;
 
 import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
 import org.junit.jupiter.api.Test;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import java.util.List;
 
+import static java.util.List.of;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,5 +41,14 @@ class CrawlerTlsConfigurationTest {
 
         assertTrue(unverifiedClient.hostnameVerifier().verify("example.com", unverifiedSession));
         assertNotSame(verifiedClient.sslSocketFactory(), unverifiedClient.sslSocketFactory());
+    }
+
+    @Test
+    void resolveHttpProtocols_shouldSupportHttp2AndHttp1Fallback() {
+        assertTrue(CrawlerEngine.resolveHttpProtocols("h2").contains(Protocol.HTTP_2));
+        assertTrue(CrawlerEngine.resolveHttpProtocols("h2").contains(Protocol.HTTP_1_1));
+
+        assertEquals(List.of(Protocol.HTTP_1_1), CrawlerEngine.resolveHttpProtocols("http1"));
+        assertEquals(List.of(Protocol.HTTP_1_1), CrawlerEngine.resolveHttpProtocols("http/1.1"));
     }
 }

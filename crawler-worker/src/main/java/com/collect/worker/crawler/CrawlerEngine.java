@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import okhttp3.Protocol;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -84,8 +85,11 @@ public class CrawlerEngine {
     /** 响应体大小上限（字节）；0=不限制。超限截断并丢弃，防止大页面撑爆堆内存 */
     @Value("${app.http.max-response-bytes:10485760}")
     private long httpMaxResponseBytes;
+    /** HTTP 协议偏好：h2=允许 HTTP/2，http1=禁用 HTTP/2 */
+    @Value("${app.http.protocol:h2}")
+    private String httpProtocol;
     /** 瞬时网络错误（IOException）重试次数，仅对幂等请求生效；0=不重试 */
-    @Value("${app.http.retry-on-io-error:1}")
+    @Value("${app.http.retry-on-io-error:2}")
     private int httpRetryOnIoError;
     /** 本地 DNS 缓存 TTL（秒）；0=禁用 DNS 缓存。爬取多域名时避免重复 DNS 查询 */
     @Value("${app.http.dns-cache-ttl-seconds:300}")
@@ -211,9 +215,9 @@ public class CrawlerEngine {
                 Math.max(0, httpMaxIdleConnections),
                 Math.max(1, httpKeepAliveMinutes), TimeUnit.MINUTES);
         this.verifiedHttpClient = buildClientWithDnsAndRetry(
-                buildHttpClient(false, null, poolSettings(), sharedConnectionPool));
+                buildHttpClient(false, null, poolSettings(), sharedConnectionPool, httpProtocol));
         this.unverifiedHttpClient = buildClientWithDnsAndRetry(
-                buildHttpClient(true, null, poolSettings(), sharedConnectionPool));
+                buildHttpClient(true, null, poolSettings(), sharedConnectionPool, httpProtocol));
         // 客户端缓存上限：自定义 Header 的客户端按 (skipTls, headers) 无限缓存，
         // 任务量增长后旧 Header 组合的客户端及其连接池会一直留在内存里，这里做上限保护
         if (httpClientCache.size() > Math.max(1, httpMaxCachedClients)) {
@@ -265,7 +269,7 @@ public class CrawlerEngine {
                 : httpClientCache.computeIfAbsent(
                         (skipTls ? "unverified" : "verified") + "|" + headers,
                         k -> buildClientWithDnsAndRetry(
-                                buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool)));
+                                buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool, httpProtocol)));
         // 派生任务级客户端：独立 Dispatcher，其余全部继承
         Dispatcher taskDispatcher = new Dispatcher();
         taskDispatcher.setMaxRequests(Math.max(1, httpMaxConcurrentRequestsPerTask));
@@ -367,6 +371,13 @@ public class CrawlerEngine {
         return builder.build();
     }
 
+    static List<Protocol> resolveHttpProtocols(String protocol) {
+        if ("http1".equalsIgnoreCase(protocol) || "http/1.1".equalsIgnoreCase(protocol)) {
+            return List.of(Protocol.HTTP_1_1);
+        }
+        return List.of(Protocol.HTTP_2, Protocol.HTTP_1_1);
+    }
+
     private Request buildRequest(String url, TaskMessage msg) {
         // 自定义 Header 由 httpClient(msg) 上的 Interceptor 统一注入（含重定向跳数），此处只设内置 Header
         return new Request.Builder()
@@ -390,7 +401,14 @@ public class CrawlerEngine {
     static OkHttpClient buildHttpClient(boolean skipTlsVerify,
                                         String headers,
                                         PoolSettings settings) {
-        return buildHttpClient(skipTlsVerify, headers, settings, null);
+        return buildHttpClient(skipTlsVerify, headers, settings, null, "h2");
+    }
+
+    static OkHttpClient buildHttpClient(boolean skipTlsVerify,
+                                        String headers,
+                                        PoolSettings settings,
+                                        String httpProtocol) {
+        return buildHttpClient(skipTlsVerify, headers, settings, null, httpProtocol);
     }
 
     /**
@@ -408,12 +426,14 @@ public class CrawlerEngine {
     static OkHttpClient buildHttpClient(boolean skipTlsVerify,
                                         String headers,
                                         PoolSettings settings,
-                                        ConnectionPool sharedPool) {
+                                        ConnectionPool sharedPool,
+                                        String httpProtocol) {
         List<Map.Entry<String, String>> headerList = parseConfiguredHeaders(headers);
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(Math.max(1, settings.connectTimeoutSeconds()), TimeUnit.SECONDS)
                 .readTimeout(Math.max(1, settings.readTimeoutSeconds()), TimeUnit.SECONDS)
                 .followRedirects(true)
+                .protocols(resolveHttpProtocols(httpProtocol))
                 .connectionPool(sharedPool != null ? sharedPool
                         : new ConnectionPool(
                                 Math.max(0, settings.maxIdleConnections()),
@@ -479,7 +499,7 @@ public class CrawlerEngine {
         }
         String key = (skipTls ? "unverified" : "verified") + "|" + headers;
         return httpClientCache.computeIfAbsent(key, k ->
-                buildClientWithDnsAndRetry(buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool)));
+                buildClientWithDnsAndRetry(buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool, httpProtocol)));
     }
 
     /**
