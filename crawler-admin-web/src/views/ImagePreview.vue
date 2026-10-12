@@ -83,6 +83,10 @@
         :style="{ left: `${imageMenu.x}px`, top: `${imageMenu.y}px` }"
         @click.stop
       >
+        <button class="context-action" type="button" @click="openImageInNewWindow">
+          <el-icon><TopRight /></el-icon>
+          <span>在新窗口打开图片</span>
+        </button>
         <button v-if="sourceUrl" class="context-action context-action-source" type="button" @click="openSourcePage">
           <el-icon><Promotion /></el-icon>
           <span>跳转来源页</span>
@@ -156,7 +160,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting, Promotion, Edit, Delete } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { dictChildren, searchDeleteImage, searchDetail } from '@/api'
@@ -458,6 +462,15 @@ const openImageMenu = (event: MouseEvent, index: number) => {
   if (x + menuW > window.innerWidth - 4) x = Math.max(4, window.innerWidth - menuW - 4)
   if (y + menuH > window.innerHeight - 4) y = Math.max(4, window.innerHeight - menuH - 4)
   imageMenu.value = { visible: true, x, y, index }
+}
+
+const openImageInNewWindow = () => {
+  imageMenu.value.visible = false
+  const index = imageMenu.value.index
+  const objectName = imageObjects.value[index]
+  if (!objectName) return
+  const url = imageUrl(objectName)
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 const openSourcePage = () => {
@@ -1057,13 +1070,8 @@ onBeforeUnmount(() => {
   height: calc(100vh - 100px);
   object-fit: contain;
   border-radius: 10px;
-  cursor: zoom-in;
   transition: transform 0.15s, box-shadow 0.15s;
   background: #f8fbfb;
-}
-.thumb:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 .empty-state {
   width: 100%;

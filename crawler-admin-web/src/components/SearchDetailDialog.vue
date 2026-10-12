@@ -83,6 +83,16 @@ const visible = computed({
 .group-tag { background: #d9f5ef; color: var(--teal-dark); }
 .detail-images { display: flex; flex-direction: row; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; padding: 4px 0; }
 .detail-image { width: 320px; height: auto; border-radius: 8px; border: 1px solid #e3e8ee; display: block; flex-shrink: 0; }
+.detail-image :deep(.el-image__preview) { opacity: 0; pointer-events: auto; transition: none; }
+.detail-image:hover :deep(.el-image__preview),
+.detail-image :deep(.el-image__preview):hover {
+  opacity: 0;
+  transform: none;
+  background: transparent;
+}
+.detail-image :deep(.el-image__preview::after) {
+  content: none;
+}
 .detail-text { white-space: pre-wrap; line-height: 1.8; color: var(--ink-900); max-height: 42vh; overflow-y: auto; }
 .detail-content-preview { padding: 4px 0; }
 .empty { text-align: center; color: var(--ink-500); padding: 40px 0; font-size: 14px; }
