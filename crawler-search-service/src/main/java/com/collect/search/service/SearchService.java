@@ -496,6 +496,46 @@ public class SearchService {
 
     public record SpiderContentClearResult(long deletedDocuments, int deletedFiles, int deletedMetadata) {}
 
+    /**
+     * 仅清除指定爬虫在 ES 中的文档，不动 MinIO 文件和元数据。
+     */
+    public long clearSpiderEsOnly(Long spiderId) throws java.io.IOException {
+        if (spiderId == null || spiderId <= 0 || spiderMapper.selectById(spiderId) == null) {
+            throw new IllegalArgumentException("爬虫不存在");
+        }
+        var response = elasticsearchClient.deleteByQuery(request -> request
+                .index(indexName)
+                .query(query -> query.term(term -> term.field("spiderId").value(spiderId))));
+        if (!response.failures().isEmpty()) {
+            throw new IllegalStateException("ES 内容未能完整清理，失败分片数: " + response.failures().size());
+        }
+        return response.deleted();
+    }
+
+    /**
+     * 批量清空多个爬虫的已采集内容（ES 文档 + MinIO 文件 + 文件元数据）。
+     *
+     * @param spiderIds 要清空的爬虫 ID 列表
+     * @return 每个爬虫的清理结果，顺序与传入一致
+     */
+    public List<BatchClearItem> clearSpiderContentBatch(List<Long> spiderIds) throws java.io.IOException {
+        if (spiderIds == null || spiderIds.isEmpty()) {
+            throw new IllegalArgumentException("爬虫 ID 列表不能为空");
+        }
+        List<BatchClearItem> results = new java.util.ArrayList<>(spiderIds.size());
+        for (Long spiderId : spiderIds) {
+            try {
+                SpiderContentClearResult r = clearSpiderContent(spiderId);
+                results.add(new BatchClearItem(spiderId, r.deletedDocuments(), r.deletedFiles(), r.deletedMetadata(), null));
+            } catch (Exception e) {
+                results.add(new BatchClearItem(spiderId, 0, 0, 0, e.getMessage()));
+            }
+        }
+        return results;
+    }
+
+    public record BatchClearItem(Long spiderId, long deletedDocuments, int deletedFiles, int deletedMetadata, String error) {}
+
     @SuppressWarnings("null")
     public void updateTags(String id, List<String> tags) throws java.io.IOException {
         if (elasticsearchClient.get(g -> g.index(indexName).id(id), SpiderContentDoc.class).source() == null) {

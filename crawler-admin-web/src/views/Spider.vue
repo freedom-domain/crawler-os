@@ -41,6 +41,16 @@
       <el-form-item class="toolbar-actions">
         <div class="spider-actions">
           <el-button type="primary" :icon="Plus" @click="showCreate">新建爬虫</el-button>
+          <el-button
+            type="danger"
+            plain
+            :icon="Delete"
+            :disabled="selectedRows.length === 0 || batchClearing"
+            :loading="batchClearing"
+            @click="handleBatchClearContent"
+          >
+            清空所选内容 ({{ selectedRows.length }})
+          </el-button>
           <el-dropdown trigger="click" @command="handleConfigCommand">
             <el-button>
               配置管理
@@ -65,7 +75,8 @@
     </el-form>
 
     <div class="table-scroll-wrapper">
-    <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border>
+    <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border @selection-change="handleSelectionChange">
+      <el-table-column type="selection" width="42" fixed="left" />
       <el-table-column prop="id" label="ID" min-width="60" fixed="left" resizable />
       <el-table-column prop="name" label="名称" min-width="160" fixed="left" resizable>
         <template #default="{ row }">
@@ -192,7 +203,7 @@
       <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="180" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="260" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <div class="row-actions">
             <el-button
@@ -203,6 +214,14 @@
               :disabled="row._running"
               @click="handleRun(row)"
             />
+            <el-button
+              type="danger"
+              size="small"
+              :icon="Delete"
+              :loading="row._clearingContent"
+              :disabled="row._clearingContent"
+              @click="handleClearEs(row)"
+            >清ES</el-button>
             <TableRowActions :items="getRowActions(row)" @command="command => handleCommand(command, row)" />
           </div>
         </template>
@@ -402,7 +421,7 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
+import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderClearContentBatch, spiderClearEs, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, ArrowDown, Download, Upload, List } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -425,6 +444,8 @@ const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
 const editingId = ref<number | null>(null)
 const startUrlsStr = ref('')
+const selectedRows = ref<any[]>([])
+const batchClearing = ref(false)
 let filterSearchTimer: ReturnType<typeof setTimeout> | null = null
 const parseStartUrls = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -953,6 +974,75 @@ const handleClearContent = async (row: any) => {
     ElMessage.error('清空内容失败，请检查服务日志后重试')
   } finally {
     row._clearingContent = false
+  }
+}
+
+const handleClearEs = async (row: any) => {
+  try {
+    if (!await confirm(
+      `确定清除爬虫「${row.name}」在 ES 中的全部文档吗？\n（MinIO 文件和元数据不受影响）`,
+      { title: '清除 ES 索引', confirmText: '清除', danger: true }
+    )) return
+  } catch {
+    return
+  }
+
+  row._clearingContent = true
+  try {
+    const res: any = await spiderClearEs(row.id)
+    const deleted = res.data || 0
+    ElMessage.success(`已清除 ${deleted} 条 ES 文档`)
+  } catch {
+    ElMessage.error('清除 ES 失败，请检查服务日志后重试')
+  } finally {
+    row._clearingContent = false
+  }
+}
+
+const handleSelectionChange = (rows: any[]) => {
+  selectedRows.value = rows
+}
+
+const handleBatchClearContent = async () => {
+  if (selectedRows.value.length === 0) return
+  const names = selectedRows.value.map(r => r.name).join('、')
+  try {
+    if (!await confirm(
+      `确定清空以下 ${selectedRows.value.length} 个爬虫的所有已采集内容吗？\n${names}\n\n此操作将删除这些爬虫在 ES 中的内容、MinIO 文件及文件元数据，且无法恢复。`,
+      { title: '批量清空内容', confirmText: '批量清空', danger: true }
+    )) return
+  } catch {
+    return
+  }
+
+  batchClearing.value = true
+  try {
+    const spiderIds = selectedRows.value.map(r => r.id)
+    const res: any = await spiderClearContentBatch(spiderIds)
+    const results: any[] = res.data || []
+    const failed = results.filter((r: any) => r.error)
+    const success = results.filter((r: any) => !r.error)
+    const totalDocs = success.reduce((sum: number, r: any) => sum + (r.deletedDocuments || 0), 0)
+    const totalFiles = success.reduce((sum: number, r: any) => sum + (r.deletedFiles || 0), 0)
+    const totalMeta = success.reduce((sum: number, r: any) => sum + (r.deletedMetadata || 0), 0)
+
+    if (failed.length === 0) {
+      ElMessage.success(
+        `批量清空完成：${success.length} 个爬虫，ES 内容 ${totalDocs} 条，MinIO 文件 ${totalFiles} 个，文件元数据 ${totalMeta} 条`
+      )
+    } else {
+      const failNames = failed.map((r: any) => selectedRows.value.find(row => row.id === r.spiderId)?.name || r.spiderId).join('、')
+      ElMessage.warning(
+        `部分清空完成：成功 ${success.length} 个，失败 ${failed.length} 个（${failNames}）`
+      )
+    }
+    selectedRows.value = []
+    tableRef.value?.clearSelection()
+    loadData()
+  } catch {
+    ElMessage.error('批量清空失败，请检查服务日志后重试')
+  } finally {
+    batchClearing.value = false
   }
 }
 

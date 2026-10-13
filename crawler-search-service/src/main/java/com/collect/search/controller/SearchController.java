@@ -119,6 +119,21 @@ public class SearchController {
         return R.ok(searchService.clearSpiderContent(spiderId));
     }
 
+    @Operation(summary = "一键批量清空所选爬虫的已采集内容及文件")
+    @PostMapping("/spiders/clear-content/batch")
+    public R<List<SearchService.BatchClearItem>> clearSpiderContentBatch(@RequestBody List<Long> spiderIds)
+            throws IOException {
+        requirePermission("spider:create");
+        return R.ok(searchService.clearSpiderContentBatch(spiderIds));
+    }
+
+    @Operation(summary = "仅清除指定爬虫在 ES 中的文档（保留 MinIO 文件和元数据）")
+    @DeleteMapping("/spiders/{spiderId}/es")
+    public R<Long> clearSpiderEsOnly(@PathVariable Long spiderId) throws IOException {
+        requirePermission("spider:create");
+        return R.ok(searchService.clearSpiderEsOnly(spiderId));
+    }
+
     @Operation(summary = "更新数据标签")
     @PutMapping("/{id}/tags")
     public R<Void> updateTags(@PathVariable("id") String id, @RequestBody List<String> tags) throws IOException {
