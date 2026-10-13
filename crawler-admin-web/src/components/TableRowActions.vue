@@ -1,8 +1,8 @@
 <template>
   <div class="table-row-actions">
     <el-dropdown trigger="click" popper-class="table-action-popper" @command="emit('command', $event)">
-      <el-button size="small" type="primary">
-        操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+      <el-button link size="small" class="action-more-btn">
+        <el-icon><MoreFilled /></el-icon>
       </el-button>
       <template #dropdown>
         <el-dropdown-menu>
@@ -27,7 +27,7 @@
 
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { MoreFilled } from '@element-plus/icons-vue'
 
 export interface TableRowAction {
   command: string
@@ -49,4 +49,6 @@ const emit = defineEmits<{
 
 <style scoped>
 .table-action-item { display: inline-flex; align-items: center; gap: 8px; }
+.action-more-btn { font-weight: 700; color: #0f9f9a; }
+.action-more-btn:hover { color: #0c8a85; }
 </style>

@@ -61,9 +61,16 @@
             <el-table-column prop="imageFailCount" label="失败" min-width="55" align="center" resizable />
             <el-table-column prop="imageExistingCount" label="已存在" min-width="65" align="center" resizable />
           </el-table-column>
-          <el-table-column label="操作" width="70" align="center" resizable class-name="col-action">
+          <el-table-column label="操作" width="50" align="center" resizable class-name="col-action">
             <template #default>
-              <el-button link type="primary" @click="goToTaskPage">查看</el-button>
+              <el-dropdown trigger="click" @command="goToTaskPage">
+                <el-button link size="small" class="col-action-more"><el-icon><MoreFilled /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="view" :icon="View">查看</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </template>
           </el-table-column>
         </el-table>
@@ -80,7 +87,7 @@
 import { ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { spiderPage, taskStats, taskPage, searchContent } from '@/api'
-import { Connection, List, CircleCheck, DataBoard, DataAnalysis } from '@element-plus/icons-vue'
+import { Connection, List, CircleCheck, DataBoard, DataAnalysis, MoreFilled, View } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 
 const router = useRouter()
@@ -220,6 +227,8 @@ onActivated(loadDashboard)
 .task-panel :deep(.el-table) { border-radius: 8px; }
 .task-panel :deep(.el-table th.el-table__cell) { background: #f5f9fa; }
 .panel-empty { padding: 34px 0; color: #8993a4; text-align: center; font-size: 13px; }
+.col-action-more { font-weight: 700; color: #0f9f9a; }
+.col-action-more:hover { color: #0c8a85; }
 @media (max-width: 1000px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.dashboard-grid { grid-template-columns: 1fr; }.hero-orbit { margin-right: 4%; } }
 @media (max-width: 600px) { .dashboard-hero { min-height: 210px; padding: 26px 24px; }.dashboard-hero h1 { font-size: 27px; }.hero-orbit { display: none; }.metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }.metric-card { min-height: 126px; padding: 14px; }.stat-value { font-size: 24px; }.panel { padding: 17px 14px; }.panel-heading { margin-bottom: 14px; }
   /* 小屏：el-table 原生横向滚动，不裁剪不隐藏 */

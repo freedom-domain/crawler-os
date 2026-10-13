@@ -62,9 +62,16 @@
       <el-table-column prop="crawlTime" label="收藏时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.crawlTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="90" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="50" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <el-button size="small" type="danger" plain @click="remove(row)">删除</el-button>
+          <el-dropdown trigger="click" @command="(cmd: string) => handleFavoriteCommand(cmd, row)">
+            <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="delete" :icon="Delete" :class="{ 'is-danger': true }">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -104,7 +111,7 @@ import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, MoreFilled, Delete } from '@element-plus/icons-vue'
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { dictChildren, favoriteDelete, favoritePage, searchDetail, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
@@ -282,6 +289,10 @@ const toggleContentLocalize = (enabled: string | number | boolean) => {
   previewContentHtml.value = resolvePreviewHtml(previewContentSource.value, previewContentBaseUrl.value, Boolean(enabled))
 }
 
+const handleFavoriteCommand = (cmd: string, row: any) => {
+  if (cmd === 'delete') remove(row)
+}
+
 const remove = async (row: any) => {
   try {
     if (!await confirm('确定删除该条收藏吗？')) return
@@ -303,6 +314,8 @@ onMounted(() => {
 
 <style scoped>
 .pagination { margin-top: 18px; display: flex; justify-content: center; }
+.action-more-btn { font-weight: 700; color: #0f9f9a; }
+.action-more-btn:hover { color: #0c8a85; }
 .title-link { color: var(--teal); text-decoration: none; }
 .title-link:hover { color: var(--teal-dark); text-decoration: underline; }
 .source-url { color: var(--teal); text-decoration: none; }

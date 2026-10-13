@@ -484,6 +484,7 @@ public class CrawlerEngine {
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(Math.max(1, settings.connectTimeoutSeconds()), TimeUnit.SECONDS)
                 .readTimeout(Math.max(1, settings.readTimeoutSeconds()), TimeUnit.SECONDS)
+                .writeTimeout(Math.max(1, settings.readTimeoutSeconds()), TimeUnit.SECONDS)
                 .followRedirects(true)
                 .protocols(resolveHttpProtocols(httpProtocol))
                 .connectionPool(sharedPool != null ? sharedPool
@@ -1968,9 +1969,12 @@ public class CrawlerEngine {
                                  TaskExecutionContext execution, TaskMessage msg,
                                  ResponseReader<T> reader) throws Exception {
         Call call = client.newCall(request);
-        // 任务级超时：msg.timeout（秒）不为空时，覆盖 OkHttp 全局 readTimeout
+        // 任务级超时：msg.timeout 单位是毫秒（前端 el-input-number min=1000 max=60000）。
+        // 取 max(任务超时, 连接+读取超时) 作为 OkHttp call 整体超时，
+        // 保证即使任务超时设得比底层超时还短，也不会因为 connect 阶段就炸掉。
         if (msg.getTimeout() != null && msg.getTimeout() > 0) {
-            call.timeout().timeout(msg.getTimeout(), TimeUnit.SECONDS);
+            long minMs = (httpConnectTimeoutSeconds + httpReadTimeoutSeconds) * 1000L;
+            call.timeout().timeout(Math.max(msg.getTimeout(), minMs), TimeUnit.MILLISECONDS);
         }
         execution.register(call);
         Response raw = call.execute();

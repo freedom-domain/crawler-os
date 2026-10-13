@@ -94,8 +94,6 @@
             :title="row.url"
           >
             <el-icon class="action-trigger__icon"><MoreFilled /></el-icon>
-            <span class="action-trigger__text">操作</span>
-            <el-icon class="action-trigger__arrow"><ArrowDown /></el-icon>
           </button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -121,7 +119,7 @@
 
 <script setup lang="ts">
 import SearchResultItem from '@/components/SearchResultItem.vue'
-import { ArrowDown, Star, StarFilled, Edit, RefreshRight, Delete, MoreFilled } from '@element-plus/icons-vue'
+import { Star, StarFilled, Edit, RefreshRight, Delete, MoreFilled } from '@element-plus/icons-vue'
 import { formatTimeAgo } from '@/utils/dateTime'
 
 defineProps<{
@@ -376,22 +374,7 @@ const setDropdownOpen = (row: any, visible: boolean) => {
   flex-shrink: 0;
 }
 
-.action-trigger__text {
-  letter-spacing: .3px;
-  line-height: 1;
-}
 
-.action-trigger__arrow {
-  font-size: 11px;
-  opacity: .65;
-  transition: transform .22s ease;
-}
-
-/* 箭头仅在菜单打开时旋转 180°（.is-open 由 visible 事件驱动，hover 不触发） */
-.action-trigger.is-open .action-trigger__arrow {
-  transform: rotate(180deg);
-  opacity: 1;
-}
 
 /* 下拉菜单样式已移到文件底部非 scoped 块（el-dropdown 弹层 teleport 到 body，scoped :deep 匹配不到） */
 

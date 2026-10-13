@@ -203,31 +203,22 @@
       <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="50" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <div class="row-actions">
-            <el-button
-              type="primary"
-              size="small"
-              :icon="VideoPlay"
-              :loading="row._running"
-              :disabled="row._running"
-              @click="handleRun(row)"
-            />
-            <el-dropdown trigger="click" @command="(command: string) => handleCommand(command, row)">
-              <el-button size="small" :icon="MoreFilled" />
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="clear-es" :icon="Delete" :class="{ 'is-danger': true }">清除 ES</el-dropdown-item>
-                  <el-dropdown-item command="tasks" :icon="List">查看任务</el-dropdown-item>
-                  <el-dropdown-item command="files" :icon="FolderOpened">查看文件</el-dropdown-item>
-                  <el-dropdown-item command="edit" :icon="EditPen">编辑</el-dropdown-item>
-                  <el-dropdown-item command="clear-content" :icon="Delete" divided :class="{ 'is-danger': true }">清空内容</el-dropdown-item>
-                  <el-dropdown-item command="delete" :icon="Delete" divided :class="{ 'is-danger': true }">删除</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
+          <el-dropdown trigger="click" @command="(command: string) => handleCommand(command, row)">
+            <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="run" :icon="VideoPlay" :loading="row._running" :disabled="row._running">执行</el-dropdown-item>
+                <el-dropdown-item command="tasks" :icon="List">查看任务</el-dropdown-item>
+                <el-dropdown-item command="files" :icon="FolderOpened">查看文件</el-dropdown-item>
+                <el-dropdown-item command="edit" :icon="EditPen">编辑</el-dropdown-item>
+                <el-dropdown-item command="clear-es" :icon="Delete" :class="{ 'is-danger': true }">清除 ES</el-dropdown-item>
+                <el-dropdown-item command="clear-content" :icon="Delete" divided :class="{ 'is-danger': true }">清空内容</el-dropdown-item>
+                <el-dropdown-item command="delete" :icon="Delete" divided :class="{ 'is-danger': true }">删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -1131,13 +1122,14 @@ onUnmounted(cancelScheduledFilterSearch)
 .spider-toolbar :deep(.spider-url-filter) { width: 280px; }
 .spider-toolbar :deep(.el-select) { width: 160px; }
 .spider-toolbar :deep(.el-upload) { display: inline-flex; }
+.action-more-btn { font-weight: 700; color: #0f9f9a; }
+.action-more-btn:hover { color: #0c8a85; }
 .spider-toolbar :deep(.toolbar-actions) { flex: 1 0 auto; justify-content: flex-end; }
 .spider-toolbar :deep(.toolbar-actions > .el-form-item__content) { width: 100%; justify-content: flex-end; }
 .spider-actions { display: flex; width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .form-tip { font-size: 12px; color: #999; line-height: 1.5; margin-top: 4px; margin-left: 0; width: 100%; }
 .text-muted { color: #c0c4cc; }
 
-.row-actions { display: inline-flex; align-items: center; gap: 8px; }
 .schedule-editable { cursor: pointer; color: var(--el-color-primary); border-bottom: 1px dashed var(--el-color-primary); padding: 2px 0; }
 .schedule-editable:hover { opacity: .8; }
 :deep(.el-table .el-switch__label) { white-space: nowrap; }
