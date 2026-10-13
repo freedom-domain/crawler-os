@@ -46,14 +46,22 @@ public class UrlQueueService {
             "return 1", Long.class);
 
     /**
-     * 认领脚本：SADD processing + EXPIRE，合并为 1 次 RTT。
-     * 返回 1=认领成功，0=已被其他 worker 认领。
+     * 原子弹出并认领一个 URL，避免 LPOP 与 SADD 间的网络往返及重复消费竞态。
+     * 队列中已被认领的旧项目会在脚本内跳过。
      */
-    private static final RedisScript<Long> CLAIM_SCRIPT = new DefaultRedisScript<>(
-            "local added = redis.call('SADD', KEYS[1], ARGV[1]) " +
-            "if added == 0 then return 0 end " +
-            "redis.call('EXPIRE', KEYS[1], ARGV[2]) " +
-            "return 1", Long.class);
+    private static final RedisScript<String> POP_AND_CLAIM_SCRIPT = new DefaultRedisScript<>(
+            "while true do " +
+            "local item = redis.call('LPOP', KEYS[1]) " +
+            "if not item then return nil end " +
+            "local separator = string.find(item, '\\t', 1, true) " +
+            "local url = item " +
+            "if separator then url = string.sub(item, 1, separator - 1) end " +
+            "local added = redis.call('SADD', KEYS[2], url) " +
+            "if added == 1 then " +
+            "redis.call('EXPIRE', KEYS[2], ARGV[1]) " +
+            "return item " +
+            "end " +
+            "end", String.class);
 
     public static String normalizeUrl(String rawUrl) {
         if (rawUrl == null) {
@@ -139,9 +147,12 @@ public class UrlQueueService {
         return String.join("&", params);
     }
 
-    public String pop(Long taskId) {
-        String key = KEY_PREFIX + taskId;
-        return redis.opsForList().leftPop(key);
+    public String popAndClaim(Long taskId) {
+        String queueKey = KEY_PREFIX + taskId;
+        String processingKey = queueKey + ":processing";
+        return redis.execute(POP_AND_CLAIM_SCRIPT,
+                List.of(queueKey, processingKey),
+                String.valueOf(TTL_HOURS * 3600));
     }
 
     public long size(Long taskId) {
@@ -221,20 +232,5 @@ public class UrlQueueService {
             normalizeCache.put(url, result);
         }
         return result;
-    }
-
-    public boolean claimForProcessing(Long taskId, String url) {
-        if (isImageUrl(url)) {
-            return false;
-        }
-        String normalized = normalizeUrlCached(url);
-        if (normalized == null || normalized.isBlank()) {
-            return false;
-        }
-        String processingKey = KEY_PREFIX + taskId + ":processing";
-        Long result = redis.execute(CLAIM_SCRIPT,
-                List.of(processingKey),
-                normalized, String.valueOf(TTL_HOURS * 3600));
-        return Long.valueOf(1L).equals(result);
     }
 }

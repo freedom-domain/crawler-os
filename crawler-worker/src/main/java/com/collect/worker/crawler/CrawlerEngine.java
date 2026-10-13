@@ -81,7 +81,7 @@ public class CrawlerEngine {
     /** 带自定义 Header 的客户端缓存上限 */
     @Value("${app.http.max-cached-clients:128}")
     private int httpMaxCachedClients;
-    /** 响应体大小上限（字节）；0=不限制。超限截断并丢弃，防止大页面撑爆堆内存 */
+    /** 响应体大小上限（字节）；0=不限制。超限时拒绝处理，防止大页面撑爆堆内存 */
     @Value("${app.http.max-response-bytes:10485760}")
     private long httpMaxResponseBytes;
     /** HTTP 协议偏好：h2=允许 HTTP/2，http1=禁用 HTTP/2 */
@@ -653,8 +653,6 @@ public class CrawlerEngine {
                 }
                 // 清理已完成的 future
                 activeFutures.removeIf(f -> f.isDone());
-                // 队列为空且没有活跃任务 → 全部完成（暂停中的任务由上面的等待逻辑处理，不会到这里退出）
-                if (activeFutures.isEmpty() && urlQueue.size(taskId) == 0) break;
                 // 达到并发上限，等待至少一个任务完成
                 if (activeFutures.size() >= concurrency) {
                     awaitAnyFuture(activeFutures, TASK_CANCEL_POLL_INTERVAL_MS);
@@ -666,7 +664,7 @@ public class CrawlerEngine {
                     continue;
                 }
                 // 尝试从队列取一个 URL
-                String item = urlQueue.pop(taskId);
+                String item = urlQueue.popAndClaim(taskId);
                 if (item == null) {
                     if (activeFutures.isEmpty()) break;
                     // 队列为空但有活跃任务，等待一个完成后再检查新入队的 URL
@@ -680,9 +678,6 @@ public class CrawlerEngine {
                 }
                 String[] parts = item.split("\t", 2);
                 String url = parts[0];
-                if (!urlQueue.claimForProcessing(taskId, url)) {
-                    continue;
-                }
                 int depth = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
                 final String crawlUrl = url;
                 final int crawlDepth = depth;
@@ -996,6 +991,10 @@ public class CrawlerEngine {
                                                 boolean overwrite, TaskExecutionContext execution,
                                                 java.util.concurrent.ExecutorService imageExecutor,
                                                 java.util.concurrent.Semaphore imageSemaphore) {
+        if ((msg.getImageSelector() == null || msg.getImageSelector().isBlank())
+                && (msg.getImageXpath() == null || msg.getImageXpath().isBlank())) {
+            return;
+        }
         try {
             List<String> imageUrls = shouldSkipImageDownload(doc, msg)
                     ? List.of()
@@ -1686,70 +1685,30 @@ public class CrawlerEngine {
         return true;
     }
 
-    /** HEAD 预判大小阈值：源站点文件小于此值时直接用 GET 下载，省去 HEAD 往返（小文件 HEAD 不划算） */
-    private static final long HEAD_PREDICT_MIN_BYTES = 16 * 1024;
-
     /**
-     * 下载并上传 JS/CSS 资源。
-     *
-     * <p>优化（避免无谓全量下载）：
-     * <ol>
-     *   <li>先 stat MinIO 已存在对象，拿到已存 size（1 次 MinIO RTT）；</li>
-     *   <li>若已存在且 size &ge; {@link #HEAD_PREDICT_MIN_BYTES}，对源站点发一次
-     *       <b>HEAD</b> 请求取 Content-Length（只取 header，不传 body，比 GET 便宜）；</li>
-     *   <li>HEAD 的 Content-Length 与已存 size 相同 → 内容大概率未变（同 size 不同内容概率极低），
-     *       <b>跳过下载</b>，省掉大 bundle 的 body 传输与堆内存占用；</li>
-     *   <li>size 不同 / HEAD 无 Content-Length / 对象不存在 / 小文件 → GET 全量下载并覆盖上传。</li>
-     * </ol>
-     * 这样大型 JS/CSS bundle 在内容未变时不再完整下载到内存，节省带宽与堆内存。
-     *
-     * <p>并发竞态说明：先 stat/HEAD 后（可能的）GET 下载，期间对象/源文件可能变化；
-     * 极端情况下本任务会多上传一次（最终一致，不会导致数据错误）。
+     * 下载并上传 JS/CSS 资源。资源长度相同不代表内容相同，因此每次都以下载后的内容更新对象。
      */
     private void processWebResource(WebResource resource, TaskMessage msg, SpiderTask task, String title,
                                     TaskExecutionContext execution) {
         long start = System.currentTimeMillis();
         try {
-            // 1) stat 已存在对象，拿到已存 size
-            long existingSize = -1;
+            // 查询对象是否存在，用于日志区分首次上传和覆盖更新。
             boolean existingExists = false;
             try {
-                io.minio.StatObjectResponse stat = minioHelper.statObject(jsBucket, resource.objectName());
+                minioHelper.statObject(jsBucket, resource.objectName());
                 existingExists = true;
-                existingSize = stat.size();
             } catch (io.minio.errors.ErrorResponseException e) {
                 if (!("NoSuchKey".equals(e.errorResponse().code()) || "NoSuchBucket".equals(e.errorResponse().code()))) {
                     throw e;
                 }
-                // NoSuchKey/NoSuchBucket → 对象不存在，existingSize 保持 -1
+                // NoSuchKey/NoSuchBucket 表示对象不存在。
             }
 
-            // 2) 已存在且足够大时，HEAD 预判源文件大小；相同则跳过下载
-            if (existingExists && existingSize >= HEAD_PREDICT_MIN_BYTES) {
-                long remoteSize = headContentLength(resource.url(), msg, execution);
-                if (execution.isCancelled()) return;
-                if (remoteSize > 0 && remoteSize == existingSize) {
-                    writeLog(task.getId(), msg.getSpiderId(), resource.url(), 2, "INFO",
-                            resource.category().toUpperCase() + " 已存在，内容未变化（HEAD size 相同）",
-                            resourceCost(start), resource.category());
-                    return;
-                }
-            }
-
-            // 3) 下载（小文件 / size 变化 / HEAD 未判定 走这里）
             byte[] downloaded = downloadBytes(resource.url(), msg, execution);
             if (execution.isCancelled()) return;
             if (downloaded == null || downloaded.length == 0) {
                 writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
                         resource.category().toUpperCase() + " 下载为空", resourceCost(start), resource.category());
-                return;
-            }
-
-            // 兜底：HEAD 未预判成功但实际 size 与已存相同，也跳过上传
-            if (existingExists && existingSize == downloaded.length) {
-                writeLog(task.getId(), msg.getSpiderId(), resource.url(), 2, "INFO",
-                        resource.category().toUpperCase() + " 已存在，内容未变化（size 相同）",
-                        resourceCost(start), resource.category());
                 return;
             }
 
@@ -1769,29 +1728,6 @@ public class CrawlerEngine {
             writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
                     resource.category().toUpperCase() + " 下载/上传失败: " + e.getMessage(),
                     resourceCost(start), resource.category());
-        }
-    }
-
-    /**
-     * 对源 URL 发 HEAD 请求取 Content-Length（不传 body）。
-     * 失败 / 非 2xx / 无 Content-Length 时返回 -1（调用方据此回退到全量下载）。
-     * 自定义 Header 由 httpClient(msg) 的 Interceptor 统一注入。
-     */
-    private long headContentLength(String url, TaskMessage msg, TaskExecutionContext execution) {
-        try {
-            Request request = buildRequest(url, msg).newBuilder().head().build();
-            return executeRequest(httpClient(msg), request, execution, msg, response -> {
-                if (!response.isSuccessful()) {
-                    return -1L;
-                }
-                long len = response.header("Content-Length") != null
-                        ? Long.parseLong(response.header("Content-Length").trim())
-                        : -1L;
-                return len;
-            });
-        } catch (Exception e) {
-            log.debug("HEAD 请求失败，回退到全量下载: url={}, err={}", url, e.getMessage());
-            return -1L;
         }
     }
 
@@ -1977,20 +1913,21 @@ public class CrawlerEngine {
             call.timeout().timeout(Math.max(msg.getTimeout(), minMs), TimeUnit.MILLISECONDS);
         }
         execution.register(call);
-        Response raw = call.execute();
-        Response response = wrapWithSizeLimit(raw);
         try {
-            return reader.read(response);
+            Response raw = call.execute();
+            Response response = wrapWithSizeLimit(raw);
+            try {
+                return reader.read(response);
+            } finally {
+                response.close();
+            }
         } finally {
-            response.close();
             execution.unregister(call);
         }
     }
 
     /**
-     * 给响应套一层大小上限：{@code app.http.max-response-bytes} > 0 时，
-     * 超过上限的响应体在读取时抛 {@link IllegalStateException}，防止大页面撑爆堆内存。
-     * 响应头/状态码不变，调用方无感知（只会在读 body 时失败）。
+     * 将响应体缓冲到大小上限以内；发现超限时失败，禁止按截断内容解析页面。
      */
     private Response wrapWithSizeLimit(Response original) throws java.io.IOException {
         if (httpMaxResponseBytes <= 0 || original.body() == null) {
@@ -2004,19 +1941,14 @@ public class CrawlerEngine {
                     "HTTP 响应体超过大小上限 " + httpMaxResponseBytes + " bytes (Content-Length="
                             + contentLength + ")，已丢弃");
         }
-        // Content-Length 未声明或 <= 上限时：流式读取到 Buffer，超限则截断
+        // Content-Length 未声明或 <= 上限时：读取时也检查实际大小，避免长度缺失或不准确导致超限。
         ResponseBody sourceBody = original.body();
         final long limit = httpMaxResponseBytes;
-        final okio.Buffer buf = new okio.Buffer();
         final okio.BufferedSource src = sourceBody.source();
+        final okio.Buffer buf;
         try {
-            while (true) {
-                long remaining = limit - buf.size();
-                if (remaining <= 0) break;
-                long n = src.read(buf, remaining);
-                if (n == -1) break;
-            }
-        } catch (java.io.IOException e) {
+            buf = readBodyWithinLimit(src, limit);
+        } catch (java.io.IOException | RuntimeException e) {
             original.close();
             throw e;
         }
@@ -2032,6 +1964,24 @@ public class CrawlerEngine {
             public okio.BufferedSource source() { return buf; }
         };
         return original.newBuilder().body(limitedBody).build();
+    }
+
+    static okio.Buffer readBodyWithinLimit(okio.BufferedSource source, long limit) throws java.io.IOException {
+        okio.Buffer buffer = new okio.Buffer();
+        while (true) {
+            long remaining = limit - buffer.size();
+            if (remaining == 0) {
+                if (source.request(1)) {
+                    throw new IllegalStateException(
+                            "HTTP 响应体超过大小上限 " + limit + " bytes，已丢弃");
+                }
+                return buffer;
+            }
+            long read = source.read(buffer, remaining);
+            if (read == -1) {
+                return buffer;
+            }
+        }
     }
 
     /** ThreadLocal MD5 实例：避免每页每资源都创建 MessageDigest（每页 2 次 + 每资源 1 次） */

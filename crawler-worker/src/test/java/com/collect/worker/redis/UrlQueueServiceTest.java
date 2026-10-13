@@ -3,6 +3,7 @@ package com.collect.worker.redis;
 import com.collect.worker.crawler.ContentParser;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import us.codecraft.webmagic.selector.Html;
 
 import java.util.List;
@@ -11,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -79,5 +82,17 @@ class UrlQueueServiceTest {
         verify(redis).delete("crawler:urls:42");
         verify(redis).delete("crawler:urls:42:processing");
         verify(redis, never()).delete("crawler:urls:42:visited");
+    }
+
+    @Test
+    void popAndClaim_shouldUseOneAtomicRedisScript() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        UrlQueueService service = new UrlQueueService(redis);
+
+        service.popAndClaim(42L);
+
+        verify(redis).execute(any(RedisScript.class),
+                eq(List.of("crawler:urls:42", "crawler:urls:42:processing")),
+                eq("86400"));
     }
 }
