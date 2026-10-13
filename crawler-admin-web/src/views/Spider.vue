@@ -203,7 +203,7 @@
       <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="260" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <div class="row-actions">
             <el-button
@@ -214,15 +214,19 @@
               :disabled="row._running"
               @click="handleRun(row)"
             />
-            <el-button
-              type="danger"
-              size="small"
-              :icon="Delete"
-              :loading="row._clearingContent"
-              :disabled="row._clearingContent"
-              @click="handleClearEs(row)"
-            >清ES</el-button>
-            <TableRowActions :items="getRowActions(row)" @command="command => handleCommand(command, row)" />
+            <el-dropdown trigger="click" @command="command => handleCommand(command, row)">
+              <el-button size="small" :icon="MoreFilled" />
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="clear-es" :icon="Delete" :class="{ 'is-danger': true }">清除 ES</el-dropdown-item>
+                  <el-dropdown-item command="tasks" :icon="List">查看任务</el-dropdown-item>
+                  <el-dropdown-item command="files" :icon="FolderOpened">查看文件</el-dropdown-item>
+                  <el-dropdown-item command="edit" :icon="EditPen">编辑</el-dropdown-item>
+                  <el-dropdown-item command="clear-content" :icon="Delete" divided :class="{ 'is-danger': true }">清空内容</el-dropdown-item>
+                  <el-dropdown-item command="delete" :icon="Delete" divided :class="{ 'is-danger': true }">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </template>
       </el-table-column>
@@ -422,7 +426,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderClearContentBatch, spiderClearEs, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
-import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, ArrowDown, Download, Upload, List } from '@element-plus/icons-vue'
+import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, ArrowDown, Download, Upload, List, MoreFilled } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -1062,6 +1066,8 @@ const getRowActions = (row: any): TableRowAction[] => [
 
 const handleCommand = (cmd: string, row: any) => {
   switch (cmd) {
+    case 'run': handleRun(row); break
+    case 'clear-es': handleClearEs(row); break
     case 'tasks': goToTaskPage(row); break
     case 'files':
       router.push({ name: 'File', query: { spiderId: String(row.id) } })
