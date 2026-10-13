@@ -181,8 +181,12 @@ public class UrlQueueService {
      * 原实现需 2 次 RTT，优化后 1 次。
      * 使用内存缓存避免重复 normalizeUrl 解析。
      */
-    /** 归一化缓存：线程安全 LRU，上限 500k 条，淘汰最久未访问的 URL */
-    private final Map<String, String> normalizeCache = buildLruCache(500_000);
+    /**
+     * 归一化缓存：线程安全 LRU，上限 100k 条（~20MB 峰值），淘汰最久未访问的 URL。
+     * 原上限 500k（~100MB）对单任务 URL 量过剩；100k 足以覆盖绝大多数站点，
+     * 淘汰后重新 normalize 即可，不影响正确性。
+     */
+    private final Map<String, String> normalizeCache = buildLruCache(100_000);
 
     /**
      * 构建线程安全的 LRU 缓存：底层 LinkedHashMap（accessOrder=true）

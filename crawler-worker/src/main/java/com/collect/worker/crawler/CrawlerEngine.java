@@ -113,8 +113,19 @@ public class CrawlerEngine {
     private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
     /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，LRU 上限 1024 条 */
     private final Map<Long, TaskStatusCache> taskStatusCache = buildLruCache(1024);
+    /**
+     * 进程级 URL→htmlHash 缓存：记录每个 URL 最近一次处理时的内容哈希（带 TTL）。
+     * 重爬时若某 URL 的 newHtmlHash 与缓存值相同，说明内容未变，可跳过 ES 变更比对
+     * （省去一次 ES 查询）。TTL 防止站点内容长期变化后缓存值过期导致误判。
+     * LRU 上限 100k 条（每条约 200 字节，峰值 ~20MB）。
+     */
+    private final Map<String, UrlHashCacheEntry> urlHtmlHashCache = buildLruCache(100_000);
+    /** URL 哈希缓存 TTL（毫秒）：24 小时，与 Redis URL 队列 TTL 对齐 */
+    private static final long URL_HASH_CACHE_TTL_MS = 24 * 60 * 60 * 1000L;
 
     record WebResource(String url, String category, String objectName, String contentType) {}
+    /** URL 内容哈希缓存条目：hash + 过期时间戳 */
+    record UrlHashCacheEntry(String htmlHash, long expireAt) {}
 
     record RobotsCacheEntry(RobotsRules rules, long expireAt) {}
 
@@ -178,7 +189,8 @@ public class CrawlerEngine {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final OkHttpClient verifiedHttpClient;
     private final OkHttpClient unverifiedHttpClient;
-    private final java.util.Map<String, OkHttpClient> httpClientCache = new ConcurrentHashMap<>();
+    /** 带自定义 Header 的客户端缓存：LRU 上限 128 条，淘汰最久未使用的 Header 组合 */
+    private final java.util.Map<String, OkHttpClient> httpClientCache = buildLruCache(128);
     private final java.util.Map<String, ExcludedRules> excludedUrlsCache = new ConcurrentHashMap<>();
 
     @Value("${app.es.content-index:spider_content}")
@@ -214,12 +226,6 @@ public class CrawlerEngine {
                 buildHttpClient(false, null, poolSettings(), sharedConnectionPool, httpProtocol));
         this.unverifiedHttpClient = buildClientWithDnsAndRetry(
                 buildHttpClient(true, null, poolSettings(), sharedConnectionPool, httpProtocol));
-        // 客户端缓存上限：自定义 Header 的客户端按 (skipTls, headers) 无限缓存，
-        // 任务量增长后旧 Header 组合的客户端及其连接池会一直留在内存里，这里做上限保护
-        if (httpClientCache.size() > Math.max(1, httpMaxCachedClients)) {
-            log.warn("HTTP 客户端缓存达到上限，清空重建（连接池随之回收）: size={}", httpClientCache.size());
-            httpClientCache.clear();
-        }
     }
 
     private PoolSettings poolSettings() {
@@ -245,32 +251,16 @@ public class CrawlerEngine {
     }
 
     /**
-     * 为单个任务创建带独立 Dispatcher 的客户端（方案 A：连接池共享 + 调度隔离）。
+     * 获取任务对应的 HTTP 客户端（不创建新实例，复用共享客户端）。
      *
-     * <p>每个任务一个 {@link Dispatcher}，单任务并发上限
-     * {@code app.http.max-concurrent-requests-per-task}（默认 100），
-     * 单任务每主机上限 {@code app.http.max-concurrent-requests-per-task-per-host}（默认 50）。
-     * 连接池、DNS 缓存、重试 Interceptor、TLS 配置均继承自共享客户端，
-     * 仅 Dispatcher 按任务隔离——防止一个任务的慢请求独占全局并发槽位。
-     *
-     * <p>任务结束时调用 {@code client.dispatcher().executorService().shutdown()} 释放线程。
-     * 同一任务的多个虚拟线程共享同一个 taskClient（通过 {@link #taskClientFor} 缓存）。
+     * <p>不再按任务派生独立 Dispatcher 的 OkHttpClient（旧方案 A：连接池共享 + 调度隔离）。
+     * OkHttp 文档明确 "It is an error to build a new client with an existing dispatcher"，
+     * 且任务结束后 OkHttpClient 对象本身会留在堆里等 GC。现改为复用共享客户端
+     * （含 TLS / 自定义 Header 组合），并发由 execute() 里的 imageSemaphore（= urlConcurrency）
+     * 统一限流，避免每任务一个废弃的 OkHttp 实例。
      */
     private OkHttpClient taskClientFor(TaskMessage msg) {
-        boolean skipTls = Integer.valueOf(1).equals(msg.getSkipTlsVerify());
-        String headers = msg.getHeaders();
-        // 选择基础客户端（含 header Interceptor + DNS + 重试 + 共享连接池）
-        OkHttpClient base = (headers == null || headers.isBlank())
-                ? (skipTls ? unverifiedHttpClient : verifiedHttpClient)
-                : httpClientCache.computeIfAbsent(
-                        (skipTls ? "unverified" : "verified") + "|" + headers,
-                        k -> buildClientWithDnsAndRetry(
-                                buildHttpClient(skipTls, headers, poolSettings(), sharedConnectionPool, httpProtocol)));
-        // 派生任务级客户端：独立 Dispatcher，其余全部继承
-        Dispatcher taskDispatcher = new Dispatcher();
-        taskDispatcher.setMaxRequests(Math.max(1, httpMaxConcurrentRequestsPerTask));
-        taskDispatcher.setMaxRequestsPerHost(Math.max(1, httpMaxConcurrentRequestsPerTaskPerHost));
-        return base.newBuilder().dispatcher(taskDispatcher).build();
+        return httpClient(msg);
     }
 
     /**
@@ -622,7 +612,7 @@ public class CrawlerEngine {
         final ExecutorService imageExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
         final java.util.concurrent.Semaphore imageSemaphore =
                 new java.util.concurrent.Semaphore(concurrency);
-        // 方案 A：任务级 Dispatcher（连接池共享 + 调度隔离），任务结束即释放
+        // 任务级 HTTP 客户端：复用共享客户端（带独立 TLS/Header 组合），并发由 imageSemaphore(=concurrency) 限流
         final OkHttpClient taskClient = taskClientFor(msg);
         TaskExecutionContext execution = new TaskExecutionContext();
         // 预计算起始 URL 的归一化集合和 host 集合，crawlUrl 每页只做 O(1) 查找
@@ -720,8 +710,6 @@ public class CrawlerEngine {
                 executor.shutdownNow();
                 awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             }
-            // 释放任务级 Dispatcher 的后台线程（连接池仍由共享池管理，不在此释放）
-            taskClient.dispatcher().executorService().shutdown();
             // 释放任务级图片下载线程池
             if (!awaitExecutorTermination(imageExecutor, 30, TimeUnit.SECONDS)) {
                 imageExecutor.shutdownNow();
@@ -917,20 +905,28 @@ public class CrawlerEngine {
             SpiderContentDoc existingDoc = null;
             boolean overwriteHtmlFlag = Integer.valueOf(1).equals(msg.getOverwriteHtml());
             if (!cacheHit && !overwriteHtmlFlag && !isConfiguredStartUrl(url, startUrlInfo)) {
-                // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
-                CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
-                SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
-                        criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
-                existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
-                if (existingDoc != null) {
-                    // 优先用 ES 中存储的 htmlHash 做 O(1) 比对，无需读取 MinIO 整份 HTML
-                    if (existingDoc.getHtmlHash() != null && !existingDoc.getHtmlHash().isBlank()) {
-                        contentUnchanged = newHtmlHash.equals(existingDoc.getHtmlHash());
-                    } else {
-                        // 旧数据无 htmlHash 字段：回退到读取 MinIO 旧 HTML 算 MD5 比对
-                        String oldHtml = readHtmlFromMinio(url);
-                        if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
-                            contentUnchanged = true;
+                // 快速路径：本地 hash 缓存命中且内容未变 → 跳过 ES 查询（省去一次 ES 往返）
+                long nowMs = System.currentTimeMillis();
+                UrlHashCacheEntry cached = urlHtmlHashCache.get(url);
+                if (cached != null && cached.expireAt() > nowMs
+                        && newHtmlHash.equals(cached.htmlHash())) {
+                    contentUnchanged = true;
+                } else {
+                    // 慢路径：查 ES 做变更比对
+                    CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
+                    SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
+                            criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+                    existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
+                    if (existingDoc != null) {
+                        // 优先用 ES 中存储的 htmlHash 做 O(1) 比对，无需读取 MinIO 整份 HTML
+                        if (existingDoc.getHtmlHash() != null && !existingDoc.getHtmlHash().isBlank()) {
+                            contentUnchanged = newHtmlHash.equals(existingDoc.getHtmlHash());
+                        } else {
+                            // 旧数据无 htmlHash 字段：回退到读取 MinIO 旧 HTML 算 MD5 比对
+                            String oldHtml = readHtmlFromMinio(url);
+                            if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
+                                contentUnchanged = true;
+                            }
                         }
                     }
                 }
@@ -941,6 +937,9 @@ public class CrawlerEngine {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                         "已存在，跳过: " + pageTitle, (int) cost);
                 log.info("内容未变化，跳过: url={}", url);
+                // 刷新本地 hash 缓存（内容未变，保持新鲜以便下次快速跳过）
+                urlHtmlHashCache.put(url, new UrlHashCacheEntry(newHtmlHash,
+                        System.currentTimeMillis() + URL_HASH_CACHE_TTL_MS));
                 success.incrementAndGet();
                 return;
             }
@@ -969,6 +968,9 @@ public class CrawlerEngine {
             writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                 (overwriteHtml && existingDoc != null) ? "覆盖更新: " + pageTitle : "抓取成功: " + pageTitle, (int) cost);
             success.incrementAndGet();
+            // 写回本地 hash 缓存：页面已写入 ES，缓存值与 ES 一致，重爬时可快速跳过 ES 查询
+            urlHtmlHashCache.put(url, new UrlHashCacheEntry(newHtmlHash,
+                    System.currentTimeMillis() + URL_HASH_CACHE_TTL_MS));
 
             // Persist the page before downloading static assets so slow asset hosts cannot delay it.
             // 读取缓存命中时，HTML 和 JS/CSS 资源都直接从 MinIO 复用，不再回源。
@@ -1655,10 +1657,57 @@ public class CrawlerEngine {
         return true;
     }
 
+    /** HEAD 预判大小阈值：源站点文件小于此值时直接用 GET 下载，省去 HEAD 往返（小文件 HEAD 不划算） */
+    private static final long HEAD_PREDICT_MIN_BYTES = 16 * 1024;
+
+    /**
+     * 下载并上传 JS/CSS 资源。
+     *
+     * <p>优化（避免无谓全量下载）：
+     * <ol>
+     *   <li>先 stat MinIO 已存在对象，拿到已存 size（1 次 MinIO RTT）；</li>
+     *   <li>若已存在且 size &ge; {@link #HEAD_PREDICT_MIN_BYTES}，对源站点发一次
+     *       <b>HEAD</b> 请求取 Content-Length（只取 header，不传 body，比 GET 便宜）；</li>
+     *   <li>HEAD 的 Content-Length 与已存 size 相同 → 内容大概率未变（同 size 不同内容概率极低），
+     *       <b>跳过下载</b>，省掉大 bundle 的 body 传输与堆内存占用；</li>
+     *   <li>size 不同 / HEAD 无 Content-Length / 对象不存在 / 小文件 → GET 全量下载并覆盖上传。</li>
+     * </ol>
+     * 这样大型 JS/CSS bundle 在内容未变时不再完整下载到内存，节省带宽与堆内存。
+     *
+     * <p>并发竞态说明：先 stat/HEAD 后（可能的）GET 下载，期间对象/源文件可能变化；
+     * 极端情况下本任务会多上传一次（最终一致，不会导致数据错误）。
+     */
     private void processWebResource(WebResource resource, TaskMessage msg, SpiderTask task, String title,
                                     TaskExecutionContext execution) {
         long start = System.currentTimeMillis();
         try {
+            // 1) stat 已存在对象，拿到已存 size
+            long existingSize = -1;
+            boolean existingExists = false;
+            try {
+                io.minio.StatObjectResponse stat = minioHelper.statObject(jsBucket, resource.objectName());
+                existingExists = true;
+                existingSize = stat.size();
+            } catch (io.minio.errors.ErrorResponseException e) {
+                if (!("NoSuchKey".equals(e.errorResponse().code()) || "NoSuchBucket".equals(e.errorResponse().code()))) {
+                    throw e;
+                }
+                // NoSuchKey/NoSuchBucket → 对象不存在，existingSize 保持 -1
+            }
+
+            // 2) 已存在且足够大时，HEAD 预判源文件大小；相同则跳过下载
+            if (existingExists && existingSize >= HEAD_PREDICT_MIN_BYTES) {
+                long remoteSize = headContentLength(resource.url(), msg, execution);
+                if (execution.isCancelled()) return;
+                if (remoteSize > 0 && remoteSize == existingSize) {
+                    writeLog(task.getId(), msg.getSpiderId(), resource.url(), 2, "INFO",
+                            resource.category().toUpperCase() + " 已存在，内容未变化（HEAD size 相同）",
+                            resourceCost(start), resource.category());
+                    return;
+                }
+            }
+
+            // 3) 下载（小文件 / size 变化 / HEAD 未判定 走这里）
             byte[] downloaded = downloadBytes(resource.url(), msg, execution);
             if (execution.isCancelled()) return;
             if (downloaded == null || downloaded.length == 0) {
@@ -1667,25 +1716,10 @@ public class CrawlerEngine {
                 return;
             }
 
-            // 先 stat 比 size：大小不同 → 内容一定变了，直接覆盖；
-            // 大小相同 → 大概率未变，跳过下载全文比对（JS/CSS 同 size 不同内容的概率极低）
-            boolean contentUnchanged = false;
-            boolean existingExists = false;
-            try {
-                io.minio.StatObjectResponse stat = minioHelper.statObject(jsBucket, resource.objectName());
-                existingExists = true;
-                if (stat.size() == downloaded.length) {
-                    contentUnchanged = true;
-                }
-            } catch (io.minio.errors.ErrorResponseException e) {
-                if (!("NoSuchKey".equals(e.errorResponse().code()) || "NoSuchBucket".equals(e.errorResponse().code()))) {
-                    throw e;
-                }
-            }
-
-            if (contentUnchanged) {
+            // 兜底：HEAD 未预判成功但实际 size 与已存相同，也跳过上传
+            if (existingExists && existingSize == downloaded.length) {
                 writeLog(task.getId(), msg.getSpiderId(), resource.url(), 2, "INFO",
-                        resource.category().toUpperCase() + " 已存在，内容未变化",
+                        resource.category().toUpperCase() + " 已存在，内容未变化（size 相同）",
                         resourceCost(start), resource.category());
                 return;
             }
@@ -1706,6 +1740,29 @@ public class CrawlerEngine {
             writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
                     resource.category().toUpperCase() + " 下载/上传失败: " + e.getMessage(),
                     resourceCost(start), resource.category());
+        }
+    }
+
+    /**
+     * 对源 URL 发 HEAD 请求取 Content-Length（不传 body）。
+     * 失败 / 非 2xx / 无 Content-Length 时返回 -1（调用方据此回退到全量下载）。
+     * 自定义 Header 由 httpClient(msg) 的 Interceptor 统一注入。
+     */
+    private long headContentLength(String url, TaskMessage msg, TaskExecutionContext execution) {
+        try {
+            Request request = buildRequest(url, msg).newBuilder().head().build();
+            return executeRequest(httpClient(msg), request, execution, msg, response -> {
+                if (!response.isSuccessful()) {
+                    return -1L;
+                }
+                long len = response.header("Content-Length") != null
+                        ? Long.parseLong(response.header("Content-Length").trim())
+                        : -1L;
+                return len;
+            });
+        } catch (Exception e) {
+            log.debug("HEAD 请求失败，回退到全量下载: url={}, err={}", url, e.getMessage());
+            return -1L;
         }
     }
 
