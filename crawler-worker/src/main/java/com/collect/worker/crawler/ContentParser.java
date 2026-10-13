@@ -9,6 +9,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Data
@@ -20,6 +21,9 @@ public class ContentParser {
     private String author;
     private List<String> nextUrls = new ArrayList<>();
 
+    /**
+     * 解析页面内容（无内容选择器，取 body 文本）。
+     */
     public static ContentParser parse(String html, String baseUrl) {
         return parse(html, baseUrl, null);
     }
@@ -31,7 +35,13 @@ public class ContentParser {
      * 未配置内容选择器时，保持原有行为（取 body 文本）。
      */
     public static ContentParser parse(String source, String baseUrl, String contentSelector) {
-        Html doc = new Html(source, baseUrl);
+        return parse(new Html(source, baseUrl), baseUrl, contentSelector);
+    }
+
+    /**
+     * 解析页面内容（复用已解析的 {@link Html}，避免重复 DOM 解析）。
+     */
+    public static ContentParser parse(Html doc, String baseUrl, String contentSelector) {
         ContentParser parser = new ContentParser();
         parser.setUrl(baseUrl);
 
@@ -69,12 +79,17 @@ public class ContentParser {
         return parser;
     }
 
+    /** 同一 path 下最多保留的 query 变体数，防止分页/排序链接导致 URL 爆炸 */
+    private static final int MAX_QUERY_VARIANTS_PER_PATH = 10;
+
     public static List<String> extractNextUrls(Html doc, String baseUrl, int remainingDepth) {
         List<String> urls = new ArrayList<>();
         if (remainingDepth <= 0) {
             return urls;
         }
         Set<String> seen = new HashSet<>();
+        // path -> 已入队的 query 变体数，用于限制同一 path 下的 query 变体数量
+        Map<String, Integer> pathQueryCount = new java.util.HashMap<>();
         for (String href : doc.$("a[href]", "href").all()) {
             String absoluteUrl = resolveUrl(baseUrl, href);
             if (absoluteUrl == null || com.collect.worker.redis.UrlQueueService.isImageUrl(absoluteUrl)) {
@@ -84,9 +99,25 @@ public class ContentParser {
             if (normalizedHref == null || normalizedHref.isBlank() || !seen.add(normalizedHref)) {
                 continue;
             }
+            // 按 path 分组限制 query 变体数，防止 ?page=2&sort=asc 等组合导致 URL 爆炸
+            String path = pathKey(normalizedHref);
+            int count = pathQueryCount.getOrDefault(path, 0);
+            if (count >= MAX_QUERY_VARIANTS_PER_PATH) {
+                continue;
+            }
+            pathQueryCount.put(path, count + 1);
             urls.add(normalizedHref);
         }
         return urls;
+    }
+
+    /**
+     * 提取 URL 的 path 部分（host + path），忽略 query 参数。
+     * 用于按 path 分组限制 query 变体数量。
+     */
+    private static String pathKey(String url) {
+        int qIdx = url.indexOf('?');
+        return qIdx > 0 ? url.substring(0, qIdx) : url;
     }
 
     public static boolean isVipPage(Html doc, String selector, String vipContent) {

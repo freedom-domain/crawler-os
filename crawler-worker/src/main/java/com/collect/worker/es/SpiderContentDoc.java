@@ -48,4 +48,11 @@ public class SpiderContentDoc {
     @Field(type = FieldType.Keyword)
     private List<String> images;
 
+    /**
+     * 页面 HTML 的 MD5 哈希，用于变更比对：
+     * 命中时直接比 hash，无需从 MinIO 读取整份 HTML 再算 MD5。
+     */
+    @Field(type = FieldType.Keyword)
+    private String htmlHash;
+
 }

@@ -6,11 +6,9 @@ import com.collect.common.mq.TaskMessage;
 import com.collect.common.util.ObjectNameUtils;
 import com.collect.worker.es.SpiderContentDoc;
 import com.collect.worker.entity.FileMetadata;
-import com.collect.worker.entity.Spider;
 import com.collect.worker.entity.SpiderTask;
 import com.collect.worker.entity.SpiderTaskLog;
 import com.collect.worker.mapper.FileMetadataMapper;
-import com.collect.worker.mapper.SpiderMapper;
 import com.collect.worker.mapper.SpiderTaskLogMapper;
 import com.collect.worker.mapper.SpiderTaskMapper;
 import com.collect.worker.minio.MinioHelper;
@@ -46,6 +44,7 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -106,14 +105,14 @@ public class CrawlerEngine {
 
     /** 所有客户端共享的连接池：不同 header/TLS 组合的客户端复用同一条 TCP 连接 */
     private ConnectionPool sharedConnectionPool;
-    /** 进程级 robots 缓存（按 authority），跨任务复用，TTL 30 分钟 */
-    private final Map<String, RobotsCacheEntry> robotsCacheByHost = new ConcurrentHashMap<>();
-    /** 本地 DNS 缓存（name -> (addresses, expireAt)） */
-    private final Map<String, DnsCacheEntry> dnsCache = new ConcurrentHashMap<>();
+    /** 进程级 robots 缓存（按 authority），跨任务复用，TTL 30 分钟，LRU 上限 4096 条 */
+    private final Map<String, RobotsCacheEntry> robotsCacheByHost = buildLruCache(4096);
+    /** 本地 DNS 缓存（name -> (addresses, expireAt)），线程安全 LRU，上限 1024 条 */
+    private final Map<String, DnsCacheEntry> dnsCache = buildLruCache(1024);
     /** 任务级客户端（线程本地）：每个爬取虚拟线程绑定自己任务的 Dispatcher，实现调度隔离 */
     private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
-    /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，减少 DB 查询 */
-    private final Map<Long, TaskStatusCache> taskStatusCache = new ConcurrentHashMap<>();
+    /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，LRU 上限 1024 条 */
+    private final Map<Long, TaskStatusCache> taskStatusCache = buildLruCache(1024);
 
     record WebResource(String url, String category, String objectName, String contentType) {}
 
@@ -172,7 +171,6 @@ public class CrawlerEngine {
 
     private final SpiderTaskMapper taskMapper;
     private final SpiderTaskLogMapper logMapper;
-    private final SpiderMapper spiderMapper;
     private final ElasticsearchOperations elasticsearchOperations;
     private final UrlQueueService urlQueue;
     private final MinioHelper minioHelper;
@@ -181,7 +179,7 @@ public class CrawlerEngine {
     private final OkHttpClient verifiedHttpClient;
     private final OkHttpClient unverifiedHttpClient;
     private final java.util.Map<String, OkHttpClient> httpClientCache = new ConcurrentHashMap<>();
-    private final java.util.Map<String, List<String>> excludedUrlsCache = new ConcurrentHashMap<>();
+    private final java.util.Map<String, ExcludedRules> excludedUrlsCache = new ConcurrentHashMap<>();
 
     @Value("${app.es.content-index:spider_content}")
     private String contentIndex;
@@ -199,13 +197,11 @@ public class CrawlerEngine {
     private String jsBucket;
 
     public CrawlerEngine(SpiderTaskMapper taskMapper, SpiderTaskLogMapper logMapper,
-                         SpiderMapper spiderMapper,
                          ElasticsearchOperations elasticsearchOperations, UrlQueueService urlQueue,
                          MinioHelper minioHelper, FileMetadataMapper fileMetadataMapper,
                          KafkaTemplate<String, String> kafkaTemplate) {
         this.taskMapper = taskMapper;
         this.logMapper = logMapper;
-        this.spiderMapper = spiderMapper;
         this.elasticsearchOperations = elasticsearchOperations;
         this.urlQueue = urlQueue;
         this.minioHelper = minioHelper;
@@ -277,7 +273,23 @@ public class CrawlerEngine {
         return base.newBuilder().dispatcher(taskDispatcher).build();
     }
 
-    /** 带本地 TTL 缓存的 DNS 解析器；缓存条目按 host 去重，过期自动清除 */
+    /**
+     * 构建线程安全的 LRU 缓存：底层是 {@link LinkedHashMap}（accessOrder=true）
+     * 包装在 {@link java.util.Collections#synchronizedMap} 中，容量超出时自动淘汰最久未访问的条目。
+     * 避免 {@code clear()} 全量清除导致的缓存抖动。
+     */
+    private static <K, V> Map<K, V> buildLruCache(int maxSize) {
+        LinkedHashMap<K, V> lru = new LinkedHashMap<>(
+                Math.max(16, maxSize / 2), 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(java.util.Map.Entry<K, V> eldest) {
+                return size() > maxSize;
+            }
+        };
+        return java.util.Collections.synchronizedMap(lru);
+    }
+
+    /** 带本地 TTL 缓存的 DNS 解析器；缓存条目按 host 去重，LRU 自动淘汰，过期自动清除 */
     private Dns dnsWithCache() {
         return hostname -> {
             long now = System.currentTimeMillis();
@@ -290,17 +302,22 @@ public class CrawlerEngine {
                 dnsCache.put(hostname, new DnsCacheEntry(addresses,
                         now + httpDnsCacheTtlSeconds * 1000L));
             }
-            // 防止缓存无限增长：超出 1024 条时清空（简单粗暴但安全）
-            if (dnsCache.size() > 1024) {
-                dnsCache.clear();
-            }
             return addresses;
         };
     }
 
+    /** 指数退避基础延迟（毫秒） */
+    private static final long RETRY_BACKOFF_BASE_MS = 200;
+    /** 指数退避上限（毫秒） */
+    private static final long RETRY_BACKOFF_MAX_MS = 5000;
+    /** Retry-After 头解析上限（秒），防止恶意超大值阻塞线程 */
+    private static final int RETRY_AFTER_MAX_SECONDS = 30;
+
     /**
      * 瞬时网络错误重试：{@link java.io.IOException}（连接重置、读超时等）
-     * 且请求幂等（GET/HEAD）时自动重试。非幂等请求不重试，避免重复提交。
+     * 且请求幂等（GET/HEAD）时自动重试，带指数退避 + 抖动。
+     * 5xx 响应优先读取 Retry-After 头，否则按退避间隔等待。
+     * 非幂等请求不重试，避免重复提交。
      */
     private okhttp3.Interceptor retryOnIoErrorInterceptor() {
         return chain -> {
@@ -313,19 +330,70 @@ public class CrawlerEngine {
                 Response response;
                 try {
                     response = chain.proceed(request);
-                    // 5xx 也视为瞬时错误，幂等请求重试
+                    // 5xx 视为瞬时错误，幂等请求重试（带退避）
                     if (response.code() >= 500 && attempt < maxAttempts) {
+                        long backoffMs = computeBackoff(request, response, attempt);
+                        log.debug("HTTP {} 重试 {}/{}: {} (等待 {}ms)",
+                                response.code(), attempt, maxAttempts - 1, request.url(), backoffMs);
                         response.close();
+                        try {
+                            Thread.sleep(backoffMs);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new java.io.IOException("重试等待被中断", ie);
+                        }
                         continue;
                     }
                     return response;
                 } catch (java.io.IOException e) {
                     if (attempt >= maxAttempts) throw e;
-                    log.debug("瞬时网络错误，重试 {}/{}: {} - {}",
-                            attempt, maxAttempts - 1, request.url(), e.getMessage());
+                    long backoffMs = backoffWithJitter(attempt);
+                    log.debug("瞬时网络错误，重试 {}/{}: {} - {} (等待 {}ms)",
+                            attempt, maxAttempts - 1, request.url(), e.getMessage(), backoffMs);
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
                 }
             }
         };
+    }
+
+    /**
+     * 计算重试前等待时间：
+     * 1. 优先读 Retry-After 头（429/503 时服务端可能设置）
+     * 2. 否则按指数退避：base * 2^(attempt-1)，上限 maxMs，加随机抖动
+     */
+    private long computeBackoff(Request request, Response response, int attempt) {
+        String retryAfter = response.header("Retry-After");
+        if (retryAfter != null && !retryAfter.isBlank()) {
+            try {
+                int seconds = Integer.parseInt(retryAfter.trim());
+                if (seconds > 0 && seconds <= RETRY_AFTER_MAX_SECONDS) {
+                    return seconds * 1000L;
+                }
+                // 也可能是 HTTP 日期格式，尝试解析
+                long httpDate = java.time.Instant.parse(retryAfter.trim()).toEpochMilli();
+                long delay = httpDate - System.currentTimeMillis();
+                if (delay > 0 && delay <= RETRY_AFTER_MAX_SECONDS * 1000L) {
+                    return delay;
+                }
+            } catch (Exception ignored) {
+                // 解析失败，回退到指数退避
+            }
+        }
+        return backoffWithJitter(attempt);
+    }
+
+    /** 指数退避 + 随机抖动：base * 2^(attempt-1) * (0.5 + random*0.5) */
+    private long backoffWithJitter(int attempt) {
+        long base = RETRY_BACKOFF_BASE_MS * (1L << Math.min(attempt - 1, 12)); // 防溢出
+        long capped = Math.min(base, RETRY_BACKOFF_MAX_MS);
+        // 抖动范围 [0.5 * capped, 1.0 * capped]
+        long jitter = (long) (capped * (0.5 + Math.random() * 0.5));
+        return jitter;
     }
 
     /**
@@ -558,6 +626,8 @@ public class CrawlerEngine {
         final OkHttpClient taskClient = taskClientFor(msg);
         TaskExecutionContext execution = new TaskExecutionContext();
         Map<String, RobotsRules> robotsCache = new ConcurrentHashMap<>();
+        // 预计算起始 URL 的归一化集合和 host 集合，crawlUrl 每页只做 O(1) 查找
+        final StartUrlInfo startUrlInfo = buildStartUrlInfo(msg.getStartUrls());
 
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger fail = new AtomicInteger(0);
@@ -637,7 +707,7 @@ public class CrawlerEngine {
                 Future<?> future = executor.submit(() ->
                         crawlUrl(crawlUrl, crawlDepth, maxDepth, msg, task, taskId, success, fail,
                                 robotsCache, processedResourceUrls, cachedStartUrls, execution, taskClient,
-                                imageExecutor, imageSemaphore)
+                                imageExecutor, imageSemaphore, startUrlInfo)
                 );
                 activeFutures.add(future);
             }
@@ -716,14 +786,20 @@ public class CrawlerEngine {
         }
         taskStatusCache.put(taskId, new TaskStatusCache(
                 task.getStatus(), task.getPausedAt(), now + TASK_STATUS_CACHE_TTL_MS));
-        // 防止缓存无限增长
-        if (taskStatusCache.size() > 1024) {
-            taskStatusCache.entrySet().removeIf(e -> e.getValue().expireAt() < now);
-        }
         return new TaskStatusInfo(task.getStatus(), task.getPausedAt());
     }
 
     record TaskStatusInfo(String status, java.time.LocalDateTime pausedAt) {}
+
+    /**
+     * 任务级起始 URL 预计算信息：在 {@link #execute} 入口处一次性计算，
+     * 避免 {@link #crawlUrl} 每页重复遍历 startUrls 做 URI 解析 + 归一化。
+     */
+    record StartUrlInfo(Set<String> normalizedSet, Set<String> hosts) {
+        static StartUrlInfo empty() {
+            return new StartUrlInfo(java.util.Collections.emptySet(), java.util.Collections.emptySet());
+        }
+    }
 
     private boolean awaitAnyFuture(Set<Future<?>> futures, long timeoutMs) {
         if (futures.isEmpty()) return true;
@@ -775,7 +851,8 @@ public class CrawlerEngine {
                            Set<String> cachedStartUrls,
                            TaskExecutionContext execution, OkHttpClient taskClient,
                            java.util.concurrent.ExecutorService imageExecutor,
-                           java.util.concurrent.Semaphore imageSemaphore) {
+                           java.util.concurrent.Semaphore imageSemaphore,
+                           StartUrlInfo startUrlInfo) {
         currentTaskClient.set(taskClient);
         try {
             // 任务状态不是运行中（如被取消）时停止爬取（带 1s 本地缓存）
@@ -811,51 +888,53 @@ public class CrawlerEngine {
             Html doc = cacheHit ? new Html(cachedHtml, url) : fetch(url, msg, execution);
             long cost = System.currentTimeMillis() - start;
 
-            ContentParser parsed = ContentParser.parse(doc.get(), url, msg.getContentSelector());
+            ContentParser parsed = ContentParser.parse(doc, url, msg.getContentSelector());
             String newHtml = doc.get();
             String newHtmlHash = md5(newHtml);
+            String pageTitle = parsed.getTitle();
             // 读取缓存命中：内容视为已存在且未变化，跳过 ES 变更比对（不联网）
             boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
             // 读取缓存时允许从已缓存页面扩展 URL；未命中联网=跳过时，
             // 扩展出的未缓存 URL 入队后会在处理阶段被跳过，不联网。
+            // extractNextUrls 已返回归一化后的 URL，此处只需做 O(1) 的 Set 查找。
             if (!msg.isSingleUrl() && depth < maxDepth) {
                 List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
-                next.removeIf(nextUrl -> {
-                    String normalized = UrlQueueService.normalizeUrl(nextUrl);
-                    return normalized == null || msg.getStartUrls().stream()
-                            .map(UrlQueueService::normalizeUrl)
-                            .anyMatch(normalized::equals) || !isSameDomain(normalized, msg.getStartUrls());
-                });
+                next.removeIf(nextUrl ->
+                        startUrlInfo.normalizedSet().contains(nextUrl) || !isSameDomain(nextUrl, startUrlInfo.hosts()));
                 int enqueued = 0;
                 for (String nextUrl : next) {
-                    String normalizedNextUrl = UrlQueueService.normalizeUrl(nextUrl);
-                    if (normalizedNextUrl == null || normalizedNextUrl.isBlank()) continue;
-                    if (isExcludedUrl(normalizedNextUrl, msg)) continue;
-                    if (!isAllowedByRobots(normalizedNextUrl, msg, robotsCache, execution)) continue;
-                    if (urlQueue.enqueueIfAbsent(taskId, normalizedNextUrl, depth + 1)) enqueued++;
+                    if (nextUrl == null || nextUrl.isBlank()) continue;
+                    if (isExcludedUrl(nextUrl, msg)) continue;
+                    if (!isAllowedByRobots(nextUrl, msg, robotsCache, execution)) continue;
+                    if (urlQueue.enqueueIfAbsent(taskId, nextUrl, depth + 1)) enqueued++;
                 }
                 log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
             }
 
-            // 仅未命中缓存的页面才做 ES 变更比对（需要读取 MinIO 旧 HTML）；
+            // 仅未命中缓存的页面才做 ES 变更比对；
             // 缓存命中时直接按"内容未变化"处理，避免额外网络/存储查询
             // overwriteHtml=1 时跳过变更比对（直接覆盖，无需读取旧内容）
             boolean contentUnchanged = false;
             SpiderContentDoc existingDoc = null;
             boolean overwriteHtmlFlag = Integer.valueOf(1).equals(msg.getOverwriteHtml());
-            if (!cacheHit && !overwriteHtmlFlag && !isConfiguredStartUrl(url, msg.getStartUrls())) {
+            if (!cacheHit && !overwriteHtmlFlag && !isConfiguredStartUrl(url, startUrlInfo)) {
                 // 配置中的起始 URL 始终抓取；仅其他页面检查已有内容是否需要跳过。
                 CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
                 SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
                         criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
                 existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
                 if (existingDoc != null) {
-                    // HTML 原文已迁移到 MinIO，从 MinIO 读取旧内容做变更比对
-                    String oldHtml = readHtmlFromMinio(url);
-                    if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
-                        contentUnchanged = true;
+                    // 优先用 ES 中存储的 htmlHash 做 O(1) 比对，无需读取 MinIO 整份 HTML
+                    if (existingDoc.getHtmlHash() != null && !existingDoc.getHtmlHash().isBlank()) {
+                        contentUnchanged = newHtmlHash.equals(existingDoc.getHtmlHash());
+                    } else {
+                        // 旧数据无 htmlHash 字段：回退到读取 MinIO 旧 HTML 算 MD5 比对
+                        String oldHtml = readHtmlFromMinio(url);
+                        if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
+                            contentUnchanged = true;
+                        }
                     }
                 }
             }
@@ -863,7 +942,7 @@ public class CrawlerEngine {
             // 后续页面不覆盖 HTML 且内容未变化 → 跳过
             if (!overwriteHtml && contentUnchanged) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                        "已存在，跳过: " + parsed.getTitle(), (int) cost);
+                        "已存在，跳过: " + pageTitle, (int) cost);
                 log.info("内容未变化，跳过: url={}", url);
                 success.incrementAndGet();
                 return;
@@ -871,7 +950,7 @@ public class CrawlerEngine {
 
             SpiderContentDoc docObj = new SpiderContentDoc();
             docObj.setId(md5(url));
-            docObj.setTitle(parsed.getTitle());
+            docObj.setTitle(pageTitle);
             docObj.setContent(parsed.getContent());
             docObj.setUrl(url);
             docObj.setAuthor(parsed.getAuthor());
@@ -887,17 +966,18 @@ public class CrawlerEngine {
             docObj.setCrawlTime(crawlTime);
             docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
             docObj.setImages(List.of());
+            docObj.setHtmlHash(newHtmlHash);
 
             saveToElasticsearchWithRetry(docObj);
             writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
-                (overwriteHtml && existingDoc != null) ? "覆盖更新: " + parsed.getTitle() : "抓取成功: " + parsed.getTitle(), (int) cost);
+                (overwriteHtml && existingDoc != null) ? "覆盖更新: " + pageTitle : "抓取成功: " + pageTitle, (int) cost);
             success.incrementAndGet();
 
             // Persist the page before downloading static assets so slow asset hosts cannot delay it.
             // 读取缓存命中时，HTML 和 JS/CSS 资源都直接从 MinIO 复用，不再回源。
             boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
-            saveHtmlAndJs(doc, url, newHtml, msg, task, !cacheHit, saveResources, processedResourceUrls, execution);
-            updateImagesAfterPageProcessing(doc, docObj, url, parsed.getTitle(),
+            saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task, !cacheHit, saveResources, processedResourceUrls, execution);
+            updateImagesAfterPageProcessing(doc, docObj, url, pageTitle,
                     msg, task, overwriteImage, execution, imageExecutor, imageSemaphore);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -967,77 +1047,131 @@ public class CrawlerEngine {
     }
 
     /**
+     * 排除规则预计算结果：
+     * - exactSet：归一化后精确匹配的 URL 集合，O(1) 查找
+     * - prefixRules：归一化后需前缀匹配的规则列表，按长度倒序（长前缀优先命中）
+     */
+    record ExcludedRules(Set<String> exactSet, List<String> prefixRules) {
+        static ExcludedRules empty() {
+            return new ExcludedRules(java.util.Collections.emptySet(), java.util.Collections.emptyList());
+        }
+    }
+
+    /**
      * 判断 URL 是否命中爬虫配置的排除规则。支持：
-     * - 精确匹配（归一化后相等）
-     * - 路径前缀匹配（如 "/tags/" 排除该目录下所有页面）
-     * 排除规则来自 TaskMessage.excludedUrls（JSON 数组），按字符串缓存解析结果。
+     * - 精确匹配（归一化后相等）→ O(1) Set 查找
+     * - 路径前缀匹配（如 "/tags/" 排除该目录下所有页面）→ O(prefixCount) 线性扫描
+     * 排除规则来自 TaskMessage.excludedUrls（JSON 数组），预计算结果按原始字符串缓存。
      */
     private boolean isExcludedUrl(String url, TaskMessage msg) {
-        List<String> rules = getExcludedRules(msg);
-        if (rules.isEmpty()) {
+        ExcludedRules rules = getExcludedRules(msg);
+        if (rules.exactSet().isEmpty() && rules.prefixRules().isEmpty()) {
             return false;
         }
         String normalized = UrlQueueService.normalizeUrl(url);
         if (normalized == null || normalized.isBlank()) {
             return false;
         }
-        for (String rule : rules) {
-            String normalizedRule = UrlQueueService.normalizeUrl(rule);
-            if (normalizedRule == null || normalizedRule.isBlank()) {
-                continue;
-            }
-            if (normalized.equals(normalizedRule)) {
-                return true;
-            }
-            if (normalized.startsWith(normalizedRule)) {
+        // 精确匹配：O(1)
+        if (rules.exactSet().contains(normalized)) {
+            return true;
+        }
+        // 前缀匹配：O(prefixCount)，规则数通常很少
+        for (String prefix : rules.prefixRules()) {
+            if (normalized.startsWith(prefix)) {
                 return true;
             }
         }
         return false;
     }
 
-    private List<String> getExcludedRules(TaskMessage msg) {
+    private ExcludedRules getExcludedRules(TaskMessage msg) {
         String raw = msg.getExcludedUrls();
         if (raw == null || raw.isBlank()) {
-            return List.of();
+            return ExcludedRules.empty();
         }
         return excludedUrlsCache.computeIfAbsent(raw, r -> {
             try {
                 List<String> parsed = JSON.parseArray(r, String.class);
                 if (parsed == null) {
-                    return List.of();
+                    return ExcludedRules.empty();
                 }
-                return parsed.stream()
-                        .filter(s -> s != null && !s.isBlank())
-                        .map(String::trim)
-                        .toList();
+                Set<String> exactSet = new java.util.HashSet<>();
+                List<String> prefixRules = new java.util.ArrayList<>();
+                for (String rule : parsed) {
+                    if (rule == null || rule.isBlank()) continue;
+                    String normalizedRule = UrlQueueService.normalizeUrl(rule.trim());
+                    if (normalizedRule == null || normalizedRule.isBlank()) continue;
+                    // 完整 URL（含 scheme://host）走精确匹配；纯路径/前缀走前缀匹配
+                    if (normalizedRule.startsWith("http://") || normalizedRule.startsWith("https://")) {
+                        exactSet.add(normalizedRule);
+                    } else {
+                        prefixRules.add(normalizedRule);
+                    }
+                }
+                // 前缀规则按长度倒序：长前缀优先命中，避免短前缀误拦截
+                prefixRules.sort((a, b) -> b.length() - a.length());
+                return new ExcludedRules(
+                        java.util.Collections.unmodifiableSet(exactSet),
+                        java.util.Collections.unmodifiableList(prefixRules));
             } catch (Exception e) {
                 log.warn("解析 excludedUrls 失败，忽略排除规则: {}", r, e);
-                return List.of();
+                return ExcludedRules.empty();
             }
         });
     }
 
-    private boolean isSameDomain(String url, List<String> startUrls) {
+    /**
+     * 判断 URL 的 host 是否与起始 URL 的 host 集合相同。
+     * host 集合在 {@link #buildStartUrlInfo} 中预计算，此处只做 O(1) 查找。
+     */
+    private boolean isSameDomain(String url, Set<String> startHosts) {
         try {
             URI target = URI.create(url);
             String targetHost = normalizeHost(target.getHost());
             if (targetHost == null) return false;
-            for (String startUrl : startUrls) {
-                URI start = URI.create(startUrl);
-                if (targetHost.equals(normalizeHost(start.getHost()))) return true;
-            }
+            return startHosts.contains(targetHost);
         } catch (Exception e) {
             log.debug("URL 域名解析失败: {}", url);
         }
         return false;
     }
 
-    private boolean isConfiguredStartUrl(String url, List<String> startUrls) {
+    /**
+     * 判断 URL 是否为配置中的起始 URL（归一化后精确匹配）。
+     * 归一化集合在 {@link #buildStartUrlInfo} 中预计算，此处只做 O(1) 查找。
+     */
+    private boolean isConfiguredStartUrl(String url, StartUrlInfo startUrlInfo) {
         String normalizedUrl = UrlQueueService.normalizeUrl(url);
-        return normalizedUrl != null && startUrls != null && startUrls.stream()
-                .map(UrlQueueService::normalizeUrl)
-                .anyMatch(normalizedUrl::equals);
+        return normalizedUrl != null && startUrlInfo.normalizedSet().contains(normalizedUrl);
+    }
+
+    /**
+     * 一次性预计算起始 URL 的归一化集合和 host 集合，供 {@link #crawlUrl} 每页 O(1) 查找。
+     */
+    private StartUrlInfo buildStartUrlInfo(List<String> startUrls) {
+        if (startUrls == null || startUrls.isEmpty()) {
+            return StartUrlInfo.empty();
+        }
+        Set<String> normalizedSet = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        Set<String> hostSet = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        for (String startUrl : startUrls) {
+            String normalized = UrlQueueService.normalizeUrl(startUrl);
+            if (normalized != null && !normalized.isBlank()) {
+                normalizedSet.add(normalized);
+            }
+            try {
+                URI uri = URI.create(startUrl);
+                String host = uri.getHost();
+                if (host != null && !host.isBlank()) {
+                    hostSet.add(host.toLowerCase(java.util.Locale.ROOT));
+                }
+            } catch (Exception e) {
+                log.debug("起始URL域名解析失败: {}", startUrl);
+            }
+        }
+        return new StartUrlInfo(java.util.Collections.unmodifiableSet(normalizedSet),
+                java.util.Collections.unmodifiableSet(hostSet));
     }
 
     /**
@@ -1128,10 +1262,6 @@ public class CrawlerEngine {
             String robotsUrl = scheme + "://" + authority + "/robots.txt";
             RobotsRules rules = loadRobotsRules(robotsUrl, msg, execution);
             robotsCacheByHost.put(authority, new RobotsCacheEntry(rules, now + ROBOTS_CACHE_TTL_MS));
-            // 防止缓存无限增长
-            if (robotsCacheByHost.size() > 4096) {
-                robotsCacheByHost.entrySet().removeIf(e -> e.getValue().expireAt() < now);
-            }
             return rules.isAllowed(uri.getRawPath());
         } catch (Exception e) {
             log.debug("robots.txt 检查失败，放行 URL: {}", url, e);
@@ -1142,7 +1272,7 @@ public class CrawlerEngine {
     private RobotsRules loadRobotsRules(String robotsUrl, TaskMessage msg, TaskExecutionContext execution) {
         try {
             Request request = buildRequest(robotsUrl, msg);
-            return executeRequest(httpClient(msg), request, execution, response -> {
+            return executeRequest(httpClient(msg), request, execution, msg, response -> {
                 if (!response.isSuccessful() || response.body() == null) return RobotsRules.allowAll();
                 return RobotsRules.parse(response.body().string());
             });
@@ -1247,7 +1377,7 @@ public class CrawlerEngine {
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
                             return objectName;
                         }
-                        byte[] data = downloadImage(imageSrc, msg, execution);
+                        byte[] data = downloadBytes(imageSrc, msg, execution);
                         if (execution.isCancelled() || data == null || data.length == 0) {
                             return null;
                         }
@@ -1451,7 +1581,7 @@ public class CrawlerEngine {
      * saveResources=false 时（读取缓存命中且未开启覆盖HTML）只处理 HTML，
      * 页面引用的 JS/CSS 全部直接从 MinIO 复用，不回源。
      */
-    private void saveHtmlAndJs(Html doc, String url, String html, TaskMessage msg,
+    private void saveHtmlAndJs(Html doc, String url, String html, String title, TaskMessage msg,
                                SpiderTask task, boolean saveHtml, boolean saveResources,
                                Set<String> processedResourceUrls,
                                TaskExecutionContext execution) {
@@ -1462,7 +1592,7 @@ public class CrawlerEngine {
                 String htmlObject = "html/" + urlHash + ".html";
                 minioHelper.putHtml(htmlBucket, htmlObject, html);
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
-                        "text/html; charset=utf-8", "html", msg.getSpiderId(), parsedTitle(doc, url), url);
+                        "text/html; charset=utf-8", "html", msg.getSpiderId(), title, url);
             }
             if (!saveResources) {
                 return;
@@ -1490,7 +1620,7 @@ public class CrawlerEngine {
             }
             for (WebResource resource : resourceQueue.values()) {
                 if (execution.isCancelled()) break;
-                processWebResource(resource, msg, task, parsedTitle(doc, url), execution);
+                processWebResource(resource, msg, task, title, execution);
             }
         } catch (Exception e) {
             if (execution.isCancelled()) return;
@@ -1563,12 +1693,6 @@ public class CrawlerEngine {
         fileMetadataMapper.updateById(metadata);
     }
 
-    private String parsedTitle(Html doc, String url) {
-        List<Selectable> titleElements = doc.$("title").nodes();
-        String title = titleElements.isEmpty() ? "" : ContentParser.textOf(titleElements.get(0));
-        return title.isBlank() ? url : title;
-    }
-
     private String resolveResourceUrl(String pageUrl, String source) {
         if (source == null || source.isBlank()) {
             return null;
@@ -1620,7 +1744,7 @@ public class CrawlerEngine {
 
     private byte[] downloadBytes(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
         Request request = buildRequest(src, msg);
-        return executeRequest(httpClient(msg), request, execution, response -> {
+        return executeRequest(httpClient(msg), request, execution, msg, response -> {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
             }
@@ -1630,10 +1754,7 @@ public class CrawlerEngine {
 
     private void saveFileMetadata(String bucket, String objectName, long fileSize, String contentType,
                                   String category, Long spiderId, String title, String source) {
-        if (fileMetadataMapper.selectByObject(bucket, objectName) != null
-                || (source != null && !source.isBlank() && fileMetadataMapper.selectBySource(source) != null)) {
-            return;
-        }
+        // 幂等插入：object_name 或 source 重复时自动忽略，避免多 worker 并发竞争
         FileMetadata metadata = new FileMetadata();
         metadata.setBucket(bucket);
         metadata.setObjectName(objectName);
@@ -1644,7 +1765,7 @@ public class CrawlerEngine {
         metadata.setCategory(category);
         metadata.setSpiderId(spiderId);
         metadata.setSource(source);
-        fileMetadataMapper.insert(metadata);
+        fileMetadataMapper.insertIgnore(metadata);
     }
 
     /**
@@ -1659,26 +1780,14 @@ public class CrawlerEngine {
     }
 
     private void saveExistingFileMetadata(String objectName, Long spiderId, String title, String source) {
-        if (fileMetadataMapper.selectByObject(imageBucket, objectName) != null) {
-            return;
-        }
         try {
             StatObjectResponse stat = minioHelper.statObject(imageBucket, objectName);
-                saveFileMetadata(imageBucket, objectName, stat.size(), stat.contentType(), inferCategory(objectName),
+            // saveFileMetadata 内部用 INSERT IGNORE，已存在时自动跳过
+            saveFileMetadata(imageBucket, objectName, stat.size(), stat.contentType(), inferCategory(objectName),
                     spiderId, title, source);
         } catch (Exception e) {
             log.warn("读取已有文件元数据失败: bucket={}, object={}", imageBucket, objectName, e);
         }
-    }
-
-    private byte[] downloadImage(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
-        Request request = buildRequest(src, msg);
-        return executeRequest(httpClient(msg), request, execution, response -> {
-            if (!response.isSuccessful() || response.body() == null) {
-                return null;
-            }
-            return response.body().bytes();
-        });
     }
 
     static String guessExt(String src, byte[] data) {
@@ -1727,7 +1836,7 @@ public class CrawlerEngine {
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CollectX/1.0")
                 .header("Accept", "text/html,application/xhtml+xml")
                 .build();
-        return executeRequest(httpClient(msg), request, execution, response -> {
+        return executeRequest(httpClient(msg), request, execution, msg, response -> {
             if (!response.isSuccessful()) {
                 throw new RuntimeException("HTTP " + response.code());
             }
@@ -1739,8 +1848,14 @@ public class CrawlerEngine {
     }
 
     private <T> T executeRequest(OkHttpClient client, Request request,
-                                 TaskExecutionContext execution, ResponseReader<T> reader) throws Exception {
-        Call call = execution.register(client.newCall(request));
+                                 TaskExecutionContext execution, TaskMessage msg,
+                                 ResponseReader<T> reader) throws Exception {
+        Call call = client.newCall(request);
+        // 任务级超时：msg.timeout（秒）不为空时，覆盖 OkHttp 全局 readTimeout
+        if (msg.getTimeout() != null && msg.getTimeout() > 0) {
+            call.timeout().timeout(msg.getTimeout(), TimeUnit.SECONDS);
+        }
+        execution.register(call);
         Response raw = call.execute();
         Response response = wrapWithSizeLimit(raw);
         try {

@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -180,14 +181,28 @@ public class UrlQueueService {
      * 原实现需 2 次 RTT，优化后 1 次。
      * 使用内存缓存避免重复 normalizeUrl 解析。
      */
-    private final Map<String, String> normalizeCache = new ConcurrentHashMap<>();
+    /** 归一化缓存：线程安全 LRU，上限 500k 条，淘汰最久未访问的 URL */
+    private final Map<String, String> normalizeCache = buildLruCache(500_000);
 
-    /** 归一化缓存上限：防止无限增长（每个任务约 10k URL，20 任务 = 200k，取 500k 安全值） */
-    private static final int NORMALIZE_CACHE_MAX = 500_000;
+    /**
+     * 构建线程安全的 LRU 缓存：底层 LinkedHashMap（accessOrder=true）
+     * 包装在 Collections.synchronizedMap 中，容量超出时自动淘汰最久未访问的条目。
+     */
+    private static <K, V> Map<K, V> buildLruCache(int maxSize) {
+        LinkedHashMap<K, V> lru = new LinkedHashMap<>(
+                Math.max(16, maxSize / 2), 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(java.util.Map.Entry<K, V> eldest) {
+                return size() > maxSize;
+            }
+        };
+        return java.util.Collections.synchronizedMap(lru);
+    }
 
     /**
      * 带内存缓存的 URL 归一化：同一 URL 多次调用只解析一次。
      * {@link #normalizeUrl} 是纯函数（相同输入 → 相同输出），缓存安全。
+     * LRU 自动淘汰，无需手动 clear。
      */
     private String normalizeUrlCached(String url) {
         if (url == null || url.isEmpty()) {
@@ -199,13 +214,7 @@ public class UrlQueueService {
         }
         String result = normalizeUrl(url);
         if (result != null) {
-            if (normalizeCache.size() < NORMALIZE_CACHE_MAX) {
-                normalizeCache.put(url, result);
-            } else {
-                // 缓存满了，清空重建（简单粗暴但安全，避免锁竞争）
-                normalizeCache.clear();
-                normalizeCache.put(url, result);
-            }
+            normalizeCache.put(url, result);
         }
         return result;
     }
