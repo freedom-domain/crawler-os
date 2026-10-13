@@ -85,7 +85,7 @@ public class CrawlerEngine {
     @Value("${app.http.max-response-bytes:10485760}")
     private long httpMaxResponseBytes;
     /** HTTP 协议偏好：h2=允许 HTTP/2，http1=禁用 HTTP/2 */
-    @Value("${app.http.protocol:h2}")
+    @Value("${app.http.protocol:http1}")
     private String httpProtocol;
     /** 瞬时网络错误（IOException）重试次数，仅对幂等请求生效；0=不重试 */
     @Value("${app.http.retry-on-io-error:2}")
@@ -181,8 +181,8 @@ public class CrawlerEngine {
     private final MinioHelper minioHelper;
     private final FileMetadataMapper fileMetadataMapper;
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final OkHttpClient verifiedHttpClient;
-    private final OkHttpClient unverifiedHttpClient;
+    private OkHttpClient verifiedHttpClient;
+    private OkHttpClient unverifiedHttpClient;
     /** 带自定义 Header 的客户端缓存：LRU 上限 128 条，淘汰最久未使用的 Header 组合 */
     private final java.util.Map<String, OkHttpClient> httpClientCache = buildLruCache(128);
     private final java.util.Map<String, ExcludedRules> excludedUrlsCache = new ConcurrentHashMap<>();
@@ -213,6 +213,10 @@ public class CrawlerEngine {
         this.minioHelper = minioHelper;
         this.fileMetadataMapper = fileMetadataMapper;
         this.kafkaTemplate = kafkaTemplate;
+    }
+
+    @jakarta.annotation.PostConstruct
+    void initializeHttpClients() {
         this.sharedConnectionPool = new ConnectionPool(
                 Math.max(0, httpMaxIdleConnections),
                 Math.max(1, httpKeepAliveMinutes), TimeUnit.MINUTES);
@@ -220,6 +224,8 @@ public class CrawlerEngine {
                 buildHttpClient(false, null, poolSettings(), sharedConnectionPool, httpProtocol));
         this.unverifiedHttpClient = buildClientWithDnsAndRetry(
                 buildHttpClient(true, null, poolSettings(), sharedConnectionPool, httpProtocol));
+        log.info("HTTP 客户端初始化: protocol={}, connectTimeout={}s, readTimeout={}s, ioRetries={}",
+                httpProtocol, httpConnectTimeoutSeconds, httpReadTimeoutSeconds, httpRetryOnIoError);
     }
 
     private PoolSettings poolSettings() {
@@ -453,7 +459,7 @@ public class CrawlerEngine {
     static OkHttpClient buildHttpClient(boolean skipTlsVerify,
                                         String headers,
                                         PoolSettings settings) {
-        return buildHttpClient(skipTlsVerify, headers, settings, null, "h2");
+        return buildHttpClient(skipTlsVerify, headers, settings, null, "http1");
     }
 
     static OkHttpClient buildHttpClient(boolean skipTlsVerify,

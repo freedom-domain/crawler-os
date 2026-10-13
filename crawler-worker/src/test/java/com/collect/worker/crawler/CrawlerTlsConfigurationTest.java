@@ -44,6 +44,14 @@ class CrawlerTlsConfigurationTest {
     }
 
     @Test
+    void buildHttpClient_shouldDefaultToHttp1() {
+        OkHttpClient client = CrawlerEngine.buildHttpClient(false, null,
+                CrawlerEngine.PoolSettings.defaults());
+
+        assertEquals(List.of(Protocol.HTTP_1_1), client.protocols());
+    }
+
+    @Test
     void resolveHttpProtocols_shouldSupportHttp2AndHttp1Fallback() {
         assertTrue(CrawlerEngine.resolveHttpProtocols("h2").contains(Protocol.HTTP_2));
         assertTrue(CrawlerEngine.resolveHttpProtocols("h2").contains(Protocol.HTTP_1_1));
