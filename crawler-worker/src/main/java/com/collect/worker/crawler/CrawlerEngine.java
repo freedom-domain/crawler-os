@@ -1060,6 +1060,7 @@ public class CrawlerEngine {
      * 判断 URL 是否命中爬虫配置的排除规则。支持：
      * - 精确匹配（归一化后相等）→ O(1) Set 查找
      * - 路径前缀匹配（如 "/tags/" 排除该目录下所有页面）→ O(prefixCount) 线性扫描
+     * - 文件路径包含匹配（如 "/wp-login.php" 排除带查询参数或嵌套路径的变体）
      * 排除规则来自 TaskMessage.excludedUrls（JSON 数组），预计算结果按原始字符串缓存。
      */
     private boolean isExcludedUrl(String url, TaskMessage msg) {
@@ -1082,6 +1083,10 @@ public class CrawlerEngine {
                 for (String prefix : rules.prefixRules()) {
                     if ("/".equals(prefix)) {
                         // 根路径：所有路径都以 / 开头，直接命中
+                        return true;
+                    }
+                    int lastSlash = prefix.lastIndexOf('/');
+                    if (prefix.lastIndexOf('.') > lastSlash && pathAndQuery.contains(prefix)) {
                         return true;
                     }
                     if (pathAndQuery.startsWith(prefix)) {

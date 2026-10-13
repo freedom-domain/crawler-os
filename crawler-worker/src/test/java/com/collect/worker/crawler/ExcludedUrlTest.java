@@ -92,6 +92,16 @@ class ExcludedUrlTest {
         void prefixWithoutTrailingSlash() throws Exception {
             assertTrue(excluded("https://example.com/tags/foo", msg("[\"/tags\"]")));
         }
+
+        @Test
+        @DisplayName("文件排除规则匹配查询参数及嵌套路径中的 URL")
+        void filePathRuleMatchesContainedUrl() throws Exception {
+            TaskMessage rule = msg("[\"/wp-login.php\"]");
+
+            assertTrue(excluded("https://example.com/wp-login.php?action=lostpassword", rule));
+            assertTrue(excluded("https://example.com/admin/wp-login.php", rule));
+            assertFalse(excluded("https://example.com/wp-login", rule));
+        }
     }
 
     @Nested
