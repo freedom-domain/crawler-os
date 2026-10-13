@@ -1075,13 +1075,30 @@ public class CrawlerEngine {
         if (rules.exactSet().contains(normalized)) {
             return true;
         }
-        // 前缀匹配：O(prefixCount)，规则数通常很少
-        for (String prefix : rules.prefixRules()) {
-            if (normalized.startsWith(prefix)) {
-                return true;
+        // 前缀匹配：取 path+query 部分做 startsWith，O(prefixCount)
+        if (!rules.prefixRules().isEmpty()) {
+            String pathAndQuery = extractPathAndQuery(normalized);
+            if (pathAndQuery != null) {
+                for (String prefix : rules.prefixRules()) {
+                    if (pathAndQuery.startsWith(prefix)) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
+    }
+
+    /**
+     * 从归一化后的完整 URL 中提取 path + query 部分。
+     * 例如 "https://example.com/tags/foo?a=1" → "/tags/foo?a=1"
+     */
+    private String extractPathAndQuery(String normalizedUrl) {
+        int schemeEnd = normalizedUrl.indexOf("://");
+        if (schemeEnd < 0) return null;
+        int pathStart = normalizedUrl.indexOf('/', schemeEnd + 3);
+        if (pathStart < 0) return "/";
+        return normalizedUrl.substring(pathStart);
     }
 
     private ExcludedRules getExcludedRules(TaskMessage msg) {
@@ -1099,13 +1116,22 @@ public class CrawlerEngine {
                 List<String> prefixRules = new java.util.ArrayList<>();
                 for (String rule : parsed) {
                     if (rule == null || rule.isBlank()) continue;
-                    String normalizedRule = UrlQueueService.normalizeUrl(rule.trim());
-                    if (normalizedRule == null || normalizedRule.isBlank()) continue;
-                    // 完整 URL（含 scheme://host）走精确匹配；纯路径/前缀走前缀匹配
-                    if (normalizedRule.startsWith("http://") || normalizedRule.startsWith("https://")) {
-                        exactSet.add(normalizedRule);
+                    String trimmed = rule.trim();
+                    // 完整 URL（含 scheme://host）走精确匹配
+                    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                        String normalizedRule = UrlQueueService.normalizeUrl(trimmed);
+                        if (normalizedRule != null && !normalizedRule.isBlank()) {
+                            exactSet.add(normalizedRule);
+                        }
                     } else {
-                        prefixRules.add(normalizedRule);
+                        // 纯路径/前缀：去掉末尾斜杠后作为前缀规则
+                        String prefix = trimmed;
+                        if (prefix.length() > 1 && prefix.endsWith("/")) {
+                            prefix = prefix.substring(0, prefix.length() - 1);
+                        }
+                        if (!prefix.isBlank()) {
+                            prefixRules.add(prefix);
+                        }
                     }
                 }
                 // 前缀规则按长度倒序：长前缀优先命中，避免短前缀误拦截
