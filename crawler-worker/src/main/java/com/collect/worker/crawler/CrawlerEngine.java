@@ -1075,13 +1075,17 @@ public class CrawlerEngine {
         if (rules.exactSet().contains(normalized)) {
             return true;
         }
-        // 前缀匹配：取 path+query 部分做 startsWith，O(prefixCount)
+        // 前缀匹配：取 path+query 部分，边界感知匹配（前缀后必须是 / 或字符串结尾）
         if (!rules.prefixRules().isEmpty()) {
             String pathAndQuery = extractPathAndQuery(normalized);
             if (pathAndQuery != null) {
                 for (String prefix : rules.prefixRules()) {
                     if (pathAndQuery.startsWith(prefix)) {
-                        return true;
+                        int remaining = pathAndQuery.length() - prefix.length();
+                        // 前缀后必须是路径分隔符或已到末尾，避免 /tags 误拦 /tags2
+                        if (remaining == 0 || pathAndQuery.charAt(prefix.length()) == '/') {
+                            return true;
+                        }
                     }
                 }
             }
