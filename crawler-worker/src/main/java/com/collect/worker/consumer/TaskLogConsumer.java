@@ -65,7 +65,7 @@ public class TaskLogConsumer {
         try {
             for (int i = 0; i < batch.size(); i += BATCH_SIZE) {
                 List<SpiderTaskLog> sub = batch.subList(i, Math.min(i + BATCH_SIZE, batch.size()));
-                sub.forEach(logMapper::insert);
+                logMapper.batchInsert(sub);
             }
             log.debug("任务日志入库 {} 条", batch.size());
         } catch (Exception e) {
