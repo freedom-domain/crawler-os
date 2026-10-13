@@ -96,12 +96,6 @@ public class CrawlerEngine {
     /** 连接池监控日志间隔（秒）；0=关闭 */
     @Value("${app.http.pool-metrics-log-seconds:60}")
     private int httpPoolMetricsLogSeconds;
-    /** 单任务最大并发请求数（任务级 Dispatcher 上限），防止一个任务独占全局并发槽位 */
-    @Value("${app.http.max-concurrent-requests-per-task:100}")
-    private int httpMaxConcurrentRequestsPerTask;
-    /** 单任务每主机最大并发请求数 */
-    @Value("${app.http.max-concurrent-requests-per-task-per-host:50}")
-    private int httpMaxConcurrentRequestsPerTaskPerHost;
 
     /** 所有客户端共享的连接池：不同 header/TLS 组合的客户端复用同一条 TCP 连接 */
     private ConnectionPool sharedConnectionPool;
@@ -1080,10 +1074,14 @@ public class CrawlerEngine {
             String pathAndQuery = extractPathAndQuery(normalized);
             if (pathAndQuery != null) {
                 for (String prefix : rules.prefixRules()) {
+                    if ("/".equals(prefix)) {
+                        // 根路径：所有路径都以 / 开头，直接命中
+                        return true;
+                    }
                     if (pathAndQuery.startsWith(prefix)) {
-                        int remaining = pathAndQuery.length() - prefix.length();
+                        int afterPrefix = pathAndQuery.length() - prefix.length();
                         // 前缀后必须是路径分隔符或已到末尾，避免 /tags 误拦 /tags2
-                        if (remaining == 0 || pathAndQuery.charAt(prefix.length()) == '/') {
+                        if (afterPrefix == 0 || pathAndQuery.charAt(prefix.length()) == '/') {
                             return true;
                         }
                     }
@@ -1128,7 +1126,7 @@ public class CrawlerEngine {
                             exactSet.add(normalizedRule);
                         }
                     } else {
-                        // 纯路径/前缀：去掉末尾斜杠后作为前缀规则
+                        // 纯路径/前缀：去掉末尾斜杠后作为前缀规则；"/" 保留（表示排除所有）
                         String prefix = trimmed;
                         if (prefix.length() > 1 && prefix.endsWith("/")) {
                             prefix = prefix.substring(0, prefix.length() - 1);

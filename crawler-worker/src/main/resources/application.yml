@@ -10,6 +10,18 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:192.168.31.2}:${MYSQL_PORT:3306}/${MYSQL_DB:crawler_platform}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:mysql_FxYHD4}
+    druid:
+      # 20 并发任务 + 主循环状态轮询 + ES 重试 + MinIO 元数据写入，8 个默认连接偏紧
+      initial-size: ${DRUID_INITIAL_SIZE:5}
+      min-idle: ${DRUID_MIN_IDLE:10}
+      max-active: ${DRUID_MAX_ACTIVE:50}
+      max-wait: ${DRUID_MAX_WAIT:5000}        # 拿不到连接时最多等 5s
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
   cloud:
     nacos:
       discovery:
@@ -35,6 +47,15 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:redis_4rzHHD}
       database: 5
+      timeout: 10s
+      # 20 并发任务高频 LPOP/SADD/RPUSH（Lua 合并），单连接模式会成为瓶颈
+      lettuce:
+        pool:
+          enabled: true
+          max-active: ${REDIS_POOL_MAX_ACTIVE:50}
+          max-idle: ${REDIS_POOL_MAX_IDLE:20}
+          min-idle: ${REDIS_POOL_MIN_IDLE:5}
+          max-wait: 5s
 
 app:
   kafka:
@@ -51,8 +72,6 @@ app:
     keep-alive-minutes: ${HTTP_KEEP_ALIVE_MINUTES:2}              # 空闲连接保留时长（分钟）
     max-concurrent-requests: ${HTTP_MAX_CONCURRENT_REQUESTS:2000} # 全部客户端合计的最大并发请求数（含排队），<=0=默认(64)
     max-concurrent-requests-per-client: ${HTTP_MAX_CONCURRENT_REQUESTS_PER_CLIENT:200} # 单客户端每主机并发上限，<=0=默认(5)
-    max-concurrent-requests-per-task: ${HTTP_MAX_CONCURRENT_REQUESTS_PER_TASK:100}     # 单任务最大并发请求数（任务级 Dispatcher），防止一个任务独占全局槽位
-    max-concurrent-requests-per-task-per-host: ${HTTP_MAX_CONCURRENT_REQUESTS_PER_TASK_PER_HOST:50} # 单任务每主机并发上限
     max-cached-clients: ${HTTP_MAX_CACHED_CLIENTS:128}            # 带自定义 Header 的客户端缓存上限
     max-response-bytes: ${HTTP_MAX_RESPONSE_BYTES:10485760}       # 响应体大小上限（字节），0=不限制
     protocol: ${HTTP_PROTOCOL:h2}                                 # HTTP 协议偏好：h2=允许 HTTP/2，http1=禁用 HTTP/2
