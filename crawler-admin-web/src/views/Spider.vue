@@ -214,7 +214,7 @@
               :disabled="row._running"
               @click="handleRun(row)"
             />
-            <el-dropdown trigger="click" @command="command => handleCommand(command, row)">
+            <el-dropdown trigger="click" @command="(command: string) => handleCommand(command, row)">
               <el-button size="small" :icon="MoreFilled" />
               <template #dropdown>
                 <el-dropdown-menu>
