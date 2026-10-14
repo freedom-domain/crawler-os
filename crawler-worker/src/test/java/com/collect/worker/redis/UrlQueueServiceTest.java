@@ -18,6 +18,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+@SuppressWarnings("unchecked")
 class UrlQueueServiceTest {
 
     @Test
@@ -94,5 +95,21 @@ class UrlQueueServiceTest {
         verify(redis).execute(any(RedisScript.class),
                 eq(List.of("crawler:urls:42", "crawler:urls:42:processing")),
                 eq("86400"));
+    }
+
+    @Test
+    void enqueueAllIfAbsent_shouldNormalizeUrlsAndPreserveDepthInOneBatch() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        UrlQueueService service = new UrlQueueService(redis);
+
+        service.enqueueAllIfAbsent(42L, List.of(
+                new UrlQueueService.UrlToEnqueue("https://EXAMPLE.com/a/?b=2&a=1#top", 1),
+                new UrlQueueService.UrlToEnqueue("https://example.com/b.jpg", 2)));
+
+        verify(redis).execute(any(RedisScript.class),
+                eq(List.of("crawler:urls:42:visited", "crawler:urls:42")),
+                eq("86400"),
+                eq("https://example.com/a?a=1&b=2"),
+                eq("1"));
     }
 }

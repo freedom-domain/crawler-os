@@ -15,8 +15,6 @@ import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -44,6 +42,22 @@ public class UrlQueueService {
             "redis.call('RPUSH', KEYS[2], ARGV[3]) " +
             "redis.call('EXPIRE', KEYS[2], ARGV[2]) " +
             "return 1", Long.class);
+
+    private static final RedisScript<Long> BATCH_ENQUEUE_SCRIPT = new DefaultRedisScript<>(
+            "local addedCount = 0 " +
+            "for i = 2, #ARGV, 2 do " +
+            "local added = redis.call('SADD', KEYS[1], ARGV[i]) " +
+            "if added == 1 then " +
+            "redis.call('RPUSH', KEYS[2], ARGV[i] .. '\\t' .. ARGV[i + 1]) " +
+            "addedCount = addedCount + 1 " +
+            "end " +
+            "end " +
+            "if addedCount > 0 then " +
+            "redis.call('EXPIRE', KEYS[1], ARGV[1]) " +
+            "redis.call('EXPIRE', KEYS[2], ARGV[1]) " +
+            "end " +
+            "return addedCount", Long.class);
+    private static final int BATCH_SIZE = 500;
 
     /**
      * 原子弹出并认领一个 URL，避免 LPOP 与 SADD 间的网络往返及重复消费竞态。
@@ -186,6 +200,49 @@ public class UrlQueueService {
                 normalized, String.valueOf(TTL_HOURS * 3600), normalized + "\t" + depth);
         return Long.valueOf(1L).equals(result);
     }
+
+    /**
+     * Atomically deduplicates and enqueues discovered URLs in bounded batches to reduce Redis RTTs.
+     * The batch size limits command payload size, not the number of URLs accepted.
+     */
+    public int enqueueAllIfAbsent(Long taskId, List<UrlToEnqueue> urls) {
+        if (urls == null || urls.isEmpty()) {
+            return 0;
+        }
+        String visitedKey = KEY_PREFIX + taskId + ":visited";
+        String queueKey = KEY_PREFIX + taskId;
+        int enqueued = 0;
+        List<String> arguments = new ArrayList<>(BATCH_SIZE * 2 + 1);
+        arguments.add(String.valueOf(TTL_HOURS * 3600));
+        for (UrlToEnqueue entry : urls) {
+            if (entry == null || isImageUrl(entry.url())) {
+                continue;
+            }
+            String normalized = normalizeUrlCached(entry.url());
+            if (normalized == null || normalized.isBlank()) {
+                continue;
+            }
+            arguments.add(normalized);
+            arguments.add(String.valueOf(entry.depth()));
+            if (arguments.size() >= BATCH_SIZE * 2 + 1) {
+                enqueued += executeBatchEnqueue(visitedKey, queueKey, arguments);
+                arguments = new ArrayList<>(BATCH_SIZE * 2 + 1);
+                arguments.add(String.valueOf(TTL_HOURS * 3600));
+            }
+        }
+        if (arguments.size() > 1) {
+            enqueued += executeBatchEnqueue(visitedKey, queueKey, arguments);
+        }
+        return enqueued;
+    }
+
+    private int executeBatchEnqueue(String visitedKey, String queueKey, List<String> arguments) {
+        Long result = redis.execute(BATCH_ENQUEUE_SCRIPT, List.of(visitedKey, queueKey),
+                arguments.toArray());
+        return result == null ? 0 : result.intValue();
+    }
+
+    public record UrlToEnqueue(String url, int depth) {}
 
     /**
      * 原子认领：Lua 脚本合并 SADD + EXPIRE 为 1 次 RTT。

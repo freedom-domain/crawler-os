@@ -52,8 +52,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import okhttp3.Protocol;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.LongAdder;
 
 @Slf4j
 @Component
@@ -96,13 +98,23 @@ public class CrawlerEngine {
     /** 连接池监控日志间隔（秒）；0=关闭 */
     @Value("${app.http.pool-metrics-log-seconds:60}")
     private int httpPoolMetricsLogSeconds;
-
+    @Value("${app.http.per-host-max-concurrent-requests:4}")
+    private int httpPerHostMaxConcurrentRequests;
+    @Value("${app.http.per-host-min-interval-millis:200}")
+    private long httpPerHostMinIntervalMillis;
     /** 所有客户端共享的连接池：不同 header/TLS 组合的客户端复用同一条 TCP 连接 */
     private ConnectionPool sharedConnectionPool;
     /** 进程级 robots 缓存（按 authority），跨任务复用，TTL 30 分钟，LRU 上限 4096 条 */
     private final Map<String, RobotsCacheEntry> robotsCacheByHost = buildLruCache(4096);
     /** 本地 DNS 缓存（name -> (addresses, expireAt)），线程安全 LRU，上限 1024 条 */
     private final Map<String, DnsCacheEntry> dnsCache = buildLruCache(1024);
+    private final Map<String, HostRequestLimiter> hostRequestLimiters = new ConcurrentHashMap<>();
+    private final LongAdder httpRequestCount = new LongAdder();
+    private final LongAdder httpFailureCount = new LongAdder();
+    private final LongAdder httpDurationNanos = new LongAdder();
+    private final LongAdder hostThrottleNanos = new LongAdder();
+    private final LongAdder discoveredUrlCount = new LongAdder();
+    private final LongAdder enqueuedUrlCount = new LongAdder();
     /** 任务级客户端（线程本地）：每个爬取虚拟线程绑定自己任务的 Dispatcher，实现调度隔离 */
     private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
     /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，LRU 上限 1024 条 */
@@ -124,6 +136,49 @@ public class CrawlerEngine {
     record RobotsCacheEntry(RobotsRules rules, long expireAt) {}
 
     record DnsCacheEntry(java.util.List<InetAddress> addresses, long expireAt) {}
+
+    private static final class HostRequestLimiter {
+        private final Semaphore permits;
+        private final long minIntervalNanos;
+        private long nextRequestAtNanos;
+
+        private HostRequestLimiter(int maxConcurrentRequests, long minIntervalMillis) {
+            permits = new Semaphore(Math.max(1, maxConcurrentRequests));
+            minIntervalNanos = TimeUnit.MILLISECONDS.toNanos(Math.max(0, minIntervalMillis));
+        }
+
+        long acquire(TaskExecutionContext execution) throws InterruptedException {
+            permits.acquire();
+            long waitStarted = System.nanoTime();
+            boolean acquired = false;
+            try {
+                synchronized (this) {
+                    while (true) {
+                        if (execution.isCancelled()) {
+                            throw new InterruptedException("爬取任务已取消");
+                        }
+                        long now = System.nanoTime();
+                        long waitNanos = nextRequestAtNanos - now;
+                        if (waitNanos <= 0) {
+                            nextRequestAtNanos = now + minIntervalNanos;
+                            acquired = true;
+                            return System.nanoTime() - waitStarted;
+                        }
+                        TimeUnit.NANOSECONDS.timedWait(this,
+                                Math.min(waitNanos, TimeUnit.MILLISECONDS.toNanos(250)));
+                    }
+                }
+            } finally {
+                if (!acquired) {
+                    permits.release();
+                }
+            }
+        }
+
+        void release() {
+            permits.release();
+        }
+    }
 
     /** 任务状态缓存条目：status + pausedAt + 过期时间 */
     record TaskStatusCache(String status, java.time.LocalDateTime pausedAt, long expireAt) {}
@@ -256,8 +311,8 @@ public class CrawlerEngine {
      * <p>不再按任务派生独立 Dispatcher 的 OkHttpClient（旧方案 A：连接池共享 + 调度隔离）。
      * OkHttp 文档明确 "It is an error to build a new client with an existing dispatcher"，
      * 且任务结束后 OkHttpClient 对象本身会留在堆里等 GC。现改为复用共享客户端
-     * （含 TLS / 自定义 Header 组合），并发由 execute() 里的 imageSemaphore（= urlConcurrency）
-     * 统一限流，避免每任务一个废弃的 OkHttp 实例。
+     * （含 TLS / 自定义 Header 组合）；页面并发、资源并发与主机级请求限制分别控制，
+     * 避免每任务一个废弃的 OkHttp 实例。
      */
     private OkHttpClient taskClientFor(TaskMessage msg) {
         return httpClient(msg);
@@ -567,13 +622,24 @@ public class CrawlerEngine {
      * 间隔 <=0 时不打印（避免空转）。
      */
     @org.springframework.scheduling.annotation.Scheduled(fixedDelayString =
-            "${app.http.pool-metrics-log-seconds:60000}")
+            "#{T(java.lang.Math).max(1000, ${app.http.pool-metrics-log-seconds:60} * 1000)}")
     public void logPoolMetrics() {
         if (httpPoolMetricsLogSeconds <= 0) return;
         int running = verifiedHttpClient.dispatcher().runningCallsCount();
         int queued = verifiedHttpClient.dispatcher().queuedCallsCount();
-        log.debug("http-pool: running={}, queued={}, cachedClients={}, dnsCacheEntries={}, robotsCacheEntries={}",
-                running, queued, httpClientCache.size(), dnsCache.size(), robotsCacheByHost.size());
+        long requests = httpRequestCount.sumThenReset();
+        long failures = httpFailureCount.sumThenReset();
+        long durationNanos = httpDurationNanos.sumThenReset();
+        long throttledNanos = hostThrottleNanos.sumThenReset();
+        long discovered = discoveredUrlCount.sumThenReset();
+        long enqueued = enqueuedUrlCount.sumThenReset();
+        log.info("crawler-metrics: httpRequests={}, httpFailures={}, avgHttpMs={}, hostThrottleMs={}, " +
+                        "discoveredUrls={}, enqueuedUrls={}, running={}, queued={}, cachedClients={}, " +
+                        "dnsCacheEntries={}, robotsCacheEntries={}, hostLimiters={}",
+                requests, failures, requests == 0 ? 0 : TimeUnit.NANOSECONDS.toMillis(durationNanos / requests),
+                TimeUnit.NANOSECONDS.toMillis(throttledNanos), discovered, enqueued,
+                running, queued, httpClientCache.size(), dnsCache.size(), robotsCacheByHost.size(),
+                hostRequestLimiters.size());
     }
 
     /**
@@ -609,11 +675,9 @@ public class CrawlerEngine {
         if (concurrency < 1) concurrency = 1;
         if (concurrency > 50) concurrency = 50;
         ExecutorService executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-        // 任务级图片下载线程池：并行下载图片
-        final ExecutorService imageExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
-        final java.util.concurrent.Semaphore imageSemaphore =
-                new java.util.concurrent.Semaphore(concurrency);
-        // 任务级 HTTP 客户端：复用共享客户端（带独立 TLS/Header 组合），并发由 imageSemaphore(=concurrency) 限流
+        final ExecutorService resourceExecutor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
+        final Semaphore resourceSemaphore = new Semaphore(concurrency);
+        // 任务级 HTTP 客户端：复用共享客户端（带独立 TLS/Header 组合）。
         final OkHttpClient taskClient = taskClientFor(msg);
         TaskExecutionContext execution = new TaskExecutionContext();
         // 预计算起始 URL 的归一化集合和 host 集合，crawlUrl 每页只做 O(1) 查找
@@ -624,6 +688,7 @@ public class CrawlerEngine {
         Set<String> processedResourceUrls = ConcurrentHashMap.newKeySet();
         Set<Future<?>> activeFutures = ConcurrentHashMap.newKeySet();
         boolean executorTerminated = true;
+        boolean resourceExecutorTerminated = true;
 
         try {
             for (String startUrl : msg.getStartUrls()) {
@@ -690,7 +755,7 @@ public class CrawlerEngine {
                 Future<?> future = executor.submit(() ->
                         crawlUrl(crawlUrl, crawlDepth, maxDepth, msg, task, taskId, success, fail,
                                 processedResourceUrls, execution, taskClient,
-                                imageExecutor, imageSemaphore, startUrlInfo)
+                                resourceExecutor, resourceSemaphore, startUrlInfo)
                 );
                 activeFutures.add(future);
             }
@@ -706,9 +771,14 @@ public class CrawlerEngine {
                 executor.shutdownNow();
                 awaitExecutorTermination(executor, Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             }
-            // 释放任务级图片下载线程池
-            if (!awaitExecutorTermination(imageExecutor, 30, TimeUnit.SECONDS)) {
-                imageExecutor.shutdownNow();
+            if (execution.isCancelled()) {
+                resourceExecutor.shutdownNow();
+            } else {
+                resourceExecutor.shutdown();
+            }
+            if (!awaitExecutorTermination(resourceExecutor, 30, TimeUnit.SECONDS)) {
+                resourceExecutorTerminated = false;
+                resourceExecutor.shutdownNow();
             }
         }
 
@@ -730,9 +800,9 @@ public class CrawlerEngine {
         urlQueue.clear(taskId);
 
 
-        if (!executorTerminated) {
+        if (!executorTerminated || !resourceExecutorTerminated) {
             task.setStatus("FAILED");
-            task.setErrorMessage("任务线程未在超时时间内结束，可能仍有页面或图片处理未完成");
+            task.setErrorMessage("任务处理线程未在超时时间内结束，可能仍有页面或资源处理未完成");
         } else if (latestTask != null
                 && ("CANCELED".equals(latestTask.getStatus()) || "CANCELING".equals(latestTask.getStatus()))) {
             task.setStatus("CANCELED");
@@ -834,8 +904,8 @@ public class CrawlerEngine {
                            Long taskId, AtomicInteger success, AtomicInteger fail,
                            Set<String> processedResourceUrls,
                            TaskExecutionContext execution, OkHttpClient taskClient,
-                           java.util.concurrent.ExecutorService imageExecutor,
-                           java.util.concurrent.Semaphore imageSemaphore,
+                           java.util.concurrent.ExecutorService resourceExecutor,
+                           Semaphore resourceSemaphore,
                            StartUrlInfo startUrlInfo) {
         currentTaskClient.set(taskClient);
         try {
@@ -884,13 +954,16 @@ public class CrawlerEngine {
                 List<String> next = ContentParser.extractNextUrls(doc, url, maxDepth - depth);
                 next.removeIf(nextUrl ->
                         startUrlInfo.normalizedSet().contains(nextUrl) || !isSameDomain(nextUrl, startUrlInfo.hosts()));
-                int enqueued = 0;
+                List<UrlQueueService.UrlToEnqueue> discoveredUrls = new java.util.ArrayList<>();
                 for (String nextUrl : next) {
                     if (nextUrl == null || nextUrl.isBlank()) continue;
                     if (isExcludedUrl(nextUrl, msg)) continue;
                     if (!isAllowedByRobots(nextUrl, msg, execution)) continue;
-                    if (urlQueue.enqueueIfAbsent(taskId, nextUrl, depth + 1)) enqueued++;
+                    discoveredUrls.add(new UrlQueueService.UrlToEnqueue(nextUrl, depth + 1));
                 }
+                discoveredUrlCount.add(next.size());
+                int enqueued = urlQueue.enqueueAllIfAbsent(taskId, discoveredUrls);
+                enqueuedUrlCount.add(enqueued);
                 log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
             }
 
@@ -968,12 +1041,13 @@ public class CrawlerEngine {
             urlHtmlHashCache.put(url, new UrlHashCacheEntry(newHtmlHash,
                     System.currentTimeMillis() + URL_HASH_CACHE_TTL_MS));
 
-            // Persist the page before downloading static assets so slow asset hosts cannot delay it.
+            // Persist the page before resource work so a slow asset host cannot prevent page storage.
             // 读取缓存命中时，HTML 和 JS/CSS 资源都直接从 MinIO 复用，不再回源。
             boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
-            saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task, !cacheHit, saveResources, processedResourceUrls, execution, imageExecutor, imageSemaphore);
+            saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task, !cacheHit, saveResources,
+                    processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
             updateImagesAfterPageProcessing(doc, docObj, url, pageTitle,
-                    msg, task, overwriteImage, execution, imageExecutor, imageSemaphore);
+                    msg, task, overwriteImage, execution, resourceExecutor, resourceSemaphore);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (!execution.isCancelled()) {
@@ -995,8 +1069,8 @@ public class CrawlerEngine {
     private void updateImagesAfterPageProcessing(Html doc, SpiderContentDoc document, String pageUrl,
                                                 String title, TaskMessage msg, SpiderTask task,
                                                 boolean overwrite, TaskExecutionContext execution,
-                                                java.util.concurrent.ExecutorService imageExecutor,
-                                                java.util.concurrent.Semaphore imageSemaphore) {
+                                                java.util.concurrent.ExecutorService resourceExecutor,
+                                                Semaphore resourceSemaphore) {
         if ((msg.getImageSelector() == null || msg.getImageSelector().isBlank())
                 && (msg.getImageXpath() == null || msg.getImageXpath().isBlank())) {
             return;
@@ -1005,7 +1079,7 @@ public class CrawlerEngine {
             List<String> imageUrls = shouldSkipImageDownload(doc, msg)
                     ? List.of()
                     : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution,
-                            imageExecutor, imageSemaphore);
+                            resourceExecutor, resourceSemaphore);
             document.setImages(imageUrls);
             saveToElasticsearchWithRetry(document);
         } catch (InterruptedException e) {
@@ -1362,8 +1436,8 @@ public class CrawlerEngine {
     private List<String> extractAndUploadImages(Html doc, String pageUrl, String title,
                                                 TaskMessage msg, SpiderTask task, boolean overwrite,
                                                 TaskExecutionContext execution,
-                                                java.util.concurrent.ExecutorService imageExecutor,
-                                                java.util.concurrent.Semaphore imageSemaphore) {
+                                                java.util.concurrent.ExecutorService resourceExecutor,
+                                                Semaphore resourceSemaphore) {
         if (execution.isCancelled()) return List.of();
         String selector = msg.getImageSelector();
         String xpath = msg.getImageXpath();
@@ -1392,9 +1466,9 @@ public class CrawlerEngine {
                 if (src.isBlank() || !seen.add(src)) {
                     continue;
                 }
-                imageSemaphore.acquireUninterruptibly();
+                resourceSemaphore.acquireUninterruptibly();
                 if (execution.isCancelled()) {
-                    imageSemaphore.release();
+                    resourceSemaphore.release();
                     break;
                 }
                 final String imageSrc = src;
@@ -1435,9 +1509,9 @@ public class CrawlerEngine {
                         }
                         return null;
                     } finally {
-                        imageSemaphore.release();
+                        resourceSemaphore.release();
                     }
-                }, imageExecutor));
+                }, resourceExecutor));
             }
             // 按原始顺序收集结果，保证图片顺序不乱
             for (java.util.concurrent.CompletableFuture<String> f : imageFutures) {
@@ -1616,8 +1690,8 @@ public class CrawlerEngine {
                                SpiderTask task, boolean saveHtml, boolean saveResources,
                                Set<String> processedResourceUrls,
                                TaskExecutionContext execution,
-                               java.util.concurrent.ExecutorService imageExecutor,
-                               java.util.concurrent.Semaphore imageSemaphore) {
+                               java.util.concurrent.ExecutorService resourceExecutor,
+                               Semaphore resourceSemaphore) {
         if (execution.isCancelled()) return;
         try {
             String urlHash = ObjectNameUtils.hashUrl(url);
@@ -1651,31 +1725,30 @@ public class CrawlerEngine {
                 enqueueResource(resourceQueue, processedResourceUrls,
                         new WebResource(cssUrl, "css", objectName, "text/css"));
             }
-            // 并行下载 JS/CSS：虚拟线程池 + 信号量限流（与图片共享并发槽位）
+            // JS/CSS 与图片共享资源并发槽位，并在当前页面任务结束前完成。
             if (!resourceQueue.isEmpty()) {
-                java.util.List<java.util.concurrent.CompletableFuture<Void>> resourceFutures = new java.util.ArrayList<>();
+                List<java.util.concurrent.CompletableFuture<Void>> resourceFutures = new java.util.ArrayList<>();
                 for (WebResource resource : resourceQueue.values()) {
                     if (execution.isCancelled()) break;
-                    imageSemaphore.acquireUninterruptibly();
+                    resourceSemaphore.acquireUninterruptibly();
                     if (execution.isCancelled()) {
-                        imageSemaphore.release();
+                        resourceSemaphore.release();
                         break;
                     }
-                    final WebResource res = resource;
                     resourceFutures.add(java.util.concurrent.CompletableFuture.runAsync(() -> {
-                        try {
-                            processWebResource(res, msg, task, title, execution);
-                        } finally {
-                            imageSemaphore.release();
-                        }
-                    }, imageExecutor));
-                }
-                for (java.util.concurrent.CompletableFuture<Void> f : resourceFutures) {
                     try {
-                        f.join();
-                    } catch (Exception e) {
+                            processWebResource(resource, msg, task, title, execution);
+                        } finally {
+                            resourceSemaphore.release();
+                        }
+                    }, resourceExecutor));
+                }
+                for (java.util.concurrent.CompletableFuture<Void> future : resourceFutures) {
+                    try {
+                        future.join();
+                    } catch (java.util.concurrent.CompletionException exception) {
                         if (!execution.isCancelled()) {
-                            log.warn("JS/CSS 处理异常: url={}", url, e);
+                            log.warn("JS/CSS 处理异常: url={}", url, exception.getCause());
                         }
                     }
                 }
@@ -1915,16 +1988,24 @@ public class CrawlerEngine {
     private <T> T executeRequest(OkHttpClient client, Request request,
                                  TaskExecutionContext execution, TaskMessage msg,
                                  ResponseReader<T> reader) throws Exception {
-        Call call = client.newCall(request);
-        // 任务级超时：msg.timeout 单位是毫秒（前端 el-input-number min=1000 max=60000）。
-        // 取 max(任务超时, 连接+读取超时) 作为 OkHttp call 整体超时，
-        // 保证即使任务超时设得比底层超时还短，也不会因为 connect 阶段就炸掉。
-        if (msg.getTimeout() != null && msg.getTimeout() > 0) {
-            long minMs = (httpConnectTimeoutSeconds + httpReadTimeoutSeconds) * 1000L;
-            call.timeout().timeout(Math.max(msg.getTimeout(), minMs), TimeUnit.MILLISECONDS);
-        }
-        execution.register(call);
+        String hostKey = request.url().host() + ":" + request.url().port();
+        HostRequestLimiter limiter = hostRequestLimiters.computeIfAbsent(hostKey,
+                ignored -> new HostRequestLimiter(httpPerHostMaxConcurrentRequests,
+                        httpPerHostMinIntervalMillis));
+        long waitedNanos = limiter.acquire(execution);
+        hostThrottleNanos.add(waitedNanos);
+        long requestStartedAt = System.nanoTime();
+        httpRequestCount.increment();
+        Call call = null;
         try {
+            call = client.newCall(request);
+            // 任务级超时：msg.timeout 单位是毫秒（前端 el-input-number min=1000 max=60000）。
+            // 取 max(任务超时, 连接+读取超时) 作为 OkHttp call 整体超时。
+            if (msg.getTimeout() != null && msg.getTimeout() > 0) {
+                long minMs = (httpConnectTimeoutSeconds + httpReadTimeoutSeconds) * 1000L;
+                call.timeout().timeout(Math.max(msg.getTimeout(), minMs), TimeUnit.MILLISECONDS);
+            }
+            execution.register(call);
             Response raw = call.execute();
             Response response = wrapWithSizeLimit(raw);
             try {
@@ -1932,8 +2013,15 @@ public class CrawlerEngine {
             } finally {
                 response.close();
             }
+        } catch (Exception e) {
+            httpFailureCount.increment();
+            throw e;
         } finally {
-            execution.unregister(call);
+            httpDurationNanos.add(System.nanoTime() - requestStartedAt);
+            if (call != null) {
+                execution.unregister(call);
+            }
+            limiter.release();
         }
     }
 
