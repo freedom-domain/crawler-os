@@ -46,33 +46,35 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="list" v-loading="loading" stripe border>
+    <div class="table-scroll-wrapper">
+    <el-table :data="list" v-loading="loading" stripe resizable border>
       <template #empty>
         <el-empty v-if="!loading" description="暂无图片预览记录" />
       </template>
-      <el-table-column prop="title" label="内容标题" min-width="280" show-overflow-tooltip>
+      <el-table-column prop="title" label="内容标题" min-width="280" show-overflow-tooltip resizable>
         <template #default="{ row }">
           <a class="title-link" href="javascript:void(0)" @click="openPreview(row)">
             {{ row.title || '无标题' }}
           </a>
         </template>
       </el-table-column>
-      <el-table-column prop="url" label="来源 URL" min-width="300" show-overflow-tooltip>
+      <el-table-column prop="url" label="来源 URL" min-width="300" show-overflow-tooltip resizable>
         <template #default="{ row }">{{ row.url || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="spiderName" label="爬虫" min-width="160" show-overflow-tooltip>
+      <el-table-column prop="spiderName" label="爬虫" min-width="160" show-overflow-tooltip resizable>
         <template #default="{ row }">{{ row.spiderName || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="imageCount" label="图片数" width="100" align="center" />
-      <el-table-column prop="createTime" label="预览时间" min-width="180">
+      <el-table-column prop="imageCount" label="图片数" width="100" align="center" resizable />
+      <el-table-column prop="createTime" label="预览时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="90" fixed="right" align="center">
+      <el-table-column label="操作" width="90" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <el-button link type="danger" @click="deleteHistory(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
+    </div>
 
     <el-pagination
       v-if="total"
