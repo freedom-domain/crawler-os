@@ -6,6 +6,7 @@ import co.elastic.clients.elasticsearch._types.query_dsl.BoolQuery;
 import co.elastic.clients.elasticsearch._types.query_dsl.Query;
 import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import co.elastic.clients.elasticsearch.core.OpenPointInTimeRequest;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -22,8 +23,10 @@ import com.collect.search.mapper.SpiderMapper;
 import com.collect.search.entity.UserFavorite;
 import com.collect.search.mapper.UserFavoriteMapper;
 import com.collect.search.entity.SearchHistory;
+import com.collect.search.entity.ImagePreviewHistory;
 import com.collect.search.mapper.FileObjectMapper;
 import com.collect.search.mapper.SearchHistoryMapper;
+import com.collect.search.mapper.ImagePreviewHistoryMapper;
 import com.collect.search.minio.MinioHelper;
 import com.collect.common.security.LoginUtils;
 import com.collect.common.util.ObjectNameUtils;
@@ -47,6 +50,7 @@ public class SearchService {
     private final SpiderMapper spiderMapper;
     private final UserFavoriteMapper userFavoriteMapper;
     private final SearchHistoryMapper searchHistoryMapper;
+    private final ImagePreviewHistoryMapper imagePreviewHistoryMapper;
     private final MinioHelper minioHelper;
     private final FileObjectMapper fileObjectMapper;
 
@@ -741,6 +745,51 @@ public class SearchService {
         searchHistoryMapper.delete(new LambdaQueryWrapper<SearchHistory>()
                 .eq(SearchHistory::getUserId, LoginUtils.getUserId())
                 .eq(SearchHistory::getKeyword, keyword.trim()));
+    }
+
+    public void recordImagePreview(ImagePreviewHistory history) {
+        String contentId = history.getContentId();
+        if (contentId == null || contentId.isBlank() || contentId.length() > 128) {
+            throw new com.collect.common.exception.BizException("内容标识无效");
+        }
+        Long userId = LoginUtils.getUserId();
+        history.setContentId(contentId.trim());
+        history.setUserId(userId);
+        history.setImageCount(Math.max(0, history.getImageCount() == null ? 0 : history.getImageCount()));
+        imagePreviewHistoryMapper.insert(history);
+    }
+
+    public IPage<ImagePreviewHistory> imagePreviewHistory(
+            int current, int size, String title, String url, String spiderName) {
+        int page = Math.max(1, current);
+        int pageSize = Math.min(100, Math.max(1, size));
+        LambdaQueryWrapper<ImagePreviewHistory> query = new LambdaQueryWrapper<ImagePreviewHistory>()
+                .eq(ImagePreviewHistory::getUserId, LoginUtils.getUserId())
+                .eq(ImagePreviewHistory::getDeleted, 0);
+        if (title != null && !title.isBlank()) {
+            query.like(ImagePreviewHistory::getTitle, title.trim());
+        }
+        if (url != null && !url.isBlank()) {
+            query.like(ImagePreviewHistory::getUrl, url.trim());
+        }
+        if (spiderName != null && !spiderName.isBlank()) {
+            query.like(ImagePreviewHistory::getSpiderName, spiderName.trim());
+        }
+        return imagePreviewHistoryMapper.selectPage(
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, pageSize),
+                query.orderByDesc(ImagePreviewHistory::getCreateTime)
+                        .orderByDesc(ImagePreviewHistory::getId));
+    }
+
+    public void deleteImagePreviewHistory(Long id) {
+        imagePreviewHistoryMapper.delete(new LambdaQueryWrapper<ImagePreviewHistory>()
+                .eq(ImagePreviewHistory::getId, id)
+                .eq(ImagePreviewHistory::getUserId, LoginUtils.getUserId()));
+    }
+
+    public void clearImagePreviewHistory() {
+        imagePreviewHistoryMapper.delete(new LambdaQueryWrapper<ImagePreviewHistory>()
+                .eq(ImagePreviewHistory::getUserId, LoginUtils.getUserId()));
     }
 
     @SuppressWarnings("null")

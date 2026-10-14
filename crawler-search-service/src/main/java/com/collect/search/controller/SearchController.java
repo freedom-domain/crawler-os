@@ -1,11 +1,14 @@
 package com.collect.search.controller;
 
 import com.alibaba.fastjson2.JSON;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
-import com.collect.search.dto.SearchResult;
+import com.collect.search.dto.ImagePreviewHistoryReq;
 import com.collect.search.dto.SearchPageResponse;
+import com.collect.search.dto.SearchResult;
+import com.collect.search.entity.ImagePreviewHistory;
 import com.collect.search.entity.SearchHistory;
 import com.collect.search.es.SpiderContentDoc;
 import com.collect.search.service.SearchService;
@@ -54,6 +57,48 @@ public class SearchController {
     public R<Void> deleteHistory(@RequestParam("keyword") String keyword) {
         requirePermission("search:query");
         searchService.deleteHistory(keyword);
+        return R.ok();
+    }
+
+    @Operation(summary = "记录图片预览")
+    @PostMapping("/image-history")
+    public R<Void> recordImagePreview(@RequestBody ImagePreviewHistoryReq request) {
+        requirePermission("search:query");
+        ImagePreviewHistory history = new ImagePreviewHistory();
+        history.setContentId(request.getContentId());
+        history.setTitle(request.getTitle());
+        history.setUrl(request.getUrl());
+        history.setSpiderName(request.getSpiderName());
+        history.setImageCount(request.getImageCount());
+        searchService.recordImagePreview(history);
+        return R.ok();
+    }
+
+    @Operation(summary = "图片预览记录")
+    @GetMapping("/image-history")
+    public R<IPage<ImagePreviewHistory>> imagePreviewHistory(
+            @RequestParam(value = "current", defaultValue = "1") int current,
+            @RequestParam(value = "size", defaultValue = "15") int size,
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "url", required = false) String url,
+            @RequestParam(value = "spiderName", required = false) String spiderName) {
+        requirePermission("search:query");
+        return R.ok(searchService.imagePreviewHistory(current, size, title, url, spiderName));
+    }
+
+    @Operation(summary = "删除图片预览记录")
+    @DeleteMapping("/image-history/{id}")
+    public R<Void> deleteImagePreviewHistory(@PathVariable Long id) {
+        requirePermission("search:query");
+        searchService.deleteImagePreviewHistory(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "清空图片预览记录")
+    @DeleteMapping("/image-history")
+    public R<Void> clearImagePreviewHistory() {
+        requirePermission("search:query");
+        searchService.clearImagePreviewHistory();
         return R.ok();
     }
 

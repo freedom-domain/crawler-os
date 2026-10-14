@@ -98,14 +98,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, defineComponent, h, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, defineComponent, h, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Menu as MenuIcon } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -304,6 +304,7 @@ const iconMap: Record<string, any> = {
   Search,
   file: Folder,
   Folder,
+  Picture,
   system: Setting,
   Setting
 }
@@ -345,7 +346,12 @@ const loadMenu = async () => {
 }
 
 onMounted(() => {
+  window.addEventListener('crawler-menu-cache-invalidated', loadMenu)
   loadMenu()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('crawler-menu-cache-invalidated', loadMenu)
 })
 
 const currentTitle = computed(() => {

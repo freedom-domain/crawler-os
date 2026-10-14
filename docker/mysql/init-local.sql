@@ -196,6 +196,21 @@ CREATE TABLE IF NOT EXISTS search_history (
     KEY idx_search_history_user_time (user_id, deleted, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 用户图片预览记录
+CREATE TABLE IF NOT EXISTS image_preview_history (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    content_id VARCHAR(128) NOT NULL,
+    title TEXT,
+    url TEXT,
+    spider_name VARCHAR(255),
+    image_count INT NOT NULL DEFAULT 0,
+    deleted TINYINT DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    KEY idx_image_preview_user_time (user_id, deleted, create_time, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 初始化角色
 INSERT INTO sys_role (id, name, code, description, status) VALUES
 (1, '管理员', 'admin', '系统管理员', 1),
@@ -218,13 +233,14 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (13, '角色管理', 'role', 12, 1, '/role', 'Avatar', 1),
 (14, '权限管理', 'permission', 12, 1, '/permission', 'Lock', 2),
 (15, '字典管理', 'dict', 12, 1, '/dict', 'PriceTag', 3),
-(16, '我的收藏', 'favorite', 0, 1, '/favorite', 'Folder', 6);
+(16, '我的收藏', 'favorite', 0, 1, '/favorite', 'Folder', 6),
+(17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15),(1, 16);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

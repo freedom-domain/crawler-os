@@ -163,7 +163,7 @@ import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { dictChildren, searchDeleteImage, searchDetail } from '@/api'
+import { dictChildren, recordImagePreview, searchDeleteImage, searchDetail } from '@/api'
 import { useUserStore } from '@/stores/user'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 
@@ -419,6 +419,20 @@ const loadImages = async () => {
     // 3. 等本页图片全部加载完成（loading 遮罩盖在上面）
     const expected = Math.min(pageSize.value, images.value.length)
     await waitForPageLoaded(expected)
+
+    if (userStore.token) {
+      try {
+        await recordImagePreview({
+          contentId: id,
+          title: doc?.title || title.value,
+          url: doc?.url || '',
+          spiderName: doc?.spiderName || '',
+          imageCount: images.value.length
+        })
+      } catch {
+        ElMessage.warning('图片已加载，但预览记录保存失败')
+      }
+    }
 
     // 4. 加载动画消失 + 执行初始化（分页条显示，网格可交互）
     loading.value = false

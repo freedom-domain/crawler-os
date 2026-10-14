@@ -39,7 +39,7 @@
           <el-tree-select
             v-model="form.parentId"
             :data="parentTreeOptions"
-            :props="{ label: 'name', children: 'children' }"
+            :props="{ value: 'id', label: 'name', children: 'children' }"
             check-strictly
             :render-after-expand="false"
             placeholder="请选择上级节点（不选则为顶级）"
@@ -147,6 +147,16 @@ const loadData = async () => {
   }
 }
 
+const invalidateMenuCache = () => {
+  for (let index = sessionStorage.length - 1; index >= 0; index--) {
+    const key = sessionStorage.key(index)
+    if (key?.startsWith('crawler-menu:')) {
+      sessionStorage.removeItem(key)
+    }
+  }
+  window.dispatchEvent(new Event('crawler-menu-cache-invalidated'))
+}
+
 const openCreate = (parent: any) => {
   form.value = {
     id: null,
@@ -179,16 +189,27 @@ const openEdit = (row: any) => {
 // 构建父级节点选项树（编辑时排除自身及其子节点，防止循环引用）
 const parentTreeOptions = computed(() => {
   const excludeId = form.value.id
-  const isDescendant = (node: any, targetId: number): boolean => {
+  const containsNode = (node: any, targetId: number): boolean => {
     if (node.id === targetId) return true
     if (node.children) {
-      return node.children.some((c: any) => isDescendant(c, targetId))
+      return node.children.some((c: any) => containsNode(c, targetId))
     }
     return false
   }
+  const findNode = (nodes: any[], targetId: number): any | null => {
+    for (const node of nodes) {
+      if (node.id === targetId) return node
+      if (node.children) {
+        const result = findNode(node.children, targetId)
+        if (result) return result
+      }
+    }
+    return null
+  }
+  const editingNode = excludeId ? findNode(tree.value, excludeId) : null
   const build = (nodes: any[]): any[] => {
     return nodes
-      .filter(n => n.id !== excludeId && !(excludeId && isDescendant(n, excludeId)))
+      .filter(n => !editingNode || !containsNode(editingNode, n.id))
       .map(n => ({
         id: n.id,
         name: n.name,
@@ -212,6 +233,7 @@ const saveForm = async () => {
     } else {
       await permissionCreate(payload)
     }
+    invalidateMenuCache()
     ElMessage.success('保存成功')
     formVisible.value = false
     loadData()
@@ -224,6 +246,7 @@ const handleDelete = async (row: any) => {
   if (!await confirm(`确定删除权限「${row.name}」吗？`, { title: '删除确认', danger: true })) return
   try {
     await permissionDelete(row.id)
+    invalidateMenuCache()
     ElMessage.success('删除成功')
     loadData()
   } catch {
@@ -245,6 +268,7 @@ const moveUp = async (row: any) => {
       await permissionUpdate(siblings[i].id, { ...siblings[i], sort: i })
     }
   }
+  invalidateMenuCache()
   ElMessage.success('已上移')
   loadData()
 }
@@ -263,6 +287,7 @@ const moveDown = async (row: any) => {
       await permissionUpdate(siblings[i].id, { ...siblings[i], sort: i })
     }
   }
+  invalidateMenuCache()
   ElMessage.success('已下移')
   loadData()
 }
