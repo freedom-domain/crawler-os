@@ -1499,7 +1499,7 @@ public class CrawlerEngine {
                         // 覆盖模式下 putObject 会直接覆盖已存在的对象
                         minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
                         saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
-                            msg.getSpiderId(), title, pageUrl);
+                            msg.getSpiderId(), title, imageSrc);
                         uploadedCounter.incrementAndGet();
                         // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
                         return objectName;
@@ -1816,19 +1816,8 @@ public class CrawlerEngine {
     }
 
     private void saveOrUpdateResourceMetadata(WebResource resource, long fileSize, Long spiderId, String title) {
-        FileMetadata metadata = fileMetadataMapper.selectByObject(jsBucket, resource.objectName());
-        if (metadata == null) {
-            saveFileMetadata(jsBucket, resource.objectName(), fileSize, resource.contentType(),
-                    resource.category(), spiderId, title, resource.url());
-            return;
-        }
-        metadata.setFileSize(fileSize);
-        metadata.setContentType(resource.contentType());
-        metadata.setCategory(resource.category());
-        metadata.setSpiderId(spiderId);
-        metadata.setTitle(title);
-        metadata.setSource(resource.url());
-        fileMetadataMapper.updateById(metadata);
+        saveFileMetadata(jsBucket, resource.objectName(), fileSize, resource.contentType(),
+                resource.category(), spiderId, title, resource.url());
     }
 
     private String resolveResourceUrl(String pageUrl, String source) {
@@ -1892,7 +1881,7 @@ public class CrawlerEngine {
 
     private void saveFileMetadata(String bucket, String objectName, long fileSize, String contentType,
                                   String category, Long spiderId, String title, String source) {
-        // 幂等插入：object_name 或 source 重复时自动忽略，避免多 worker 并发竞争
+        // 原子插入或更新：并发重复抓取时也能让文件信息保持最新。
         FileMetadata metadata = new FileMetadata();
         metadata.setBucket(bucket);
         metadata.setObjectName(objectName);
@@ -1903,7 +1892,7 @@ public class CrawlerEngine {
         metadata.setCategory(category);
         metadata.setSpiderId(spiderId);
         metadata.setSource(source);
-        fileMetadataMapper.insertIgnore(metadata);
+        fileMetadataMapper.upsert(metadata);
     }
 
     /**
@@ -1920,7 +1909,7 @@ public class CrawlerEngine {
     private void saveExistingFileMetadata(String objectName, Long spiderId, String title, String source) {
         try {
             StatObjectResponse stat = minioHelper.statObject(imageBucket, objectName);
-            // saveFileMetadata 内部用 INSERT IGNORE，已存在时自动跳过
+            // 已存在时同步最新标题、来源等元数据，不需要重新上传对象。
             saveFileMetadata(imageBucket, objectName, stat.size(), stat.contentType(), inferCategory(objectName),
                     spiderId, title, source);
         } catch (Exception e) {
