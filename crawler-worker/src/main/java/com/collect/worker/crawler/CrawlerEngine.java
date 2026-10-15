@@ -89,7 +89,7 @@ public class CrawlerEngine {
     /** HTTP 协议偏好：h2=允许 HTTP/2，http1=禁用 HTTP/2 */
     @Value("${app.http.protocol:http1}")
     private String httpProtocol;
-    /** 瞬时网络错误（IOException）重试次数，仅对幂等请求生效；0=不重试 */
+    /** 瞬时网络错误及 404/5xx 响应重试次数，仅对幂等请求生效；0=不重试 */
     @Value("${app.http.retry-on-io-error:2}")
     private int httpRetryOnIoError;
     /** 本地 DNS 缓存 TTL（秒）；0=禁用 DNS 缓存。爬取多域名时避免重复 DNS 查询 */
@@ -359,9 +359,8 @@ public class CrawlerEngine {
     private static final int RETRY_AFTER_MAX_SECONDS = 30;
 
     /**
-     * 瞬时网络错误重试：{@link java.io.IOException}（连接重置、读超时等）
-     * 且请求幂等（GET/HEAD）时自动重试，带指数退避 + 抖动。
-     * 5xx 响应优先读取 Retry-After 头，否则按退避间隔等待。
+     * 瞬时网络错误、404 和 5xx 响应在请求幂等（GET/HEAD）时自动重试，
+     * 带指数退避 + 抖动。404 可能由源站/CDN 瞬时异常产生；5xx 响应优先读取 Retry-After 头。
      * 非幂等请求不重试，避免重复提交。
      */
     private okhttp3.Interceptor retryOnIoErrorInterceptor() {
@@ -375,8 +374,8 @@ public class CrawlerEngine {
                 Response response;
                 try {
                     response = chain.proceed(request);
-                    // 5xx 视为瞬时错误，幂等请求重试（带退避）
-                    if (response.code() >= 500 && attempt < maxAttempts) {
+                    // 404 可能是源站/CDN 的瞬时异常；和 5xx 一样对幂等请求进行有限重试
+                    if ((response.code() == 404 || response.code() >= 500) && attempt < maxAttempts) {
                         long backoffMs = computeBackoff(request, response, attempt);
                         log.debug("HTTP {} 重试 {}/{}: {} (等待 {}ms)",
                                 response.code(), attempt, maxAttempts - 1, request.url(), backoffMs);
@@ -943,8 +942,7 @@ public class CrawlerEngine {
             String newHtml = doc.get();
             String newHtmlHash = md5(newHtml);
             String pageTitle = parsed.getTitle();
-            // 读取缓存命中：内容视为已存在且未变化，跳过 ES 变更比对（不联网）
-            boolean overwriteHtml = cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
+            boolean overwriteHtml = Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
             // 读取缓存时允许从已缓存页面扩展 URL；未命中联网=跳过时，
@@ -967,13 +965,10 @@ public class CrawlerEngine {
                 log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
             }
 
-            // 仅未命中缓存的页面才做 ES 变更比对；
-            // 缓存命中时直接按"内容未变化"处理，避免额外网络/存储查询
-            // overwriteHtml=1 时跳过变更比对（直接覆盖，无需读取旧内容）
+            // 非覆盖模式下统一比对 ES 内容；覆盖模式无需读取旧内容
             boolean contentUnchanged = false;
             SpiderContentDoc existingDoc = null;
-            boolean overwriteHtmlFlag = Integer.valueOf(1).equals(msg.getOverwriteHtml());
-            if (!cacheHit && !overwriteHtmlFlag && !isConfiguredStartUrl(url, startUrlInfo)) {
+            if (!overwriteHtml) {
                 // 快速路径：本地 hash 缓存命中且内容未变 → 跳过 ES 查询（省去一次 ES 往返）
                 long nowMs = System.currentTimeMillis();
                 UrlHashCacheEntry cached = urlHtmlHashCache.get(url);
@@ -1001,7 +996,7 @@ public class CrawlerEngine {
                 }
             }
 
-            // 后续页面不覆盖 HTML 且内容未变化 → 跳过
+            // 非覆盖模式且内容未变化 → 跳过
             if (!overwriteHtml && contentUnchanged) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                         "已存在，跳过: " + pageTitle, (int) cost);
@@ -1024,7 +1019,7 @@ public class CrawlerEngine {
             docObj.setSourceType(msg.getType());
             DateTimeFormatter esDateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
             // 已存在内容覆盖时：抓取时间保留首次抓取时间，更新时间设为当前时间
-            boolean isOverwrite = existingDoc != null || overwriteHtmlFlag;
+            boolean isOverwrite = existingDoc != null || overwriteHtml;
             String crawlTime = isOverwrite && existingDoc != null && existingDoc.getCrawlTime() != null
                     ? existingDoc.getCrawlTime()
                     : LocalDateTime.now().format(esDateFormatter);
@@ -1240,15 +1235,6 @@ public class CrawlerEngine {
     private boolean isSameDomain(String url, Set<String> startHosts) {
         String host = hostOf(url);
         return host != null && startHosts.contains(host);
-    }
-
-    /**
-     * 判断 URL 是否为配置中的起始 URL（归一化后精确匹配）。
-     * 归一化集合在 {@link #buildStartUrlInfo} 中预计算，此处只做 O(1) 查找。
-     */
-    private boolean isConfiguredStartUrl(String url, StartUrlInfo startUrlInfo) {
-        String normalizedUrl = UrlQueueService.normalizeUrl(url);
-        return normalizedUrl != null && startUrlInfo.normalizedSet().contains(normalizedUrl);
     }
 
     /**
