@@ -34,6 +34,13 @@ class CrawlerContentComparisonTest {
     }
 
     @Test
+    void hasSameBytes_shouldIdentifyUnchangedAndChangedMinioContent() {
+        assertTrue(CrawlerEngine.hasSameBytes(new byte[] {1, 2}, new byte[] {1, 2}));
+        assertFalse(CrawlerEngine.hasSameBytes(new byte[] {1, 2}, new byte[] {1, 3}));
+        assertFalse(CrawlerEngine.hasSameBytes(null, new byte[] {1, 2}));
+    }
+
+    @Test
     void shouldReadCachedHtml_forAnyPageWhenNotOverwriting() {
         assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false));
         assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true));

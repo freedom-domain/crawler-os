@@ -918,6 +918,11 @@ public class CrawlerEngine {
                             "html/" + ObjectNameUtils.hashUrl(url) + ".html")
                     : null;
             boolean cacheHit = cachedHtml != null;
+            String previousHtml = cachedHtml;
+            if (overwriteHtml && !cacheHit) {
+                previousHtml = minioHelper.getHtmlIfExists(htmlBucket,
+                        "html/" + ObjectNameUtils.hashUrl(url) + ".html");
+            }
             String normalizedUrl = UrlQueueService.normalizeUrl(url);
             boolean startPage = startUrlInfo.normalizedSet().contains(normalizedUrl);
             SpiderContentDoc existingDoc = null;
@@ -981,10 +986,17 @@ public class CrawlerEngine {
 
             List<String> imageUrls = getImagesForPage(doc, url, pageTitle, msg, task, overwriteImage,
                     execution, resourceExecutor, resourceSemaphore);
+            boolean htmlChanged = !Objects.equals(previousHtml, newHtml);
+            boolean saveResources = !cacheHit || overwriteHtml;
+            saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task,
+                    !cacheHit && htmlChanged, saveResources,
+                    processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
+
             if (hasSameContentAndImages(existingDoc, parsed.getContent(), imageUrls)) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                        "正文和图片未变化，跳过: " + pageTitle, (int) cost);
-                log.info("正文和图片未变化，跳过: url={}", url);
+                        htmlChanged ? "MinIO 源码已更新，ES 正文和图片未变化: " + pageTitle
+                                : "正文、图片和 MinIO 源码未变化，跳过: " + pageTitle, (int) cost);
+                log.info("ES 正文和图片未变化: url={}, htmlChanged={}", url, htmlChanged);
                 success.incrementAndGet();
                 return;
             }
@@ -1013,11 +1025,6 @@ public class CrawlerEngine {
             writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                 (overwriteHtml && existingDoc != null) ? "覆盖更新: " + pageTitle : "抓取成功: " + pageTitle, (int) cost);
             success.incrementAndGet();
-
-            // 读取缓存命中时，HTML 和 JS/CSS 资源都直接从 MinIO 复用，不再回源。
-            boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
-            saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task, !cacheHit, saveResources,
-                    processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (!execution.isCancelled()) {
@@ -1071,6 +1078,10 @@ public class CrawlerEngine {
         List<String> existingImages = existingDoc.getImages() == null ? List.of() : existingDoc.getImages();
         List<String> newImages = images == null ? List.of() : images;
         return existingImages.equals(newImages);
+    }
+
+    static boolean hasSameBytes(byte[] existing, byte[] current) {
+        return existing != null && current != null && java.util.Arrays.equals(existing, current);
     }
 
     static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml) {
@@ -1475,6 +1486,14 @@ public class CrawlerEngine {
                                 return objectName;
                             }
                         }
+                        byte[] existingData = overwrite
+                                ? minioHelper.getObjectIfExists(imageBucket, objectName)
+                                : null;
+                        if (hasSameBytes(existingData, data)) {
+                            skippedCounter.incrementAndGet();
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                            return objectName;
+                        }
                         // 覆盖模式下 putObject 会直接覆盖已存在的对象
                         minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
                         saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
@@ -1772,6 +1791,17 @@ public class CrawlerEngine {
             if (downloaded == null || downloaded.length == 0) {
                 writeLog(task.getId(), msg.getSpiderId(), resource.url(), 0, "ERROR",
                         resource.category().toUpperCase() + " 下载为空", resourceCost(start), resource.category());
+                return;
+            }
+
+            byte[] existing = existingExists && Integer.valueOf(1).equals(msg.getOverwriteHtml())
+                    ? minioHelper.getObjectIfExists(jsBucket, resource.objectName())
+                    : null;
+            if (hasSameBytes(existing, downloaded)) {
+                saveOrUpdateResourceMetadata(resource, downloaded.length, msg.getSpiderId(), title);
+                writeLog(task.getId(), msg.getSpiderId(), resource.url(), 2, "INFO",
+                        resource.category().toUpperCase() + " 内容未变化，跳过覆盖",
+                        resourceCost(start), resource.category());
                 return;
             }
 
