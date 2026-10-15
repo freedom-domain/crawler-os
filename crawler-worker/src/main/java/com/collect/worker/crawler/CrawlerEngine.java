@@ -912,14 +912,20 @@ public class CrawlerEngine {
             long start = System.currentTimeMillis();
             boolean overwriteHtml = Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
-            String normalizedUrl = UrlQueueService.normalizeUrl(url);
-            boolean startPage = startUrlInfo.normalizedSet().contains(normalizedUrl);
-            boolean checkHtmlCache = shouldReadCachedHtml(readCache, overwriteHtml, startPage);
+            boolean checkHtmlCache = shouldReadCachedHtml(readCache, overwriteHtml);
             String cachedHtml = checkHtmlCache
                     ? minioHelper.getHtmlIfExists(htmlBucket,
                             "html/" + ObjectNameUtils.hashUrl(url) + ".html")
                     : null;
             boolean cacheHit = cachedHtml != null;
+            String normalizedUrl = UrlQueueService.normalizeUrl(url);
+            boolean startPage = startUrlInfo.normalizedSet().contains(normalizedUrl);
+            if (shouldSkipCachedDiscoveredUrl(cacheHit, overwriteHtml, startPage)) {
+                writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO", "已存在", 0);
+                log.info("MinIO 缓存已存在，跳过已发现 URL: {}", url);
+                success.incrementAndGet();
+                return;
+            }
             if (readCache && !cacheHit && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline())) {
                 // 读取缓存模式且未开启"未命中联网"：只从 MinIO 获取，未缓存的页面直接跳过
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
@@ -1015,6 +1021,12 @@ public class CrawlerEngine {
             log.warn("抓取失败: {}", url, e);
             writeLog(task.getId(), msg.getSpiderId(), url, 0, "ERROR", e.getMessage(), 0);
         } finally {
+            try {
+                urlQueue.complete(taskId, url);
+            } catch (RuntimeException e) {
+                fail.incrementAndGet();
+                log.error("URL 队列完成确认失败: taskId={}, url={}", taskId, url, e);
+            }
             currentTaskClient.remove();
         }
     }
@@ -1050,8 +1062,12 @@ public class CrawlerEngine {
         return existingImages.equals(newImages);
     }
 
-    static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml, boolean startPage) {
-        return readCache || (!startPage && !overwriteHtml);
+    static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml) {
+        return readCache || !overwriteHtml;
+    }
+
+    static boolean shouldSkipCachedDiscoveredUrl(boolean cacheHit, boolean overwriteHtml, boolean startPage) {
+        return cacheHit && !overwriteHtml && !startPage;
     }
 
     private void saveToElasticsearchWithRetry(SpiderContentDoc document) throws InterruptedException {

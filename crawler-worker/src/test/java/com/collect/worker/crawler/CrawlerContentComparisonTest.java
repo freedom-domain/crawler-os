@@ -34,10 +34,17 @@ class CrawlerContentComparisonTest {
     }
 
     @Test
-    void shouldReadCachedHtml_onlyForNonStartPagesWhenNotOverwriting() {
-        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, false, true));
-        assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false, false));
-        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true, false));
-        assertTrue(CrawlerEngine.shouldReadCachedHtml(true, false, true));
+    void shouldReadCachedHtml_forAnyPageWhenNotOverwriting() {
+        assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false));
+        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true));
+        assertTrue(CrawlerEngine.shouldReadCachedHtml(true, false));
+    }
+
+    @Test
+    void shouldSkipCachedDiscoveredUrl_onlyWhenCachedAndNotOverwriting() {
+        assertTrue(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, false));
+        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, true));
+        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, true, false));
+        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(false, false, false));
     }
 }

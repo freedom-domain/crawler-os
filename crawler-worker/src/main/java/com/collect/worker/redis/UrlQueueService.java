@@ -169,6 +169,14 @@ public class UrlQueueService {
                 String.valueOf(TTL_HOURS * 3600));
     }
 
+    public void complete(Long taskId, String url) {
+        String normalized = normalizeUrlCached(url);
+        if (normalized == null || normalized.isBlank()) {
+            return;
+        }
+        redis.opsForSet().remove(KEY_PREFIX + taskId + ":processing", normalized);
+    }
+
     public long size(Long taskId) {
         String key = KEY_PREFIX + taskId;
         Long s = redis.opsForList().size(key);

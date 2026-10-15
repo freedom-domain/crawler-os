@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @SuppressWarnings("unchecked")
 class UrlQueueServiceTest {
@@ -95,6 +96,20 @@ class UrlQueueServiceTest {
         verify(redis).execute(any(RedisScript.class),
                 eq(List.of("crawler:urls:42", "crawler:urls:42:processing")),
                 eq("86400"));
+    }
+
+    @Test
+    void complete_shouldRemoveUrlFromProcessingAndKeepVisitedSet() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+        org.springframework.data.redis.core.SetOperations<String, String> setOperations =
+                mock(org.springframework.data.redis.core.SetOperations.class);
+        when(redis.opsForSet()).thenReturn(setOperations);
+        UrlQueueService service = new UrlQueueService(redis);
+
+        service.complete(42L, "https://EXAMPLE.com/path/");
+
+        verify(setOperations).remove("crawler:urls:42:processing", "https://example.com/path");
+        verify(redis, never()).delete("crawler:urls:42:visited");
     }
 
     @Test
