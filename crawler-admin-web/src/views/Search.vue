@@ -126,7 +126,7 @@
             v-for="(img, idx) in previewImages"
             :key="idx"
             :src="imageUrl(img)"
-            :preview-src-list="previewImages.map(imageUrl)"
+            :preview-src-list="previewImages.map(img => imageUrl(img))"
             :initial-index="previewInitialIndex"
             fit="contain"
             class="preview-img"

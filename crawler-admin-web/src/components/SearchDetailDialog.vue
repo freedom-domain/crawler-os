@@ -30,7 +30,7 @@
             v-for="(img, idx) in detail.images"
             :key="idx"
             :src="imageUrl(img)"
-            :preview-src-list="detail.images.map(imageUrl)"
+            :preview-src-list="detail.images.map((img: string) => imageUrl(img))"
             :initial-index="idx"
             fit="contain"
             class="detail-image"
