@@ -160,15 +160,19 @@
       </el-table-column>
       <el-table-column prop="forceOverwriteHtml" label="强制覆盖HTML" min-width="140" align="center" resizable>
         <template #default="{ row }">
-          <el-tag v-if="row.overwriteHtml === 1 && row.forceOverwriteHtml === 1" type="danger" size="small">
-            强制覆盖
-          </el-tag>
-          <el-tag v-else-if="row.overwriteHtml === 1" type="info" size="small">
-            有变化时覆盖
-          </el-tag>
-          <el-tag v-else type="info" size="small">
-            未启用
-          </el-tag>
+          <el-switch
+            v-if="row.overwriteHtml === 1"
+            v-model="row.forceOverwriteHtml"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="强制"
+            inactive-text="有变化时"
+            size="small"
+            :loading="row._savingForceHtml"
+            :disabled="row._savingForceHtml"
+            @change="handleToggleForceOverwriteHtml(row)"
+          />
+          <el-tag v-else type="info" size="small">未启用</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="overwriteImage" label="覆盖图片" min-width="130" align="center" resizable>
@@ -868,21 +872,31 @@ const TOGGLE_FIELD_LABELS: Record<string, string> = {
   readCache: '读取缓存',
   readCacheMissOnline: '未命中联网',
   overwriteHtml: '覆盖HTML',
+  forceOverwriteHtml: '强制覆盖HTML',
   overwriteImage: '覆盖图片'
 }
 
-const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'readCacheMissOnline' | 'overwriteHtml' | 'overwriteImage', savingKey: string) => {
-  const oldValue = row[field]
+const applyToggle = async (row: any, field: 'isPublic' | 'readCache' | 'readCacheMissOnline' | 'overwriteHtml' | 'forceOverwriteHtml' | 'overwriteImage', savingKey: string) => {
   const label = TOGGLE_FIELD_LABELS[field]
+  let savedValue: number | undefined
   row[savingKey] = true
   try {
     const detail: any = await spiderDetail(row.id)
     const payload = buildUpdatePayload(detail.data)
-    payload[field] = oldValue
+    savedValue = detail.data?.[field] ?? 0
+    payload[field] = row[field]
+    if (field === 'overwriteHtml' && row.overwriteHtml !== 1) {
+      payload.forceOverwriteHtml = 0
+    }
     await spiderUpdate(row.id, payload)
+    if (field === 'overwriteHtml' && row.overwriteHtml !== 1) {
+      row.forceOverwriteHtml = 0
+    }
     ElMessage.success(`${label}已更新`)
   } catch {
-    row[field] = oldValue
+    if (savedValue !== undefined) {
+      row[field] = savedValue
+    }
     ElMessage.error(`${label}切换失败`)
   } finally {
     row[savingKey] = false
@@ -893,6 +907,7 @@ const handleTogglePublic = (row: any) => applyToggle(row, 'isPublic', '_savingPu
 const handleToggleReadCache = (row: any) => applyToggle(row, 'readCache', '_savingCache')
 const handleToggleReadCacheMissOnline = (row: any) => applyToggle(row, 'readCacheMissOnline', '_savingCacheMiss')
 const handleToggleOverwriteHtml = (row: any) => applyToggle(row, 'overwriteHtml', '_savingHtml')
+const handleToggleForceOverwriteHtml = (row: any) => applyToggle(row, 'forceOverwriteHtml', '_savingForceHtml')
 const handleToggleOverwriteImage = (row: any) => applyToggle(row, 'overwriteImage', '_savingImage')
 
 const handleToggleStatus = async (row: any) => {
