@@ -73,6 +73,8 @@ public class SpiderService {
         spider.setVipSelector(req.getVipSelector());
         spider.setVipSelectorContent(req.getVipSelectorContent());
         spider.setOverwriteHtml(req.getOverwriteHtml());
+        spider.setForceOverwriteHtml(Integer.valueOf(1).equals(req.getOverwriteHtml())
+                && Integer.valueOf(1).equals(req.getForceOverwriteHtml()) ? 1 : 0);
         spider.setOverwriteImage(req.getOverwriteImage());
         spider.setReadCache(req.getReadCache() == null ? 0 : req.getReadCache());
         spider.setReadCacheMissOnline(req.getReadCacheMissOnline() == null ? 0 : req.getReadCacheMissOnline());
@@ -146,6 +148,7 @@ public class SpiderService {
             config.setVipSelector(spider.getVipSelector());
             config.setVipSelectorContent(spider.getVipSelectorContent());
             config.setOverwriteHtml(spider.getOverwriteHtml());
+            config.setForceOverwriteHtml(spider.getForceOverwriteHtml() == null ? 0 : spider.getForceOverwriteHtml());
             config.setOverwriteImage(spider.getOverwriteImage());
             config.setReadCache(spider.getReadCache() == null ? 0 : spider.getReadCache());
             config.setReadCacheMissOnline(spider.getReadCacheMissOnline() == null ? 0 : spider.getReadCacheMissOnline());
@@ -220,6 +223,8 @@ public class SpiderService {
         exist.setVipSelector(req.getVipSelector());
         exist.setVipSelectorContent(req.getVipSelectorContent());
         exist.setOverwriteHtml(req.getOverwriteHtml());
+        exist.setForceOverwriteHtml(Integer.valueOf(1).equals(req.getOverwriteHtml())
+                && Integer.valueOf(1).equals(req.getForceOverwriteHtml()) ? 1 : 0);
         exist.setOverwriteImage(req.getOverwriteImage());
         exist.setReadCache(req.getReadCache() == null ? 0 : req.getReadCache());
         exist.setReadCacheMissOnline(req.getReadCacheMissOnline() == null ? 0 : req.getReadCacheMissOnline());
@@ -304,6 +309,7 @@ public class SpiderService {
         }
         if (forceOverwrite) {
             msg.setOverwriteHtml(1);
+            msg.setForceOverwriteHtml(1);
             msg.setOverwriteImage(1);
         }
         String payload = JSON.toJSONString(msg);
@@ -494,6 +500,7 @@ public class SpiderService {
         msg.setVipSelector(spider.getVipSelector());
         msg.setVipSelectorContent(spider.getVipSelectorContent());
         msg.setOverwriteHtml(spider.getOverwriteHtml());
+        msg.setForceOverwriteHtml(spider.getForceOverwriteHtml() == null ? 0 : spider.getForceOverwriteHtml());
         msg.setOverwriteImage(spider.getOverwriteImage());
         msg.setReadCache(spider.getReadCache() == null ? 0 : spider.getReadCache());
         msg.setReadCacheMissOnline(spider.getReadCacheMissOnline() == null ? 0 : spider.getReadCacheMissOnline());

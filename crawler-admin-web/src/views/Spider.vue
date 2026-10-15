@@ -286,6 +286,10 @@
           <el-switch v-model="form.overwriteHtml" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
           <div class="form-tip">开启后重新爬取会覆盖 ES 中的内容；关闭则内容未变化时跳过</div>
         </el-form-item>
+        <el-form-item v-if="form.overwriteHtml === 1" label="强制覆盖HTML">
+          <el-switch v-model="form.forceOverwriteHtml" :active-value="1" :inactive-value="0" active-text="强制" inactive-text="有变化时" />
+          <div class="form-tip">开启后直接将本次爬取的 HTML 源码写入 MinIO，不比较新旧内容；关闭则仅在源码变化时覆盖</div>
+        </el-form-item>
         <el-form-item label="覆盖图片">
           <el-switch v-model="form.overwriteImage" :active-value="1" :inactive-value="0" active-text="覆盖" inactive-text="跳过" />
           <div class="form-tip">开启后重新爬取会重新下载并覆盖已存在的图片；关闭则已存在图片不重复下载</div>
@@ -501,7 +505,7 @@ const parseExcludedUrls = (text: string): string[] => {
 }
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] as string[]
+  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, forceOverwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] as string[]
 })
 
 // 调度表达式生成器
@@ -680,7 +684,7 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, forceOverwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] }
   headerRows.value = []
   startUrlsStr.value = ''
   scheduleTarget.value = ''
@@ -734,7 +738,7 @@ const showEdit = async (row: any) => {
   editingId.value = d.id
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
-    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0, readCacheMissOnline: d.readCacheMissOnline ?? 0,
+    contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, forceOverwriteHtml: d.forceOverwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0, readCacheMissOnline: d.readCacheMissOnline ?? 0,
     schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0, headers: d.headers || '', excludedUrls: parseExcludedUrls(d.excludedUrls)
   }
   headerRows.value = parseHeadersToRows(d.headers || '')
@@ -830,6 +834,7 @@ const buildUpdatePayload = (detail: any) => {
     vipSelector: detail.vipSelector || '',
     vipSelectorContent: detail.vipSelectorContent || '',
     overwriteHtml: detail.overwriteHtml ?? 0,
+    forceOverwriteHtml: detail.forceOverwriteHtml ?? 0,
     overwriteImage: detail.overwriteImage ?? 0,
     readCache: detail.readCache ?? 0,
     readCacheMissOnline: detail.readCacheMissOnline ?? 0,

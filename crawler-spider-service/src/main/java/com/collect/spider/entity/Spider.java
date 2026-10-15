@@ -21,6 +21,7 @@ public class Spider extends BaseEntity {
     private String vipSelector;
     private String vipSelectorContent;
     private Integer overwriteHtml;
+    private Integer forceOverwriteHtml;
     private Integer overwriteImage;
     private Integer readCache;
     private Integer readCacheMissOnline;

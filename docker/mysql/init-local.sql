@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS spider (
     vip_selector VARCHAR(512),
     vip_selector_content VARCHAR(512),
     overwrite_html TINYINT DEFAULT 0,
+    force_overwrite_html TINYINT NOT NULL DEFAULT 0,
     overwrite_image TINYINT DEFAULT 0,
     read_cache TINYINT NOT NULL DEFAULT 0,
     read_cache_miss_online TINYINT NOT NULL DEFAULT 0,

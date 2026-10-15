@@ -42,9 +42,10 @@ class CrawlerContentComparisonTest {
 
     @Test
     void shouldReadCachedHtml_forAnyPageWhenNotOverwriting() {
-        assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false));
-        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true));
-        assertTrue(CrawlerEngine.shouldReadCachedHtml(true, false));
+        assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false, false));
+        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true, false));
+        assertTrue(CrawlerEngine.shouldReadCachedHtml(true, false, false));
+        assertFalse(CrawlerEngine.shouldReadCachedHtml(true, true, true));
     }
 
     @Test

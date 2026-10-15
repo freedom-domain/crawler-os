@@ -911,15 +911,16 @@ public class CrawlerEngine {
             }
             long start = System.currentTimeMillis();
             boolean overwriteHtml = Integer.valueOf(1).equals(msg.getOverwriteHtml());
+            boolean forceOverwriteHtml = overwriteHtml && Integer.valueOf(1).equals(msg.getForceOverwriteHtml());
             boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
-            boolean checkHtmlCache = shouldReadCachedHtml(readCache, overwriteHtml);
+            boolean checkHtmlCache = shouldReadCachedHtml(readCache, overwriteHtml, forceOverwriteHtml);
             String cachedHtml = checkHtmlCache
                     ? minioHelper.getHtmlIfExists(htmlBucket,
                             "html/" + ObjectNameUtils.hashUrl(url) + ".html")
                     : null;
             boolean cacheHit = cachedHtml != null;
             String previousHtml = cachedHtml;
-            if (overwriteHtml && !cacheHit) {
+            if (overwriteHtml && !forceOverwriteHtml && !cacheHit) {
                 previousHtml = minioHelper.getHtmlIfExists(htmlBucket,
                         "html/" + ObjectNameUtils.hashUrl(url) + ".html");
             }
@@ -940,7 +941,8 @@ public class CrawlerEngine {
                 success.incrementAndGet();
                 return;
             }
-            if (readCache && !cacheHit && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline())) {
+            if (readCache && !forceOverwriteHtml && !cacheHit
+                    && !Integer.valueOf(1).equals(msg.getReadCacheMissOnline())) {
                 // 读取缓存模式且未开启"未命中联网"：只从 MinIO 获取，未缓存的页面直接跳过
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
                         "缓存未命中，跳过（未开启未命中联网）", 0);
@@ -989,14 +991,16 @@ public class CrawlerEngine {
             boolean htmlChanged = !Objects.equals(previousHtml, newHtml);
             boolean saveResources = !cacheHit || overwriteHtml;
             saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task,
-                    !cacheHit && htmlChanged, saveResources,
+                    !cacheHit && (forceOverwriteHtml || htmlChanged), saveResources,
                     processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
 
             if (hasSameContentAndImages(existingDoc, parsed.getContent(), imageUrls)) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                        htmlChanged ? "MinIO 源码已更新，ES 正文和图片未变化: " + pageTitle
+                        forceOverwriteHtml ? "HTML源码已强制覆盖，ES正文和图片未变化: " + pageTitle
+                                : htmlChanged ? "MinIO 源码已更新，ES 正文和图片未变化: " + pageTitle
                                 : "正文、图片和 MinIO 源码未变化，跳过: " + pageTitle, (int) cost);
-                log.info("ES 正文和图片未变化: url={}, htmlChanged={}", url, htmlChanged);
+                log.info("ES 正文和图片未变化: url={}, htmlChanged={}, forceOverwriteHtml={}",
+                        url, htmlChanged, forceOverwriteHtml);
                 success.incrementAndGet();
                 return;
             }
@@ -1084,8 +1088,8 @@ public class CrawlerEngine {
         return existing != null && current != null && java.util.Arrays.equals(existing, current);
     }
 
-    static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml) {
-        return readCache || !overwriteHtml;
+    static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml, boolean forceOverwriteHtml) {
+        return !forceOverwriteHtml && (readCache || !overwriteHtml);
     }
 
     static boolean shouldSkipCachedDiscoveredUrl(boolean minioHit, boolean elasticsearchHit,

@@ -33,6 +33,9 @@ public class SpiderUpdateReq {
     private String vipSelectorContent;
 
     private Integer overwriteHtml = 0;
+    @Min(value = 0, message = "HTML强制覆盖配置只能设置为0或1")
+    @Max(value = 1, message = "HTML强制覆盖配置只能设置为0或1")
+    private Integer forceOverwriteHtml = 0;
     private Integer overwriteImage = 0;
     private Integer readCache = 0;
 
