@@ -41,10 +41,11 @@ class CrawlerContentComparisonTest {
     }
 
     @Test
-    void shouldSkipCachedDiscoveredUrl_onlyWhenCachedAndNotOverwriting() {
-        assertTrue(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, false));
-        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, true));
-        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, true, false));
-        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(false, false, false));
+    void shouldSkipCachedDiscoveredUrl_whenEitherCacheHasEntryAndNotOverwriting() {
+        assertTrue(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, false, false));
+        assertTrue(CrawlerEngine.shouldSkipCachedDiscoveredUrl(false, true, false, false));
+        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(false, false, false, false));
+        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, true, false));
+        assertFalse(CrawlerEngine.shouldSkipCachedDiscoveredUrl(true, false, false, true));
     }
 }

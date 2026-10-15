@@ -920,9 +920,18 @@ public class CrawlerEngine {
             boolean cacheHit = cachedHtml != null;
             String normalizedUrl = UrlQueueService.normalizeUrl(url);
             boolean startPage = startUrlInfo.normalizedSet().contains(normalizedUrl);
-            if (shouldSkipCachedDiscoveredUrl(cacheHit, overwriteHtml, startPage)) {
+            SpiderContentDoc existingDoc = null;
+            boolean existingDocChecked = false;
+            if (!overwriteHtml && !startPage) {
+                CriteriaQuery existingQuery = new CriteriaQuery(new Criteria("url").is(url));
+                SearchHits<SpiderContentDoc> existingHits = elasticsearchOperations.search(
+                        existingQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+                existingDoc = existingHits.isEmpty() ? null : existingHits.getSearchHits().get(0).getContent();
+                existingDocChecked = true;
+            }
+            if (shouldSkipCachedDiscoveredUrl(cacheHit, existingDoc != null, overwriteHtml, startPage)) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO", "已存在", 0);
-                log.info("MinIO 缓存已存在，跳过已发现 URL: {}", url);
+                log.info("MinIO 或 Elasticsearch 中已存在，跳过已发现 URL: {}", url);
                 success.incrementAndGet();
                 return;
             }
@@ -963,10 +972,12 @@ public class CrawlerEngine {
                 log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
             }
 
-            CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
-            SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
-                    criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
-            SpiderContentDoc existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
+            if (!existingDocChecked) {
+                CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
+                SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
+                        criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+                existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
+            }
 
             List<String> imageUrls = getImagesForPage(doc, url, pageTitle, msg, task, overwriteImage,
                     execution, resourceExecutor, resourceSemaphore);
@@ -1066,8 +1077,9 @@ public class CrawlerEngine {
         return readCache || !overwriteHtml;
     }
 
-    static boolean shouldSkipCachedDiscoveredUrl(boolean cacheHit, boolean overwriteHtml, boolean startPage) {
-        return cacheHit && !overwriteHtml && !startPage;
+    static boolean shouldSkipCachedDiscoveredUrl(boolean minioHit, boolean elasticsearchHit,
+                                                 boolean overwriteHtml, boolean startPage) {
+        return (minioHit || elasticsearchHit) && !overwriteHtml && !startPage;
     }
 
     private void saveToElasticsearchWithRetry(SpiderContentDoc document) throws InterruptedException {
