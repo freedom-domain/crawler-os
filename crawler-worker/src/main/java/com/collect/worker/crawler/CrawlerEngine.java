@@ -47,6 +47,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import okhttp3.Protocol;
@@ -119,19 +120,7 @@ public class CrawlerEngine {
     private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
     /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，LRU 上限 1024 条 */
     private final Map<Long, TaskStatusCache> taskStatusCache = buildLruCache(1024);
-    /**
-     * 进程级 URL→htmlHash 缓存：记录每个 URL 最近一次处理时的内容哈希（带 TTL）。
-     * 重爬时若某 URL 的 newHtmlHash 与缓存值相同，说明内容未变，可跳过 ES 变更比对
-     * （省去一次 ES 查询）。TTL 防止站点内容长期变化后缓存值过期导致误判。
-     * LRU 上限 100k 条（每条约 200 字节，峰值 ~20MB）。
-     */
-    private final Map<String, UrlHashCacheEntry> urlHtmlHashCache = buildLruCache(100_000);
-    /** URL 哈希缓存 TTL（毫秒）：24 小时，与 Redis URL 队列 TTL 对齐 */
-    private static final long URL_HASH_CACHE_TTL_MS = 24 * 60 * 60 * 1000L;
-
     record WebResource(String url, String category, String objectName, String contentType) {}
-    /** URL 内容哈希缓存条目：hash + 过期时间戳 */
-    record UrlHashCacheEntry(String htmlHash, long expireAt) {}
 
     record RobotsCacheEntry(RobotsRules rules, long expireAt) {}
 
@@ -965,45 +954,17 @@ public class CrawlerEngine {
                 log.info("depth={}, url={}, extracted={}, enqueued={}", depth, url, next.size(), enqueued);
             }
 
-            // 非覆盖模式下统一比对 ES 内容；覆盖模式无需读取旧内容
-            boolean contentUnchanged = false;
-            SpiderContentDoc existingDoc = null;
-            if (!overwriteHtml) {
-                // 快速路径：本地 hash 缓存命中且内容未变 → 跳过 ES 查询（省去一次 ES 往返）
-                long nowMs = System.currentTimeMillis();
-                UrlHashCacheEntry cached = urlHtmlHashCache.get(url);
-                if (cached != null && cached.expireAt() > nowMs
-                        && newHtmlHash.equals(cached.htmlHash())) {
-                    contentUnchanged = true;
-                } else {
-                    // 慢路径：查 ES 做变更比对
-                    CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
-                    SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
-                            criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
-                    existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
-                    if (existingDoc != null) {
-                        // 优先用 ES 中存储的 htmlHash 做 O(1) 比对，无需读取 MinIO 整份 HTML
-                        if (existingDoc.getHtmlHash() != null && !existingDoc.getHtmlHash().isBlank()) {
-                            contentUnchanged = newHtmlHash.equals(existingDoc.getHtmlHash());
-                        } else {
-                            // 旧数据无 htmlHash 字段：回退到读取 MinIO 旧 HTML 算 MD5 比对
-                            String oldHtml = readHtmlFromMinio(url);
-                            if (oldHtml != null && newHtmlHash.equals(md5(oldHtml))) {
-                                contentUnchanged = true;
-                            }
-                        }
-                    }
-                }
-            }
+            CriteriaQuery criteriaQuery = new CriteriaQuery(new Criteria("url").is(url));
+            SearchHits<SpiderContentDoc> existing = elasticsearchOperations.search(
+                    criteriaQuery, SpiderContentDoc.class, IndexCoordinates.of(contentIndex));
+            SpiderContentDoc existingDoc = existing.isEmpty() ? null : existing.getSearchHits().get(0).getContent();
 
-            // 非覆盖模式且内容未变化 → 跳过
-            if (!overwriteHtml && contentUnchanged) {
+            List<String> imageUrls = getImagesForPage(doc, url, pageTitle, msg, task, overwriteImage,
+                    execution, resourceExecutor, resourceSemaphore);
+            if (hasSameContentAndImages(existingDoc, parsed.getContent(), imageUrls)) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                        "已存在，跳过: " + pageTitle, (int) cost);
-                log.info("内容未变化，跳过: url={}", url);
-                // 刷新本地 hash 缓存（内容未变，保持新鲜以便下次快速跳过）
-                urlHtmlHashCache.put(url, new UrlHashCacheEntry(newHtmlHash,
-                        System.currentTimeMillis() + URL_HASH_CACHE_TTL_MS));
+                        "正文和图片未变化，跳过: " + pageTitle, (int) cost);
+                log.info("正文和图片未变化，跳过: url={}", url);
                 success.incrementAndGet();
                 return;
             }
@@ -1025,24 +986,18 @@ public class CrawlerEngine {
                     : LocalDateTime.now().format(esDateFormatter);
             docObj.setCrawlTime(crawlTime);
             docObj.setUpdateTime(LocalDateTime.now().format(esDateFormatter));
-            docObj.setImages(List.of());
+            docObj.setImages(imageUrls);
             docObj.setHtmlHash(newHtmlHash);
 
             saveToElasticsearchWithRetry(docObj);
             writeLog(task.getId(), msg.getSpiderId(), url, 1, "INFO",
                 (overwriteHtml && existingDoc != null) ? "覆盖更新: " + pageTitle : "抓取成功: " + pageTitle, (int) cost);
             success.incrementAndGet();
-            // 写回本地 hash 缓存：页面已写入 ES，缓存值与 ES 一致，重爬时可快速跳过 ES 查询
-            urlHtmlHashCache.put(url, new UrlHashCacheEntry(newHtmlHash,
-                    System.currentTimeMillis() + URL_HASH_CACHE_TTL_MS));
 
-            // Persist the page before resource work so a slow asset host cannot prevent page storage.
             // 读取缓存命中时，HTML 和 JS/CSS 资源都直接从 MinIO 复用，不再回源。
             boolean saveResources = !cacheHit || Integer.valueOf(1).equals(msg.getOverwriteHtml());
             saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task, !cacheHit, saveResources,
                     processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
-            updateImagesAfterPageProcessing(doc, docObj, url, pageTitle,
-                    msg, task, overwriteImage, execution, resourceExecutor, resourceSemaphore);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (!execution.isCancelled()) {
@@ -1061,32 +1016,35 @@ public class CrawlerEngine {
         }
     }
 
-    private void updateImagesAfterPageProcessing(Html doc, SpiderContentDoc document, String pageUrl,
-                                                String title, TaskMessage msg, SpiderTask task,
-                                                boolean overwrite, TaskExecutionContext execution,
-                                                java.util.concurrent.ExecutorService resourceExecutor,
-                                                Semaphore resourceSemaphore) {
+    private List<String> getImagesForPage(Html doc, String pageUrl, String title,
+                                          TaskMessage msg, SpiderTask task, boolean overwrite,
+                                          TaskExecutionContext execution,
+                                          java.util.concurrent.ExecutorService resourceExecutor,
+                                          Semaphore resourceSemaphore) {
         if ((msg.getImageSelector() == null || msg.getImageSelector().isBlank())
                 && (msg.getImageXpath() == null || msg.getImageXpath().isBlank())) {
-            return;
+            return List.of();
         }
         try {
-            List<String> imageUrls = shouldSkipImageDownload(doc, msg)
+            return shouldSkipImageDownload(doc, msg)
                     ? List.of()
                     : extractAndUploadImages(doc, pageUrl, title, msg, task, overwrite, execution,
                             resourceExecutor, resourceSemaphore);
-            document.setImages(imageUrls);
-            saveToElasticsearchWithRetry(document);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            if (!execution.isCancelled()) {
-                log.warn("图片结果回写被中断，页面内容已保存: url={}", pageUrl);
-            }
         } catch (Exception e) {
             if (!execution.isCancelled()) {
-                log.warn("图片处理失败，页面内容已保存: url={}", pageUrl, e);
+                log.warn("图片处理失败: url={}", pageUrl, e);
             }
+            return List.of();
         }
+    }
+
+    static boolean hasSameContentAndImages(SpiderContentDoc existingDoc, String content, List<String> images) {
+        if (existingDoc == null || !Objects.equals(existingDoc.getContent(), content)) {
+            return false;
+        }
+        List<String> existingImages = existingDoc.getImages() == null ? List.of() : existingDoc.getImages();
+        List<String> newImages = images == null ? List.of() : images;
+        return existingImages.equals(newImages);
     }
 
     private void saveToElasticsearchWithRetry(SpiderContentDoc document) throws InterruptedException {
@@ -1840,19 +1798,6 @@ public class CrawlerEngine {
 
     private int resourceCost(long startTime) {
         return (int) Math.min(Integer.MAX_VALUE, Math.max(0, System.currentTimeMillis() - startTime));
-    }
-
-    /**
-     * 从 MinIO 读取已存储的 HTML 原文（用于变更比对）。对象不存在或读取失败时返回 null。
-     */
-    private String readHtmlFromMinio(String url) {
-        try {
-            return minioHelper.getHtmlIfExists(htmlBucket,
-                    "html/" + ObjectNameUtils.hashUrl(url) + ".html");
-        } catch (Exception e) {
-            log.debug("从 MinIO 读取 HTML 失败: url={}", url, e);
-            return null;
-        }
     }
 
     private byte[] downloadBytes(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
