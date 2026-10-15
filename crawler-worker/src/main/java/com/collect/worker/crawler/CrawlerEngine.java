@@ -910,8 +910,12 @@ public class CrawlerEngine {
                 return;
             }
             long start = System.currentTimeMillis();
+            boolean overwriteHtml = Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean readCache = Integer.valueOf(1).equals(msg.getReadCache());
-            String cachedHtml = readCache
+            String normalizedUrl = UrlQueueService.normalizeUrl(url);
+            boolean startPage = startUrlInfo.normalizedSet().contains(normalizedUrl);
+            boolean checkHtmlCache = shouldReadCachedHtml(readCache, overwriteHtml, startPage);
+            String cachedHtml = checkHtmlCache
                     ? minioHelper.getHtmlIfExists(htmlBucket,
                             "html/" + ObjectNameUtils.hashUrl(url) + ".html")
                     : null;
@@ -931,7 +935,6 @@ public class CrawlerEngine {
             String newHtml = doc.get();
             String newHtmlHash = md5(newHtml);
             String pageTitle = parsed.getTitle();
-            boolean overwriteHtml = Integer.valueOf(1).equals(msg.getOverwriteHtml());
             boolean overwriteImage = !cacheHit && Integer.valueOf(1).equals(msg.getOverwriteImage());
 
             // 读取缓存时允许从已缓存页面扩展 URL；未命中联网=跳过时，
@@ -1045,6 +1048,10 @@ public class CrawlerEngine {
         List<String> existingImages = existingDoc.getImages() == null ? List.of() : existingDoc.getImages();
         List<String> newImages = images == null ? List.of() : images;
         return existingImages.equals(newImages);
+    }
+
+    static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml, boolean startPage) {
+        return readCache || (!startPage && !overwriteHtml);
     }
 
     private void saveToElasticsearchWithRetry(SpiderContentDoc document) throws InterruptedException {

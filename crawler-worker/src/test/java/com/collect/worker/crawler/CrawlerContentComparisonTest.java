@@ -32,4 +32,12 @@ class CrawlerContentComparisonTest {
 
         assertTrue(CrawlerEngine.hasSameContentAndImages(existing, "article body", List.of()));
     }
+
+    @Test
+    void shouldReadCachedHtml_onlyForNonStartPagesWhenNotOverwriting() {
+        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, false, true));
+        assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false, false));
+        assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true, false));
+        assertTrue(CrawlerEngine.shouldReadCachedHtml(true, false, true));
+    }
 }
