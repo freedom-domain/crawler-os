@@ -158,6 +158,19 @@
           />
         </template>
       </el-table-column>
+      <el-table-column prop="forceOverwriteHtml" label="强制覆盖HTML" min-width="140" align="center" resizable>
+        <template #default="{ row }">
+          <el-tag v-if="row.overwriteHtml === 1 && row.forceOverwriteHtml === 1" type="danger" size="small">
+            强制覆盖
+          </el-tag>
+          <el-tag v-else-if="row.overwriteHtml === 1" type="info" size="small">
+            有变化时覆盖
+          </el-tag>
+          <el-tag v-else type="info" size="small">
+            未启用
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="overwriteImage" label="覆盖图片" min-width="130" align="center" resizable>
         <template #default="{ row }">
           <el-switch
