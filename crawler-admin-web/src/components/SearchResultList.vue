@@ -363,22 +363,19 @@ const setDropdownOpen = (row: any, visible: boolean) => {
   background: transparent;
   color: #9aa7b5;
   cursor: pointer;
-  transition: background .18s ease, border-color .18s ease, color .18s ease;
+  transition: color .18s ease;
 }
 
 .fav-btn:hover {
-  background: #fcf7eb;
-  color: #b48732;
+  color: #6b7280;
 }
 
 .fav-btn--active {
-  background: #fcf7eb;
-  color: #b48732;
+  color: #e53935;
 }
 
 .fav-btn--active:hover {
-  background: #f8efd9;
-  color: #946b20;
+  color: #c62828;
 }
 
 .fav-btn--loading {
