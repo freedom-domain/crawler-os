@@ -59,56 +59,58 @@
           <svg class="tag-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
           {{ row.spiderGroup }}
         </span>
-        <button
-          v-if="authenticated"
-          type="button"
-          class="fav-btn"
-          :class="{ 'fav-btn--active': row.favorited, 'fav-btn--loading': row._favLoading }"
-          :disabled="row._favLoading"
-          :title="row.favorited ? '取消收藏' : '收藏该条内容'"
-          @click.stop="$emit('favorite', row, !row.favorited)"
-        >
-          <el-icon
-            :size="15"
-            class="fav-btn__icon"
-            :class="{ 'fav-btn__icon--pop': row._favJustChanged }"
-          >
-            <StarFilled v-if="row.favorited" />
-            <Star v-else />
-          </el-icon>
-          <span class="fav-btn__text">{{ row.favorited ? '已收藏' : '收藏' }}</span>
-        </button>
-        <el-dropdown
-          v-if="authenticated"
-          trigger="click"
-          popper-class="table-action-popper"
-          :show-timeout="100"
-          :hide-timeout="100"
-          @command="(command: string) => $emit('command', command, row)"
-          @update:visible="(visible: boolean) => setDropdownOpen(row, visible)"
-        >
+        <span v-if="authenticated" class="result-actions">
           <button
             type="button"
-            class="action-trigger"
-            :class="{ 'is-open': row._dropdownOpen }"
-            :title="row.url"
+            class="fav-btn"
+            :class="{ 'fav-btn--active': row.favorited, 'fav-btn--loading': row._favLoading }"
+            :disabled="row._favLoading"
+            :title="row.favorited ? '取消收藏' : '收藏该条内容'"
+            :aria-label="row.favorited ? '取消收藏' : '收藏该条内容'"
+            :aria-pressed="Boolean(row.favorited)"
+            @click.stop="$emit('favorite', row, !row.favorited)"
           >
-            <el-icon class="action-trigger__icon"><MoreFilled /></el-icon>
+            <el-icon
+              :size="16"
+              class="fav-btn__icon"
+              :class="{ 'fav-btn__icon--pop': row._favJustChanged }"
+            >
+              <StarFilled v-if="row.favorited" />
+              <Star v-else />
+            </el-icon>
           </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="tag">
-                <span class="action-item"><el-icon class="action-icon action-icon--edit"><Edit /></el-icon>标签</span>
-              </el-dropdown-item>
-              <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">
-                <span class="action-item"><el-icon class="action-icon action-icon--rerun"><RefreshRight /></el-icon>重新爬取</span>
-              </el-dropdown-item>
-              <el-dropdown-item command="delete" class="action-item-danger">
-                <span class="action-item"><el-icon class="action-icon action-icon--delete"><Delete /></el-icon>删除</span>
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+          <el-dropdown
+            trigger="click"
+            popper-class="table-action-popper"
+            :show-timeout="100"
+            :hide-timeout="100"
+            @command="(command: string) => $emit('command', command, row)"
+            @update:visible="(visible: boolean) => setDropdownOpen(row, visible)"
+          >
+            <button
+              type="button"
+              class="action-trigger"
+              :class="{ 'is-open': row._dropdownOpen }"
+              title="更多操作"
+              aria-label="更多操作"
+            >
+              <el-icon class="action-trigger__icon"><MoreFilled /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="tag">
+                  <span class="action-item"><el-icon class="action-icon action-icon--edit"><Edit /></el-icon>标签</span>
+                </el-dropdown-item>
+                <el-dropdown-item command="rerun" :disabled="!row.spiderId || !row.url">
+                  <span class="action-item"><el-icon class="action-icon action-icon--rerun"><RefreshRight /></el-icon>重新爬取</span>
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" class="action-item-danger">
+                  <span class="action-item"><el-icon class="action-icon action-icon--delete"><Delete /></el-icon>删除</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </span>
         <span v-if="row.updateTime" class="meta-time update-time">
           {{ formatTime(row.updateTime) }} · {{ formatTimeAgo(row.updateTime) }}
         </span>
@@ -298,125 +300,85 @@ const setDropdownOpen = (row: any, visible: boolean) => {
 
 .update-time { color: var(--ink-500); font-size: 12px; }
 
-/* 操作触发按钮：胶囊样式 + hover 浮起 */
-/* 操作触发按钮：青色渐变胶囊（与"图片N张"徽章同系列）+ 打开菜单时箭头旋转 */
-.action-trigger {
-  position: relative;
+/* 搜索结果操作使用轻量图标按钮，避免抢占标题和正文的视觉层级。 */
+.result-actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px 4px 7px;
-  border: 1px solid #b7e7dc;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #f2fcfa 0%, #e4f5f2 100%);
-  color: #087f70;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  overflow: hidden;
-  transition: background .2s ease, box-shadow .2s ease, border-color .2s ease, color .2s ease;
 }
 
-/* 悬停扫光 */
-.action-trigger::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -120%;
-  width: 70%;
-  height: 100%;
-  background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, .55) 50%, transparent 100%);
-  transform: skewX(-20deg);
-  transition: left .55s ease;
-  pointer-events: none;
+.action-trigger {
+  display: inline-grid;
+  align-items: center;
+  justify-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-500);
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
 }
 
 .action-trigger:hover {
-  background: linear-gradient(135deg, #d9f3ed 0%, #c9ece5 100%);
-  border-color: #8ed6c8;
-  box-shadow: 0 3px 10px rgba(15, 129, 124, .18);
-  color: #075e55;
+  background: #eef7f6;
+  border-color: #d7eae7;
+  color: var(--teal-dark);
 }
 
-.action-trigger:hover::after {
-  left: 130%;
-}
-
-.action-trigger:active {
-  box-shadow: 0 1px 4px rgba(15, 129, 124, .14);
-}
-
-.action-trigger:focus-visible {
-  outline: 2px solid #087f70;
-  outline-offset: 2px;
-}
-
-/* 仅当菜单打开（JS 驱动 .is-open 类）时：按钮高亮 + 箭头旋转 180° */
+.action-trigger:active,
 .action-trigger.is-open {
-  background: linear-gradient(135deg, #cdeadf 0%, #bce4db 100%);
-  border-color: #6fccc0;
-  box-shadow: 0 3px 10px rgba(15, 129, 124, .2);
-  color: #064f47;
+  background: #e2f2ef;
+  border-color: #c6e4df;
+  color: var(--teal-dark);
+}
+
+.action-trigger:focus-visible,
+.fav-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 
 .action-trigger__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, .7);
-  box-shadow: inset 0 0 0 1px rgba(8, 127, 112, .12);
-  color: #0a8074;
-  font-size: 12px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
 
 
-/* 下拉菜单样式已移到文件底部非 scoped 块（el-dropdown 弹层 teleport 到 body，scoped :deep 匹配不到） */
-
-/* 收藏按钮：小巧紧凑 + 已收藏金色 + loading 态 + 弹跳动画 */
 .fav-btn {
-  display: inline-flex;
+  display: inline-grid;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border: 1px solid #e2e8ee;
-  border-radius: 999px;
-  background: #fff;
-  color: #7c8b9c;
-  font-size: 12px;
-  font-weight: 500;
-  font-family: inherit;
+  justify-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #9aa7b5;
   cursor: pointer;
-  transition: border-color .18s ease, box-shadow .18s ease,
-    background .18s ease, color .18s ease;
+  transition: background .18s ease, border-color .18s ease, color .18s ease;
 }
 
 .fav-btn:hover {
-  border-color: #f0c96e;
-  background: #fdf9ef;
-  color: #c79a2e;
-}
-
-.fav-btn:focus-visible {
-  outline: 2px solid #c79a2e;
-  outline-offset: 2px;
+  background: #fcf7eb;
+  color: #b48732;
 }
 
 .fav-btn--active {
-  border-color: #eed6a3;
-  background: #fbf4e4;
-  color: #a8791f;
+  background: #fcf7eb;
+  color: #b48732;
 }
 
 .fav-btn--active:hover {
-  border-color: #e3b95f;
-  background: #f9edd2;
-  color: #8f6414;
+  background: #f8efd9;
+  color: #946b20;
 }
 
 .fav-btn--loading {
@@ -425,16 +387,8 @@ const setDropdownOpen = (row: any, visible: boolean) => {
 }
 
 .fav-btn__icon {
-  color: #c79a2e;
+  color: inherit;
   transition: transform .2s ease;
-}
-
-.fav-btn:not(.fav-btn--active) .fav-btn__icon {
-  color: #a5b1bf;
-}
-
-.fav-btn:not(.fav-btn--active):hover .fav-btn__icon {
-  color: #c79a2e;
 }
 
 .fav-btn__icon--pop {
@@ -446,10 +400,6 @@ const setDropdownOpen = (row: any, visible: boolean) => {
   35%  { transform: scale(1.45) rotate(-8deg); }
   65%  { transform: scale(.88) rotate(4deg); }
   100% { transform: scale(1) rotate(0); }
-}
-
-.fav-btn__text {
-  line-height: 1;
 }
 
 .action-item {
@@ -465,17 +415,17 @@ const setDropdownOpen = (row: any, visible: boolean) => {
 
 .action-icon--edit {
   color: #6b7c8d;
-  transition: color .15s ease, transform .2s ease;
+  transition: color .15s ease;
 }
 
 .action-icon--rerun {
   color: #6b7c8d;
-  transition: color .15s ease, transform .4s ease;
+  transition: color .15s ease;
 }
 
 .action-icon--delete {
   color: #94a3b1;
-  transition: color .15s ease, transform .2s ease;
+  transition: color .15s ease;
 }
 
 @media (max-width: 460px) {
@@ -518,15 +468,12 @@ const setDropdownOpen = (row: any, visible: boolean) => {
   color: #b6c2cc;
 }
 
-/* hover 时图标动效：标签放大、重爬旋转、删除放大变红 */
 .table-action-popper .el-dropdown-menu__item:not(.is-disabled):hover .action-icon--edit {
   color: #0a8074;
-  transform: scale(1.12);
 }
 
 .table-action-popper .el-dropdown-menu__item:not(.is-disabled):hover .action-icon--rerun {
   color: #0a8074;
-  transform: rotate(90deg);
 }
 
 .table-action-popper .el-dropdown-menu__item.action-item-danger {
@@ -544,6 +491,5 @@ const setDropdownOpen = (row: any, visible: boolean) => {
 
 .table-action-popper .el-dropdown-menu__item.action-item-danger:hover .action-icon--delete {
   color: #c8342e;
-  transform: scale(1.12);
 }
 </style>
