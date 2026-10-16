@@ -494,11 +494,22 @@ const handleCommand = async (cmd: string) => {
     left: 0;
     bottom: 0;
     width: 236px !important;
+    display: flex;
+    flex-direction: column;
     z-index: 2100;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
   }
   .aside.is-open { transform: translateX(0); }
+  .aside :deep(.el-menu) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
   .header { height: 56px; }
   .collapse-btn { margin: 0 14px; }
   .breadcrumb { font-size: 13px; }
