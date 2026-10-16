@@ -6,20 +6,22 @@
         <img class="logo-mark" src="/crawleros-icon.svg" alt="" />
         <span v-if="!collapsed" class="logo-copy">Crawler<span>OS</span></span>
       </div>
-      <el-menu
-        :default-active="route.path"
-        :collapse="collapsed"
-        router
-        background-color="transparent"
-        text-color="#b7c9d9"
-        active-text-color="#ffffff"
-      >
-        <MenuNode :item="{ path: '/dashboard', name: 'Dashboard', icon: 'odometer' }" />
+      <div class="menu-scroll">
+        <el-menu
+          :default-active="route.path"
+          :collapse="collapsed"
+          router
+          background-color="transparent"
+          text-color="#b7c9d9"
+          active-text-color="#ffffff"
+        >
+          <MenuNode :item="{ path: '/dashboard', name: 'Dashboard', icon: 'odometer' }" />
 
-        <template v-for="item in menuList" :key="item.id">
-          <MenuNode :item="item" />
-        </template>
-      </el-menu>
+          <template v-for="item in menuList" :key="item.id">
+            <MenuNode :item="item" />
+          </template>
+        </el-menu>
+      </div>
     </el-aside>
 
     <el-container>
@@ -393,6 +395,9 @@ const handleCommand = async (cmd: string) => {
 .layout { width: 100%; height: 100%; min-width: 960px; }
 .layout > :deep(.el-container) { height: 100%; min-height: 0; overflow: hidden; }
 .aside {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: linear-gradient(180deg, #142a4c 0%, #193556 100%);
   transition: width 0.25s ease;
   overflow: hidden;
@@ -424,7 +429,19 @@ const handleCommand = async (cmd: string) => {
   border-radius: 9px;
 }
 .logo-copy span { color: #72e0c8; }
-:deep(.el-menu) { border-right: 0; padding: 14px 10px; }
+.menu-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+:deep(.el-menu) {
+  border-right: 0;
+  padding: 14px 10px;
+}
 :deep(.el-menu-item), :deep(.el-sub-menu__title) { height: 46px; line-height: 46px; margin: 4px 0; border-radius: 8px; }
 :deep(.el-menu--collapse .el-menu-item), :deep(.el-menu--collapse .el-sub-menu__title) {
   width: 52px;
@@ -508,15 +525,6 @@ const handleCommand = async (cmd: string) => {
     transition: transform 0.25s ease;
   }
   .aside.is-open { transform: translateX(0); }
-  .aside :deep(.el-menu) {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-y;
-  }
   .header { height: 56px; }
   .collapse-btn { margin: 0 14px; }
   .breadcrumb { font-size: 13px; }
