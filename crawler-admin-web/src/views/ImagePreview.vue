@@ -1,5 +1,5 @@
 <template>
-  <div class="image-preview-page" @click="hideImageMenu">
+  <div ref="pageRoot" class="image-preview-page" @click="hideImageMenu">
     <!-- 工具栏触发按钮 -->
     <button 
       type="button" 
@@ -63,18 +63,30 @@
       {{ loadError }}
     </div>
 
-    <!-- 图片列表：立即渲染（loading 时盖在上面的遮罩挡住），每行张数可输入，支持分页 -->
+    <!-- 只加载当前分页；图片进入视口附近时由浏览器按需加载 -->
     <div v-else class="grid-wrapper" :class="{ 'pagination-open': totalPages > 1 }">
       <div class="grid" :style="gridStyle">
-        <img
+        <div
           v-for="(img, idx) in pageImages"
-          :key="idx"
-          class="thumb"
-          :src="img"
-          :alt="`图片 ${pageStart + idx + 1}`"
-          loading="eager"
-          @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
-        />
+          :key="`${pageStart + idx}-${img}`"
+          class="thumb-card"
+        >
+          <div v-if="imageLoadStates[img] !== 'loaded'" class="thumb-loading">
+            <span v-if="imageLoadStates[img] === 'error'" class="thumb-error">图片加载失败</span>
+            <span v-else class="thumb-spinner" aria-label="图片加载中" />
+          </div>
+          <img
+            class="thumb"
+            :class="{ 'thumb-ready': imageLoadStates[img] === 'loaded' }"
+            :src="img"
+            :alt="`图片 ${pageStart + idx + 1}`"
+            loading="lazy"
+            decoding="async"
+            @load="setImageLoadState(img, 'loaded')"
+            @error="setImageLoadState(img, 'error')"
+            @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
+          />
+        </div>
         <div v-if="!images.length" class="empty-state">暂无图片</div>
       </div>
       <div
@@ -170,6 +182,7 @@ import TagEditorDialog from '@/components/TagEditorDialog.vue'
 const route = useRoute()
 const userStore = useUserStore()
 const contentId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
+const pageRoot = ref<HTMLElement | null>(null)
 
 const title = ref('图片预览')
 const sourceUrl = ref('')
@@ -182,6 +195,7 @@ const tagOptions = ref<any[]>([])
 const imageMenu = ref({ visible: false, x: 0, y: 0, index: -1 })
 const loading = ref(false)
 const loadError = ref('')
+const imageLoadStates = ref<Record<string, 'loaded' | 'error'>>({})
 const gridScale = ref(1)
 // 每行显示的图片张数（+− 步进调整）
 const cols = ref(4)
@@ -386,6 +400,7 @@ const loadImages = async () => {
   const id = contentId.value
   if (!id) {
     loadError.value = '缺少内容标识，无法加载图片'
+    loading.value = false
     return
   }
 
@@ -416,9 +431,12 @@ const loadImages = async () => {
     await nextTick()
     applyBreakpointDefaults(true)
 
-    // 3. 等本页图片全部加载完成（loading 遮罩盖在上面）
-    const expected = Math.min(pageSize.value, images.value.length)
-    await waitForPageLoaded(expected)
+    // 3. 等待当前断点布局第一行实际显示的图片；其他行继续按需加载。
+    await waitForFirstRowImages()
+
+    // 图片加载完成后立即显示网格，预览历史记录保存不属于图片加载流程。
+    loading.value = false
+    currentPageLoaded.value = true
 
     if (userStore.token) {
       try {
@@ -433,12 +451,6 @@ const loadImages = async () => {
         ElMessage.warning('图片已加载，但预览记录保存失败')
       }
     }
-
-    // 4. 加载动画消失 + 执行初始化（分页条显示，网格可交互）
-    loading.value = false
-    currentPageLoaded.value = true
-
-
   } catch {
     loadError.value = '图片加载失败，请稍后重试'
     loading.value = false
@@ -580,37 +592,47 @@ const totalPages = computed(() => Math.max(1, Math.ceil(images.value.length / pa
 const pageStart = computed(() => (page.value - 1) * pageSize.value)
 const pageImages = computed(() => images.value.slice(pageStart.value, pageStart.value + pageSize.value))
 
+const setImageLoadState = (src: string, state: 'loaded' | 'error') => {
+  imageLoadStates.value[src] = state
+}
+
 // 本页图片加载完成标记（首屏加载完成后置 true，翻页不需要再等）
 const currentPageLoaded = ref(false)
 
-// 等当前页图片全部加载完成，返回 Promise。
-// 以 img.complete 为准，80ms 轮询，1 秒超时兜底（避免异常卡住）。
-const waitForPageLoaded = (expected: number) => new Promise<void>((resolve) => {
-  if (!expected) {
-    resolve()
-    return
-  }
-  let elapsed = 0
-  const timer = setInterval(() => {
-    elapsed += 80
-    const els = Array.from(document.querySelectorAll<HTMLImageElement>('.grid .thumb'))
-    const ok = els.length >= expected && els.slice(0, expected).every((img) => img.complete)
-    if (ok) {
-      clearInterval(timer)
-      resolve()
-    } else if (elapsed >= 1000) {
-      // 兜底：1 秒内没全部 complete，放行
-      clearInterval(timer)
+// 每个断点的默认列数就是首屏第一行应等待的图片数。
+const waitForFirstRowImages = async () => {
+  await nextTick()
+  const expected = Math.min(cols.value, pageImages.value.length)
+  const els = Array.from(document.querySelectorAll<HTMLImageElement>('.grid .thumb')).slice(0, expected)
+  if (els.length < expected) return
+
+  await Promise.all(els.map((img) => new Promise<void>((resolve) => {
+    const src = img.getAttribute('src') || img.src
+    const settle = () => {
+      setImageLoadState(src, img.naturalWidth > 0 ? 'loaded' : 'error')
+      img.removeEventListener('load', onSettled)
+      img.removeEventListener('error', onSettled)
       resolve()
     }
-  }, 80)
-})
+    const onSettled = () => settle()
+
+    if (img.complete) {
+      settle()
+      return
+    }
+
+    img.addEventListener('load', onSettled, { once: true })
+    img.addEventListener('error', onSettled, { once: true })
+    // Recheck after attaching listeners in case the image completed in between.
+    if (img.complete) settle()
+  })))
+}
 
 const changePage = (p: number) => {
   const next = Math.min(totalPages.value, Math.max(1, p))
   if (next === page.value) return
   page.value = next
-  window.scrollTo({ top: 0 })
+  pageRoot.value?.scrollTo({ top: 0 })
 }
 
 // 重置：走页面初始化逻辑（重新加载图片，所有页面参数恢复初始默认值）
@@ -1084,8 +1106,45 @@ onBeforeUnmount(() => {
   height: calc(100vh - 100px);
   object-fit: contain;
   border-radius: 10px;
-  transition: transform 0.15s, box-shadow 0.15s;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.15s, box-shadow 0.15s;
   background: #f8fbfb;
+}
+.thumb-card {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 100px);
+  overflow: hidden;
+  border-radius: 10px;
+  background: #eaf0f2;
+}
+.thumb.thumb-ready {
+  opacity: 1;
+}
+.thumb-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(110deg, #eaf0f2 25%, #f8fbfb 45%, #eaf0f2 65%);
+  background-size: 200% 100%;
+  animation: thumb-shimmer 1.4s ease-in-out infinite;
+}
+.thumb-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(15, 159, 154, 0.18);
+  border-top-color: #0f9f9a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.thumb-error {
+  color: #8993a4;
+  font-size: 13px;
+}
+@keyframes thumb-shimmer {
+  to { background-position-x: -200%; }
 }
 .empty-state {
   width: 100%;
@@ -1348,7 +1407,8 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
     font-size: 13px;
   }
-  .thumb { height: calc(100dvh - 80px); }
+  .thumb,
+  .thumb-card { height: calc(100dvh - 80px); }
   .viewer-stage img { max-width: calc(100vw - 60px); max-height: calc(100dvh - 100px); }
   .viewer-nav.prev { left: 10px; }
   .viewer-nav.next { right: 10px; }
