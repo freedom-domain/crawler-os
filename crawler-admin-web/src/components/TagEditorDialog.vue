@@ -1,24 +1,15 @@
 <template>
   <el-dialog v-model="visible" title="编辑标签" width="480px" destroy-on-close>
-    <div class="tag-editor-row">
-      <el-select
-        v-model="selection"
-        multiple
-        filterable
-        allow-create
-        default-first-option
-        placeholder="选择或输入标签"
-        class="tag-editor-select"
-        :teleported="true"
-        popper-class="tag-editor-popper"
-      >
-        <el-option
-          v-for="option in tagOptions"
-          :key="option.id"
-          :label="option.label"
-          :value="option.label"
+    <div class="tag-editor-content">
+      <el-checkbox-group v-model="selection" class="tag-editor-options">
+        <el-checkbox
+          v-for="tag in availableTags"
+          :key="tag"
+          :label="tag"
+          :value="tag"
+          border
         />
-      </el-select>
+      </el-checkbox-group>
       <div class="tag-editor-actions">
         <el-button @click="visible = false">取消</el-button>
         <el-button type="primary" @click="save">保存</el-button>
@@ -48,6 +39,12 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value)
 })
 const selection = ref<string[]>([])
+const availableTags = computed(() => {
+  const options = props.tagOptions
+    .map(option => String(option.label || '').trim())
+    .filter(Boolean)
+  return [...new Set([...options, ...selection.value])]
+})
 
 watch(
   () => [props.modelValue, props.row] as const,
@@ -71,9 +68,9 @@ const save = async () => {
 </script>
 
 <style scoped>
-.tag-editor-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
-.tag-editor-select { min-width: 0; flex: 1; }
-.tag-editor-actions { display: flex; flex-shrink: 0; gap: 8px; }
-:global(.tag-editor-popper) { z-index: 3100 !important; }
+.tag-editor-content { display: flex; flex-direction: column; gap: 20px; padding: 8px 0; }
+.tag-editor-options { display: flex; flex-wrap: wrap; gap: 10px; max-height: 45vh; overflow-y: auto; }
+.tag-editor-options :deep(.el-checkbox) { margin: 0; }
+.tag-editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 </style>
