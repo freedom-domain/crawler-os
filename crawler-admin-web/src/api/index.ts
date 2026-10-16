@@ -66,6 +66,31 @@ export const recordImagePreview = (data: any) => request.post('/search/image-his
 export const imagePreviewHistoryPage = (params: any) => request.get('/search/image-history', { params })
 export const deleteImagePreviewHistory = (id: number) => request.delete(`/search/image-history/${id}`)
 export const clearImagePreviewHistory = () => request.delete('/search/image-history')
+export const investmentAccount = () => request.get('/investment/account')
+export const investmentQuote = (code: string) => request.get('/investment/quote', { params: { code } })
+export const investmentTrade = (data: { code: string; side: 'BUY' | 'SELL'; quantity: number }) =>
+  request.post('/investment/trade', data)
+export const investmentTrades = () => request.get('/investment/trades')
+export const fundHistory = (params: { code: string; startDate: string; endDate: string; frequency: string }) =>
+  request.get('/investment/fund/history', { params })
+export const simulateFundDca = (data: {
+  code: string
+  startDate: string
+  endDate: string
+  amount: number
+  weekday: number
+}) => request.post('/investment/fund/dca', data)
+export const offExchangeFundHistory = (params: { code: string; startDate: string; endDate: string }) =>
+  request.get('/investment/off-exchange-fund/history', { params })
+export const simulateOffExchangeFundDca = (data: {
+  code: string
+  startDate: string
+  endDate: string
+  amount: number
+  weekday: number
+  subscriptionFeeRate: number
+  redemptionFeeRate: number
+}) => request.post('/investment/off-exchange-fund/dca', data)
 export const syncSearchHistory = (keywords: string[]) => request.post('/search/history/sync', keywords)
 export const clearSearchHistory = () => request.delete('/search/history')
 export const deleteSearchHistory = (keyword: string) => request.delete('/search/history/item', { params: { keyword } })

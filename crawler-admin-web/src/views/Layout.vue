@@ -105,7 +105,7 @@ import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, Menu as MenuIcon } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -305,6 +305,7 @@ const iconMap: Record<string, any> = {
   file: Folder,
   Folder,
   Picture,
+  TrendCharts,
   system: Setting,
   Setting
 }

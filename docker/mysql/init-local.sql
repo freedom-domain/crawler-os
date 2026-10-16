@@ -212,6 +212,56 @@ CREATE TABLE IF NOT EXISTS image_preview_history (
     KEY idx_image_preview_user_time (user_id, deleted, create_time, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS paper_investment_account (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    initial_cash DECIMAL(18,2) NOT NULL,
+    cash_balance DECIMAL(18,2) NOT NULL,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    UNIQUE KEY uk_paper_investment_user (user_id),
+    KEY idx_paper_investment_account_deleted (deleted, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS paper_investment_holding (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    code CHAR(6) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    market VARCHAR(16) NOT NULL,
+    instrument_type VARCHAR(16) NOT NULL,
+    quantity INT NOT NULL DEFAULT 0,
+    available_quantity INT NOT NULL DEFAULT 0,
+    average_cost DECIMAL(18,6) NOT NULL DEFAULT 0,
+    settled_date DATE,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    UNIQUE KEY uk_paper_investment_holding (user_id, code),
+    KEY idx_paper_investment_holding_user (user_id, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS paper_investment_trade (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    code CHAR(6) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    market VARCHAR(16) NOT NULL,
+    instrument_type VARCHAR(16) NOT NULL,
+    side VARCHAR(4) NOT NULL,
+    quantity INT NOT NULL,
+    price DECIMAL(18,4) NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    commission DECIMAL(18,2) NOT NULL,
+    stamp_tax DECIMAL(18,2) NOT NULL DEFAULT 0,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    create_time DATETIME,
+    update_time DATETIME,
+    KEY idx_paper_investment_trade_user_time (user_id, deleted, create_time, id),
+    KEY idx_paper_investment_trade_code (user_id, code, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 初始化角色
 INSERT INTO sys_role (id, name, code, description, status) VALUES
 (1, '管理员', 'admin', '系统管理员', 1),
@@ -235,13 +285,15 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (14, '权限管理', 'permission', 12, 1, '/permission', 'Lock', 2),
 (15, '字典管理', 'dict', 12, 1, '/dict', 'PriceTag', 3),
 (16, '我的收藏', 'favorite', 0, 1, '/favorite', 'Folder', 6),
-(17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7);
+(17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7),
+(18, '模拟投资', 'investment', 0, 1, '/investment', 'TrendCharts', 8);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),
+(2, 18);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES
