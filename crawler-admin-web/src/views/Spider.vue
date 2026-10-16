@@ -77,14 +77,14 @@
     <div class="table-scroll-wrapper">
     <el-table ref="tableRef" :data="list" v-loading="loading" stripe :row-class-name="tableRowClassName" resizable border @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="42" fixed="left" />
-      <el-table-column prop="id" label="ID" min-width="60" fixed="left" resizable />
-      <el-table-column prop="name" label="名称" min-width="160" fixed="left" resizable>
+      <el-table-column prop="name" label="名称" min-width="110" fixed="left" resizable>
         <template #default="{ row }">
           <el-link type="primary" @click="router.push({ name: 'Search', query: { spiderId: String(row.id) } })">
             {{ row.name }}
           </el-link>
         </template>
       </el-table-column>
+      <el-table-column prop="id" label="ID" min-width="60" resizable />
       <el-table-column label="起始URL" min-width="320" show-overflow-tooltip resizable>
         <template #default="{ row }">
           <template v-for="(url, index) in parseStartUrls(row.startUrls)" :key="`${url}-${index}`">
@@ -632,6 +632,18 @@ const syncQueryToRoute = () => {
   void router.replace({ query })
 }
 
+const normalizeSwitchValue = (value: unknown) => Number(value) === 1 ? 1 : 0
+const normalizeSpiderSwitches = (spider: any) => ({
+  ...spider,
+  isPublic: normalizeSwitchValue(spider.isPublic),
+  readCache: normalizeSwitchValue(spider.readCache),
+  readCacheMissOnline: normalizeSwitchValue(spider.readCacheMissOnline),
+  overwriteHtml: normalizeSwitchValue(spider.overwriteHtml),
+  forceOverwriteHtml: normalizeSwitchValue(spider.forceOverwriteHtml),
+  overwriteImage: normalizeSwitchValue(spider.overwriteImage),
+  status: normalizeSwitchValue(spider.status)
+})
+
 const loadData = async () => {
   const requestedHighlightId = highlightSpiderId.value
   loading.value = true
@@ -645,7 +657,8 @@ const loadData = async () => {
       isPublic: publicFilter.value ?? undefined
     })
     if (requestedHighlightId !== highlightSpiderId.value) return
-    list.value = res.data?.records || []
+    // el-switch emits `change` when its initial value is not exactly an active/inactive value.
+    list.value = (res.data?.records || []).map(normalizeSpiderSwitches)
     total.value = res.data?.total || 0
     if (requestedHighlightId) {
       const found = list.value.some((row) => Number(row.id) === requestedHighlightId)
@@ -653,7 +666,7 @@ const loadData = async () => {
         const detail: any = await spiderDetail(requestedHighlightId)
         if (requestedHighlightId !== highlightSpiderId.value) return
         if (detail.data && Number(detail.data.id) === requestedHighlightId) {
-          list.value.unshift(detail.data)
+          list.value.unshift(normalizeSpiderSwitches(detail.data))
         }
       }
     }
