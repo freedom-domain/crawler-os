@@ -994,13 +994,11 @@ public class CrawlerEngine {
                     !cacheHit && (forceOverwriteHtml || htmlChanged), saveResources,
                     processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
 
-            if (hasSameContentAndImages(existingDoc, parsed.getContent(), imageUrls)) {
+            if (shouldSkipUnchangedContent(existingDoc, parsed.getContent(), imageUrls, forceOverwriteHtml)) {
                 writeLog(task.getId(), msg.getSpiderId(), url, 2, "INFO",
-                        forceOverwriteHtml ? "HTML源码已强制覆盖，ES正文和图片未变化: " + pageTitle
-                                : htmlChanged ? "MinIO 源码已更新，ES 正文和图片未变化: " + pageTitle
+                        htmlChanged ? "MinIO 源码已更新，ES 正文和图片未变化: " + pageTitle
                                 : "正文、图片和 MinIO 源码未变化，跳过: " + pageTitle, (int) cost);
-                log.info("ES 正文和图片未变化: url={}, htmlChanged={}, forceOverwriteHtml={}",
-                        url, htmlChanged, forceOverwriteHtml);
+                log.info("ES 正文和图片未变化: url={}, htmlChanged={}", url, htmlChanged);
                 success.incrementAndGet();
                 return;
             }
@@ -1082,6 +1080,11 @@ public class CrawlerEngine {
         List<String> existingImages = existingDoc.getImages() == null ? List.of() : existingDoc.getImages();
         List<String> newImages = images == null ? List.of() : images;
         return existingImages.equals(newImages);
+    }
+
+    static boolean shouldSkipUnchangedContent(SpiderContentDoc existingDoc, String content, List<String> images,
+                                              boolean forceOverwriteHtml) {
+        return !forceOverwriteHtml && hasSameContentAndImages(existingDoc, content, images);
     }
 
     static boolean hasSameBytes(byte[] existing, byte[] current) {

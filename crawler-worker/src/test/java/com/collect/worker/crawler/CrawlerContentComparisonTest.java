@@ -34,6 +34,18 @@ class CrawlerContentComparisonTest {
     }
 
     @Test
+    void shouldSkipUnchangedContent_shouldNotCompareWhenForceOverwriting() {
+        SpiderContentDoc existing = new SpiderContentDoc();
+        existing.setContent("article body");
+        existing.setImages(List.of("images/first.jpg"));
+
+        assertFalse(CrawlerEngine.shouldSkipUnchangedContent(
+                existing, "article body", List.of("images/first.jpg"), true));
+        assertTrue(CrawlerEngine.shouldSkipUnchangedContent(
+                existing, "article body", List.of("images/first.jpg"), false));
+    }
+
+    @Test
     void hasSameBytes_shouldIdentifyUnchangedAndChangedMinioContent() {
         assertTrue(CrawlerEngine.hasSameBytes(new byte[] {1, 2}, new byte[] {1, 2}));
         assertFalse(CrawlerEngine.hasSameBytes(new byte[] {1, 2}, new byte[] {1, 3}));
