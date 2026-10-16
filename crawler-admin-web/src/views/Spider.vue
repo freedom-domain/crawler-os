@@ -40,7 +40,6 @@
       </el-form-item>
       <el-form-item class="toolbar-actions">
         <div class="spider-actions">
-          <el-button type="primary" :icon="Plus" @click="showCreate">新建爬虫</el-button>
           <el-button
             type="danger"
             plain
@@ -58,6 +57,7 @@
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
+                <el-dropdown-item command="create" :icon="Plus">新建爬虫</el-dropdown-item>
                 <el-dropdown-item command="export" :icon="Download">导出配置</el-dropdown-item>
                 <el-dropdown-item command="import" :icon="Upload">导入配置</el-dropdown-item>
               </el-dropdown-menu>
@@ -754,6 +754,7 @@ const handleImport = async (file: File) => {
 const importInputRef = ref<HTMLInputElement | null>(null)
 
 const handleConfigCommand = (cmd: string) => {
+  if (cmd === 'create') showCreate()
   if (cmd === 'export') handleExport()
   if (cmd === 'import') importInputRef.value?.click()
 }

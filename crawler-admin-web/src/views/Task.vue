@@ -61,7 +61,7 @@
     <el-table :data="list" v-loading="loading" stripe @selection-change="handleSelectionChange" resizable border class="task-table">
       <el-table-column type="selection" width="50"  resizable />
       <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip resizable />
-      <el-table-column label="爬虫名称" min-width="160" resizable>
+      <el-table-column label="爬虫名称" min-width="120" resizable>
         <template #default="{ row }">
           <el-dropdown trigger="click" @command="(cmd: string) => handleSpiderJump(cmd, row)">
             <el-button link type="primary" class="spider-name-dropdown">
