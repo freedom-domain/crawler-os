@@ -18,7 +18,7 @@
       <el-table-column prop="id" label="ID" min-width="60"  resizable />
       <el-table-column prop="username" label="用户名" min-width="140"  resizable />
       <el-table-column prop="nickname" label="昵称" min-width="140"  resizable />
-      <el-table-column prop="email" label="邮箱"  resizable />
+      <el-table-column prop="email" label="邮箱" width="220" show-overflow-tooltip resizable />
       <el-table-column prop="phone" label="手机" min-width="140"  resizable />
       <el-table-column prop="roleName" label="角色" min-width="120" resizable>
         <template #default="{ row }">
@@ -32,7 +32,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <TableRowActions :items="rowActions" @command="command => handleRowAction(command, row)" />
         </template>

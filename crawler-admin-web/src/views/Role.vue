@@ -19,7 +19,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <TableRowActions :items="rowActions" @command="command => handleRowAction(command, row)" />
         </template>

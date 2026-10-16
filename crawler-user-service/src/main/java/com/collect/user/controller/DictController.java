@@ -20,8 +20,9 @@ public class DictController {
 
     @Operation(summary = "字典树形列表")
     @GetMapping
-    public R<List<SysDict>> tree() {
-        return R.ok(dictService.tree());
+    public R<List<SysDict>> tree(
+            @RequestParam(value = "includeDisabled", defaultValue = "false") boolean includeDisabled) {
+        return R.ok(dictService.tree(includeDisabled));
     }
 
     @Operation(summary = "根据父级 value 获取子项列表")

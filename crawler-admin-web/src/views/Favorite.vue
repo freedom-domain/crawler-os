@@ -68,7 +68,9 @@
             <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="delete" :icon="Delete" :class="{ 'is-danger': true }">删除</el-dropdown-item>
+                <el-dropdown-item command="edit-tags" :icon="EditPen">编辑标签</el-dropdown-item>
+                <el-dropdown-item command="image-preview" :icon="Picture">打开预览页</el-dropdown-item>
+                <el-dropdown-item command="delete" :icon="Delete" divided :class="{ 'is-danger': true }">删除收藏</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -111,7 +113,7 @@ import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Refresh, MoreFilled, Delete } from '@element-plus/icons-vue'
+import { Refresh, MoreFilled, Delete, EditPen, Picture } from '@element-plus/icons-vue'
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { dictChildren, favoriteDelete, favoritePage, searchDetail, spiderPage } from '@/api'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
@@ -290,6 +292,8 @@ const toggleContentLocalize = (enabled: string | number | boolean) => {
 }
 
 const handleFavoriteCommand = (cmd: string, row: any) => {
+  if (cmd === 'edit-tags') openTagEditor(row)
+  if (cmd === 'image-preview') openImagePreview(row)
   if (cmd === 'delete') remove(row)
 }
 

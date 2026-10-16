@@ -71,7 +71,7 @@
         <el-table-column prop="fileName" label="文件名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="objectName" label="对象名" min-width="200" show-overflow-tooltip  resizable />
         <el-table-column prop="bucket" label="存储桶" min-width="120"  resizable />
-        <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+        <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
           <template #default="{ row }">
             <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
           </template>

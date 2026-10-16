@@ -114,7 +114,7 @@
         <el-table-column prop="imageFailCount" label="失败" min-width="70" align="center"  resizable />
         <el-table-column prop="imageExistingCount" label="已存在" min-width="80" align="center"  resizable />
       </el-table-column>
-      <el-table-column label="操作" min-width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
         </template>

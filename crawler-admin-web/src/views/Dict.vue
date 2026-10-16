@@ -1,85 +1,108 @@
 <template>
   <div class="dict-page">
-    <!-- 左侧：分类列表 -->
-    <div class="panel-left">
+    <div class="category-panel">
       <div class="panel-header">
-        <span class="panel-title">分类</span>
+        <div class="category-heading">
+          <span class="panel-title">字典分类</span>
+          <span class="category-summary">{{ filteredCategories.length }} 个分类</span>
+        </div>
         <el-button type="primary" size="small" :icon="Plus" @click="showCreateParent">新增</el-button>
       </div>
       <div class="search-box">
         <el-input v-model="keyword" placeholder="搜索分类" clearable :prefix-icon="Search" size="small" />
         <el-button size="small" @click="keyword = ''">重置</el-button>
       </div>
-      <div class="category-list" v-loading="loading">
-        <div
-          v-for="cat in filteredCategories"
-          :key="cat.id"
-          class="category-item"
-          :class="{ active: selectedId === cat.id }"
-          @click="selectCategory(cat)"
-        >
-          <div class="cat-info">
-            <span class="cat-name">{{ cat.label }}</span>
-            <span class="cat-count">{{ (cat.children || []).length }}</span>
-          </div>
-          <div class="cat-actions" @click.stop>
-            <el-button size="small" text :icon="Edit" @click="showEdit(cat)" />
-            <el-button size="small" text type="danger" :icon="Delete" @click="handleDelete(cat)" />
-          </div>
-        </div>
-        <div v-if="!filteredCategories.length && !loading" class="empty-tip">暂无分类</div>
-      </div>
-    </div>
-
-    <!-- 右侧：子项管理 -->
-    <div class="panel-right">
-      <template v-if="selectedCategory">
-        <div class="panel-header">
-          <div class="right-header-left">
-            <span class="panel-title">{{ selectedCategory.label }}</span>
-            <el-tag size="small" type="info">{{ (selectedCategory.children || []).length }} 项</el-tag>
-          </div>
-          <el-button type="primary" size="small" :icon="Plus" @click="showCreateChild">添加子项</el-button>
-        </div>
-
-        <div class="child-table-wrap" v-loading="loading">
-          <draggable
-            v-model="childList"
-            handle=".drag-handle"
-            @end="onDragEnd"
-          >
-            <template #item="{ element }">
-              <div class="child-row">
-                <span class="drag-handle">⠿</span>
-                <span class="child-sort">{{ element.sort }}</span>
-                <span class="child-name">{{ element.label }}</span>
-                <span class="child-value">{{ element.value || '-' }}</span>
-                <el-switch
-                  v-model="element.status"
-                  :active-value="1"
-                  :inactive-value="0"
-                  size="small"
-                  @change="handleStatusChange(element)"
-                />
-                <span class="child-time">{{ formatDateTime(element.createTime) }}</span>
-                <div class="child-actions">
-                  <el-button size="small" text @click="showEdit(element)">编辑</el-button>
-                  <el-button size="small" text type="danger" @click="handleDelete(element)">删除</el-button>
-                </div>
-              </div>
+      <div class="table-scroll-wrapper category-table-wrap">
+        <el-table :data="pagedCategories" v-loading="loading" stripe border resizable>
+          <el-table-column prop="id" label="ID" width="75" resizable />
+          <el-table-column prop="label" label="名称" min-width="140" show-overflow-tooltip resizable />
+          <el-table-column prop="value" label="值" min-width="140" show-overflow-tooltip resizable>
+            <template #default="{ row }">{{ row.value || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="sort" label="排序" width="85" align="center" resizable>
+            <template #default="{ row }">{{ row.sort ?? 0 }}</template>
+          </el-table-column>
+          <el-table-column label="子项数" width="90" align="center" resizable>
+            <template #default="{ row }">{{ (row.children || []).length }}</template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="90" align="center" resizable>
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.status === 1 ? 'success' : 'info'">
+                {{ row.status === 1 ? '启用' : '禁用' }}
+              </el-tag>
             </template>
-          </draggable>
-          <div v-if="!childList.length && !loading" class="child-empty">
-            <el-empty description="暂无子项" :image-size="60" />
-          </div>
-        </div>
-      </template>
-      <template v-else>
-        <div class="placeholder">
-          <el-empty description="请选择左侧分类" :image-size="100" />
-        </div>
-      </template>
+          </el-table-column>
+          <el-table-column prop="createTime" label="创建时间" min-width="170" resizable>
+            <template #default="{ row }">{{ formatDateTime(row.createTime) || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="updateTime" label="更新时间" min-width="170" resizable>
+            <template #default="{ row }">{{ formatDateTime(row.updateTime) || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <TableRowActions
+                :items="getCategoryActions()"
+                @command="command => handleCategoryAction(command, row)"
+              />
+            </template>
+          </el-table-column>
+          <template #empty>暂无分类</template>
+        </el-table>
+      </div>
+      <el-pagination
+        v-model:current-page="categoryPage"
+        v-model:page-size="categoryPageSize"
+        :total="filteredCategories.length"
+        :page-sizes="[10, 15, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+      />
     </div>
+
+    <el-dialog
+      v-model="childrenDialogVisible"
+      :title="`${managingCategory?.label || '分类'} · 子项管理`"
+      width="min(900px, calc(100vw - 32px))"
+      destroy-on-close
+    >
+      <div class="children-dialog-toolbar">
+        <span class="children-count">{{ childList.length }} 个子项 · 拖动可调整顺序</span>
+        <el-button type="primary" size="small" :icon="Plus" @click="showCreateChild">添加子项</el-button>
+      </div>
+      <div class="child-table-wrap" v-loading="loading">
+        <div v-if="childList.length" class="child-table-header" aria-hidden="true">
+          <span></span>
+          <span>排序</span>
+          <span>名称</span>
+          <span>值</span>
+          <span>状态</span>
+          <span>创建时间</span>
+          <span>操作</span>
+        </div>
+        <draggable v-model="childList" handle=".drag-handle" @end="onDragEnd">
+          <template #item="{ element }">
+            <div class="child-row">
+              <span class="drag-handle">⠿</span>
+              <span class="child-sort">{{ element.sort }}</span>
+              <span class="child-name">{{ element.label }}</span>
+              <span class="child-value">{{ element.value || '-' }}</span>
+              <el-tag size="small" :type="element.status === 1 ? 'success' : 'info'">
+                {{ element.status === 1 ? '启用' : '禁用' }}
+              </el-tag>
+              <span class="child-time">{{ formatDateTime(element.createTime) }}</span>
+              <div class="child-actions">
+                <TableRowActions
+                  :items="getChildActions()"
+                  @command="command => handleChildAction(command, element)"
+                />
+              </div>
+            </div>
+          </template>
+        </draggable>
+        <div v-if="!childList.length && !loading" class="child-empty">
+          <el-empty description="暂无子项" :image-size="60" />
+        </div>
+      </div>
+    </el-dialog>
 
     <!-- 弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="440px" destroy-on-close>
@@ -111,18 +134,23 @@ import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import draggable from 'vuedraggable'
 import { dictTree, dictCreate, dictUpdate, dictDelete } from '@/api'
-import { Plus, Search, Edit, Delete } from '@element-plus/icons-vue'
+import { Plus, Search, Edit, Delete, FolderOpened } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 const treeData = ref<any[]>([])
 const loading = ref(false)
 const keyword = ref('')
+const categoryPage = ref(1)
+const categoryPageSize = ref(10)
 const selectedId = ref<number | null>(null)
 const dialogVisible = ref(false)
+const childrenDialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const isEdit = ref(false)
 const form = ref({ parentId: 0, label: '', value: '', sort: 0, status: 1 })
 const childList = ref<any[]>([])
+const managingCategory = ref<any>(null)
 
 const selectedCategory = computed(() =>
   treeData.value.find((c: any) => c.id === selectedId.value) || null
@@ -158,8 +186,18 @@ const filteredCategories = computed(() => {
   return treeData.value.filter(
     (c: any) =>
       c.label?.toLowerCase().includes(kw) ||
-      (c.children || []).some((ch: any) => ch.label?.toLowerCase().includes(kw))
+    c.value?.toLowerCase().includes(kw) ||
+    (c.children || []).some((ch: any) => ch.label?.toLowerCase().includes(kw))
   )
+})
+
+const pagedCategories = computed(() => {
+  const start = (categoryPage.value - 1) * categoryPageSize.value
+  return filteredCategories.value.slice(start, start + categoryPageSize.value)
+})
+
+watch([keyword, categoryPageSize], () => {
+  categoryPage.value = 1
 })
 
 const dialogTitle = computed(() => {
@@ -170,8 +208,15 @@ const dialogTitle = computed(() => {
 const loadData = async () => {
   loading.value = true
   try {
-    const res: any = await dictTree()
+    const res: any = await dictTree({ includeDisabled: true })
     treeData.value = res.data || []
+    const lastPage = Math.max(1, Math.ceil(filteredCategories.value.length / categoryPageSize.value))
+    if (categoryPage.value > lastPage) {
+      categoryPage.value = lastPage
+    }
+    if (managingCategory.value) {
+      managingCategory.value = treeData.value.find((c: any) => c.id === managingCategory.value.id) || null
+    }
     // 默认选中第一个
     if (!selectedId.value && treeData.value.length) {
       selectedId.value = treeData.value[0].id
@@ -181,8 +226,32 @@ const loadData = async () => {
   }
 }
 
-const selectCategory = (cat: any) => {
+const openChildrenDialog = (cat: any) => {
   selectedId.value = cat.id
+  managingCategory.value = cat
+  childrenDialogVisible.value = true
+}
+
+const getCategoryActions = (): TableRowAction[] => [
+  { command: 'children', label: '管理子项', icon: FolderOpened },
+  { command: 'edit', label: '编辑分类', icon: Edit },
+  { command: 'delete', label: '删除分类', icon: Delete, divided: true, danger: true }
+]
+
+const handleCategoryAction = (command: string, cat: any) => {
+  if (command === 'children') openChildrenDialog(cat)
+  if (command === 'edit') showEdit(cat)
+  if (command === 'delete') handleDelete(cat)
+}
+
+const getChildActions = (): TableRowAction[] => [
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, divided: true, danger: true }
+]
+
+const handleChildAction = (command: string, row: any) => {
+  if (command === 'edit') showEdit(row)
+  if (command === 'delete') handleDelete(row)
 }
 
 const showCreateParent = () => {
@@ -193,14 +262,14 @@ const showCreateParent = () => {
 }
 
 const showCreateChild = () => {
-  if (!selectedCategory.value) return
+  if (!managingCategory.value) return
   isEdit.value = false
   editingId.value = null
   form.value = {
-    parentId: selectedCategory.value.id,
+    parentId: managingCategory.value.id,
     label: '',
     value: '',
-    sort: (selectedCategory.value.children || []).length,
+    sort: childList.value.length,
     status: 1
   }
   dialogVisible.value = true
@@ -246,16 +315,6 @@ const handleSubmit = async () => {
   }
 }
 
-const handleStatusChange = async (row: any) => {
-  try {
-    await dictUpdate(row.id, { status: row.status })
-    ElMessage.success(row.status === 1 ? '已启用' : '已禁用')
-  } catch {
-    row.status = row.status === 1 ? 0 : 1
-    ElMessage.error('状态更新失败')
-  }
-}
-
 const handleDelete = async (row: any) => {
   const isParent = row.parentId === 0
   const hasChildren = isParent && (row.children || []).length > 0
@@ -284,38 +343,52 @@ onMounted(loadData)
 
 <style scoped>
 .dict-page {
-  display: flex;
-  gap: 16px;
   height: calc(100vh - 140px);
   min-height: 400px;
 }
 
-/* 左侧面板 */
-.panel-left {
-  width: 280px;
-  min-width: 240px;
+.category-panel {
+  width: 100%;
+  height: 100%;
   background: #fff;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid #dfe9eb;
-  box-shadow: 0 6px 20px rgba(23, 43, 77, .05);
+  box-shadow: 0 8px 24px rgba(23, 43, 77, .06);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.category-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.category-summary,
+.children-count {
+  color: var(--ink-500);
+  font-size: 12px;
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
+  min-height: 58px;
+  padding: 12px 16px;
   border-bottom: 1px solid #e5eef0;
-  background: #f8fbfb;
+  background: linear-gradient(135deg, #f7fbfb, #f2f8f8);
 }
 
 .panel-title {
   font-size: 15px;
   font-weight: 700;
   color: var(--ink-950);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-box {
@@ -330,133 +403,98 @@ onMounted(loadData)
   min-width: 0;
 }
 
-.category-list {
+.category-table-wrap {
   flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.category-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
-  margin-bottom: 4px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.category-item:hover {
-  background: var(--surface-soft);
-}
-
-.category-item.active {
-  background: #e2f6f3;
-  border: 1px solid #a9e0d7;
-  color: #087f7d;
-}
-
-.cat-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.cat-name {
-  font-size: 14px;
-  color: var(--ink-900);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.category-item.active .cat-name {
-  color: var(--teal-dark);
-  font-weight: 600;
-}
-
-.cat-count {
-  min-width: 20px;
-  height: 20px;
-  line-height: 20px;
-  text-align: center;
-  background: #e8f0f2;
-  border-radius: 10px;
-  font-size: 11px;
-  color: var(--ink-700);
-  padding: 0 6px;
-}
-
-.category-item.active .cat-count {
-  background: #d9f5ef;
-  color: var(--teal-dark);
-}
-
-.cat-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.category-item:hover .cat-actions {
-  opacity: 1;
-}
-
-.empty-tip {
-  text-align: center;
-  color: var(--ink-500);
-  font-size: 13px;
-  padding: 20px 0;
-}
-
-/* 右侧面板 */
-.panel-right {
-  flex: 1;
-  background: var(--surface);
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.right-header-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  min-height: 0;
+  padding: 10px 16px 0;
 }
 
 .child-table-wrap {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 16px 16px;
+  max-height: min(60vh, 560px);
+  overflow: auto;
+  padding: 0 2px 8px;
+}
+
+.children-dialog-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.child-table-header,
+.child-row {
+  display: grid;
+  grid-template-columns: 20px 38px minmax(150px, 1.4fr) minmax(120px, 1fr) 72px minmax(145px, 1fr) 108px;
+  align-items: center;
+  gap: 10px;
+  min-width: 740px;
+  box-sizing: border-box;
+}
+
+.child-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--ink-500);
+  background: #fff;
+  border-bottom: 1px solid #e9eff1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.child-table-header > :last-child,
+.child-row > :last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+}
+
+.child-table-header > :last-child {
+  background: #fff;
+  text-align: center;
+}
+
+.child-table-header > :nth-child(5) {
+  text-align: center;
+}
+
+.child-row > :nth-child(5) {
+  justify-self: center;
+}
+
+.child-row > :last-child {
+  background: var(--surface-soft);
+}
+
+.child-row:hover > :last-child {
+  background: #f2f9f7;
 }
 
 .child-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  margin-bottom: 4px;
+  min-height: 54px;
+  padding: 8px 12px;
+  margin-top: 8px;
   background: var(--surface-soft);
   border: 1px solid #edf2f4;
-  border-radius: 8px;
-  transition: all 0.2s;
+  border-radius: 10px;
+  transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 
 .child-row:hover {
-  background: #eef7f5;
+  background: #f2f9f7;
   border-color: #bfe5de;
+  box-shadow: 0 2px 8px rgba(16, 110, 102, .05);
 }
 
 .drag-handle {
   cursor: grab;
   color: #a8bcc4;
-  font-size: 14px;
+  font-size: 16px;
+  text-align: center;
   user-select: none;
 }
 
@@ -465,9 +503,9 @@ onMounted(loadData)
 }
 
 .child-sort {
-  min-width: 22px;
-  height: 22px;
-  line-height: 22px;
+  width: 26px;
+  height: 24px;
+  line-height: 24px;
   text-align: center;
   background: #e8f0f2;
   border-radius: 4px;
@@ -476,7 +514,7 @@ onMounted(loadData)
 }
 
 .child-name {
-  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 500;
   color: var(--ink-900);
@@ -486,9 +524,9 @@ onMounted(loadData)
 }
 
 .child-value {
+  min-width: 0;
   font-size: 13px;
   color: var(--ink-500);
-  max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -497,22 +535,30 @@ onMounted(loadData)
 .child-time {
   font-size: 12px;
   color: var(--ink-500);
-  min-width: 140px;
+  white-space: nowrap;
 }
 
 .child-actions {
   display: flex;
-  gap: 4px;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  white-space: nowrap;
 }
 
 .child-empty {
   padding: 20px 0;
 }
 
-.placeholder {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+@media (max-width: 680px) {
+  .dict-page {
+    height: auto;
+    min-height: 0;
+  }
+
+  .children-dialog-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

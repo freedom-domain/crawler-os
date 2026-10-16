@@ -78,7 +78,7 @@ export const favoritePage = (params: any) => request.get('/search/favorites', { 
 export const favoriteDelete = (contentId: string) => request.delete(`/search/favorites/${contentId}`)
 export const favoriteAdd = (contentId: string) => request.post(`/search/favorites/${contentId}`)
 
-export const dictTree = () => request.get('/dict')
+export const dictTree = (params?: { includeDisabled?: boolean }) => request.get('/dict', { params })
 export const dictChildren = (parentValue: string) => request.get(`/dict/children/${parentValue}`)
 export const dictCreate = (data: any) => request.post('/dict', data)
 export const dictUpdate = (id: number, data: any) => request.put(`/dict/${id}`, data)

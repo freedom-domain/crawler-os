@@ -25,7 +25,7 @@
       </el-table-column>
       <el-table-column prop="path" label="路由路径" min-width="160"  resizable />
       <el-table-column prop="sort" label="排序" min-width="80"  resizable />
-      <el-table-column label="操作" width="120" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <TableRowActions :items="getRowActions(row)" @command="command => handleRowAction(command, row)" />
         </template>

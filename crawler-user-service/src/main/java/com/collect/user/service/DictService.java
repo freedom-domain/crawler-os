@@ -20,8 +20,8 @@ public class DictService {
      * 返回树形结构：父项（parent_id=0）及其子项
      */
     @SuppressWarnings("null")
-    public List<SysDict> tree() {
-        List<SysDict> all = listAll();
+    public List<SysDict> tree(boolean includeDisabled) {
+        List<SysDict> all = listAll(includeDisabled);
         List<SysDict> parents = new ArrayList<>();
         for (SysDict d : all) {
             if (d.getParentId() == null || d.getParentId() == 0) {
@@ -66,9 +66,11 @@ public class DictService {
     }
 
     @SuppressWarnings("null")
-    private List<SysDict> listAll() {
+    private List<SysDict> listAll(boolean includeDisabled) {
         LambdaQueryWrapper<SysDict> qw = new LambdaQueryWrapper<>();
-        qw.eq(SysDict::getStatus, 1);
+        if (!includeDisabled) {
+            qw.eq(SysDict::getStatus, 1);
+        }
         qw.orderByAsc(SysDict::getSort).orderByDesc(SysDict::getId);
         return dictMapper.selectList(qw);
     }

@@ -222,17 +222,20 @@
       </el-table-column>
       <el-table-column label="操作" width="50" fixed="right" align="center" resizable>
         <template #default="{ row }">
-          <el-dropdown trigger="click" @command="(command: string) => handleCommand(command, row)">
+          <el-dropdown trigger="click" popper-class="spider-operation-menu" @command="(command: string) => handleCommand(command, row)">
             <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="run" :icon="VideoPlay" :loading="row._running" :disabled="row._running">执行</el-dropdown-item>
-                <el-dropdown-item command="tasks" :icon="List">查看任务</el-dropdown-item>
-                <el-dropdown-item command="files" :icon="FolderOpened">查看文件</el-dropdown-item>
-                <el-dropdown-item command="edit" :icon="EditPen">编辑</el-dropdown-item>
-                <el-dropdown-item command="clear-es" :icon="Delete" :class="{ 'is-danger': true }">清除 ES</el-dropdown-item>
-                <el-dropdown-item command="clear-content" :icon="Delete" divided :class="{ 'is-danger': true }">清空内容</el-dropdown-item>
-                <el-dropdown-item command="delete" :icon="Delete" divided :class="{ 'is-danger': true }">删除</el-dropdown-item>
+                <el-dropdown-item disabled class="spider-action-heading spider-action-heading--task">任务操作</el-dropdown-item>
+                <el-dropdown-item command="run" :icon="VideoPlay" :loading="row._running" :disabled="row._running" class="spider-action--task">立即执行</el-dropdown-item>
+                <el-dropdown-item command="tasks" :icon="List" divided class="spider-action--task">查看任务</el-dropdown-item>
+                <el-dropdown-item disabled divided class="spider-action-heading spider-action-heading--resource">资源与配置</el-dropdown-item>
+                <el-dropdown-item command="files" :icon="FolderOpened" class="spider-action--resource">查看文件</el-dropdown-item>
+                <el-dropdown-item command="edit" :icon="EditPen" class="spider-action--resource">编辑爬虫</el-dropdown-item>
+                <el-dropdown-item disabled divided class="spider-action-heading">危险操作</el-dropdown-item>
+                <el-dropdown-item command="clear-es" :icon="Delete" class="is-danger">清除 ES 文档</el-dropdown-item>
+                <el-dropdown-item command="clear-content" :icon="Delete" class="is-danger">清空全部内容</el-dropdown-item>
+                <el-dropdown-item command="delete" :icon="Delete" class="is-danger">删除爬虫</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -1157,6 +1160,29 @@ onUnmounted(cancelScheduledFilterSearch)
 .spider-toolbar :deep(.el-upload) { display: inline-flex; }
 .action-more-btn { font-weight: 700; color: #0f9f9a; }
 .action-more-btn:hover { color: #0c8a85; }
+:global(.spider-operation-menu .spider-action-heading) {
+  height: 28px;
+  padding: 4px 12px;
+  color: #8b95a1;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  line-height: 20px;
+  cursor: default;
+  opacity: 1;
+  pointer-events: none;
+}
+:global(.spider-operation-menu .spider-action-heading--task) { color: #2475c5; }
+:global(.spider-operation-menu .spider-action-heading--resource) { color: #7954a8; }
+:global(.spider-operation-menu .spider-action-heading:hover) {
+  background: transparent;
+}
+:global(.spider-operation-menu .spider-action--task:not(.is-disabled)) { color: #2475c5; }
+:global(.spider-operation-menu .spider-action--task:not(.is-disabled):hover) { color: #1b5fa3; background: #edf6ff; }
+:global(.spider-operation-menu .spider-action--resource:not(.is-disabled)) { color: #7954a8; }
+:global(.spider-operation-menu .spider-action--resource:not(.is-disabled):hover) { color: #63408e; background: #f5effb; }
+:global(.spider-operation-menu .el-dropdown-menu__item.is-danger:not(.is-disabled)) { color: #d9363e; }
+:global(.spider-operation-menu .el-dropdown-menu__item.is-danger:not(.is-disabled):hover) { color: #bd2630; background: #fff0f0; }
 .spider-toolbar :deep(.toolbar-actions) { flex: 1 0 auto; justify-content: flex-end; }
 .spider-toolbar :deep(.toolbar-actions > .el-form-item__content) { width: 100%; justify-content: flex-end; }
 .spider-actions { display: flex; width: 100%; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
