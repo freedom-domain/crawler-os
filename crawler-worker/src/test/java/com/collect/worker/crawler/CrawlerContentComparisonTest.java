@@ -53,6 +53,14 @@ class CrawlerContentComparisonTest {
     }
 
     @Test
+    void shouldSaveHtmlSource_onlyWhenChangedUnlessForced() {
+        assertFalse(CrawlerEngine.shouldSaveHtmlSource("same html", "same html", false));
+        assertTrue(CrawlerEngine.shouldSaveHtmlSource("old html", "new html", false));
+        assertTrue(CrawlerEngine.shouldSaveHtmlSource(null, "new html", false));
+        assertTrue(CrawlerEngine.shouldSaveHtmlSource("same html", "same html", true));
+    }
+
+    @Test
     void shouldReadCachedHtml_forAnyPageWhenNotOverwriting() {
         assertTrue(CrawlerEngine.shouldReadCachedHtml(false, false, false));
         assertFalse(CrawlerEngine.shouldReadCachedHtml(false, true, false));

@@ -991,7 +991,7 @@ public class CrawlerEngine {
             boolean htmlChanged = !Objects.equals(previousHtml, newHtml);
             boolean saveResources = !cacheHit || overwriteHtml;
             saveHtmlAndJs(doc, url, newHtml, pageTitle, msg, task,
-                    !cacheHit && (forceOverwriteHtml || htmlChanged), saveResources,
+                    !cacheHit && shouldSaveHtmlSource(previousHtml, newHtml, forceOverwriteHtml), saveResources,
                     processedResourceUrls, execution, resourceExecutor, resourceSemaphore);
 
             if (shouldSkipUnchangedContent(existingDoc, parsed.getContent(), imageUrls, forceOverwriteHtml)) {
@@ -1089,6 +1089,10 @@ public class CrawlerEngine {
 
     static boolean hasSameBytes(byte[] existing, byte[] current) {
         return existing != null && current != null && java.util.Arrays.equals(existing, current);
+    }
+
+    static boolean shouldSaveHtmlSource(String existingHtml, String currentHtml, boolean forceOverwriteHtml) {
+        return forceOverwriteHtml || !Objects.equals(existingHtml, currentHtml);
     }
 
     static boolean shouldReadCachedHtml(boolean readCache, boolean overwriteHtml, boolean forceOverwriteHtml) {
