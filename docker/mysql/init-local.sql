@@ -286,14 +286,17 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (15, '字典管理', 'dict', 12, 1, '/dict', 'PriceTag', 3),
 (16, '我的收藏', 'favorite', 0, 1, '/favorite', 'Folder', 6),
 (17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7),
-(18, '模拟投资', 'investment', 0, 1, '/investment', 'TrendCharts', 8);
+(18, '模拟投资', 'investment', 0, 0, NULL, 'TrendCharts', 8),
+(19, '股票模拟交易', 'investment:overview', 18, 1, '/investment/overview', 'Odometer', 1),
+(21, '场内基金', 'investment:onshore-fund', 18, 1, '/investment/onshore-fund', 'Coin', 2),
+(22, '场外基金', 'investment:offshore-fund', 18, 1, '/investment/offshore-fund', 'DataLine', 3);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),
-(2, 18);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 19),(1, 21),(1, 22),
+(2, 18),(2, 19),(2, 21),(2, 22);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

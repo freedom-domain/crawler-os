@@ -1,9 +1,10 @@
 <template>
   <section class="investment-page">
+    <template v-if="pageType === 'overview'">
     <header class="page-heading">
       <div>
-        <h1>模拟投资</h1>
-        <p>使用虚拟资金模拟买卖，成交按行情接口报价；报价可能延迟，不构成投资建议。</p>
+        <h1>投资总览与股票模拟交易</h1>
+        <p>查看虚拟账户资产并模拟 A 股买卖；成交按行情接口报价，报价可能延迟，不构成投资建议。</p>
       </div>
       <el-button :icon="Refresh" :loading="loading" @click="loadAccount">刷新资产</el-button>
     </header>
@@ -30,7 +31,9 @@
         <small>{{ signedPercent(account?.profitPercent) }}</small>
       </article>
     </div>
+    </template>
 
+    <template v-if="pageType === 'overview'">
     <el-card class="quote-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -79,7 +82,9 @@
       <el-empty v-else-if="!quoteLoading" description="查询行情后可进行模拟交易" :image-size="64" />
       <p class="fee-note">模拟费用：佣金 0.03%（每笔最低 ¥5）；卖出股票另收 0.05% 印花税；交易按 100 股/份整数倍，实行 T+1。</p>
     </el-card>
+    </template>
 
+    <template v-if="pageType === 'onshore-fund'">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -222,7 +227,9 @@
       </template>
       <el-empty v-else-if="!dcaLoading" description="设置基金、定投金额和时间段后运行回测" :image-size="64" />
     </el-card>
+    </template>
 
+    <template v-if="pageType === 'offshore-fund'">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -358,7 +365,9 @@
       </template>
       <el-empty v-else-if="!offExchangeDcaLoading" description="设置场外基金、定投金额、费率和时间段后运行回测" :image-size="64" />
     </el-card>
+    </template>
 
+    <template v-if="pageType === 'overview'">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -386,11 +395,6 @@
         <el-table-column label="浮动盈亏" width="135" align="right">
           <template #default="{ row }">
             <span :class="profitTone(row.unrealizedProfit)">{{ signedMoney(row.unrealizedProfit) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right" align="center">
-          <template #default="{ row }">
-            <el-button link type="success" :disabled="row.availableQuantity < 100" @click="openTrade('SELL', row.code)">卖出</el-button>
           </template>
         </el-table-column>
         <template #empty><el-empty description="暂无持仓，查询证券代码后即可模拟买入" /></template>
@@ -430,7 +434,9 @@
         <template #empty><el-empty description="暂无成交记录" /></template>
       </el-table>
     </el-card>
+    </template>
 
+    <template v-if="pageType === 'overview'">
     <el-dialog v-model="tradeDialogVisible" :title="tradeSide === 'BUY' ? '模拟买入' : '模拟卖出'" width="440px">
       <div v-if="quote" class="trade-dialog-summary">
         <strong>{{ quote.name }}（{{ quote.code }}）</strong>
@@ -469,6 +475,7 @@
         </el-button>
       </template>
     </el-dialog>
+    </template>
   </section>
 </template>
 
@@ -485,6 +492,10 @@ import {
   simulateFundDca,
   simulateOffExchangeFundDca
 } from '@/api'
+
+const props = defineProps<{
+  pageType: 'overview' | 'onshore-fund' | 'offshore-fund'
+}>()
 
 interface Quote {
   code: string
@@ -642,6 +653,10 @@ const loadQuote = async () => {
   quote.value = null
   try {
     const response: any = await investmentQuote(code.value.trim())
+    if (response.data.instrumentType !== '股票') {
+      ElMessage.warning('股票模拟交易页面仅支持 A 股，请在场内基金页面查询 ETF')
+      return
+    }
     quote.value = response.data
     code.value = response.data.code
   } catch {
@@ -763,7 +778,11 @@ const runOffExchangeFundDca = async () => {
   }
 }
 
-onMounted(loadAccount)
+onMounted(() => {
+  if (props.pageType === 'overview') {
+    loadAccount()
+  }
+})
 </script>
 
 <style scoped>

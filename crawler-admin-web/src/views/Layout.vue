@@ -105,7 +105,7 @@ import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Menu as MenuIcon } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -140,7 +140,11 @@ const restoreTabs = () => {
     if (!Array.isArray(saved)) return
     const restored = saved.filter((tab): tab is { key: string; path: string; title: string; name?: string } =>
       tab && typeof tab.key === 'string' && typeof tab.path === 'string' && typeof tab.title === 'string' && tab.path !== '/login'
-    ).map(tab => ({ ...tab, key: tab.path }))
+    ).map(tab => {
+      const path = tab.path === '/investment' ? '/investment/overview' : tab.path
+      const name = tab.path === '/investment' ? 'InvestmentOverview' : tab.name
+      return { ...tab, key: path, path, name }
+    })
     const uniqueRestored = [...new Map(restored.map(tab => [tab.path, tab])).values()]
     if (uniqueRestored.length) {
       tabs.value = uniqueRestored.some(tab => tab.path === '/dashboard')
@@ -306,6 +310,8 @@ const iconMap: Record<string, any> = {
   Folder,
   Picture,
   TrendCharts,
+  Coin,
+  DataLine,
   system: Setting,
   Setting
 }
@@ -315,7 +321,7 @@ const getIcon = (item: any) => {
 }
 
 const loadMenu = async () => {
-  const cacheKey = `crawler-menu:${userStore.userId}`
+  const cacheKey = `crawler-menu:v3:${userStore.userId}`
   let shouldRefresh = true
   try {
     const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null')
