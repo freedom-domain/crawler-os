@@ -189,8 +189,9 @@
     >
       <div v-loading="detailLoading" class="fund-detail-content">
         <template v-if="detail">
-          <h3 class="detail-section-title"><span>01</span>基金资料</h3>
-          <el-descriptions class="fund-detail-descriptions" :column="3" border>
+          <el-tabs v-model="detailTab" class="fund-detail-tabs">
+            <el-tab-pane label="基金资料" name="profile">
+              <el-descriptions class="fund-detail-descriptions" :column="3" border>
             <el-descriptions-item label="基金名称">{{ detail.name }}</el-descriptions-item>
             <el-descriptions-item label="基金代码">{{ detail.code }}</el-descriptions-item>
             <el-descriptions-item label="基金类型">{{ detail.fundType === 'ONSHORE' ? '场内基金' : '场外基金' }}</el-descriptions-item>
@@ -202,10 +203,11 @@
             <el-descriptions-item label="成立规模">{{ detail.establishmentScale || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="目录同步时间">{{ formatDateTime(detail.syncedAt) }}</el-descriptions-item>
             <el-descriptions-item label="档案更新时间">{{ formatDateTime(detail.profileUpdatedAt) }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>02</span>基金规模与管理</h3>
-          <el-descriptions class="fund-detail-descriptions" :column="3" border>
+            <el-tab-pane label="规模与管理" name="management">
+              <el-descriptions class="fund-detail-descriptions" :column="3" border>
             <el-descriptions-item label="净资产规模">
               {{ detail.netAssetScale || '暂无' }}
               <span v-if="detail.netAssetScaleAsOf" class="detail-as-of">（{{ detail.netAssetScaleAsOf }}）</span>
@@ -218,10 +220,11 @@
             <el-descriptions-item label="基金管理人">{{ detail.managementCompany || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="基金经理">{{ detail.managerNames || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="基金托管人">{{ detail.custodian || '暂无' }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>03</span>费率与投资基准</h3>
-          <el-descriptions class="fund-detail-descriptions" :column="3" border>
+            <el-tab-pane label="费率与投资基准" name="fees">
+              <el-descriptions class="fund-detail-descriptions" :column="3" border>
             <el-descriptions-item label="管理费率">{{ detail.managementFeeRate || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="托管费率">{{ detail.custodianFeeRate || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="销售服务费率">{{ detail.serviceFeeRate || '暂无' }}</el-descriptions-item>
@@ -230,20 +233,22 @@
             <el-descriptions-item label="最高赎回费率">{{ detail.maxRedemptionFeeRate || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="业绩比较基准" :span="2">{{ detail.benchmark || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="跟踪标的">{{ detail.trackingTarget || '暂无' }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>04</span>投资背景</h3>
-          <el-descriptions class="fund-detail-descriptions fund-detail-narrative" :column="1" border>
+            <el-tab-pane label="投资背景" name="investment">
+              <el-descriptions class="fund-detail-descriptions fund-detail-narrative" :column="1" border>
             <el-descriptions-item label="投资目标">{{ detail.investmentObjective || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="投资理念">{{ detail.investmentPhilosophy || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="投资范围">{{ detail.investmentScope || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="投资策略">{{ detail.investmentStrategy || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="分红政策">{{ detail.dividendPolicy || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="风险收益特征">{{ detail.riskReturnFeature || '暂无' }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>05</span>关注与缓存</h3>
-          <el-descriptions class="fund-detail-descriptions" :column="3" border>
+            <el-tab-pane label="关注与缓存" name="cache">
+              <el-descriptions class="fund-detail-descriptions" :column="3" border>
             <el-descriptions-item label="关注状态">{{ detail.watched ? '已关注' : '未关注' }}</el-descriptions-item>
             <el-descriptions-item label="关注周期">
               {{ detail.watchlistFrequencies ? detail.watchlistFrequencies.split(',').map(frequencyLabel).join('、') : '未关注' }}
@@ -258,10 +263,11 @@
             <el-descriptions-item label="缓存区间表现">{{ cachedPeriodReturn(detail) }}</el-descriptions-item>
             <el-descriptions-item label="区间最高价/净值">{{ formatPrice(detail.periodHigh) }}</el-descriptions-item>
             <el-descriptions-item label="区间最低价/净值">{{ formatPrice(detail.periodLow) }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>06</span>最新缓存行情</h3>
-          <el-descriptions class="fund-detail-descriptions" :column="3" border>
+            <el-tab-pane label="最新缓存行情" name="latest">
+              <el-descriptions class="fund-detail-descriptions" :column="3" border>
             <template v-if="detail.fundType === 'ONSHORE'">
               <el-descriptions-item label="开盘价">{{ formatPrice(detail.latestOpen) }}</el-descriptions-item>
               <el-descriptions-item label="收盘价">{{ formatPrice(detail.latestClose) }}</el-descriptions-item>
@@ -275,7 +281,9 @@
               <el-descriptions-item label="累计净值">{{ formatPrice(detail.latestCumulativeNav) }}</el-descriptions-item>
               <el-descriptions-item label="日涨跌幅">{{ formatPercent(detail.latestChangePercent) }}</el-descriptions-item>
             </template>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
+          </el-tabs>
         </template>
         <p class="detail-note">基金规模与档案背景来自东方财富基金档案，规模以页面标注的披露日期为准；行情摘要仅展示本系统已缓存的数据，不会在打开详情时请求历史行情接口。</p>
       </div>
@@ -394,6 +402,7 @@ const fundPageType = ref<'onshore-fund' | 'offshore-fund'>('onshore-fund')
 const fundPageCode = ref('')
 const detailVisible = ref(false)
 const detailLoading = ref(false)
+const detailTab = ref('profile')
 const profileUpdating = ref(false)
 const busyKey = ref('')
 const detail = ref<FundCatalogItem | null>(null)
@@ -595,6 +604,7 @@ const clearCache = async (row: FundManagementItem) => {
 const openDetail = async (row: FundCatalogItem) => {
   detailVisible.value = true
   detailLoading.value = true
+  detailTab.value = 'profile'
   detail.value = null
   try {
     const response: any = await fundCatalogDetail({ fundType: row.fundType, code: row.code })
@@ -691,32 +701,6 @@ onMounted(loadCatalog)
   font-size: 12px;
   line-height: 1.7;
 }
-.detail-section-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 24px 0 12px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid #e7edf2;
-  color: #1d2d3e;
-  font-size: 16px;
-  font-weight: 700;
-}
-.detail-section-title:first-child {
-  margin-top: 0;
-}
-.detail-section-title > span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: #e8f6f5;
-  color: #0f918b;
-  font-size: 11px;
-  font-weight: 700;
-}
 .detail-as-of {
   color: #78889a;
   font-size: 12px;
@@ -761,6 +745,9 @@ onMounted(loadCatalog)
 }
 .fund-detail-dialog .fund-detail-descriptions {
   margin-bottom: 4px;
+}
+.fund-detail-dialog .fund-detail-tabs .el-tabs__header {
+  margin-bottom: 18px;
 }
 .fund-detail-dialog .fund-detail-descriptions .el-descriptions__label {
   min-width: 105px;

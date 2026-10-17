@@ -87,8 +87,9 @@
     >
       <div v-loading="detailLoading" class="stock-detail-content">
         <template v-if="detail">
-          <h3 class="detail-section-title"><span>01</span>证券信息</h3>
-          <el-descriptions class="stock-detail-descriptions" :column="3" border>
+          <el-tabs v-model="detailTab" class="stock-detail-tabs">
+            <el-tab-pane label="证券信息" name="security">
+              <el-descriptions class="stock-detail-descriptions" :column="3" border>
             <el-descriptions-item label="股票名称">{{ detail.name }}</el-descriptions-item>
             <el-descriptions-item label="股票代码">{{ detail.code }}</el-descriptions-item>
             <el-descriptions-item label="上市市场">{{ detail.market }}</el-descriptions-item>
@@ -98,10 +99,11 @@
             <el-descriptions-item label="昨收价格">{{ formatPrice(detail.previousClose) }}</el-descriptions-item>
             <el-descriptions-item label="行情时间">{{ detail.quoteTime || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="档案更新时间">{{ formatDateTime(detail.profileUpdatedAt) }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>02</span>公司基本资料</h3>
-          <el-descriptions class="stock-detail-descriptions" :column="3" border>
+            <el-tab-pane label="公司基本资料" name="company">
+              <el-descriptions class="stock-detail-descriptions" :column="3" border>
             <el-descriptions-item label="公司全称" :span="2">{{ detail.companyName || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="曾用名">{{ detail.formerNames || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="法定代表人">{{ detail.legalRepresentative || '暂无' }}</el-descriptions-item>
@@ -113,14 +115,17 @@
             <el-descriptions-item label="公司网站">{{ detail.website || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="电子邮箱">{{ detail.email || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="联系电话">{{ detail.phone || '暂无' }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
 
-          <h3 class="detail-section-title"><span>03</span>经营与公司背景</h3>
-          <el-descriptions class="stock-detail-descriptions stock-detail-narrative" :column="1" border>
+            <el-tab-pane label="经营与公司背景" name="business">
+              <el-descriptions class="stock-detail-descriptions stock-detail-narrative" :column="1" border>
             <el-descriptions-item label="公司简介">{{ detail.companyProfile || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="主营业务">{{ detail.mainBusiness || '暂无' }}</el-descriptions-item>
             <el-descriptions-item label="经营范围">{{ detail.businessScope || '暂无' }}</el-descriptions-item>
-          </el-descriptions>
+              </el-descriptions>
+            </el-tab-pane>
+          </el-tabs>
         </template>
         <p class="detail-note">公司资料来自东方财富公开档案，行情来自公开报价接口，可能存在延迟；内容仅供参考。</p>
       </div>
@@ -199,6 +204,7 @@ const syncing = ref(false)
 const lastSyncedAt = ref('')
 const detailVisible = ref(false)
 const detailLoading = ref(false)
+const detailTab = ref('security')
 const profileUpdating = ref(false)
 const detail = ref<StockItem | null>(null)
 const investmentVisible = ref(false)
@@ -261,6 +267,7 @@ const syncCatalog = async () => {
 const openDetail = async (stock: StockItem) => {
   detailVisible.value = true
   detailLoading.value = true
+  detailTab.value = 'security'
   detail.value = null
   try {
     const response: any = await stockCatalogDetail(stock.code)
@@ -345,30 +352,6 @@ onMounted(loadCatalog)
   font-weight: 700;
   color: #0f9f9a;
 }
-.detail-section-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 24px 0 12px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid #e7edf2;
-  color: #1d2d3e;
-  font-size: 16px;
-}
-.detail-section-title:first-child {
-  margin-top: 0;
-}
-.detail-section-title > span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: #e8f6f5;
-  color: #0f918b;
-  font-size: 11px;
-}
 .detail-note {
   margin: 18px 0 0;
   padding: 10px 12px;
@@ -406,6 +389,9 @@ onMounted(loadCatalog)
 }
 .stock-detail-dialog .stock-detail-descriptions {
   margin-bottom: 4px;
+}
+.stock-detail-dialog .stock-detail-tabs .el-tabs__header {
+  margin-bottom: 18px;
 }
 .stock-detail-dialog .stock-detail-descriptions .el-descriptions__label {
   min-width: 105px;
