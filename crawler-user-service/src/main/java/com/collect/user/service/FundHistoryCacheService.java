@@ -49,7 +49,7 @@ public class FundHistoryCacheService {
         response.setCode(code);
         response.setName(records.getFirst().getName());
         response.setFrequency(frequency);
-        response.setPoints(records.stream().map(record -> {
+        List<FundHistoryPoint> points = records.stream().map(record -> {
             FundHistoryPoint point = new FundHistoryPoint();
             point.setDate(record.getTradeDate().toString());
             point.setOpen(record.getOpen());
@@ -59,7 +59,9 @@ public class FundHistoryCacheService {
             point.setVolume(record.getVolume());
             point.setChangePercent(record.getChangePercent());
             return point;
-        }).toList());
+        }).toList();
+        response.setPoints(points);
+        response.setAnalysis(FundHistoryAnalyzer.analyzeOnExchange(points, frequency));
         return response;
     }
 
@@ -83,14 +85,16 @@ public class FundHistoryCacheService {
         OffExchangeFundHistoryResponse response = new OffExchangeFundHistoryResponse();
         response.setCode(code);
         response.setName(records.getFirst().getName());
-        response.setPoints(records.stream().map(record -> {
+        List<OffExchangeFundNavPoint> points = records.stream().map(record -> {
             OffExchangeFundNavPoint point = new OffExchangeFundNavPoint();
             point.setDate(record.getTradeDate().toString());
             point.setUnitNav(record.getUnitNav());
             point.setCumulativeNav(record.getCumulativeNav());
             point.setChangePercent(record.getChangePercent());
             return point;
-        }).toList());
+        }).toList();
+        response.setPoints(points);
+        response.setAnalysis(FundHistoryAnalyzer.analyzeOffExchange(points));
         return response;
     }
 

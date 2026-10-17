@@ -92,6 +92,7 @@ public class EastmoneyOffExchangeFundClient {
         List<OffExchangeFundNavPoint> points = new ArrayList<>(pointMap.values());
         result.setName(name);
         result.setPoints(points);
+        result.setAnalysis(FundHistoryAnalyzer.analyzeOffExchange(points));
         historyCacheService.saveOffExchange(code, name, points);
         return result;
     }

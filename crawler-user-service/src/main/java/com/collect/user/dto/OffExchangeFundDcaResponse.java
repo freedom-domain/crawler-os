@@ -29,4 +29,5 @@ public class OffExchangeFundDcaResponse {
     private BigDecimal profitPercent;
     private String finalNavDate;
     private List<OffExchangeFundDcaEntry> schedule;
+    private FundLumpSumComparison lumpSumComparison;
 }

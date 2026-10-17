@@ -6,6 +6,7 @@ import com.collect.user.dto.OffExchangeFundDcaRequest;
 import com.collect.user.dto.OffExchangeFundDcaResponse;
 import com.collect.user.dto.OffExchangeFundHistoryResponse;
 import com.collect.user.dto.OffExchangeFundNavPoint;
+import com.collect.user.dto.FundLumpSumComparison;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -143,7 +144,42 @@ public class OffExchangeFundBacktestService {
                 : profit.multiply(BigDecimal.valueOf(100)).divide(totalContribution, 2, RoundingMode.HALF_UP));
         result.setFinalNavDate(lastNav.getDate());
         result.setSchedule(entries);
+        result.setLumpSumComparison(compareLumpSum(totalContribution, navs.firstEntry().getValue(), lastNav,
+                subscriptionRate, redemptionRate));
         return result;
+    }
+
+    private FundLumpSumComparison compareLumpSum(BigDecimal contribution, OffExchangeFundNavPoint firstNav,
+                                                  OffExchangeFundNavPoint finalNav, BigDecimal subscriptionRate,
+                                                  BigDecimal redemptionRate) {
+        BigDecimal subscriptionFee = contribution.multiply(subscriptionRate)
+                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal shares = contribution.subtract(subscriptionFee)
+                .divide(firstNav.getUnitNav(), SHARE_SCALE, RoundingMode.DOWN);
+        BigDecimal investedAmount = shares.multiply(firstNav.getUnitNav())
+                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal remainingCash = contribution.subtract(subscriptionFee).subtract(investedAmount)
+                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal grossValue = shares.multiply(finalNav.getUnitNav())
+                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal redemptionFee = grossValue.multiply(redemptionRate)
+                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal finalValue = grossValue.subtract(redemptionFee).add(remainingCash)
+                .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        BigDecimal profit = finalValue.subtract(contribution).setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+
+        FundLumpSumComparison comparison = new FundLumpSumComparison();
+        comparison.setInvestmentDate(firstNav.getDate());
+        comparison.setTotalContribution(contribution);
+        comparison.setInvestedAmount(investedAmount);
+        comparison.setTotalFees(subscriptionFee.add(redemptionFee).setScale(AMOUNT_SCALE, RoundingMode.HALF_UP));
+        comparison.setSubscriptionFee(subscriptionFee);
+        comparison.setRedemptionFee(redemptionFee);
+        comparison.setFinalValue(finalValue);
+        comparison.setProfit(profit);
+        comparison.setProfitPercent(contribution.signum() == 0 ? BigDecimal.ZERO.setScale(2)
+                : profit.multiply(BigDecimal.valueOf(100)).divide(contribution, 2, RoundingMode.HALF_UP));
+        return comparison;
     }
 
     private ArrayList<ScheduleDate> createSchedule(LocalDate startDate, LocalDate endDate, int weekday,

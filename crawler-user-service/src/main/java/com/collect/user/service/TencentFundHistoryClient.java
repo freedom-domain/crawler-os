@@ -108,6 +108,7 @@ public class TencentFundHistoryClient {
         response.setName(name);
         response.setFrequency(frequency);
         response.setPoints(points);
+        response.setAnalysis(FundHistoryAnalyzer.analyzeOnExchange(points, frequency));
         historyCacheService.saveOnExchange(code, name, frequency, points);
         return response;
     }

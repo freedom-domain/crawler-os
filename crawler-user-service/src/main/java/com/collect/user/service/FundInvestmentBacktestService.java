@@ -6,6 +6,7 @@ import com.collect.user.dto.FundDcaRequest;
 import com.collect.user.dto.FundDcaResponse;
 import com.collect.user.dto.FundHistoryPoint;
 import com.collect.user.dto.FundHistoryResponse;
+import com.collect.user.dto.FundLumpSumComparison;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -171,7 +172,43 @@ public class FundInvestmentBacktestService {
                 : profit.multiply(BigDecimal.valueOf(100)).divide(totalContribution, 2, RoundingMode.HALF_UP));
         response.setFinalQuoteDate(lastPoint.getDate());
         response.setSchedule(schedule);
+        response.setLumpSumComparison(compareLumpSum(totalContribution, tradingDays.firstEntry().getValue(),
+                finalPrice));
         return response;
+    }
+
+    private FundLumpSumComparison compareLumpSum(BigDecimal contribution, FundHistoryPoint firstPoint,
+                                                  BigDecimal finalPrice) {
+        BigDecimal price = firstPoint.getClose();
+        int lots = contribution.divide(price.multiply(BigDecimal.valueOf(LOT_SIZE)), 0, RoundingMode.DOWN)
+                .intValue();
+        BigDecimal investedAmount;
+        BigDecimal fee;
+        while (true) {
+            int shares = lots * LOT_SIZE;
+            investedAmount = price.multiply(BigDecimal.valueOf(shares)).setScale(2, RoundingMode.HALF_UP);
+            fee = shares > 0 ? commission(investedAmount) : BigDecimal.ZERO.setScale(2);
+            if (investedAmount.add(fee).compareTo(contribution) <= 0 || lots == 0) {
+                break;
+            }
+            lots--;
+        }
+        int shares = lots * LOT_SIZE;
+        BigDecimal remainingCash = contribution.subtract(investedAmount).subtract(fee).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal finalValue = finalPrice.multiply(BigDecimal.valueOf(shares))
+                .add(remainingCash).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal profit = finalValue.subtract(contribution).setScale(2, RoundingMode.HALF_UP);
+
+        FundLumpSumComparison comparison = new FundLumpSumComparison();
+        comparison.setInvestmentDate(firstPoint.getDate());
+        comparison.setTotalContribution(contribution);
+        comparison.setInvestedAmount(investedAmount);
+        comparison.setTotalFees(fee);
+        comparison.setFinalValue(finalValue);
+        comparison.setProfit(profit);
+        comparison.setProfitPercent(contribution.signum() == 0 ? BigDecimal.ZERO.setScale(2)
+                : profit.multiply(BigDecimal.valueOf(100)).divide(contribution, 2, RoundingMode.HALF_UP));
+        return comparison;
     }
 
     private List<ScheduleDate> createSchedule(LocalDate startDate, LocalDate endDate, int weekday,

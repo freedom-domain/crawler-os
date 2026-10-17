@@ -29,4 +29,5 @@ public class FundDcaResponse {
     private BigDecimal profitPercent;
     private String finalQuoteDate;
     private List<FundDcaEntry> schedule;
+    private FundLumpSumComparison lumpSumComparison;
 }

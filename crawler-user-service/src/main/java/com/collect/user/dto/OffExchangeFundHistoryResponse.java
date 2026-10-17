@@ -10,4 +10,5 @@ public class OffExchangeFundHistoryResponse {
     private String code;
     private String name;
     private List<OffExchangeFundNavPoint> points;
+    private FundHistoryAnalysis analysis;
 }

@@ -140,6 +140,59 @@
             <span>{{ historyResult.points[historyResult.points.length - 1]?.date }}</span>
           </div>
         </div>
+        <div v-if="historyResult.analysis" class="analysis-grid">
+          <article class="asset-card" :class="profitTone(historyResult.analysis.totalReturnPercent)">
+            <span>区间收益率</span>
+            <strong>{{ analysisPercent(historyResult.analysis.totalReturnPercent, true) }}</strong>
+            <small>{{ historyResult.analysis.periodDays }} 个自然日</small>
+          </article>
+          <article class="asset-card" :class="profitTone(historyResult.analysis.annualizedReturnPercent)">
+            <span>年化收益率</span>
+            <strong>{{ analysisPercent(historyResult.analysis.annualizedReturnPercent, true) }}</strong>
+            <small>按实际区间折算</small>
+          </article>
+          <article class="asset-card is-loss">
+            <span>最大回撤</span>
+            <strong>{{ drawdownPercent(historyResult.analysis.maxDrawdownPercent) }}</strong>
+            <small>历史峰值至后续低点</small>
+          </article>
+          <article class="asset-card">
+            <span>年化波动率</span>
+            <strong>{{ analysisPercent(historyResult.analysis.annualizedVolatilityPercent) }}</strong>
+            <small>按{{ frequencyLabel(historyResult.frequency) }}收益率年化</small>
+          </article>
+          <article class="asset-card">
+            <span>夏普比率</span>
+            <strong>{{ analysisRatio(historyResult.analysis.sharpeRatio, historyResult.analysis.observationCount, 'sharpe') }}</strong>
+            <small>无风险利率按 0% 估算</small>
+          </article>
+          <article class="asset-card">
+            <span>索提诺比率</span>
+            <strong>{{ analysisRatio(historyResult.analysis.sortinoRatio, historyResult.analysis.observationCount, 'sortino') }}</strong>
+            <small>仅计入下行波动</small>
+          </article>
+        </div>
+        <div v-if="historyResult.analysis" class="analysis-tables">
+          <div>
+            <h4>月度收益</h4>
+            <el-table :data="recentMonthlyReturns" stripe max-height="320">
+              <el-table-column prop="period" label="月份" min-width="110" />
+              <el-table-column label="收益率" min-width="100" align="right">
+                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div>
+            <h4>滚动一年收益</h4>
+            <el-table :data="recentRollingReturns" stripe max-height="320">
+              <el-table-column prop="period" label="截至日期" min-width="120" />
+              <el-table-column label="近一年收益率" min-width="120" align="right">
+                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+              </el-table-column>
+            </el-table>
+            <p v-if="!historyResult.analysis.rollingOneYearReturns?.length" class="fee-note">所选数据尚不足一年，暂无完整滚动一年数据。</p>
+          </div>
+        </div>
         <el-table :data="recentHistoryPoints" stripe max-height="440">
           <el-table-column prop="date" label="日期" min-width="120" />
           <el-table-column label="开盘" min-width="100" align="right">
@@ -158,7 +211,7 @@
             <template #default="{ row }"><span :class="profitTone(row.changePercent)">{{ signedPercent(row.changePercent) }}</span></template>
           </el-table-column>
         </el-table>
-        <p class="fee-note">表格显示最近 20 个数据点；历史行情接口采用前复权口径。价格仅供模拟分析，不构成投资建议。</p>
+        <p class="fee-note">收益率按复权收盘价计算；夏普/索提诺假定无风险利率为 0%，波动率按所选周期年化。月度收益首月因缺少区间前数据不计；历史表现不代表未来收益，不构成投资建议。</p>
       </div>
       <el-empty v-else-if="!historyLoading" description="选择基金代码和日期范围后查询历史行情" :image-size="64" />
     </el-card>
@@ -201,6 +254,26 @@
           <article :class="profitTone(dcaResult.profit)"><span>模拟盈亏</span><strong>{{ signedMoney(dcaResult.profit) }}</strong><small>{{ signedPercent(dcaResult.profitPercent) }}</small></article>
           <article><span>累计份额</span><strong>{{ Number(dcaResult.totalShares).toLocaleString() }}</strong></article>
           <article><span>结转现金</span><strong>¥{{ money(dcaResult.remainingCash) }}</strong></article>
+        </div>
+        <div class="dca-comparison">
+          <h4>定投与一次性买入（相同累计投入）</h4>
+          <el-table :data="dcaComparisonRows" stripe>
+            <el-table-column prop="strategy" label="策略" min-width="130" />
+            <el-table-column prop="investmentDate" label="开始买入日" min-width="120" />
+            <el-table-column label="累计投入" min-width="120" align="right">
+              <template #default="{ row }">¥{{ money(row.totalContribution) }}</template>
+            </el-table-column>
+            <el-table-column label="期末资产" min-width="120" align="right">
+              <template #default="{ row }">¥{{ money(row.finalValue) }}</template>
+            </el-table-column>
+            <el-table-column label="盈亏" min-width="120" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}（{{ signedPercent(row.profitPercent) }}）</span></template>
+            </el-table-column>
+            <el-table-column label="费用" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.totalFees) }}</template>
+            </el-table-column>
+          </el-table>
+          <p class="fee-note">一次性买入假设在区间首个交易日投入全部定投累计金额；场内按整手和佣金规则计算，未用现金计入期末资产。</p>
         </div>
         <p class="fee-note">
           {{ dcaResult.name }}（{{ dcaResult.code }}）· 成功定投 {{ dcaResult.executedPeriods }} 期
@@ -284,6 +357,59 @@
             <span>{{ offExchangeHistoryResult.points[offExchangeHistoryResult.points.length - 1]?.date }}</span>
           </div>
         </div>
+        <div v-if="offExchangeHistoryResult.analysis" class="analysis-grid">
+          <article class="asset-card" :class="profitTone(offExchangeHistoryResult.analysis.totalReturnPercent)">
+            <span>区间收益率</span>
+            <strong>{{ analysisPercent(offExchangeHistoryResult.analysis.totalReturnPercent, true) }}</strong>
+            <small>{{ offExchangeHistoryResult.analysis.periodDays }} 个自然日</small>
+          </article>
+          <article class="asset-card" :class="profitTone(offExchangeHistoryResult.analysis.annualizedReturnPercent)">
+            <span>年化收益率</span>
+            <strong>{{ analysisPercent(offExchangeHistoryResult.analysis.annualizedReturnPercent, true) }}</strong>
+            <small>按实际区间折算</small>
+          </article>
+          <article class="asset-card is-loss">
+            <span>最大回撤</span>
+            <strong>{{ drawdownPercent(offExchangeHistoryResult.analysis.maxDrawdownPercent) }}</strong>
+            <small>历史峰值至后续低点</small>
+          </article>
+          <article class="asset-card">
+            <span>年化波动率</span>
+            <strong>{{ analysisPercent(offExchangeHistoryResult.analysis.annualizedVolatilityPercent) }}</strong>
+            <small>按净值日收益率年化</small>
+          </article>
+          <article class="asset-card">
+            <span>夏普比率</span>
+            <strong>{{ analysisRatio(offExchangeHistoryResult.analysis.sharpeRatio, offExchangeHistoryResult.analysis.observationCount, 'sharpe') }}</strong>
+            <small>无风险利率按 0% 估算</small>
+          </article>
+          <article class="asset-card">
+            <span>索提诺比率</span>
+            <strong>{{ analysisRatio(offExchangeHistoryResult.analysis.sortinoRatio, offExchangeHistoryResult.analysis.observationCount, 'sortino') }}</strong>
+            <small>仅计入下行波动</small>
+          </article>
+        </div>
+        <div v-if="offExchangeHistoryResult.analysis" class="analysis-tables">
+          <div>
+            <h4>月度收益</h4>
+            <el-table :data="recentOffExchangeMonthlyReturns" stripe max-height="320">
+              <el-table-column prop="period" label="月份" min-width="110" />
+              <el-table-column label="收益率" min-width="100" align="right">
+                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div>
+            <h4>滚动一年收益</h4>
+            <el-table :data="recentOffExchangeRollingReturns" stripe max-height="320">
+              <el-table-column prop="period" label="截至日期" min-width="120" />
+              <el-table-column label="近一年收益率" min-width="120" align="right">
+                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+              </el-table-column>
+            </el-table>
+            <p v-if="!offExchangeHistoryResult.analysis.rollingOneYearReturns?.length" class="fee-note">所选数据尚不足一年，暂无完整滚动一年数据。</p>
+          </div>
+        </div>
         <el-table :data="recentOffExchangeNavPoints" stripe max-height="440">
           <el-table-column prop="date" label="净值日期" min-width="120" />
           <el-table-column label="单位净值" min-width="110" align="right">
@@ -296,7 +422,7 @@
             <template #default="{ row }"><span :class="profitTone(row.changePercent)">{{ signedPercent(row.changePercent) }}</span></template>
           </el-table-column>
         </el-table>
-        <p class="fee-note">净值来自东方财富基金数据，仅显示已公布的历史单位净值；数据仅供模拟分析，不构成投资建议。</p>
+        <p class="fee-note">收益率优先使用累计净值计算，缺少累计净值时使用单位净值；夏普/索提诺假定无风险利率为 0%，年化波动率按净值日收益率估算。月度收益首月因缺少区间前数据不计；历史表现不代表未来收益，不构成投资建议。</p>
       </div>
       <el-empty v-else-if="!offExchangeHistoryLoading" description="输入场外基金代码和日期范围后查询净值" :image-size="64" />
     </el-card>
@@ -345,6 +471,26 @@
           <article :class="profitTone(offExchangeDcaResult.profit)"><span>模拟盈亏</span><strong>{{ signedMoney(offExchangeDcaResult.profit) }}</strong><small>{{ signedPercent(offExchangeDcaResult.profitPercent) }}</small></article>
           <article><span>累计份额</span><strong>{{ money(offExchangeDcaResult.totalShares) }}</strong></article>
           <article><span>申购费 / 赎回费</span><strong>¥{{ money(offExchangeDcaResult.totalSubscriptionFee) }} / ¥{{ money(offExchangeDcaResult.redemptionFee) }}</strong></article>
+        </div>
+        <div class="dca-comparison">
+          <h4>定投与一次性买入（相同累计投入）</h4>
+          <el-table :data="offExchangeDcaComparisonRows" stripe>
+            <el-table-column prop="strategy" label="策略" min-width="130" />
+            <el-table-column prop="investmentDate" label="开始买入日" min-width="120" />
+            <el-table-column label="累计投入" min-width="120" align="right">
+              <template #default="{ row }">¥{{ money(row.totalContribution) }}</template>
+            </el-table-column>
+            <el-table-column label="期末赎回净值" min-width="130" align="right">
+              <template #default="{ row }">¥{{ money(row.finalValue) }}</template>
+            </el-table-column>
+            <el-table-column label="盈亏" min-width="120" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}（{{ signedPercent(row.profitPercent) }}）</span></template>
+            </el-table-column>
+            <el-table-column label="申购 / 赎回费" min-width="120" align="right">
+              <template #default="{ row }">¥{{ money(row.subscriptionFee) }} / ¥{{ money(row.redemptionFee) }}</template>
+            </el-table-column>
+          </el-table>
+          <p class="fee-note">一次性买入假设在区间首个净值日投入全部定投累计金额；两种策略使用相同申购费率、期末赎回费率和估值日期。</p>
         </div>
         <p class="fee-note">
           {{ offExchangeDcaResult.name }}（{{ offExchangeDcaResult.code }}）· 成功定投 {{ offExchangeDcaResult.executedPeriods }} 期
@@ -579,8 +725,66 @@ const quoteAvailableQuantity = computed(() =>
 )
 const historyPoints = computed(() => historyResult.value?.points || [])
 const recentHistoryPoints = computed(() => [...historyPoints.value].slice(-20).reverse())
+const recentMonthlyReturns = computed(() => [...(historyResult.value?.analysis?.monthlyReturns || [])].slice(-12).reverse())
+const recentRollingReturns = computed(() => [...(historyResult.value?.analysis?.rollingOneYearReturns || [])].slice(-12).reverse())
 const offExchangeNavPoints = computed(() => offExchangeHistoryResult.value?.points || [])
 const recentOffExchangeNavPoints = computed(() => [...offExchangeNavPoints.value].slice(-20).reverse())
+const recentOffExchangeMonthlyReturns = computed(() =>
+  [...(offExchangeHistoryResult.value?.analysis?.monthlyReturns || [])].slice(-12).reverse())
+const recentOffExchangeRollingReturns = computed(() =>
+  [...(offExchangeHistoryResult.value?.analysis?.rollingOneYearReturns || [])].slice(-12).reverse())
+const dcaComparisonRows = computed(() => {
+  const result = dcaResult.value
+  if (!result) return []
+  const rows = [{
+    strategy: '每周定投',
+    investmentDate: result.schedule?.[0]?.tradeDate || result.startDate,
+    totalContribution: result.totalContribution,
+    finalValue: result.totalAssets,
+    profit: result.profit,
+    profitPercent: result.profitPercent,
+    totalFees: result.totalCommission
+  }]
+  if (result.lumpSumComparison) {
+    rows.push({
+      strategy: '一次性买入',
+      investmentDate: result.lumpSumComparison.investmentDate,
+      totalContribution: result.lumpSumComparison.totalContribution,
+      finalValue: result.lumpSumComparison.finalValue,
+      profit: result.lumpSumComparison.profit,
+      profitPercent: result.lumpSumComparison.profitPercent,
+      totalFees: result.lumpSumComparison.totalFees
+    })
+  }
+  return rows
+})
+const offExchangeDcaComparisonRows = computed(() => {
+  const result = offExchangeDcaResult.value
+  if (!result) return []
+  const rows = [{
+    strategy: '每周定投',
+    investmentDate: result.schedule?.[0]?.tradeDate || result.startDate,
+    totalContribution: result.totalContribution,
+    finalValue: result.netLiquidationValue,
+    profit: result.profit,
+    profitPercent: result.profitPercent,
+    subscriptionFee: result.totalSubscriptionFee,
+    redemptionFee: result.redemptionFee
+  }]
+  if (result.lumpSumComparison) {
+    rows.push({
+      strategy: '一次性买入',
+      investmentDate: result.lumpSumComparison.investmentDate,
+      totalContribution: result.lumpSumComparison.totalContribution,
+      finalValue: result.lumpSumComparison.finalValue,
+      profit: result.lumpSumComparison.profit,
+      profitPercent: result.lumpSumComparison.profitPercent,
+      subscriptionFee: result.lumpSumComparison.subscriptionFee,
+      redemptionFee: result.lumpSumComparison.redemptionFee
+    })
+  }
+  return rows
+})
 const offExchangeNavMin = computed(() => offExchangeNavPoints.value.length
   ? Math.min(...offExchangeNavPoints.value.map((point: any) => Number(point.unitNav)))
   : 0)
@@ -645,6 +849,21 @@ const signedMoney = (value: unknown) => {
 const signedPercent = (value: unknown) => {
   const number = Number(value || 0)
   return `${number > 0 ? '+' : ''}${number.toFixed(2)}%`
+}
+const analysisPercent = (value: unknown, signed = false) => {
+  if (value == null || !Number.isFinite(Number(value))) return '-'
+  const number = Number(value)
+  return `${signed && number > 0 ? '+' : ''}${number.toFixed(2)}%`
+}
+const analysisRatio = (value: unknown, observationCount: number, ratioType: 'sharpe' | 'sortino') => {
+  if (value != null && Number.isFinite(Number(value))) return Number(value).toFixed(2)
+  if (observationCount < 3) return '数据不足'
+  return ratioType === 'sortino' ? '无下行波动' : '无波动'
+}
+const drawdownPercent = (value: unknown) => {
+  if (value == null || !Number.isFinite(Number(value))) return '-'
+  const number = Math.abs(Number(value))
+  return `${number > 0 ? '-' : ''}${number.toFixed(2)}%`
 }
 const profitTone = (value: unknown) => Number(value || 0) > 0 ? 'is-profit' : Number(value || 0) < 0 ? 'is-loss' : ''
 const dateTime = (value: string) => value ? value.replace('T', ' ').slice(0, 19) : '-'
@@ -896,6 +1115,34 @@ onMounted(() => {
 .history-result {
   margin-top: 18px;
 }
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+.analysis-grid .asset-card {
+  min-height: 104px;
+  padding: 14px 16px;
+}
+.analysis-grid .asset-card strong {
+  font-size: 20px;
+}
+.analysis-tables {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 18px 0;
+}
+.analysis-tables h4,
+.dca-comparison h4 {
+  margin: 0 0 10px;
+  color: #29384a;
+  font-size: 14px;
+}
+.dca-comparison {
+  margin: 18px 0;
+}
 .history-caption,
 .chart-dates {
   display: flex;
@@ -1054,6 +1301,12 @@ onMounted(() => {
   .asset-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .analysis-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analysis-tables {
+    grid-template-columns: 1fr;
+  }
   .dca-summary {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1075,6 +1328,16 @@ onMounted(() => {
   }
   .asset-card strong {
     font-size: 19px;
+  }
+  .analysis-grid {
+    gap: 8px;
+  }
+  .analysis-grid .asset-card {
+    min-height: 96px;
+    padding: 12px;
+  }
+  .analysis-grid .asset-card strong {
+    font-size: 17px;
   }
   .dca-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -145,7 +145,7 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。
 
-启用模拟投资功能时，已有数据库需依次执行 `docker/mysql/migration/017_paper_investment.sql`、`docker/mysql/migration/018_investment_type_menus.sql`、`docker/mysql/migration/019_merge_stock_trading_into_investment_overview.sql` 和 `docker/mysql/migration/020_fund_history_cache.sql`。模拟账户在用户首次打开功能时创建，每个账户默认有 ¥100,000 虚拟资金；投资菜单分为股票模拟交易（含账户总览）、场内基金和场外基金。实时行情来自腾讯财经公开报价接口；场内基金历史行情和周定投回测使用腾讯历史行情接口，场外基金历史净值和周定投回测使用东方财富接口。场内和场外历史行情均会缓存到数据库，查询时可选择 API（查询后缓存）或数据库；选择数据库时需要先通过 API 查询缓存对应代码、周期和日期范围的数据。场外基金定投回测中，申购费率从每期投入中扣除，期末赎回费按用户输入的比例估算；实际净值公布、申购确认和持有期赎回费可能与模拟假设不同。
+启用模拟投资功能时，已有数据库需依次执行 `docker/mysql/migration/017_paper_investment.sql`、`docker/mysql/migration/018_investment_type_menus.sql`、`docker/mysql/migration/019_merge_stock_trading_into_investment_overview.sql` 和 `docker/mysql/migration/020_fund_history_cache.sql`。模拟账户在用户首次打开功能时创建，每个账户默认有 ¥100,000 虚拟资金；投资菜单分为股票模拟交易（含账户总览）、场内基金和场外基金。实时行情来自腾讯财经公开报价接口；场内基金历史行情和周定投回测使用腾讯历史行情接口，场外基金历史净值和周定投回测使用东方财富接口。场内和场外历史行情均会缓存到数据库，查询时可选择 API（查询后缓存）或数据库；选择数据库时需要先通过 API 查询缓存对应代码、周期和日期范围的数据。历史行情分析包含区间/年化收益、最大回撤、年化波动率、夏普/索提诺比率、月度收益和滚动一年收益；风险调整比率假设无风险利率为 0%，场内使用复权收盘价，场外优先使用累计净值，缺失累计净值时使用单位净值。定投回测同时按相同累计投入对比区间首日一次性买入，费用和整手规则依基金类型估算。所有指标基于所选历史区间，不代表未来收益。场外基金定投回测中，申购费率从每期投入中扣除，期末赎回费按用户输入的比例估算；实际净值公布、申购确认和持有期赎回费可能与模拟假设不同。
 
 ### 3. 启动前端
 

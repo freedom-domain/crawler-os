@@ -11,4 +11,5 @@ public class FundHistoryResponse {
     private String name;
     private String frequency;
     private List<FundHistoryPoint> points;
+    private FundHistoryAnalysis analysis;
 }
