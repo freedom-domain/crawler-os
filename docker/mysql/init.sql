@@ -340,6 +340,37 @@ CREATE TABLE IF NOT EXISTS fund_profile (
     PRIMARY KEY (fund_type, code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS stock_catalog (
+    code CHAR(6) PRIMARY KEY,
+    name VARCHAR(128) NOT NULL,
+    market VARCHAR(16) NOT NULL,
+    industry VARCHAR(128),
+    synced_at DATETIME NOT NULL,
+    KEY idx_stock_catalog_name (name),
+    KEY idx_stock_catalog_market_code (market, code),
+    KEY idx_stock_catalog_industry (industry)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS stock_profile (
+    code CHAR(6) PRIMARY KEY,
+    company_name VARCHAR(255),
+    former_names TEXT,
+    legal_representative VARCHAR(128),
+    registered_capital VARCHAR(128),
+    established_date VARCHAR(64),
+    province VARCHAR(64),
+    employee_count VARCHAR(64),
+    main_business MEDIUMTEXT,
+    business_scope MEDIUMTEXT,
+    company_profile MEDIUMTEXT,
+    registered_address VARCHAR(512),
+    website VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(128),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 初始化角色
 INSERT INTO sys_role (id, name, code, description, status) VALUES
 (1, '管理员', 'admin', '系统管理员', 1),
@@ -366,14 +397,15 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7),
 (18, '模拟投资', 'investment', 0, 0, NULL, 'TrendCharts', 8),
 (19, '股票模拟交易', 'investment:overview', 18, 1, '/investment/overview', 'Odometer', 1),
-(23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 2);
+(23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 3),
+(24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 19),(1, 23),
-(2, 18),(2, 19),(2, 23);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 19),(1, 23),(1, 24),
+(2, 18),(2, 19),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

@@ -70,7 +70,7 @@ export const investmentAccount = () => request.get('/investment/account')
 export const investmentQuote = (code: string) => request.get('/investment/quote', { params: { code } })
 export const investmentTrade = (data: { code: string; side: 'BUY' | 'SELL'; quantity: number }) =>
   request.post('/investment/trade', data)
-export const investmentTrades = () => request.get('/investment/trades')
+export const investmentTrades = (code?: string) => request.get('/investment/trades', { params: code ? { code } : undefined })
 export const fundHistory = (params: {
   code: string
   startDate: string
@@ -114,6 +114,17 @@ export const fundCatalogDetail = (params: { fundType: 'ONSHORE' | 'OFFSHORE'; co
 export const fundCatalogProfileRefresh = (params: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string }) =>
   request.post('/investment/fund-management/catalog/profile/refresh', null, { params })
 export const fundCatalogSync = () => request.post('/investment/fund-management/catalog/sync')
+export const stockCatalogPage = (params: {
+  keyword?: string
+  market?: '上海' | '深圳' | '北京'
+  page: number
+  pageSize: number
+}) => request.get('/investment/stock-management/catalog', { params })
+export const stockCatalogDetail = (code: string) =>
+  request.get('/investment/stock-management/catalog/detail', { params: { code } })
+export const stockCatalogProfileRefresh = (code: string) =>
+  request.post('/investment/stock-management/catalog/profile/refresh', null, { params: { code } })
+export const stockCatalogSync = () => request.post('/investment/stock-management/catalog/sync')
 export const fundWatchlistAdd = (data: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string; frequency: string }) =>
   request.post('/investment/fund-management/watchlist', data)
 export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency: string }) =>

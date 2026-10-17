@@ -3,13 +3,20 @@
     <template v-if="pageType === 'overview'">
     <header class="page-heading">
       <div>
-        <h1>投资总览与股票模拟交易</h1>
-        <p>查看虚拟账户资产并模拟 A 股买卖；成交按行情接口报价，报价可能延迟，不构成投资建议。</p>
+        <h1>{{ tradeOnly ? '股票模拟投资' : '投资总览与股票模拟交易' }}</h1>
+        <p v-if="!tradeOnly">查看虚拟账户资产并模拟 A 股买卖；成交按行情接口报价，报价可能延迟，不构成投资建议。</p>
+        <p v-else>模拟买卖股票，并查看持仓与最近成交；报价可能延迟，不构成投资建议。</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" @click="loadAccount">刷新资产</el-button>
+      <el-button v-if="!tradeOnly" :icon="Refresh" :loading="loading" @click="loadAccount">刷新资产</el-button>
     </header>
 
-    <div class="asset-grid" v-loading="loading">
+    <el-tabs v-if="tradeOnly" v-model="tradeActiveTab" class="trade-only-tabs">
+      <el-tab-pane label="模拟交易" name="trade" />
+      <el-tab-pane label="持仓" name="positions" />
+      <el-tab-pane label="最近成交" name="trades" />
+    </el-tabs>
+
+    <div v-if="!tradeOnly" class="asset-grid" v-loading="loading">
       <article class="asset-card">
         <span>总资产</span>
         <strong>¥{{ money(account?.totalAssets) }}</strong>
@@ -33,7 +40,7 @@
     </div>
     </template>
 
-    <template v-if="pageType === 'overview'">
+    <template v-if="pageType === 'overview' && (!tradeOnly || tradeActiveTab === 'trade')">
     <el-card class="quote-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -593,17 +600,17 @@
     </el-tabs>
     </template>
 
-    <template v-if="pageType === 'overview'">
+    <template v-if="pageType === 'overview' && (!tradeOnly || tradeActiveTab === 'positions')">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
           <div>
-            <strong>我的持仓</strong>
-            <span>持仓盈亏按行情估值，未扣除卖出费用</span>
+            <strong>{{ tradeOnly ? `${currentStockName}（${currentStockCode}）持仓` : '我的持仓' }}</strong>
+            <span>{{ tradeOnly ? '当前股票持仓，盈亏按行情估值且未扣除卖出费用' : '持仓盈亏按行情估值，未扣除卖出费用' }}</span>
           </div>
         </div>
       </template>
-      <el-table :data="account?.positions || []" v-loading="loading" stripe>
+      <el-table :data="displayedPositions" v-loading="loading" stripe>
         <el-table-column prop="code" label="代码" width="100" />
         <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="instrumentType" label="类型" width="90" />
@@ -623,20 +630,22 @@
             <span :class="profitTone(row.unrealizedProfit)">{{ signedMoney(row.unrealizedProfit) }}</span>
           </template>
         </el-table-column>
-        <template #empty><el-empty description="暂无持仓，查询证券代码后即可模拟买入" /></template>
+        <template #empty><el-empty :description="tradeOnly ? '当前股票暂无持仓' : '暂无持仓，查询证券代码后即可模拟买入'" /></template>
       </el-table>
     </el-card>
+    </template>
 
+    <template v-if="pageType === 'overview' && (!tradeOnly || tradeActiveTab === 'trades')">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
           <div>
-            <strong>最近成交</strong>
-            <span>最多显示最近 50 笔模拟交易</span>
+            <strong>{{ tradeOnly ? `${currentStockName}（${currentStockCode}）最近成交` : '最近成交' }}</strong>
+            <span>{{ tradeOnly ? '当前股票最近 50 笔模拟成交' : '最多显示最近 50 笔模拟交易' }}</span>
           </div>
         </div>
       </template>
-      <el-table :data="account?.recentTrades || []" v-loading="loading" stripe>
+      <el-table :data="displayedRecentTrades" v-loading="loading || tradesLoading" stripe>
         <el-table-column label="成交时间" min-width="170">
           <template #default="{ row }">{{ dateTime(row.tradeTime) }}</template>
         </el-table-column>
@@ -657,7 +666,7 @@
         <el-table-column label="交易费用" width="120" align="right">
           <template #default="{ row }">¥{{ money(Number(row.commission) + Number(row.stampTax)) }}</template>
         </el-table-column>
-        <template #empty><el-empty description="暂无成交记录" /></template>
+        <template #empty><el-empty :description="tradeOnly ? '当前股票暂无成交记录' : '暂无成交记录'" /></template>
       </el-table>
     </el-card>
     </template>
@@ -715,6 +724,7 @@ import {
   investmentAccount,
   investmentQuote,
   investmentTrade,
+  investmentTrades,
   offExchangeFundHistory,
   simulateFundDca,
   simulateOffExchangeFundDca
@@ -723,6 +733,7 @@ import {
 const props = defineProps<{
   pageType: 'overview' | 'onshore-fund' | 'offshore-fund'
   initialCode?: string
+  tradeOnly?: boolean
 }>()
 
 interface Quote {
@@ -742,6 +753,8 @@ interface ChartCoordinate {
 }
 
 const account = ref<any>(null)
+const stockRecentTrades = ref<any[]>([])
+const tradesLoading = ref(false)
 const code = ref('')
 const quote = ref<Quote | null>(null)
 const quoteLoading = ref(false)
@@ -752,6 +765,13 @@ const tradeSide = ref<'BUY' | 'SELL'>('BUY')
 const tradeQuantity = ref(100)
 const currentAvailableQuantity = ref(0)
 const today = new Date()
+const currentStockCode = computed(() => quote.value?.code || code.value.trim() || props.initialCode || '')
+const currentStockName = computed(() =>
+  quote.value?.name
+  || account.value?.positions?.find((item: any) => item.code === currentStockCode.value)?.name
+  || currentStockCode.value
+  || '当前股票'
+)
 const toDateString = (date: Date) => {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
   return localDate.toISOString().slice(0, 10)
@@ -762,6 +782,7 @@ const initialStartDate = toDateString(oneYearAgo)
 const initialEndDate = toDateString(today)
 const onshoreActiveTab = ref('history')
 const offshoreActiveTab = ref('history')
+const tradeActiveTab = ref<'trade' | 'positions' | 'trades'>('trade')
 const fundCode = ref('')
 const historyStartDate = ref(initialStartDate)
 const historyEndDate = ref(initialEndDate)
@@ -803,7 +824,9 @@ watch(
   () => [props.pageType, props.initialCode] as const,
   ([pageType, initialCode]) => {
     if (!initialCode) return
-    if (pageType === 'onshore-fund') {
+    if (pageType === 'overview') {
+      code.value = initialCode
+    } else if (pageType === 'onshore-fund') {
       fundCode.value = initialCode
     } else if (pageType === 'offshore-fund') {
       offExchangeFundCode.value = initialCode
@@ -815,6 +838,13 @@ watch(
 const quoteAvailableQuantity = computed(() =>
   account.value?.positions?.find((item: any) => item.code === quote.value?.code)?.availableQuantity || 0
 )
+const displayedPositions = computed(() => {
+  const positions = account.value?.positions || []
+  return props.tradeOnly
+    ? positions.filter((item: any) => item.code === currentStockCode.value)
+    : positions
+})
+const displayedRecentTrades = computed(() => props.tradeOnly ? stockRecentTrades.value : account.value?.recentTrades || [])
 const historyPoints = computed(() => historyResult.value?.points || [])
 const recentHistoryPoints = computed(() => [...historyPoints.value].slice(-20).reverse())
 const historyHoverPoint = computed(() => historyHoverIndex.value === null
@@ -983,11 +1013,30 @@ const profitTone = (value: unknown) => Number(value || 0) > 0 ? 'is-profit' : Nu
 const dateTime = (value: string) => value ? value.replace('T', ' ').slice(0, 19) : '-'
 const frequencyLabel = (frequency: string) => ({ day: '日线', week: '周线', month: '月线' }[frequency] || '行情')
 
+const loadCurrentStockTrades = async (stockCode = currentStockCode.value) => {
+  if (!props.tradeOnly || !stockCode) {
+    stockRecentTrades.value = []
+    return
+  }
+  tradesLoading.value = true
+  try {
+    const response: any = await investmentTrades(stockCode)
+    if (stockCode === currentStockCode.value) {
+      stockRecentTrades.value = response.data || []
+    }
+  } catch {
+    stockRecentTrades.value = []
+  } finally {
+    tradesLoading.value = false
+  }
+}
+
 const loadAccount = async () => {
   loading.value = true
   try {
     const response: any = await investmentAccount()
     account.value = response.data
+    await loadCurrentStockTrades()
   } catch {
     account.value = null
   } finally {
@@ -1006,8 +1055,10 @@ const loadQuote = async () => {
     }
     quote.value = response.data
     code.value = response.data.code
+    await loadCurrentStockTrades(response.data.code)
   } catch {
     quote.value = null
+    stockRecentTrades.value = []
   } finally {
     quoteLoading.value = false
   }
@@ -1132,6 +1183,9 @@ const runOffExchangeFundDca = async () => {
 onMounted(() => {
   if (props.pageType === 'overview') {
     loadAccount()
+    if (props.initialCode) {
+      void loadQuote()
+    }
   }
 })
 </script>

@@ -16,11 +16,15 @@ import com.collect.finance.dto.FundWatchlistRequest;
 import com.collect.finance.dto.OffExchangeFundDcaRequest;
 import com.collect.finance.dto.OffExchangeFundDcaResponse;
 import com.collect.finance.dto.OffExchangeFundHistoryResponse;
+import com.collect.finance.dto.StockCatalogItem;
+import com.collect.finance.dto.StockCatalogPage;
+import com.collect.finance.dto.StockCatalogSyncResult;
 import com.collect.finance.service.FundCatalogService;
 import com.collect.finance.service.FundInvestmentBacktestService;
 import com.collect.finance.service.FundManagementService;
 import com.collect.finance.service.OffExchangeFundBacktestService;
 import com.collect.finance.service.PaperInvestmentService;
+import com.collect.finance.service.StockCatalogService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -41,17 +45,20 @@ public class PaperInvestmentController {
     private final FundInvestmentBacktestService fundInvestmentBacktestService;
     private final OffExchangeFundBacktestService offExchangeFundBacktestService;
     private final FundManagementService fundManagementService;
+    private final StockCatalogService stockCatalogService;
 
     public PaperInvestmentController(PaperInvestmentService investmentService,
                                      FundCatalogService fundCatalogService,
                                      FundInvestmentBacktestService fundInvestmentBacktestService,
                                      OffExchangeFundBacktestService offExchangeFundBacktestService,
-                                     FundManagementService fundManagementService) {
+                                     FundManagementService fundManagementService,
+                                     StockCatalogService stockCatalogService) {
         this.investmentService = investmentService;
         this.fundCatalogService = fundCatalogService;
         this.fundInvestmentBacktestService = fundInvestmentBacktestService;
         this.offExchangeFundBacktestService = offExchangeFundBacktestService;
         this.fundManagementService = fundManagementService;
+        this.stockCatalogService = stockCatalogService;
     }
 
     @GetMapping("/account")
@@ -70,8 +77,8 @@ public class PaperInvestmentController {
     }
 
     @GetMapping("/trades")
-    public R<List<InvestmentTradeResponse>> trades() {
-        return R.ok(investmentService.recentTrades());
+    public R<List<InvestmentTradeResponse>> trades(@RequestParam(required = false) String code) {
+        return R.ok(investmentService.recentTrades(code));
     }
 
     @GetMapping("/fund/history")
@@ -128,6 +135,29 @@ public class PaperInvestmentController {
     @PostMapping("/fund-management/catalog/sync")
     public R<FundCatalogSyncResult> syncFundCatalog() {
         return R.ok(fundCatalogService.sync());
+    }
+
+    @GetMapping("/stock-management/catalog")
+    public R<StockCatalogPage> stockCatalog(@RequestParam(required = false) String keyword,
+                                            @RequestParam(required = false) String market,
+                                            @RequestParam(defaultValue = "1") int page,
+                                            @RequestParam(defaultValue = "20") int pageSize) {
+        return R.ok(stockCatalogService.page(keyword, market, page, pageSize));
+    }
+
+    @GetMapping("/stock-management/catalog/detail")
+    public R<StockCatalogItem> stockCatalogDetail(@RequestParam String code) {
+        return R.ok(stockCatalogService.detail(code));
+    }
+
+    @PostMapping("/stock-management/catalog/profile/refresh")
+    public R<StockCatalogItem> refreshStockProfile(@RequestParam String code) {
+        return R.ok(stockCatalogService.refreshProfile(code));
+    }
+
+    @PostMapping("/stock-management/catalog/sync")
+    public R<StockCatalogSyncResult> syncStockCatalog() {
+        return R.ok(stockCatalogService.sync());
     }
 
     @PostMapping("/fund-management/watchlist")

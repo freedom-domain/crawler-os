@@ -87,7 +87,7 @@ public class PaperInvestmentService {
         response.setTotalProfit(totalAssets.subtract(account.getInitialCash()).setScale(2, RoundingMode.HALF_UP));
         response.setProfitPercent(percentage(response.getTotalProfit(), account.getInitialCash()));
         response.setPositions(positions);
-        response.setRecentTrades(recentTrades(userId));
+        response.setRecentTrades(recentTrades(userId, null));
         return response;
     }
 
@@ -180,7 +180,11 @@ public class PaperInvestmentService {
     }
 
     public List<InvestmentTradeResponse> recentTrades() {
-        return recentTrades(LoginUtils.getUserId());
+        return recentTrades(LoginUtils.getUserId(), null);
+    }
+
+    public List<InvestmentTradeResponse> recentTrades(String code) {
+        return recentTrades(LoginUtils.getUserId(), code);
     }
 
     private PaperInvestmentAccount loadOrCreateAccount(Long userId) {
@@ -251,11 +255,12 @@ public class PaperInvestmentService {
         return response;
     }
 
-    private List<InvestmentTradeResponse> recentTrades(Long userId) {
+    private List<InvestmentTradeResponse> recentTrades(Long userId, String code) {
         List<PaperInvestmentTrade> trades = tradeMapper.selectList(
                 new LambdaQueryWrapper<PaperInvestmentTrade>()
                         .eq(PaperInvestmentTrade::getUserId, userId)
                         .eq(PaperInvestmentTrade::getDeleted, 0)
+                        .eq(code != null && !code.isBlank(), PaperInvestmentTrade::getCode, code)
                         .orderByDesc(PaperInvestmentTrade::getCreateTime)
                         .last("LIMIT 50"));
         return trades.stream().map(this::toTradeResponse).toList();
