@@ -1,0 +1,12 @@
+.git
+**/target
+**/node_modules
+**/dist
+**/.idea
+**/*.iml
+*.log
+docker-data
+mysql-data
+es-data
+minio-data
+redis-data
