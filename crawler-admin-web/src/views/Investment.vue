@@ -251,42 +251,48 @@
         <div v-if="historyResult.analysis" class="analysis-tables">
           <div>
             <h4>月度收益</h4>
-            <el-table :data="recentMonthlyReturns" class="market-history-table" stripe max-height="320">
-              <el-table-column prop="period" label="月份" min-width="110" />
-              <el-table-column label="收益率" min-width="100" align="right">
-                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
-              </el-table-column>
-            </el-table>
+            <div class="table-scroll-wrapper">
+              <el-table :data="recentMonthlyReturns" class="investment-data-table" stripe border resizable max-height="320">
+                <el-table-column prop="period" label="月份" min-width="110" />
+                <el-table-column label="收益率" min-width="100" align="right">
+                  <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
           <div>
             <h4>滚动一年收益</h4>
-            <el-table :data="recentRollingReturns" class="market-history-table" stripe max-height="320">
-              <el-table-column prop="period" label="截至日期" min-width="120" />
-              <el-table-column label="近一年收益率" min-width="120" align="right">
-                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
-              </el-table-column>
-            </el-table>
+            <div class="table-scroll-wrapper">
+              <el-table :data="recentRollingReturns" class="investment-data-table" stripe border resizable max-height="320">
+                <el-table-column prop="period" label="截至日期" min-width="120" />
+                <el-table-column label="近一年收益率" min-width="120" align="right">
+                  <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+                </el-table-column>
+              </el-table>
+            </div>
             <p v-if="!historyResult.analysis.rollingOneYearReturns?.length" class="fee-note">所选数据尚不足一年，暂无完整滚动一年数据。</p>
           </div>
         </div>
-        <el-table :data="recentHistoryPoints" class="market-history-table" stripe max-height="360">
-          <el-table-column prop="date" label="日期" min-width="120" />
-          <el-table-column label="开盘" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.open) }}</template>
-          </el-table-column>
-          <el-table-column label="收盘" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.close) }}</template>
-          </el-table-column>
-          <el-table-column label="最高" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.high) }}</template>
-          </el-table-column>
-          <el-table-column label="最低" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.low) }}</template>
-          </el-table-column>
-          <el-table-column label="涨跌幅" min-width="100" align="right">
-            <template #default="{ row }"><span :class="profitTone(row.changePercent)">{{ signedPercent(row.changePercent) }}</span></template>
-          </el-table-column>
-        </el-table>
+        <div class="table-scroll-wrapper">
+          <el-table :data="recentHistoryPoints" class="investment-data-table history-detail-table" stripe border resizable max-height="440">
+            <el-table-column prop="date" label="日期" min-width="120" />
+            <el-table-column label="开盘" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.open) }}</template>
+            </el-table-column>
+            <el-table-column label="收盘" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.close) }}</template>
+            </el-table-column>
+            <el-table-column label="最高" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.high) }}</template>
+            </el-table-column>
+            <el-table-column label="最低" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.low) }}</template>
+            </el-table-column>
+            <el-table-column label="涨跌幅" min-width="100" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.changePercent)">{{ signedPercent(row.changePercent) }}</span></template>
+            </el-table-column>
+          </el-table>
+        </div>
         <p class="fee-note">收益率按复权收盘价计算；夏普/索提诺假定无风险利率为 0%，波动率按所选周期年化。月度收益首月因缺少区间前数据不计；历史表现不代表未来收益，不构成投资建议。</p>
       </div>
       <el-empty v-else-if="!historyLoading" description="选择基金代码和日期范围后查询历史行情" :image-size="64" />
@@ -334,22 +340,24 @@
         </div>
         <div class="dca-comparison">
           <h4>定投与一次性买入（相同累计投入）</h4>
-          <el-table :data="dcaComparisonRows" stripe>
-            <el-table-column prop="strategy" label="策略" min-width="130" />
-            <el-table-column prop="investmentDate" label="开始买入日" min-width="120" />
-            <el-table-column label="累计投入" min-width="120" align="right">
-              <template #default="{ row }">¥{{ money(row.totalContribution) }}</template>
-            </el-table-column>
-            <el-table-column label="期末资产" min-width="120" align="right">
-              <template #default="{ row }">¥{{ money(row.finalValue) }}</template>
-            </el-table-column>
-            <el-table-column label="盈亏" min-width="120" align="right">
-              <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}（{{ signedPercent(row.profitPercent) }}）</span></template>
-            </el-table-column>
-            <el-table-column label="费用" min-width="100" align="right">
-              <template #default="{ row }">¥{{ money(row.totalFees) }}</template>
-            </el-table-column>
-          </el-table>
+          <div class="table-scroll-wrapper">
+            <el-table :data="dcaComparisonRows" class="investment-data-table" stripe border resizable>
+              <el-table-column prop="strategy" label="策略" min-width="130" />
+              <el-table-column prop="investmentDate" label="开始买入日" min-width="120" />
+              <el-table-column label="累计投入" min-width="120" align="right">
+                <template #default="{ row }">¥{{ money(row.totalContribution) }}</template>
+              </el-table-column>
+              <el-table-column label="期末资产" min-width="120" align="right">
+                <template #default="{ row }">¥{{ money(row.finalValue) }}</template>
+              </el-table-column>
+              <el-table-column label="盈亏" min-width="120" align="right">
+                <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}（{{ signedPercent(row.profitPercent) }}）</span></template>
+              </el-table-column>
+              <el-table-column label="费用" min-width="100" align="right">
+                <template #default="{ row }">¥{{ money(row.totalFees) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
           <p class="fee-note">一次性买入假设在区间首个交易日投入全部定投累计金额；场内按整手和佣金规则计算，未用现金计入期末资产。</p>
         </div>
         <p class="fee-note">
@@ -359,27 +367,29 @@
           · 期末估值日期 {{ dcaResult.finalQuoteDate }}（收盘价 ¥{{ money(dcaResult.finalPrice) }}）。
           按 100 份为一手买入，佣金 0.03%（每笔最低 ¥5），不含其他交易费用。
         </p>
-        <el-table :data="dcaResult.schedule" stripe max-height="460">
-          <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
-          <el-table-column prop="tradeDate" label="实际交易日" min-width="120" />
-          <el-table-column label="收盘价" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.price) }}</template>
-          </el-table-column>
-          <el-table-column label="本期投入" min-width="110" align="right">
-            <template #default="{ row }">¥{{ money(row.contribution) }}</template>
-          </el-table-column>
-          <el-table-column prop="shares" label="买入份额" min-width="100" align="right" />
-          <el-table-column label="成交金额" min-width="110" align="right">
-            <template #default="{ row }">¥{{ money(row.investedAmount) }}</template>
-          </el-table-column>
-          <el-table-column label="佣金" min-width="90" align="right">
-            <template #default="{ row }">¥{{ money(row.commission) }}</template>
-          </el-table-column>
-          <el-table-column prop="cumulativeShares" label="累计份额" min-width="110" align="right" />
-          <el-table-column label="累计盈亏" min-width="115" align="right">
-            <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
-          </el-table-column>
-        </el-table>
+        <div class="table-scroll-wrapper">
+          <el-table :data="dcaResult.schedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="460">
+            <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
+            <el-table-column prop="tradeDate" label="实际交易日" min-width="120" />
+            <el-table-column label="收盘价" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.price) }}</template>
+            </el-table-column>
+            <el-table-column label="本期投入" min-width="110" align="right">
+              <template #default="{ row }">¥{{ money(row.contribution) }}</template>
+            </el-table-column>
+            <el-table-column prop="shares" label="买入份额" min-width="100" align="right" />
+            <el-table-column label="成交金额" min-width="110" align="right">
+              <template #default="{ row }">¥{{ money(row.investedAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="佣金" min-width="90" align="right">
+              <template #default="{ row }">¥{{ money(row.commission) }}</template>
+            </el-table-column>
+            <el-table-column prop="cumulativeShares" label="累计份额" min-width="110" align="right" />
+            <el-table-column label="累计盈亏" min-width="115" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
+            </el-table-column>
+          </el-table>
+        </div>
       </template>
       <el-empty v-else-if="!dcaLoading" description="设置基金、定投金额和时间段后运行回测" :image-size="64" />
     </el-card>
@@ -502,36 +512,42 @@
         <div v-if="offExchangeHistoryResult.analysis" class="analysis-tables">
           <div>
             <h4>月度收益</h4>
-            <el-table :data="recentOffExchangeMonthlyReturns" class="market-history-table" stripe max-height="320">
-              <el-table-column prop="period" label="月份" min-width="110" />
-              <el-table-column label="收益率" min-width="100" align="right">
-                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
-              </el-table-column>
-            </el-table>
+            <div class="table-scroll-wrapper">
+              <el-table :data="recentOffExchangeMonthlyReturns" class="investment-data-table" stripe border resizable max-height="320">
+                <el-table-column prop="period" label="月份" min-width="110" />
+                <el-table-column label="收益率" min-width="100" align="right">
+                  <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
           <div>
             <h4>滚动一年收益</h4>
-            <el-table :data="recentOffExchangeRollingReturns" class="market-history-table" stripe max-height="320">
-              <el-table-column prop="period" label="截至日期" min-width="120" />
-              <el-table-column label="近一年收益率" min-width="120" align="right">
-                <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
-              </el-table-column>
-            </el-table>
+            <div class="table-scroll-wrapper">
+              <el-table :data="recentOffExchangeRollingReturns" class="investment-data-table" stripe border resizable max-height="320">
+                <el-table-column prop="period" label="截至日期" min-width="120" />
+                <el-table-column label="近一年收益率" min-width="120" align="right">
+                  <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
+                </el-table-column>
+              </el-table>
+            </div>
             <p v-if="!offExchangeHistoryResult.analysis.rollingOneYearReturns?.length" class="fee-note">所选数据尚不足一年，暂无完整滚动一年数据。</p>
           </div>
         </div>
-        <el-table :data="recentOffExchangeNavPoints" class="market-history-table" stripe max-height="360">
-          <el-table-column prop="date" label="净值日期" min-width="120" />
-          <el-table-column label="单位净值" min-width="110" align="right">
-            <template #default="{ row }">¥{{ money(row.unitNav) }}</template>
-          </el-table-column>
-          <el-table-column label="累计净值" min-width="110" align="right">
-            <template #default="{ row }">{{ row.cumulativeNav == null ? '-' : `¥${money(row.cumulativeNav)}` }}</template>
-          </el-table-column>
-          <el-table-column label="日涨跌幅" min-width="110" align="right">
-            <template #default="{ row }"><span :class="profitTone(row.changePercent)">{{ signedPercent(row.changePercent) }}</span></template>
-          </el-table-column>
-        </el-table>
+        <div class="table-scroll-wrapper">
+          <el-table :data="recentOffExchangeNavPoints" class="investment-data-table history-detail-table" stripe border resizable max-height="440">
+            <el-table-column prop="date" label="净值日期" min-width="120" />
+            <el-table-column label="单位净值" min-width="110" align="right">
+              <template #default="{ row }">¥{{ money(row.unitNav) }}</template>
+            </el-table-column>
+            <el-table-column label="累计净值" min-width="110" align="right">
+              <template #default="{ row }">{{ row.cumulativeNav == null ? '-' : `¥${money(row.cumulativeNav)}` }}</template>
+            </el-table-column>
+            <el-table-column label="日涨跌幅" min-width="110" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.changePercent)">{{ signedPercent(row.changePercent) }}</span></template>
+            </el-table-column>
+          </el-table>
+        </div>
         <p class="fee-note">收益率优先使用累计净值计算，缺少累计净值时使用单位净值；夏普/索提诺假定无风险利率为 0%，年化波动率按净值日收益率估算。月度收益首月因缺少区间前数据不计；历史表现不代表未来收益，不构成投资建议。</p>
       </div>
       <el-empty v-else-if="!offExchangeHistoryLoading" description="输入场外基金代码和日期范围后查询净值" :image-size="64" />
@@ -585,22 +601,24 @@
         </div>
         <div class="dca-comparison">
           <h4>定投与一次性买入（相同累计投入）</h4>
-          <el-table :data="offExchangeDcaComparisonRows" stripe>
-            <el-table-column prop="strategy" label="策略" min-width="130" />
-            <el-table-column prop="investmentDate" label="开始买入日" min-width="120" />
-            <el-table-column label="累计投入" min-width="120" align="right">
-              <template #default="{ row }">¥{{ money(row.totalContribution) }}</template>
-            </el-table-column>
-            <el-table-column label="期末赎回净值" min-width="130" align="right">
-              <template #default="{ row }">¥{{ money(row.finalValue) }}</template>
-            </el-table-column>
-            <el-table-column label="盈亏" min-width="120" align="right">
-              <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}（{{ signedPercent(row.profitPercent) }}）</span></template>
-            </el-table-column>
-            <el-table-column label="申购 / 赎回费" min-width="120" align="right">
-              <template #default="{ row }">¥{{ money(row.subscriptionFee) }} / ¥{{ money(row.redemptionFee) }}</template>
-            </el-table-column>
-          </el-table>
+          <div class="table-scroll-wrapper">
+            <el-table :data="offExchangeDcaComparisonRows" class="investment-data-table" stripe border resizable>
+              <el-table-column prop="strategy" label="策略" min-width="130" />
+              <el-table-column prop="investmentDate" label="开始买入日" min-width="120" />
+              <el-table-column label="累计投入" min-width="120" align="right">
+                <template #default="{ row }">¥{{ money(row.totalContribution) }}</template>
+              </el-table-column>
+              <el-table-column label="期末赎回净值" min-width="130" align="right">
+                <template #default="{ row }">¥{{ money(row.finalValue) }}</template>
+              </el-table-column>
+              <el-table-column label="盈亏" min-width="120" align="right">
+                <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}（{{ signedPercent(row.profitPercent) }}）</span></template>
+              </el-table-column>
+              <el-table-column label="申购 / 赎回费" min-width="120" align="right">
+                <template #default="{ row }">¥{{ money(row.subscriptionFee) }} / ¥{{ money(row.redemptionFee) }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
           <p class="fee-note">一次性买入假设在区间首个净值日投入全部定投累计金额；两种策略使用相同申购费率、期末赎回费率和估值日期。</p>
         </div>
         <p class="fee-note">
@@ -609,28 +627,30 @@
           · 期末估值日期 {{ offExchangeDcaResult.finalNavDate }}（单位净值 ¥{{ money(offExchangeDcaResult.finalNav) }}）。
           每期申购费按输入费率从投入金额中扣除；期末赎回费按赎回费率估算。实际申购确认、折扣及持有期限费率以基金公告为准。
         </p>
-        <el-table :data="offExchangeDcaResult.schedule" stripe max-height="460">
-          <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
-          <el-table-column prop="tradeDate" label="净值日期" min-width="120" />
-          <el-table-column label="单位净值" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.nav) }}</template>
-          </el-table-column>
-          <el-table-column label="本期投入" min-width="110" align="right">
-            <template #default="{ row }">¥{{ money(row.contribution) }}</template>
-          </el-table-column>
-          <el-table-column label="申购费" min-width="100" align="right">
-            <template #default="{ row }">¥{{ money(row.subscriptionFee) }}</template>
-          </el-table-column>
-          <el-table-column label="买入份额" min-width="100" align="right">
-            <template #default="{ row }">{{ money(row.shares) }}</template>
-          </el-table-column>
-          <el-table-column label="累计份额" min-width="110" align="right">
-            <template #default="{ row }">{{ money(row.cumulativeShares) }}</template>
-          </el-table-column>
-          <el-table-column label="累计盈亏" min-width="115" align="right">
-            <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
-          </el-table-column>
-        </el-table>
+        <div class="table-scroll-wrapper">
+          <el-table :data="offExchangeDcaResult.schedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="460">
+            <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
+            <el-table-column prop="tradeDate" label="净值日期" min-width="120" />
+            <el-table-column label="单位净值" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.nav) }}</template>
+            </el-table-column>
+            <el-table-column label="本期投入" min-width="110" align="right">
+              <template #default="{ row }">¥{{ money(row.contribution) }}</template>
+            </el-table-column>
+            <el-table-column label="申购费" min-width="100" align="right">
+              <template #default="{ row }">¥{{ money(row.subscriptionFee) }}</template>
+            </el-table-column>
+            <el-table-column label="买入份额" min-width="100" align="right">
+              <template #default="{ row }">{{ money(row.shares) }}</template>
+            </el-table-column>
+            <el-table-column label="累计份额" min-width="110" align="right">
+              <template #default="{ row }">{{ money(row.cumulativeShares) }}</template>
+            </el-table-column>
+            <el-table-column label="累计盈亏" min-width="115" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
+            </el-table-column>
+          </el-table>
+        </div>
       </template>
       <el-empty v-else-if="!offExchangeDcaLoading" description="设置场外基金、定投金额、费率和时间段后运行回测" :image-size="64" />
     </el-card>
@@ -648,7 +668,8 @@
           </div>
         </div>
       </template>
-      <el-table :data="displayedPositions" v-loading="loading" stripe>
+      <div class="table-scroll-wrapper">
+        <el-table :data="displayedPositions" class="investment-data-table" v-loading="loading" stripe border resizable>
         <el-table-column prop="code" label="代码" width="100" />
         <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="instrumentType" label="类型" width="90" />
@@ -669,7 +690,8 @@
           </template>
         </el-table-column>
         <template #empty><el-empty :description="tradeOnly ? '当前股票暂无持仓' : '暂无持仓，查询证券代码后即可模拟买入'" /></template>
-      </el-table>
+        </el-table>
+      </div>
     </el-card>
     </template>
 
@@ -683,7 +705,8 @@
           </div>
         </div>
       </template>
-      <el-table :data="displayedRecentTrades" v-loading="loading || tradesLoading" stripe>
+      <div class="table-scroll-wrapper">
+        <el-table :data="displayedRecentTrades" class="investment-data-table" v-loading="loading || tradesLoading" stripe border resizable>
         <el-table-column label="成交时间" min-width="170">
           <template #default="{ row }">{{ dateTime(row.tradeTime) }}</template>
         </el-table-column>
@@ -705,7 +728,8 @@
           <template #default="{ row }">¥{{ money(Number(row.commission) + Number(row.stampTax)) }}</template>
         </el-table-column>
         <template #empty><el-empty :description="tradeOnly ? '当前股票暂无成交记录' : '暂无成交记录'" /></template>
-      </el-table>
+        </el-table>
+      </div>
     </el-card>
     </template>
 

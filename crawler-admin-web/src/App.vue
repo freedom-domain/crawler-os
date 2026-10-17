@@ -230,6 +230,25 @@ button, input, textarea, select { font: inherit; }
   width: 100%;
   overflow-x: auto;
   min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #8aa6ad #e8edf2;
+}
+.table-scroll-wrapper::-webkit-scrollbar {
+  height: 10px;
+}
+.table-scroll-wrapper::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #e8edf2;
+}
+.table-scroll-wrapper::-webkit-scrollbar-thumb {
+  border: 2px solid #e8edf2;
+  border-radius: 999px;
+  background: #8aa6ad;
+  background-clip: padding-box;
+}
+.table-scroll-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #607f88;
+  background-clip: padding-box;
 }
 .table-scroll-wrapper .el-table {
   width: max-content;
