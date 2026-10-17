@@ -105,6 +105,12 @@
             <el-option label="月线" value="month" />
           </el-select>
         </el-form-item>
+        <el-form-item label="数据来源">
+          <el-select v-model="historySource" style="width: 180px">
+            <el-option label="API 查询并缓存" value="api" />
+            <el-option label="数据库" value="database" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="开始日期">
           <el-date-picker v-model="historyStartDate" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
@@ -248,6 +254,12 @@
         </el-form-item>
         <el-form-item label="结束日期">
           <el-date-picker v-model="offExchangeHistoryEndDate" type="date" value-format="YYYY-MM-DD" />
+        </el-form-item>
+        <el-form-item label="数据来源">
+          <el-select v-model="offExchangeHistorySource" style="width: 180px">
+            <el-option label="API 查询并缓存" value="api" />
+            <el-option label="数据库" value="database" />
+          </el-select>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="offExchangeHistoryLoading" @click="loadOffExchangeFundHistory">查询历史净值</el-button>
@@ -531,6 +543,7 @@ const fundCode = ref('159915')
 const historyStartDate = ref(initialStartDate)
 const historyEndDate = ref(initialEndDate)
 const historyFrequency = ref('day')
+const historySource = ref<'api' | 'database'>('api')
 const historyResult = ref<any>(null)
 const historyLoading = ref(false)
 const dcaStartDate = ref(initialStartDate)
@@ -542,6 +555,7 @@ const dcaLoading = ref(false)
 const offExchangeFundCode = ref('000001')
 const offExchangeHistoryStartDate = ref(initialStartDate)
 const offExchangeHistoryEndDate = ref(initialEndDate)
+const offExchangeHistorySource = ref<'api' | 'database'>('api')
 const offExchangeHistoryResult = ref<any>(null)
 const offExchangeHistoryLoading = ref(false)
 const offExchangeDcaStartDate = ref(initialStartDate)
@@ -711,7 +725,8 @@ const loadFundHistory = async () => {
       code: fundCode.value.trim(),
       startDate: historyStartDate.value,
       endDate: historyEndDate.value,
-      frequency: historyFrequency.value
+      frequency: historyFrequency.value,
+      source: historySource.value
     })
     historyResult.value = response.data
   } catch {
@@ -747,7 +762,8 @@ const loadOffExchangeFundHistory = async () => {
     const response: any = await offExchangeFundHistory({
       code: offExchangeFundCode.value.trim(),
       startDate: offExchangeHistoryStartDate.value,
-      endDate: offExchangeHistoryEndDate.value
+      endDate: offExchangeHistoryEndDate.value,
+      source: offExchangeHistorySource.value
     })
     offExchangeHistoryResult.value = response.data
   } catch {

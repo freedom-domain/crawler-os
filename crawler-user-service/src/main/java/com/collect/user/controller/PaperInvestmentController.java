@@ -64,8 +64,9 @@ public class PaperInvestmentController {
     public R<FundHistoryResponse> fundHistory(@RequestParam String code,
                                               @RequestParam String startDate,
                                               @RequestParam String endDate,
-                                              @RequestParam(defaultValue = "day") String frequency) {
-        return R.ok(fundInvestmentBacktestService.history(code, startDate, endDate, frequency));
+                                              @RequestParam(defaultValue = "day") String frequency,
+                                              @RequestParam(defaultValue = "api") String source) {
+        return R.ok(fundInvestmentBacktestService.history(code, startDate, endDate, frequency, source));
     }
 
     @PostMapping("/fund/dca")
@@ -76,8 +77,9 @@ public class PaperInvestmentController {
     @GetMapping("/off-exchange-fund/history")
     public R<OffExchangeFundHistoryResponse> offExchangeFundHistory(@RequestParam String code,
                                                                     @RequestParam String startDate,
-                                                                    @RequestParam String endDate) {
-        return R.ok(offExchangeFundBacktestService.history(code, startDate, endDate));
+                                                                    @RequestParam String endDate,
+                                                                    @RequestParam(defaultValue = "api") String source) {
+        return R.ok(offExchangeFundBacktestService.history(code, startDate, endDate, source));
     }
 
     @PostMapping("/off-exchange-fund/dca")

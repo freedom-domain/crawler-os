@@ -33,8 +33,14 @@ public class TencentFundHistoryClient {
             .build();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    private final FundHistoryCacheService historyCacheService;
+
     @Value("${investment.tencent-history-url:https://web.ifzq.gtimg.cn/appstock/app/fqkline/get}")
     private String historyUrl;
+
+    public TencentFundHistoryClient(FundHistoryCacheService historyCacheService) {
+        this.historyCacheService = historyCacheService;
+    }
 
     public FundHistoryResponse getHistory(String code, LocalDate startDate, LocalDate endDate, String frequency) {
         String interval = switch (frequency) {
@@ -102,6 +108,7 @@ public class TencentFundHistoryClient {
         response.setName(name);
         response.setFrequency(frequency);
         response.setPoints(points);
+        historyCacheService.saveOnExchange(code, name, frequency, points);
         return response;
     }
 

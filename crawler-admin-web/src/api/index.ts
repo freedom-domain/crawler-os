@@ -71,7 +71,13 @@ export const investmentQuote = (code: string) => request.get('/investment/quote'
 export const investmentTrade = (data: { code: string; side: 'BUY' | 'SELL'; quantity: number }) =>
   request.post('/investment/trade', data)
 export const investmentTrades = () => request.get('/investment/trades')
-export const fundHistory = (params: { code: string; startDate: string; endDate: string; frequency: string }) =>
+export const fundHistory = (params: {
+  code: string
+  startDate: string
+  endDate: string
+  frequency: string
+  source: 'api' | 'database'
+}) =>
   request.get('/investment/fund/history', { params })
 export const simulateFundDca = (data: {
   code: string
@@ -80,7 +86,12 @@ export const simulateFundDca = (data: {
   amount: number
   weekday: number
 }) => request.post('/investment/fund/dca', data)
-export const offExchangeFundHistory = (params: { code: string; startDate: string; endDate: string }) =>
+export const offExchangeFundHistory = (params: {
+  code: string
+  startDate: string
+  endDate: string
+  source: 'api' | 'database'
+}) =>
   request.get('/investment/off-exchange-fund/history', { params })
 export const simulateOffExchangeFundDca = (data: {
   code: string

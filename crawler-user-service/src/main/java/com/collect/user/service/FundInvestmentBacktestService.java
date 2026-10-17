@@ -33,15 +33,36 @@ public class FundInvestmentBacktestService {
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final TencentFundHistoryClient historyClient;
+    private final FundHistoryCacheService historyCacheService;
 
-    public FundInvestmentBacktestService(TencentFundHistoryClient historyClient) {
+    public FundInvestmentBacktestService(TencentFundHistoryClient historyClient,
+                                         FundHistoryCacheService historyCacheService) {
         this.historyClient = historyClient;
+        this.historyCacheService = historyCacheService;
     }
 
-    public FundHistoryResponse history(String rawCode, String rawStartDate, String rawEndDate, String frequency) {
+    public FundHistoryResponse history(String rawCode, String rawStartDate, String rawEndDate, String frequency,
+                                       String source) {
         String code = normalizeCode(rawCode);
         DateRange range = validateRange(rawStartDate, rawEndDate);
-        return historyClient.getHistory(code, range.startDate(), range.endDate(), frequency);
+        if (!"day".equals(frequency) && !"week".equals(frequency) && !"month".equals(frequency)) {
+            throw new BizException("行情周期仅支持日、周、月");
+        }
+        if (isApiSource(source)) {
+            return historyClient.getHistory(code, range.startDate(), range.endDate(), frequency);
+        }
+        return historyCacheService.getOnExchange(code, frequency, range.startDate(), range.endDate());
+    }
+
+    private boolean isApiSource(String source) {
+        String normalizedSource = source == null ? "" : source.trim();
+        if ("api".equalsIgnoreCase(normalizedSource)) {
+            return true;
+        }
+        if ("database".equalsIgnoreCase(normalizedSource)) {
+            return false;
+        }
+        throw new BizException("历史行情来源仅支持 api 或 database");
     }
 
     public FundDcaResponse simulate(FundDcaRequest request) {

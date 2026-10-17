@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -36,8 +37,14 @@ public class EastmoneyOffExchangeFundClient {
             .build();
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    private final FundHistoryCacheService historyCacheService;
+
     @Value("${investment.eastmoney-nav-url:https://api.fund.eastmoney.com/f10/lsjz}")
     private String historyUrl;
+
+    public EastmoneyOffExchangeFundClient(FundHistoryCacheService historyCacheService) {
+        this.historyCacheService = historyCacheService;
+    }
 
     @Value("${investment.eastmoney-fund-info-url:https://fund.eastmoney.com/pingzhongdata/%s.js}")
     private String fundInfoUrl;
@@ -81,8 +88,11 @@ public class EastmoneyOffExchangeFundClient {
 
         OffExchangeFundHistoryResponse result = new OffExchangeFundHistoryResponse();
         result.setCode(code);
-        result.setName(fetchFundName(code));
-        result.setPoints(new ArrayList<>(pointMap.values()));
+        String name = fetchFundName(code);
+        List<OffExchangeFundNavPoint> points = new ArrayList<>(pointMap.values());
+        result.setName(name);
+        result.setPoints(points);
+        historyCacheService.saveOffExchange(code, name, points);
         return result;
     }
 

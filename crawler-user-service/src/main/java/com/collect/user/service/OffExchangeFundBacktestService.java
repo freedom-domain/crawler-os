@@ -28,14 +28,25 @@ public class OffExchangeFundBacktestService {
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final EastmoneyOffExchangeFundClient historyClient;
+    private final FundHistoryCacheService historyCacheService;
 
-    public OffExchangeFundBacktestService(EastmoneyOffExchangeFundClient historyClient) {
+    public OffExchangeFundBacktestService(EastmoneyOffExchangeFundClient historyClient,
+                                          FundHistoryCacheService historyCacheService) {
         this.historyClient = historyClient;
+        this.historyCacheService = historyCacheService;
     }
 
-    public OffExchangeFundHistoryResponse history(String code, String rawStartDate, String rawEndDate) {
+    public OffExchangeFundHistoryResponse history(String code, String rawStartDate, String rawEndDate, String source) {
         DateRange range = validateRange(rawStartDate, rawEndDate);
-        return historyClient.getHistory(normalizeCode(code), range.startDate(), range.endDate());
+        String normalizedCode = normalizeCode(code);
+        String normalizedSource = source == null ? "" : source.trim();
+        if ("api".equalsIgnoreCase(normalizedSource)) {
+            return historyClient.getHistory(normalizedCode, range.startDate(), range.endDate());
+        }
+        if ("database".equalsIgnoreCase(normalizedSource)) {
+            return historyCacheService.getOffExchange(normalizedCode, range.startDate(), range.endDate());
+        }
+        throw new BizException("历史行情来源仅支持 api 或 database");
     }
 
     public OffExchangeFundDcaResponse simulate(OffExchangeFundDcaRequest request) {
