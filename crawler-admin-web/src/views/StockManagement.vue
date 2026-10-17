@@ -263,7 +263,7 @@
 
     <el-dialog
       v-model="investmentVisible"
-      :title="`模拟投资 · ${investmentStock?.name || ''}`"
+      :title="investmentStock ? `模拟投资 · ${investmentStock.name}（${investmentStock.code}）` : '模拟投资'"
       width="min(900px, 96vw)"
       top="4vh"
       class="stock-investment-dialog"
@@ -341,7 +341,7 @@ const keyword = ref('')
 const market = ref<'' | '上海' | '深圳' | '北京'>('')
 const watched = ref<boolean | undefined>(undefined)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(10)
 const total = ref(0)
 const loading = ref(false)
 const syncing = ref(false)
@@ -364,7 +364,7 @@ const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
 const refreshScheduleSaving = ref(false)
 const watchlistKeyword = ref('')
 const watchlistPage = ref(1)
-const watchlistPageSize = ref(20)
+const watchlistPageSize = ref(10)
 const watchBusyCode = ref('')
 const filteredWatchlist = computed(() => {
   const query = watchlistKeyword.value.trim().toLocaleLowerCase()

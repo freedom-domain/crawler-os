@@ -164,7 +164,7 @@ public class PaperInvestmentController {
                                           @RequestParam(required = false) String fundType,
                                           @RequestParam(required = false) Boolean watched,
                                           @RequestParam(defaultValue = "1") int page,
-                                          @RequestParam(defaultValue = "20") int pageSize) {
+                                          @RequestParam(defaultValue = "10") int pageSize) {
         return R.ok(fundCatalogService.page(keyword, fundType, watched, page, pageSize));
     }
 
@@ -188,7 +188,7 @@ public class PaperInvestmentController {
                                             @RequestParam(required = false) String market,
                                             @RequestParam(required = false) Boolean watched,
                                             @RequestParam(defaultValue = "1") int page,
-                                            @RequestParam(defaultValue = "20") int pageSize) {
+                                            @RequestParam(defaultValue = "10") int pageSize) {
         return R.ok(stockCatalogService.page(keyword, market, watched, page, pageSize));
     }
 

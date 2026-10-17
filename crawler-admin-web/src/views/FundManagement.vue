@@ -194,7 +194,7 @@
 
     <el-dialog
       v-model="fundPageVisible"
-      :title="fundPageType === 'onshore-fund' ? '场内基金历史行情' : '场外基金历史行情'"
+      :title="fundPageCode ? `${fundPageName}（${fundPageCode}）· ${fundPageType === 'onshore-fund' ? '场内' : '场外'}基金历史行情` : (fundPageType === 'onshore-fund' ? '场内基金历史行情' : '场外基金历史行情')"
       width="min(1400px, 96vw)"
       top="3vh"
       class="fund-page-dialog"
@@ -205,7 +205,7 @@
 
     <el-dialog
       v-model="detailVisible"
-      :title="detail?.name || '基金详情'"
+      :title="detail ? `${detail.name}（${detail.code}）` : '基金详情'"
       width="min(1000px, 94vw)"
       top="4vh"
       class="fund-detail-dialog"
@@ -438,7 +438,7 @@ const catalog = ref<FundCatalogItem[]>([])
 const watchedFunds = ref<FundManagementItem[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(10)
 const keyword = ref('')
 const fundType = ref<FundType | ''>('')
 const catalogWatchStatus = ref<'watched' | 'unwatched' | ''>('')
@@ -449,12 +449,13 @@ const watchlistLoading = ref(false)
 const watchlistKeyword = ref('')
 const watchlistFundType = ref<FundType | ''>('')
 const watchlistPage = ref(1)
-const watchlistPageSize = ref(20)
+const watchlistPageSize = ref(10)
 const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
 const refreshScheduleSaving = ref(false)
 const fundPageVisible = ref(false)
 const fundPageType = ref<'onshore-fund' | 'offshore-fund'>('onshore-fund')
 const fundPageCode = ref('')
+const fundPageName = ref('')
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailTab = ref('profile')
@@ -604,6 +605,7 @@ const openWatchlist = () => {
 const openFundPage = (row: FundCatalogItem) => {
   fundPageType.value = row.fundType === 'ONSHORE' ? 'onshore-fund' : 'offshore-fund'
   fundPageCode.value = row.code
+  fundPageName.value = row.name
   fundPageVisible.value = true
 }
 
