@@ -50,6 +50,11 @@ public class FundCatalogService {
         if (item == null) {
             throw new BizException("基金目录中没有该基金，请先同步基金列表");
         }
+        if (item.getProfileUpdatedAt() == null) {
+            profileClient.enrich(code, item);
+            catalogMapper.upsertFundProfile(item);
+            item = catalogMapper.selectCatalogItem(fundType, code);
+        }
         return item;
     }
 
