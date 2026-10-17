@@ -5,7 +5,8 @@ COPY pom.xml ./
 COPY crawler-common ./crawler-common
 COPY crawler-finance-service ./crawler-finance-service
 
-RUN mvn -pl crawler-finance-service -am -DskipTests clean package -q
+RUN mvn -f crawler-common/pom.xml -DskipTests install -q \
+    && mvn -f crawler-finance-service/pom.xml -DskipTests clean package -q
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
