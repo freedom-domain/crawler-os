@@ -61,14 +61,15 @@
         <span v-if="lastSyncedAt">最近同步：{{ formatDateTime(lastSyncedAt) }}</span>
         <span v-else>尚未同步，请先同步股票信息</span>
       </div>
-      <el-table :data="stocks" v-loading="loading" stripe border>
-        <el-table-column prop="code" label="股票代码" width="115" />
-        <el-table-column prop="name" label="股票名称" min-width="190" show-overflow-tooltip />
-        <el-table-column prop="market" label="市场" width="95" />
-        <el-table-column prop="industry" label="所属行业" min-width="150" show-overflow-tooltip>
+      <div class="table-scroll-wrapper">
+      <el-table :data="stocks" v-loading="loading" stripe resizable border>
+        <el-table-column prop="code" label="股票代码" width="115" resizable />
+        <el-table-column prop="name" label="股票名称" min-width="190" show-overflow-tooltip resizable />
+        <el-table-column prop="market" label="市场" width="95" resizable />
+        <el-table-column prop="industry" label="所属行业" min-width="150" show-overflow-tooltip resizable>
           <template #default="{ row }">{{ row.industry || '暂无' }}</template>
         </el-table-column>
-        <el-table-column label="关注状态" width="125">
+        <el-table-column label="关注状态" width="125" resizable>
           <template #default="{ row }">
             <el-switch
               :model-value="row.watched"
@@ -81,10 +82,10 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="目录同步时间" min-width="155">
+        <el-table-column label="目录同步时间" min-width="155" resizable>
           <template #default="{ row }">{{ formatDateTime(row.syncedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="60" fixed="right" align="center">
+        <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
           <template #default="{ row }">
             <el-dropdown trigger="click" @command="(command: string) => handleCommand(command, row)">
               <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
@@ -102,6 +103,7 @@
           <el-empty :description="total ? '没有符合条件的股票' : '股票目录为空，请先同步股票信息'" />
         </template>
       </el-table>
+      </div>
       <el-pagination
         v-if="total > 0"
         class="pagination"
@@ -136,20 +138,21 @@
         />
         <span class="watchlist-count">共 {{ filteredWatchlist.length.toLocaleString() }} 只</span>
       </div>
-      <el-table :data="pagedWatchlist" v-loading="watchlistLoading" stripe border max-height="55vh">
-        <el-table-column prop="code" label="股票代码" width="110" />
-        <el-table-column prop="name" label="股票名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="market" label="市场" width="90" />
-        <el-table-column prop="industry" label="所属行业" min-width="140" show-overflow-tooltip>
+      <div class="table-scroll-wrapper">
+      <el-table :data="pagedWatchlist" v-loading="watchlistLoading" stripe resizable border max-height="55vh">
+        <el-table-column prop="code" label="股票代码" width="110" resizable />
+        <el-table-column prop="name" label="股票名称" min-width="180" show-overflow-tooltip resizable />
+        <el-table-column prop="market" label="市场" width="90" resizable />
+        <el-table-column prop="industry" label="所属行业" min-width="140" show-overflow-tooltip resizable>
           <template #default="{ row }">{{ row.industry || '暂无' }}</template>
         </el-table-column>
-        <el-table-column label="历史行情点数" width="125" align="right">
+        <el-table-column label="历史行情点数" width="125" align="right" resizable>
           <template #default="{ row }">{{ row.cachedPoints || 0 }}</template>
         </el-table-column>
-        <el-table-column label="最新行情日期" width="125">
+        <el-table-column label="最新行情日期" width="125" resizable>
           <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="60" fixed="right" align="center">
+        <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
           <template #default="{ row }">
             <el-dropdown trigger="click" @command="(command: string) => handleWatchlistCommand(command, row)">
               <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
@@ -166,6 +169,7 @@
           <el-empty :description="watchlist.length ? '没有符合条件的股票' : '关注清单为空，可在股票目录中开启关注'" />
         </template>
       </el-table>
+      </div>
       <el-pagination
         v-if="filteredWatchlist.length > 0"
         class="watchlist-pagination"

@@ -59,18 +59,19 @@
         <span v-if="lastSyncedAt">最近同步：{{ formatDateTime(lastSyncedAt) }}</span>
         <span v-else>尚未同步，请先同步基金目录</span>
       </div>
-      <el-table :data="catalog" v-loading="loading" stripe border>
-        <el-table-column label="类型" width="105">
+      <div class="table-scroll-wrapper">
+      <el-table :data="catalog" v-loading="loading" stripe resizable border>
+        <el-table-column label="类型" width="105" resizable>
           <template #default="{ row }">
             <el-tag :type="row.fundType === 'ONSHORE' ? 'primary' : 'warning'">
               {{ row.fundType === 'ONSHORE' ? '场内' : '场外' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="code" label="代码" width="105" />
-        <el-table-column prop="name" label="基金名称" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="category" label="基金类型" min-width="155" show-overflow-tooltip />
-        <el-table-column label="关注状态" width="125">
+        <el-table-column prop="code" label="代码" width="105" resizable />
+        <el-table-column prop="name" label="基金名称" min-width="220" show-overflow-tooltip resizable />
+        <el-table-column prop="category" label="基金类型" min-width="155" show-overflow-tooltip resizable />
+        <el-table-column label="关注状态" width="125" resizable>
           <template #default="{ row }">
             <el-switch
               :model-value="row.watched"
@@ -101,6 +102,7 @@
           <el-empty :description="total ? '没有符合条件的基金' : '基金目录为空，请先同步基金目录'" />
         </template>
       </el-table>
+      </div>
       <el-pagination
         v-if="total > 0"
         class="pagination"
@@ -141,22 +143,23 @@
         <el-button :icon="Refresh" @click="resetWatchlistFilters">清除筛选</el-button>
         <span class="watchlist-count">共 {{ filteredWatchFunds.length.toLocaleString() }} 项</span>
       </div>
-      <el-table :data="pagedWatchFunds" v-loading="watchlistLoading" stripe border max-height="55vh">
-        <el-table-column label="类型" width="85">
+      <div class="table-scroll-wrapper">
+      <el-table :data="pagedWatchFunds" v-loading="watchlistLoading" stripe resizable border max-height="55vh">
+        <el-table-column label="类型" width="85" resizable>
           <template #default="{ row }">{{ row.fundType === 'ONSHORE' ? '场内' : '场外' }}</template>
         </el-table-column>
-        <el-table-column prop="code" label="代码" width="95" />
-        <el-table-column prop="name" label="基金名称" min-width="175" show-overflow-tooltip />
-        <el-table-column label="周期" width="85">
+        <el-table-column prop="code" label="代码" width="95" resizable />
+        <el-table-column prop="name" label="基金名称" min-width="175" show-overflow-tooltip resizable />
+        <el-table-column label="周期" width="85" resizable>
           <template #default="{ row }">{{ frequencyLabel(row.frequency) }}</template>
         </el-table-column>
-        <el-table-column label="缓存点数" width="95" align="right">
+        <el-table-column label="缓存点数" width="95" align="right" resizable>
           <template #default="{ row }">{{ row.cachedPoints || 0 }}</template>
         </el-table-column>
-        <el-table-column prop="latestDate" label="最新行情日期" width="125">
+        <el-table-column prop="latestDate" label="最新行情日期" width="125" resizable>
           <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
         </el-table-column>
-        <el-table-column label="关注状态" width="95">
+        <el-table-column label="关注状态" width="95" resizable>
           <template #default="{ row }">
             <el-tag type="success">已关注</el-tag>
           </template>
@@ -190,6 +193,7 @@
           <el-empty :description="hasWatchedFunds ? '没有符合条件的基金' : '关注清单为空，可在基金目录中添加关注'" />
         </template>
       </el-table>
+      </div>
       <el-pagination
         v-if="filteredWatchFunds.length > 0"
         class="watchlist-pagination"
