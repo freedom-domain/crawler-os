@@ -2,14 +2,14 @@
   <div class="history-sync-panel">
     <el-dialog
       v-model="concurrencyDialogVisible"
-      title="腾讯历史行情并发设置"
-      width="420px"
+      title="历史行情 API 与并发设置"
+      width="min(520px, 94vw)"
       :close-on-click-modal="!concurrencySaving"
       :close-on-press-escape="!concurrencySaving"
     >
       <div v-loading="concurrencyLoading">
         <div class="concurrency-setting">
-          <span>最大并发请求数</span>
+          <span>历史行情任务并发数</span>
           <el-input-number
             v-model="concurrency"
             :min="1"
@@ -17,19 +17,49 @@
             :step="1"
             controls-position="right"
             :disabled="concurrencyLoading || concurrencySaving"
-            aria-label="历史行情请求并发数"
+            aria-label="历史行情任务并发数"
+          />
+        </div>
+        <div class="concurrency-setting">
+          <span>请求间隔（毫秒）</span>
+          <el-input-number
+            v-model="requestIntervalMillis"
+            :min="0"
+            :max="60000"
+            :step="100"
+            controls-position="right"
+            :disabled="concurrencyLoading || concurrencySaving"
+            aria-label="历史行情请求间隔毫秒"
           />
         </div>
         <p class="concurrency-hint">
-          所有腾讯历史行情查询共享此上限，保存后立即生效。建议从 1 开始，较高并发可能增加数据源压力。
+          请求开始之间至少间隔此时长；0 表示不限制。并发数控制同时执行的任务和请求数量，间隔与并发数共同生效。默认 1000 毫秒。
         </p>
+        <div class="concurrency-setting api-provider-setting">
+          <span>启用的历史行情 API</span>
+          <el-select
+            v-model="providers"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="至少选择一个 API"
+            :disabled="concurrencyLoading || concurrencySaving"
+            aria-label="启用的历史行情 API"
+          >
+            <el-option v-for="option in providerOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </div>
       </div>
       <template #footer>
         <el-button :disabled="concurrencySaving" @click="concurrencyDialogVisible = false">取消</el-button>
         <el-button
           type="primary"
           :loading="concurrencySaving"
-          :disabled="concurrencyLoading || concurrency === savedConcurrency"
+          :disabled="concurrencyLoading || (
+            concurrency === savedConcurrency
+            && sameProviders(providers, savedProviders)
+            && requestIntervalMillis === savedRequestIntervalMillis
+          )"
           @click="saveConcurrency"
         >保存</el-button>
       </template>
@@ -159,6 +189,14 @@ const loadingLatest = ref(false)
 const loadingTask = ref(false)
 const concurrency = ref(1)
 const savedConcurrency = ref(1)
+const requestIntervalMillis = ref(1000)
+const savedRequestIntervalMillis = ref(1000)
+const providers = ref<string[]>(['TENCENT'])
+const savedProviders = ref<string[]>(['TENCENT'])
+const providerOptions = [
+  { label: '腾讯财经', value: 'TENCENT' },
+  { label: '东方财富', value: 'EASTMONEY' }
+]
 const concurrencyLoading = ref(false)
 const concurrencySaving = ref(false)
 const task = ref<SyncTask | null>(null)
@@ -172,7 +210,13 @@ const progress = computed(() => task.value?.totalCount
   : 100)
 
 const responseData = (response: any): SyncTask | null => response.data || null
-const concurrencyResponseData = (response: any): number => response.data.concurrency
+const concurrencyResponseData = (response: any): {
+  concurrency: number
+  providers: string[]
+  requestIntervalMillis: number
+} => response.data
+const sameProviders = (left: string[], right: string[]) =>
+  left.length === right.length && left.every(provider => right.includes(provider))
 const dateTime = (value: string | null | undefined) => value ? value.replace('T', ' ').slice(0, 19) : '—'
 const taskStatusLabel = (status: string) => ({
   PENDING: '等待中',
@@ -198,8 +242,13 @@ const loadConcurrency = async () => {
   concurrencyLoading.value = true
   try {
     const response: any = await historySyncConcurrencyGet()
-    concurrency.value = concurrencyResponseData(response)
+    const settings = concurrencyResponseData(response)
+    concurrency.value = settings.concurrency
     savedConcurrency.value = concurrency.value
+    requestIntervalMillis.value = settings.requestIntervalMillis
+    savedRequestIntervalMillis.value = requestIntervalMillis.value
+    providers.value = [...settings.providers]
+    savedProviders.value = [...settings.providers]
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '读取历史行情并发配置失败')
   } finally {
@@ -217,12 +266,28 @@ const saveConcurrency = async () => {
     ElMessage.warning('历史行情并发数量需为 1 到 20 的整数')
     return
   }
+  if (providers.value.length === 0) {
+    ElMessage.warning('至少启用一个历史行情 API')
+    return
+  }
+  if (!Number.isInteger(requestIntervalMillis.value)
+      || requestIntervalMillis.value < 0 || requestIntervalMillis.value > 60000) {
+    ElMessage.warning('历史行情请求间隔需为 0 到 60000 毫秒的整数')
+    return
+  }
   concurrencySaving.value = true
   try {
-    const response: any = await historySyncConcurrencyUpdate(concurrency.value)
-    concurrency.value = concurrencyResponseData(response)
+    const response: any = await historySyncConcurrencyUpdate(
+      concurrency.value, providers.value, requestIntervalMillis.value
+    )
+    const settings = concurrencyResponseData(response)
+    concurrency.value = settings.concurrency
     savedConcurrency.value = concurrency.value
-    ElMessage.success('历史行情并发配置已保存并立即生效')
+    requestIntervalMillis.value = settings.requestIntervalMillis
+    savedRequestIntervalMillis.value = requestIntervalMillis.value
+    providers.value = [...settings.providers]
+    savedProviders.value = [...settings.providers]
+    ElMessage.success('历史行情 API 与并发配置已保存')
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '保存历史行情并发配置失败')
   } finally {

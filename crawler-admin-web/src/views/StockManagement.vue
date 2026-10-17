@@ -15,7 +15,7 @@
               <el-dropdown-item command="watchlist" :icon="Star">关注清单</el-dropdown-item>
               <el-dropdown-item command="history-sync">同步全部历史行情</el-dropdown-item>
               <el-dropdown-item command="sync-records">历史行情同步记录</el-dropdown-item>
-              <el-dropdown-item command="concurrency">腾讯行情并发设置</el-dropdown-item>
+              <el-dropdown-item command="concurrency">历史行情 API 与并发设置</el-dropdown-item>
               <el-dropdown-item command="overview" :icon="Coin">投资总览</el-dropdown-item>
               <el-dropdown-item command="catalog-sync" :icon="Refresh" :disabled="syncing">同步股票信息</el-dropdown-item>
             </el-dropdown-menu>

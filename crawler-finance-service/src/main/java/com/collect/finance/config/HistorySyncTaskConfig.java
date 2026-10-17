@@ -5,13 +5,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.Executor;
-
 @Configuration
 public class HistorySyncTaskConfig {
 
     @Bean("historySyncExecutor")
-    public Executor historySyncExecutor(
+    public ThreadPoolTaskExecutor historySyncExecutor(
             @Value("${investment.history-sync.concurrency:1}") int concurrency) {
         if (concurrency < 1) {
             throw new IllegalArgumentException("investment.history-sync.concurrency must be at least 1");

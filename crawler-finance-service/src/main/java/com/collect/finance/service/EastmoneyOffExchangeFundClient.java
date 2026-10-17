@@ -1,6 +1,7 @@
 package com.collect.finance.service;
 
 import com.collect.common.exception.BizException;
+import com.collect.finance.config.HistoryRequestLimiter;
 import com.collect.finance.dto.OffExchangeFundHistoryResponse;
 import com.collect.finance.dto.OffExchangeFundNavPoint;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,12 +39,15 @@ public class EastmoneyOffExchangeFundClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final FundHistoryCacheService historyCacheService;
+    private final HistoryRequestLimiter requestLimiter;
 
     @Value("${investment.eastmoney-nav-url:https://api.fund.eastmoney.com/f10/lsjz}")
     private String historyUrl;
 
-    public EastmoneyOffExchangeFundClient(FundHistoryCacheService historyCacheService) {
+    public EastmoneyOffExchangeFundClient(FundHistoryCacheService historyCacheService,
+                                          HistoryRequestLimiter requestLimiter) {
         this.historyCacheService = historyCacheService;
+        this.requestLimiter = requestLimiter;
     }
 
     @Value("${investment.eastmoney-fund-info-url:https://fund.eastmoney.com/pingzhongdata/%s.js}")
@@ -149,7 +153,10 @@ public class EastmoneyOffExchangeFundClient {
     }
 
     private String getText(String url, String referer) {
+        boolean acquired = false;
         try {
+            requestLimiter.acquire();
+            acquired = true;
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(15))
                     .header("Referer", referer)
@@ -171,6 +178,10 @@ public class EastmoneyOffExchangeFundClient {
             throw new BizException("基金净值查询被中断，请稍后重试");
         } catch (IllegalArgumentException e) {
             throw new BizException("基金净值服务地址无效");
+        } finally {
+            if (acquired) {
+                requestLimiter.release();
+            }
         }
     }
 

@@ -108,8 +108,9 @@ public class PaperInvestmentController {
     public R<StockHistoryResponse> stockHistory(@RequestParam String code,
                                                 @RequestParam String startDate,
                                                 @RequestParam String endDate,
-                                                @RequestParam(defaultValue = "api") String source) {
-        return R.ok(stockInvestmentBacktestService.history(code, startDate, endDate, source));
+                                                @RequestParam(defaultValue = "api") String source,
+                                                @RequestParam(defaultValue = "TENCENT") String provider) {
+        return R.ok(stockInvestmentBacktestService.history(code, startDate, endDate, source, provider));
     }
 
     @PostMapping("/stock/backtest")
@@ -132,8 +133,9 @@ public class PaperInvestmentController {
                                               @RequestParam String startDate,
                                               @RequestParam String endDate,
                                               @RequestParam(defaultValue = "day") String frequency,
-                                              @RequestParam(defaultValue = "api") String source) {
-        return R.ok(fundInvestmentBacktestService.history(code, startDate, endDate, frequency, source));
+                                              @RequestParam(defaultValue = "api") String source,
+                                              @RequestParam(defaultValue = "TENCENT") String provider) {
+        return R.ok(fundInvestmentBacktestService.history(code, startDate, endDate, frequency, source, provider));
     }
 
     @PostMapping("/fund/dca")
@@ -265,8 +267,11 @@ public class PaperInvestmentController {
     }
 
     @PutMapping("/history-sync/concurrency")
-    public R<HistorySyncConcurrencyResponse> updateHistorySyncConcurrency(@RequestParam int concurrency) {
-        return R.ok(historySyncSettingService.updateConcurrency(concurrency));
+    public R<HistorySyncConcurrencyResponse> updateHistorySyncConcurrency(
+            @RequestParam int concurrency, @RequestParam String providers,
+            @RequestParam int requestIntervalMillis) {
+        return R.ok(historySyncSettingService.updateSettings(concurrency,
+                java.util.Arrays.asList(providers.split(",")), requestIntervalMillis));
     }
 
     @PostMapping("/stock-management/watchlist")

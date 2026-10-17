@@ -34,23 +34,38 @@ public class FundInvestmentBacktestService {
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final TencentFundHistoryClient historyClient;
+    private final EastmoneyHistoryClient eastmoneyHistoryClient;
     private final FundHistoryCacheService historyCacheService;
+    private final HistorySyncSettingService historySyncSettingService;
 
     public FundInvestmentBacktestService(TencentFundHistoryClient historyClient,
-                                         FundHistoryCacheService historyCacheService) {
+                                         EastmoneyHistoryClient eastmoneyHistoryClient,
+                                         FundHistoryCacheService historyCacheService,
+                                         HistorySyncSettingService historySyncSettingService) {
         this.historyClient = historyClient;
+        this.eastmoneyHistoryClient = eastmoneyHistoryClient;
         this.historyCacheService = historyCacheService;
+        this.historySyncSettingService = historySyncSettingService;
     }
 
     public FundHistoryResponse history(String rawCode, String rawStartDate, String rawEndDate, String frequency,
-                                       String source) {
+                                       String source, String rawProvider) {
         String code = normalizeCode(rawCode);
         DateRange range = validateRange(rawStartDate, rawEndDate);
         if (!"day".equals(frequency) && !"week".equals(frequency) && !"month".equals(frequency)) {
             throw new BizException("行情周期仅支持日、周、月");
         }
         if (isApiSource(source)) {
-            return historyClient.getHistory(code, range.startDate(), range.endDate(), frequency);
+            String provider = rawProvider == null || rawProvider.isBlank()
+                    ? "TENCENT" : rawProvider.trim().toUpperCase(java.util.Locale.ROOT);
+            historySyncSettingService.requireEnabledProvider(provider);
+            return switch (provider) {
+                case "TENCENT" -> historyClient.getHistory(code, range.startDate(), range.endDate(), frequency);
+                case "EASTMONEY" ->
+                        eastmoneyHistoryClient.getFundHistory(provider, code, range.startDate(),
+                                range.endDate(), frequency);
+                default -> throw new BizException("不支持的历史行情 API：" + provider);
+            };
         }
         return historyCacheService.getOnExchange(code, frequency, range.startDate(), range.endDate());
     }

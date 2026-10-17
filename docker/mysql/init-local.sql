@@ -316,10 +316,13 @@ INSERT IGNORE INTO stock_refresh_setting (id, frequency) VALUES (1, 'DAILY');
 CREATE TABLE IF NOT EXISTS history_sync_setting (
     id TINYINT PRIMARY KEY,
     max_concurrent_requests INT NOT NULL DEFAULT 1,
+    enabled_apis VARCHAR(128) NOT NULL DEFAULT 'TENCENT',
+    request_interval_millis INT NOT NULL DEFAULT 1000,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT IGNORE INTO history_sync_setting (id, max_concurrent_requests) VALUES (1, 1);
+INSERT IGNORE INTO history_sync_setting (id, max_concurrent_requests, enabled_apis, request_interval_millis)
+VALUES (1, 1, 'TENCENT', 1000);
 
 CREATE TABLE IF NOT EXISTS history_sync_task (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

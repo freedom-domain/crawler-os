@@ -77,6 +77,7 @@ export const fundHistory = (params: {
   endDate: string
   frequency: string
   source: 'api' | 'database'
+  provider?: string
 }) =>
   request.get('/investment/fund/history', { params })
 export const simulateFundDca = (data: {
@@ -91,6 +92,7 @@ export const stockHistory = (params: {
   startDate: string
   endDate: string
   source: 'api' | 'database'
+  provider?: string
 }) => request.get('/investment/stock/history', { params })
 export const simulateStockBacktest = (data: {
   code: string
@@ -162,8 +164,13 @@ export const historySyncTaskGet = (id: number, page = 1, pageSize = 10) =>
 export const historySyncTaskCancel = (id: number, page = 1, pageSize = 10) =>
   request.put(`/investment/history-sync/${id}/cancel`, null, { params: { page, pageSize } })
 export const historySyncConcurrencyGet = () => request.get('/investment/history-sync/concurrency')
-export const historySyncConcurrencyUpdate = (concurrency: number) =>
-  request.put('/investment/history-sync/concurrency', null, { params: { concurrency } })
+export const historySyncConcurrencyUpdate = (
+  concurrency: number,
+  providers: string[],
+  requestIntervalMillis: number
+) => request.put('/investment/history-sync/concurrency', null, {
+  params: { concurrency, providers: providers.join(','), requestIntervalMillis }
+})
 export const fundWatchlistAdd = (data: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string; frequency: string }) =>
   request.post('/investment/fund-management/watchlist', data)
 export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency?: string }) =>

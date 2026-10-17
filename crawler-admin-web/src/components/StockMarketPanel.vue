@@ -1,7 +1,7 @@
 <template>
   <section class="stock-market-panel">
     <div v-if="mode === 'history'">
-      <p class="panel-description">查询股票日线历史行情。API 数据来自腾讯财经并自动缓存，数据库查询仅读取已缓存的数据。</p>
+      <p class="panel-description">查询股票日线历史行情。API 查询结果会自动缓存；数据库查询仅读取已缓存的数据。</p>
       <el-form class="market-form" inline @submit.prevent="loadHistory">
         <el-form-item label="股票代码">
           <el-input :model-value="code" readonly />
@@ -16,6 +16,11 @@
           <el-select v-model="historySource" style="width: 160px">
             <el-option label="API 查询并缓存" value="api" />
             <el-option label="数据库缓存" value="database" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="historySource === 'api'" label="历史行情 API">
+          <el-select v-model="historyProvider" style="width: 180px">
+            <el-option v-for="option in availableProviders" :key="option.value" :label="option.label" :value="option.value" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -202,9 +207,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { simulateStockBacktest, stockHistory } from '@/api'
+import { historySyncConcurrencyGet, simulateStockBacktest, stockHistory } from '@/api'
 
 type Mode = 'history' | 'backtest'
 type DataSource = 'api' | 'database'
@@ -279,6 +284,14 @@ const initialEndDate = dateString(today)
 const historyStartDate = ref(initialStartDate)
 const historyEndDate = ref(initialEndDate)
 const historySource = ref<DataSource>('api')
+const historyProvider = ref('TENCENT')
+const configuredProviders = ref<string[]>(['TENCENT'])
+const providerOptions = [
+  { label: '腾讯财经', value: 'TENCENT' },
+  { label: '东方财富', value: 'EASTMONEY' }
+]
+const availableProviders = computed(() => providerOptions
+  .filter(option => configuredProviders.value.includes(option.value)))
 const historyResult = ref<{ code: string; name: string; points: StockHistoryPoint[] } | null>(null)
 const historyLoading = ref(false)
 const historyHoverIndex = ref<number | null>(null)
@@ -403,6 +416,18 @@ const comparisonRows = computed(() => {
 })
 const recentSchedule = computed(() => [...(backtestResult.value?.schedule || [])].reverse())
 
+onMounted(async () => {
+  try {
+    const response: any = await historySyncConcurrencyGet()
+    configuredProviders.value = response.data.providers
+    if (!configuredProviders.value.includes(historyProvider.value)) {
+      historyProvider.value = configuredProviders.value[0]
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '读取历史行情 API 配置失败')
+  }
+})
+
 const money = (value: number | null | undefined) =>
   Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const percent = (value: number | null | undefined) => {
@@ -437,7 +462,8 @@ const loadHistory = async () => {
       code: props.code,
       startDate: historyStartDate.value,
       endDate: historyEndDate.value,
-      source: historySource.value
+      source: historySource.value,
+      provider: historyProvider.value
     })
     historyResult.value = response.data
   } catch (error) {

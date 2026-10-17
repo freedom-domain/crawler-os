@@ -32,21 +32,39 @@ public class StockInvestmentBacktestService {
     private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final TencentStockHistoryClient historyClient;
+    private final EastmoneyHistoryClient eastmoneyHistoryClient;
     private final StockHistoryCacheService historyCacheService;
+    private final HistorySyncSettingService historySyncSettingService;
 
     public StockInvestmentBacktestService(TencentStockHistoryClient historyClient,
-                                          StockHistoryCacheService historyCacheService) {
+                                          EastmoneyHistoryClient eastmoneyHistoryClient,
+                                          StockHistoryCacheService historyCacheService,
+                                          HistorySyncSettingService historySyncSettingService) {
         this.historyClient = historyClient;
+        this.eastmoneyHistoryClient = eastmoneyHistoryClient;
         this.historyCacheService = historyCacheService;
+        this.historySyncSettingService = historySyncSettingService;
     }
 
-    public StockHistoryResponse history(String rawCode, String rawStartDate, String rawEndDate, String source) {
+    public StockHistoryResponse history(String rawCode, String rawStartDate, String rawEndDate, String source,
+                                        String rawProvider) {
         String code = normalizeCode(rawCode);
         DateRange range = validateRange(rawStartDate, rawEndDate);
         if (isApiSource(source)) {
-            return historyClient.getHistory(code, range.startDate(), range.endDate());
+            String provider = normalizeProvider(rawProvider);
+            historySyncSettingService.requireEnabledProvider(provider);
+            return switch (provider) {
+                case "TENCENT" -> historyClient.getHistory(code, range.startDate(), range.endDate());
+                case "EASTMONEY" ->
+                        eastmoneyHistoryClient.getStockHistory(provider, code, range.startDate(), range.endDate());
+                default -> throw new BizException("不支持的历史行情 API：" + provider);
+            };
         }
         return historyCacheService.get(code, range.startDate(), range.endDate());
+    }
+
+    private String normalizeProvider(String provider) {
+        return provider == null || provider.isBlank() ? "TENCENT" : provider.trim().toUpperCase(java.util.Locale.ROOT);
     }
 
     public int syncAllHistory(String rawCode) {

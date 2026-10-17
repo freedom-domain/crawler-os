@@ -1,7 +1,7 @@
 package com.collect.finance.service;
 
 import com.collect.common.exception.BizException;
-import com.collect.finance.config.TencentHistoryRequestLimiter;
+import com.collect.finance.config.HistoryRequestLimiter;
 import com.collect.finance.dto.StockHistoryPoint;
 import com.collect.finance.dto.StockHistoryResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,13 +34,13 @@ public class TencentStockHistoryClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final StockHistoryCacheService historyCacheService;
-    private final TencentHistoryRequestLimiter requestLimiter;
+    private final HistoryRequestLimiter requestLimiter;
 
     @Value("${investment.tencent-history-url:https://web.ifzq.gtimg.cn/appstock/app/fqkline/get}")
     private String historyUrl;
 
     public TencentStockHistoryClient(StockHistoryCacheService historyCacheService,
-                                     TencentHistoryRequestLimiter requestLimiter) {
+                                     HistoryRequestLimiter requestLimiter) {
         this.historyCacheService = historyCacheService;
         this.requestLimiter = requestLimiter;
     }

@@ -145,6 +145,14 @@
             <el-option label="数据库" value="database" />
           </el-select>
         </el-form-item>
+        <el-form-item v-if="historySource === 'api'" label="历史行情 API">
+          <el-select v-model="historyProvider" style="width: 180px">
+            <el-option v-for="option in availableHistoryProviders" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="historySource === 'api' && availableHistoryProviders.length === 0">
+          <span class="fee-note">当前启用的 API 不支持场内基金，请到历史行情 API 设置中启用东方财富。</span>
+        </el-form-item>
         <el-form-item label="开始日期">
           <el-date-picker v-model="historyStartDate" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
@@ -152,7 +160,12 @@
           <el-date-picker v-model="historyEndDate" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="historyLoading" @click="loadFundHistory">查询历史行情</el-button>
+          <el-button
+            type="primary"
+            :loading="historyLoading"
+            :disabled="historySource === 'api' && availableHistoryProviders.length === 0"
+            @click="loadFundHistory"
+          >查询历史行情</el-button>
         </el-form-item>
       </el-form>
       <div v-if="historyResult" class="history-result">
@@ -746,6 +759,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import FundCodeSelect from '@/components/FundCodeSelect.vue'
 import {
   fundHistory,
+  historySyncConcurrencyGet,
   investmentAccount,
   investmentQuote,
   investmentTrade,
@@ -817,6 +831,14 @@ const historyStartDate = ref(initialStartDate)
 const historyEndDate = ref(initialEndDate)
 const historyFrequency = ref('day')
 const historySource = ref<'api' | 'database'>('api')
+const historyProvider = ref('TENCENT')
+const configuredHistoryProviders = ref<string[]>(['TENCENT'])
+const historyProviderOptions = [
+  { label: '腾讯财经', value: 'TENCENT' },
+  { label: '东方财富', value: 'EASTMONEY' }
+]
+const availableHistoryProviders = computed(() => historyProviderOptions
+  .filter(option => configuredHistoryProviders.value.includes(option.value)))
 const historyResult = ref<any>(null)
 const historyLoading = ref(false)
 const historyHoverIndex = ref<number | null>(null)
@@ -1140,7 +1162,8 @@ const loadFundHistory = async () => {
       startDate: historyStartDate.value,
       endDate: historyEndDate.value,
       frequency: historyFrequency.value,
-      source: historySource.value
+      source: historySource.value,
+      provider: historyProvider.value
     })
     historyResult.value = response.data
   } catch {
@@ -1210,6 +1233,14 @@ const runOffExchangeFundDca = async () => {
 }
 
 onMounted(() => {
+  void historySyncConcurrencyGet().then((response: any) => {
+    configuredHistoryProviders.value = response.data.providers
+    if (!configuredHistoryProviders.value.includes(historyProvider.value)) {
+      historyProvider.value = configuredHistoryProviders.value[0]
+    }
+  }).catch((error) => {
+    ElMessage.error(error instanceof Error ? error.message : '读取历史行情 API 配置失败')
+  })
   if (props.pageType === 'overview') {
     loadAccount()
     if (props.initialCode) {

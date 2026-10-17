@@ -155,7 +155,7 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 投资总览与股票模拟交易已移至股票管理页面的按钮弹窗中；已有数据库需执行 `docker/mysql/migration/029_move_investment_overview_to_stock_management.sql` 移除旧的独立菜单权限，原 `/investment/overview` 地址会兼容跳转至股票管理页面。
 
-基金管理和股票管理页面提供“同步全部历史行情”后台任务，可手动同步目录中全部基金（场内日/周/月线、场外净值）或股票（日线）的数据源完整历史。任务按标的记录状态、同步数据点数与错误详情，可在页面查看最新任务的进度和逐项结果；执行中的任务可取消，当前标的完成后停止，尚未开始的标的会标记为已取消，已写入的数据不会回滚。两页工具栏均可配置腾讯历史行情请求并发数（1-20），保存后立即生效且在 Finance 服务重启后保留；建议先从 1 开始，调高可能增加数据源压力。已有数据库需依次执行 `docker/mysql/migration/031_history_sync_tasks.sql` 和 `docker/mysql/migration/032_history_sync_concurrency.sql`。
+基金管理和股票管理页面提供“同步全部历史行情”后台任务，可手动同步目录中全部基金（场内日/周/月线、场外净值）或股票（日线）的历史数据。手动查询股票或场内基金历史行情时，可按次选择 API：Tencent 或 Eastmoney；工具栏另可多选启用可供手动查询选择的 API。两种数据源均由 Finance 服务中的 Java HTTP 客户端调用。后台“同步全部历史行情”仍使用现有 Tencent 数据源路径，不受手动查询 API 选择或启用列表影响。任务按标的记录状态、同步数据点数与错误详情，可在页面查看最新任务的进度和逐项结果；执行中的任务可取消，当前标的完成后停止，尚未开始的标的会标记为已取消，已写入的数据不会回滚。两页工具栏可配置历史行情任务并发数（1-20）和请求间隔（默认 1000 毫秒，0 表示不限制）；间隔限制 Finance 服务所有历史行情 API 请求的开始频率，两个请求开始之间至少经过配置时长。并发数及间隔保存后立即生效且在服务重启后保留。已有数据库升级时需依次执行 `docker/mysql/migration/031_history_sync_tasks.sql`、`docker/mysql/migration/032_history_sync_concurrency.sql`、`docker/mysql/migration/033_history_sync_apis.sql` 和 `docker/mysql/migration/035_history_request_interval.sql`；若曾保存过 BaoStock/AKShare 配置，再执行 `docker/mysql/migration/034_history_sync_java_providers.sql`。
 
 ### 3. 启动前端
 

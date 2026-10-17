@@ -1,6 +1,7 @@
 package com.collect.finance.service;
 
 import com.collect.common.exception.BizException;
+import com.collect.finance.config.HistoryRequestLimiter;
 import com.collect.finance.dto.FundHistoryPoint;
 import com.collect.finance.dto.FundHistoryResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -34,12 +35,15 @@ public class TencentFundHistoryClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final FundHistoryCacheService historyCacheService;
+    private final HistoryRequestLimiter requestLimiter;
 
     @Value("${investment.tencent-history-url:https://web.ifzq.gtimg.cn/appstock/app/fqkline/get}")
     private String historyUrl;
 
-    public TencentFundHistoryClient(FundHistoryCacheService historyCacheService) {
+    public TencentFundHistoryClient(FundHistoryCacheService historyCacheService,
+                                    HistoryRequestLimiter requestLimiter) {
         this.historyCacheService = historyCacheService;
+        this.requestLimiter = requestLimiter;
     }
 
     public FundHistoryResponse getHistory(String code, LocalDate startDate, LocalDate endDate, String frequency) {
@@ -133,7 +137,10 @@ public class TencentFundHistoryClient {
     }
 
     private JsonNode fetch(String dataKey, String interval, LocalDate startDate, LocalDate endDate) {
+        boolean acquired = false;
         try {
+            requestLimiter.acquire();
+            acquired = true;
             String params = dataKey + "," + interval + "," + startDate + "," + endDate + ",320,qfq";
             String url = historyUrl + "?param=" + URLEncoder.encode(params, StandardCharsets.UTF_8);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -156,6 +163,10 @@ public class TencentFundHistoryClient {
             throw new BizException("历史行情查询被中断，请稍后重试");
         } catch (IllegalArgumentException e) {
             throw new BizException("历史行情服务地址无效");
+        } finally {
+            if (acquired) {
+                requestLimiter.release();
+            }
         }
     }
 
