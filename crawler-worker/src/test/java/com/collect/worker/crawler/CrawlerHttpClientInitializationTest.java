@@ -37,12 +37,12 @@ class CrawlerHttpClientInitializationTest {
         ReflectionTestUtils.setField(engine, "httpMaxConcurrentRequestsPerClient", 200);
         ReflectionTestUtils.setField(engine, "httpRetryOnIoError", 2);
         ReflectionTestUtils.setField(engine, "httpDnsCacheTtlSeconds", 0);
-        ReflectionTestUtils.setField(engine, "httpProtocol", "http1");
+        ReflectionTestUtils.setField(engine, "httpProtocol", "h2");
 
         engine.initializeHttpClients();
 
         OkHttpClient client = (OkHttpClient) ReflectionTestUtils.getField(engine, "verifiedHttpClient");
-        assertEquals(List.of(Protocol.HTTP_1_1), client.protocols());
+        assertEquals(List.of(Protocol.HTTP_2, Protocol.HTTP_1_1), client.protocols());
         assertEquals(15_000, client.connectTimeoutMillis());
         assertEquals(30_000, client.readTimeoutMillis());
         assertEquals(2000, client.dispatcher().getMaxRequests());

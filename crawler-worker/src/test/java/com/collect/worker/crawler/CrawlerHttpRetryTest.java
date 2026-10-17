@@ -86,7 +86,7 @@ class CrawlerHttpRetryTest {
     private static Response response(Request request, int code) {
         return new Response.Builder()
                 .request(request)
-                .protocol(Protocol.HTTP_1_1)
+                .protocol(Protocol.HTTP_2)
                 .code(code)
                 .message(code == 404 ? "Not Found" : "OK")
                 .body(ResponseBody.create(new byte[0], null))

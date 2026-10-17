@@ -39,6 +39,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509TrustManager;
 import javax.net.ssl.TrustManager;
 import java.net.InetAddress;
+import java.net.ProtocolException;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
@@ -87,8 +88,8 @@ public class CrawlerEngine {
     /** 响应体大小上限（字节）；0=不限制。超限时拒绝处理，防止大页面撑爆堆内存 */
     @Value("${app.http.max-response-bytes:10485760}")
     private long httpMaxResponseBytes;
-    /** HTTP 协议偏好：h2=允许 HTTP/2，http1=禁用 HTTP/2 */
-    @Value("${app.http.protocol:http1}")
+    /** 仅使用 HTTP/2 */
+    @Value("${app.http.protocol:h2}")
     private String httpProtocol;
     /** 瞬时网络错误及 404/5xx 响应重试次数，仅对幂等请求生效；0=不重试 */
     @Value("${app.http.retry-on-io-error:2}")
@@ -473,8 +474,8 @@ public class CrawlerEngine {
     }
 
     static List<Protocol> resolveHttpProtocols(String protocol) {
-        if ("http1".equalsIgnoreCase(protocol) || "http/1.1".equalsIgnoreCase(protocol)) {
-            return List.of(Protocol.HTTP_1_1);
+        if (!"h2".equalsIgnoreCase(protocol)) {
+            throw new IllegalArgumentException("Unsupported HTTP protocol: " + protocol + "; expected h2");
         }
         return List.of(Protocol.HTTP_2, Protocol.HTTP_1_1);
     }
@@ -502,7 +503,7 @@ public class CrawlerEngine {
     static OkHttpClient buildHttpClient(boolean skipTlsVerify,
                                         String headers,
                                         PoolSettings settings) {
-        return buildHttpClient(skipTlsVerify, headers, settings, null, "http1");
+        return buildHttpClient(skipTlsVerify, headers, settings, null, "h2");
     }
 
     static OkHttpClient buildHttpClient(boolean skipTlsVerify,
@@ -536,6 +537,16 @@ public class CrawlerEngine {
                 .writeTimeout(Math.max(1, settings.readTimeoutSeconds()), TimeUnit.SECONDS)
                 .followRedirects(true)
                 .protocols(resolveHttpProtocols(httpProtocol))
+                .addNetworkInterceptor(chain -> {
+                    Response response = chain.proceed(chain.request());
+                    if (response.protocol() != Protocol.HTTP_2) {
+                        Protocol negotiatedProtocol = response.protocol();
+                        response.close();
+                        throw new ProtocolException("HTTP/2 required, but server negotiated "
+                                + negotiatedProtocol);
+                    }
+                    return response;
+                })
                 .connectionPool(sharedPool != null ? sharedPool
                         : new ConnectionPool(
                                 Math.max(0, settings.maxIdleConnections()),
