@@ -39,6 +39,11 @@
         </el-tabs>
         <div v-if="historyResult.points.length" class="history-chart">
           <div class="chart-value chart-top">¥{{ money(chartMaxPrice) }}</div>
+          <div class="chart-zoom-controls" role="group" aria-label="图表缩放">
+            <el-button size="small" :disabled="!canZoomIn" aria-label="放大图表" @click="zoomChart(1)">+</el-button>
+            <el-button size="small" :disabled="!canZoomOut" aria-label="缩小图表" @click="zoomChart(-1)">−</el-button>
+            <el-button size="small" :disabled="!isChartZoomed" @click="resetChartZoom">重置</el-button>
+          </div>
           <svg viewBox="0 0 1000 220" preserveAspectRatio="none" role="img" :aria-label="`${historyResult.name}历史收盘价走势`">
             <line x1="0" y1="30" x2="1000" y2="30" class="chart-grid" />
             <line x1="0" y1="110" x2="1000" y2="110" class="chart-grid" />
@@ -62,9 +67,9 @@
             </g>
             <template v-if="historyHoverIndex !== null">
               <line
-                :x1="historyChartCoordinates[historyHoverIndex]?.x"
+                :x1="historyChartCoordinates[historyHoverVisibleIndex]?.x"
                 y1="20"
-                :x2="historyChartCoordinates[historyHoverIndex]?.x"
+                :x2="historyChartCoordinates[historyHoverVisibleIndex]?.x"
                 y2="200"
                 class="chart-crosshair"
               />
@@ -83,6 +88,7 @@
               class="chart-interaction-area"
               @pointermove="updateChartHover"
               @pointerleave="historyHoverIndex = null"
+              @wheel="handleChartWheel"
             />
           </svg>
           <div v-if="historyHoverPoint" class="chart-hover-label">
@@ -95,8 +101,30 @@
           </div>
           <div class="chart-value chart-bottom">¥{{ money(chartMinPrice) }}</div>
           <div class="chart-dates">
-            <span>{{ historyResult.points[0]?.date }}</span>
-            <span>{{ historyResult.points[historyResult.points.length - 1]?.date }}</span>
+            <span>{{ chartVisiblePoints[0]?.date }}</span>
+            <span>{{ chartVisiblePoints[chartVisiblePoints.length - 1]?.date }}</span>
+          </div>
+          <div
+            v-if="isChartZoomed"
+            class="chart-scrollbar"
+            role="scrollbar"
+            aria-label="图表日期范围"
+            aria-orientation="horizontal"
+            :aria-valuemin="0"
+            :aria-valuemax="maximumChartWindowStart"
+            :aria-valuenow="chartVisibleStart"
+            @pointerdown="startChartScroll"
+            @pointermove="moveChartScroll"
+            @pointerup="endChartScroll"
+            @pointercancel="endChartScroll"
+          >
+            <div
+              class="chart-scrollbar-thumb"
+              :style="{
+                width: `${chartScrollbarThumbWidth}%`,
+                left: `${chartScrollbarThumbLeft}%`
+              }"
+            />
           </div>
         </div>
         <el-empty v-else description="所选日期范围没有交易行情" :image-size="64" />
@@ -301,6 +329,9 @@ const availableProviders = computed(() => providerOptions
 const historyResult = ref<{ code: string; name: string; points: StockHistoryPoint[] } | null>(null)
 const historyLoading = ref(false)
 const historyHoverIndex = ref<number | null>(null)
+const chartWindowSize = ref(0)
+const chartWindowStart = ref(0)
+const chartScrollbarDragOffset = ref<number | null>(null)
 const chartType = ref<'line' | 'candlestick'>('line')
 const backtestStartDate = ref(initialStartDate)
 const backtestEndDate = ref(initialEndDate)
@@ -317,26 +348,51 @@ const weekdays = [
 ]
 
 const historyPoints = computed(() => historyResult.value?.points || [])
+const chartVisibleCount = computed(() => historyPoints.value.length
+  ? Math.min(historyPoints.value.length, Math.max(1, chartWindowSize.value || historyPoints.value.length))
+  : 0)
+const chartVisibleStart = computed(() => Math.min(
+  chartWindowStart.value,
+  Math.max(0, historyPoints.value.length - chartVisibleCount.value)
+))
+const maximumChartWindowStart = computed(() => Math.max(0, historyPoints.value.length - chartVisibleCount.value))
+const chartScrollbarThumbWidth = computed(() => historyPoints.value.length
+  ? chartVisibleCount.value / historyPoints.value.length * 100
+  : 100)
+const chartScrollbarThumbLeft = computed(() => maximumChartWindowStart.value
+  ? chartVisibleStart.value / maximumChartWindowStart.value * (100 - chartScrollbarThumbWidth.value)
+  : 0)
+const chartVisiblePoints = computed(() => historyPoints.value.slice(
+  chartVisibleStart.value,
+  chartVisibleStart.value + chartVisibleCount.value
+))
+const minimumChartWindowSize = computed(() => Math.min(10, historyPoints.value.length))
+const canZoomIn = computed(() => chartVisibleCount.value > minimumChartWindowSize.value)
+const canZoomOut = computed(() => chartVisibleCount.value < historyPoints.value.length)
+const isChartZoomed = computed(() => chartVisibleCount.value < historyPoints.value.length)
 const recentHistoryPoints = computed(() => [...historyPoints.value].slice(-20).reverse())
 const historyHoverPoint = computed(() => historyHoverIndex.value === null
   ? null
   : historyPoints.value[historyHoverIndex.value] || null)
-const historyMinClose = computed(() => historyPoints.value.length
-  ? Math.min(...historyPoints.value.map(point => Number(point.close)))
+const historyHoverVisibleIndex = computed(() => historyHoverIndex.value === null
+  ? -1
+  : historyHoverIndex.value - chartVisibleStart.value)
+const historyMinClose = computed(() => chartVisiblePoints.value.length
+  ? Math.min(...chartVisiblePoints.value.map(point => Number(point.close)))
   : 0)
-const historyMaxClose = computed(() => historyPoints.value.length
-  ? Math.max(...historyPoints.value.map(point => Number(point.close)))
+const historyMaxClose = computed(() => chartVisiblePoints.value.length
+  ? Math.max(...chartVisiblePoints.value.map(point => Number(point.close)))
   : 0)
-const historyMinLow = computed(() => historyPoints.value.length
-  ? Math.min(...historyPoints.value.map(point => Number(point.low)))
+const historyMinLow = computed(() => chartVisiblePoints.value.length
+  ? Math.min(...chartVisiblePoints.value.map(point => Number(point.low)))
   : 0)
-const historyMaxHigh = computed(() => historyPoints.value.length
-  ? Math.max(...historyPoints.value.map(point => Number(point.high)))
+const historyMaxHigh = computed(() => chartVisiblePoints.value.length
+  ? Math.max(...chartVisiblePoints.value.map(point => Number(point.high)))
   : 0)
 const chartMinPrice = computed(() => chartType.value === 'candlestick' ? historyMinLow.value : historyMinClose.value)
 const chartMaxPrice = computed(() => chartType.value === 'candlestick' ? historyMaxHigh.value : historyMaxClose.value)
 const historyCandles = computed(() => {
-  const points = historyPoints.value
+  const points = chartVisiblePoints.value
   if (!points.length) return []
   const min = historyMinLow.value
   const max = historyMaxHigh.value
@@ -364,14 +420,15 @@ const historyCandles = computed(() => {
 })
 const historyHoverCoordinate = computed<ChartCoordinate | null>(() => {
   if (historyHoverIndex.value === null) return null
+  const visibleIndex = historyHoverIndex.value - chartVisibleStart.value
   if (chartType.value === 'candlestick') {
-    const candle = historyCandles.value[historyHoverIndex.value]
+    const candle = historyCandles.value[visibleIndex]
     return candle ? { x: candle.x, y: candle.closeY } : null
   }
-  return historyChartCoordinates.value[historyHoverIndex.value] || null
+  return historyChartCoordinates.value[visibleIndex] || null
 })
 const historyChartCoordinates = computed(() => {
-  const points = historyPoints.value
+  const points = chartVisiblePoints.value
   if (!points.length) return []
   const min = historyMinClose.value
   const max = historyMaxClose.value
@@ -386,14 +443,88 @@ const historyChartCoordinates = computed(() => {
 const historyChartPoints = computed(() => historyChartCoordinates.value
   .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '))
 const updateChartHover = (event: PointerEvent) => {
-  const pointCount = historyPoints.value.length
+  const pointCount = chartVisiblePoints.value.length
   if (pointCount < 1) return
   const target = event.currentTarget
   if (!(target instanceof SVGElement)) return
   const { left, width } = target.getBoundingClientRect()
   if (width <= 0) return
   const normalizedX = Math.max(0, Math.min(1, (event.clientX - left) / width))
-  historyHoverIndex.value = pointCount === 1 ? 0 : Math.round(normalizedX * (pointCount - 1))
+  const visibleIndex = pointCount === 1 ? 0 : Math.round(normalizedX * (pointCount - 1))
+  historyHoverIndex.value = chartVisibleStart.value + visibleIndex
+}
+const zoomChart = (direction: 1 | -1, anchorFraction = 0.5) => {
+  const total = historyPoints.value.length
+  const currentSize = chartVisibleCount.value
+  if (!total || !currentSize) return
+
+  const nextSize = direction > 0
+    ? Math.max(minimumChartWindowSize.value, Math.floor(currentSize / 1.5))
+    : Math.min(total, Math.ceil(currentSize * 1.5))
+  if (nextSize === currentSize) return
+
+  const anchorIndex = chartVisibleStart.value + anchorFraction * (currentSize - 1)
+  chartWindowSize.value = nextSize
+  chartWindowStart.value = Math.max(0, Math.min(
+    total - nextSize,
+    Math.round(anchorIndex - anchorFraction * (nextSize - 1))
+  ))
+  historyHoverIndex.value = null
+}
+const resetChartZoom = () => {
+  chartWindowStart.value = 0
+  chartWindowSize.value = 0
+  chartScrollbarDragOffset.value = null
+  historyHoverIndex.value = null
+}
+const startChartScroll = (event: PointerEvent) => {
+  const track = event.currentTarget
+  if (!(track instanceof HTMLElement)) return
+  const trackRect = track.getBoundingClientRect()
+  const thumb = track.querySelector('.chart-scrollbar-thumb')
+  if (trackRect.width <= 0 || !(thumb instanceof HTMLElement)) return
+
+  const thumbRect = thumb.getBoundingClientRect()
+  chartScrollbarDragOffset.value = event.target instanceof Node && thumb.contains(event.target)
+    ? event.clientX - thumbRect.left
+    : thumbRect.width / 2
+  track.setPointerCapture(event.pointerId)
+  moveChartScroll(event)
+}
+const moveChartScroll = (event: PointerEvent) => {
+  if (chartScrollbarDragOffset.value === null) return
+  const track = event.currentTarget
+  if (!(track instanceof HTMLElement)) return
+  const trackRect = track.getBoundingClientRect()
+  if (trackRect.width <= 0) return
+
+  const thumbWidth = trackRect.width * chartVisibleCount.value / historyPoints.value.length
+  const availableWidth = trackRect.width - thumbWidth
+  if (availableWidth <= 0) return
+  const thumbLeft = Math.max(0, Math.min(
+    availableWidth,
+    event.clientX - trackRect.left - chartScrollbarDragOffset.value
+  ))
+  chartWindowStart.value = Math.round(thumbLeft / availableWidth * maximumChartWindowStart.value)
+  historyHoverIndex.value = null
+}
+const endChartScroll = (event: PointerEvent) => {
+  const track = event.currentTarget
+  if (track instanceof HTMLElement && track.hasPointerCapture(event.pointerId)) {
+    track.releasePointerCapture(event.pointerId)
+  }
+  chartScrollbarDragOffset.value = null
+}
+const handleChartWheel = (event: WheelEvent) => {
+  const direction = event.deltaY < 0 ? 1 : -1
+  if ((direction > 0 && !canZoomIn.value) || (direction < 0 && !canZoomOut.value)) return
+  const target = event.currentTarget
+  if (!(target instanceof SVGElement)) return
+  const { left, width } = target.getBoundingClientRect()
+  if (width <= 0) return
+  const anchorFraction = Math.max(0, Math.min(1, (event.clientX - left) / width))
+  event.preventDefault()
+  zoomChart(direction, anchorFraction)
 }
 const comparisonRows = computed(() => {
   const result = backtestResult.value
@@ -452,6 +583,7 @@ const tone = (value: number | null | undefined) =>
 watch(() => props.code, () => {
   historyResult.value = null
   historyHoverIndex.value = null
+  resetChartZoom()
   backtestResult.value = null
   historyStartDate.value = initialStartDate
   historyEndDate.value = initialEndDate
@@ -472,6 +604,7 @@ const loadHistory = async () => {
       provider: historyProvider.value
     })
     historyResult.value = response.data
+    resetChartZoom()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '查询股票历史行情失败')
   } finally {
@@ -538,7 +671,7 @@ const runBacktest = async () => {
 }
 .history-chart {
   position: relative;
-  height: 250px;
+  height: 266px;
   margin-bottom: 20px;
   padding: 8px 36px 22px 48px;
   border: 1px solid #e8edf2;
@@ -549,6 +682,18 @@ const runBacktest = async () => {
   width: 100%;
   height: 200px;
   overflow: visible;
+}
+.chart-zoom-controls {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+.chart-zoom-controls :deep(.el-button) {
+  min-width: 30px;
+  padding: 5px 8px;
 }
 .chart-grid {
   stroke: #e8edf2;
@@ -597,7 +742,7 @@ const runBacktest = async () => {
 }
 .chart-hover-label {
   position: absolute;
-  top: 0;
+  top: 34px;
   right: 36px;
   z-index: 1;
   display: flex;
@@ -632,8 +777,34 @@ const runBacktest = async () => {
 .chart-dates {
   position: absolute;
   right: 36px;
-  bottom: 6px;
+  bottom: 23px;
   left: 48px;
+}
+.chart-scrollbar {
+  position: absolute;
+  right: 36px;
+  bottom: 7px;
+  left: 48px;
+  height: 10px;
+  border-radius: 5px;
+  background: #e8edf2;
+  cursor: grab;
+  touch-action: none;
+}
+.chart-scrollbar:active {
+  cursor: grabbing;
+}
+.chart-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  min-width: 12px;
+  border-radius: inherit;
+  background: #8aa6ad;
+}
+.chart-scrollbar-thumb:hover,
+.chart-scrollbar:active .chart-scrollbar-thumb {
+  background: #607f88;
 }
 .backtest-summary {
   display: grid;
