@@ -6,8 +6,21 @@
         <p>同步并浏览基金目录，查看基金详情与历史行情；关注清单可在弹窗中维护。</p>
       </div>
       <div class="heading-actions">
-        <el-button :icon="Star" @click="openWatchlist">关注清单</el-button>
-        <el-button type="primary" :icon="Refresh" :loading="syncing" @click="syncCatalog">同步基金目录</el-button>
+        <el-dropdown trigger="click" @command="handleManagementAction">
+          <el-button type="primary">
+            管理操作<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="watchlist" :icon="Star">关注清单</el-dropdown-item>
+              <el-dropdown-item command="history-sync">同步全部历史行情</el-dropdown-item>
+              <el-dropdown-item command="sync-records">历史行情同步记录</el-dropdown-item>
+              <el-dropdown-item command="concurrency">腾讯行情并发设置</el-dropdown-item>
+              <el-dropdown-item command="catalog-sync" :icon="Refresh" :disabled="syncing">同步基金目录</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <HistorySyncTaskPanel ref="historySyncPanel" instrument-type="FUND" />
       </div>
     </header>
 
@@ -351,8 +364,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
+import HistorySyncTaskPanel from '@/components/HistorySyncTaskPanel.vue'
 import InvestmentView from '@/views/Investment.vue'
 import {
   fundCatalogDetail,
@@ -444,6 +458,7 @@ const fundType = ref<FundType | ''>('')
 const catalogWatchStatus = ref<'watched' | 'unwatched' | ''>('')
 const loading = ref(false)
 const syncing = ref(false)
+const historySyncPanel = ref<InstanceType<typeof HistorySyncTaskPanel> | null>(null)
 const watchlistVisible = ref(false)
 const watchlistLoading = ref(false)
 const watchlistKeyword = ref('')
@@ -600,6 +615,14 @@ const openWatchlist = () => {
   watchlistPage.value = 1
   watchlistVisible.value = true
   void Promise.all([loadWatchlist(), loadRefreshSchedule()])
+}
+
+const handleManagementAction = (command: string) => {
+  if (command === 'watchlist') openWatchlist()
+  else if (command === 'history-sync') void historySyncPanel.value?.startTask()
+  else if (command === 'sync-records') void historySyncPanel.value?.openLatest()
+  else if (command === 'concurrency') historySyncPanel.value?.openConcurrencySettings()
+  else if (command === 'catalog-sync') void syncCatalog()
 }
 
 const openFundPage = (row: FundCatalogItem) => {

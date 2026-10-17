@@ -14,6 +14,8 @@ import com.collect.finance.dto.FundHistoryResponse;
 import com.collect.finance.dto.FundManagementItem;
 import com.collect.finance.dto.FundRefreshSchedule;
 import com.collect.finance.dto.FundWatchlistRequest;
+import com.collect.finance.dto.HistorySyncConcurrencyResponse;
+import com.collect.finance.dto.HistorySyncTaskResponse;
 import com.collect.finance.dto.OffExchangeFundDcaRequest;
 import com.collect.finance.dto.OffExchangeFundDcaResponse;
 import com.collect.finance.dto.OffExchangeFundHistoryResponse;
@@ -28,6 +30,8 @@ import com.collect.finance.service.FundCatalogService;
 import com.collect.finance.service.FundInvestmentBacktestService;
 import com.collect.finance.service.FundManagementService;
 import com.collect.finance.service.FundRefreshSettingService;
+import com.collect.finance.service.HistorySyncSettingService;
+import com.collect.finance.service.HistorySyncTaskService;
 import com.collect.finance.service.OffExchangeFundBacktestService;
 import com.collect.finance.service.PaperInvestmentService;
 import com.collect.finance.service.StockCatalogService;
@@ -39,6 +43,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -60,6 +65,8 @@ public class PaperInvestmentController {
     private final StockInvestmentBacktestService stockInvestmentBacktestService;
     private final StockWatchlistService stockWatchlistService;
     private final StockRefreshSettingService stockRefreshSettingService;
+    private final HistorySyncTaskService historySyncTaskService;
+    private final HistorySyncSettingService historySyncSettingService;
 
     public PaperInvestmentController(PaperInvestmentService investmentService,
                                      FundCatalogService fundCatalogService,
@@ -70,7 +77,9 @@ public class PaperInvestmentController {
                                      StockCatalogService stockCatalogService,
                                      StockInvestmentBacktestService stockInvestmentBacktestService,
                                      StockWatchlistService stockWatchlistService,
-                                     StockRefreshSettingService stockRefreshSettingService) {
+                                     StockRefreshSettingService stockRefreshSettingService,
+                                     HistorySyncTaskService historySyncTaskService,
+                                     HistorySyncSettingService historySyncSettingService) {
         this.investmentService = investmentService;
         this.fundCatalogService = fundCatalogService;
         this.fundInvestmentBacktestService = fundInvestmentBacktestService;
@@ -81,6 +90,8 @@ public class PaperInvestmentController {
         this.stockInvestmentBacktestService = stockInvestmentBacktestService;
         this.stockWatchlistService = stockWatchlistService;
         this.stockRefreshSettingService = stockRefreshSettingService;
+        this.historySyncTaskService = historySyncTaskService;
+        this.historySyncSettingService = historySyncSettingService;
     }
 
     @GetMapping("/account")
@@ -220,6 +231,42 @@ public class PaperInvestmentController {
     @PutMapping("/stock-management/refresh-schedule")
     public R<FundRefreshSchedule> updateStockRefreshSchedule(@RequestBody FundRefreshSchedule schedule) {
         return R.ok(stockRefreshSettingService.updateSchedule(schedule));
+    }
+
+    @PostMapping("/history-sync")
+    public R<HistorySyncTaskResponse> startHistorySync(@RequestParam String instrumentType) {
+        return R.ok(historySyncTaskService.start(instrumentType));
+    }
+
+    @GetMapping("/history-sync/latest")
+    public R<HistorySyncTaskResponse> latestHistorySync(@RequestParam String instrumentType,
+                                                       @RequestParam(defaultValue = "1") int page,
+                                                       @RequestParam(defaultValue = "10") int pageSize) {
+        return R.ok(historySyncTaskService.latest(instrumentType, page, pageSize));
+    }
+
+    @GetMapping("/history-sync/{id}")
+    public R<HistorySyncTaskResponse> historySyncTask(@PathVariable long id,
+                                                     @RequestParam(defaultValue = "1") int page,
+                                                     @RequestParam(defaultValue = "10") int pageSize) {
+        return R.ok(historySyncTaskService.get(id, page, pageSize));
+    }
+
+    @PutMapping("/history-sync/{id}/cancel")
+    public R<HistorySyncTaskResponse> cancelHistorySyncTask(@PathVariable long id,
+                                                           @RequestParam(defaultValue = "1") int page,
+                                                           @RequestParam(defaultValue = "10") int pageSize) {
+        return R.ok(historySyncTaskService.cancel(id, page, pageSize));
+    }
+
+    @GetMapping("/history-sync/concurrency")
+    public R<HistorySyncConcurrencyResponse> historySyncConcurrency() {
+        return R.ok(historySyncSettingService.getConcurrency());
+    }
+
+    @PutMapping("/history-sync/concurrency")
+    public R<HistorySyncConcurrencyResponse> updateHistorySyncConcurrency(@RequestParam int concurrency) {
+        return R.ok(historySyncSettingService.updateConcurrency(concurrency));
     }
 
     @PostMapping("/stock-management/watchlist")

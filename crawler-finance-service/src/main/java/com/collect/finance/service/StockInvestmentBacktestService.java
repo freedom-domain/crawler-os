@@ -49,6 +49,13 @@ public class StockInvestmentBacktestService {
         return historyCacheService.get(code, range.startDate(), range.endDate());
     }
 
+    public int syncAllHistory(String rawCode) {
+        String code = normalizeCode(rawCode);
+        StockHistoryResponse response = historyClient.getHistory(
+                code, LocalDate.of(1900, 1, 1), LocalDate.now(MARKET_ZONE));
+        return response.getPoints().size();
+    }
+
     public StockBacktestResponse simulate(StockBacktestRequest request) {
         String code = normalizeCode(request.getCode());
         DateRange range = validateRange(request.getStartDate(), request.getEndDate());

@@ -153,6 +153,17 @@ export const stockWatchlistRefresh = (code: string) =>
 export const stockRefreshScheduleGet = () => request.get('/investment/stock-management/refresh-schedule')
 export const stockRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY') =>
   request.put('/investment/stock-management/refresh-schedule', { frequency })
+export const historySyncTaskStart = (instrumentType: 'FUND' | 'STOCK') =>
+  request.post('/investment/history-sync', null, { params: { instrumentType } })
+export const historySyncTaskLatest = (instrumentType: 'FUND' | 'STOCK', page = 1, pageSize = 10) =>
+  request.get('/investment/history-sync/latest', { params: { instrumentType, page, pageSize } })
+export const historySyncTaskGet = (id: number, page = 1, pageSize = 10) =>
+  request.get(`/investment/history-sync/${id}`, { params: { page, pageSize } })
+export const historySyncTaskCancel = (id: number, page = 1, pageSize = 10) =>
+  request.put(`/investment/history-sync/${id}/cancel`, null, { params: { page, pageSize } })
+export const historySyncConcurrencyGet = () => request.get('/investment/history-sync/concurrency')
+export const historySyncConcurrencyUpdate = (concurrency: number) =>
+  request.put('/investment/history-sync/concurrency', null, { params: { concurrency } })
 export const fundWatchlistAdd = (data: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string; frequency: string }) =>
   request.post('/investment/fund-management/watchlist', data)
 export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency?: string }) =>

@@ -1,6 +1,7 @@
 package com.collect.finance.service;
 
 import com.collect.common.exception.BizException;
+import com.collect.finance.config.TencentHistoryRequestLimiter;
 import com.collect.finance.dto.StockHistoryPoint;
 import com.collect.finance.dto.StockHistoryResponse;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -33,12 +34,15 @@ public class TencentStockHistoryClient {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final StockHistoryCacheService historyCacheService;
+    private final TencentHistoryRequestLimiter requestLimiter;
 
     @Value("${investment.tencent-history-url:https://web.ifzq.gtimg.cn/appstock/app/fqkline/get}")
     private String historyUrl;
 
-    public TencentStockHistoryClient(StockHistoryCacheService historyCacheService) {
+    public TencentStockHistoryClient(StockHistoryCacheService historyCacheService,
+                                     TencentHistoryRequestLimiter requestLimiter) {
         this.historyCacheService = historyCacheService;
+        this.requestLimiter = requestLimiter;
     }
 
     public StockHistoryResponse getHistory(String code, LocalDate startDate, LocalDate endDate) {
@@ -123,7 +127,10 @@ public class TencentStockHistoryClient {
     }
 
     private JsonNode fetch(String dataKey, LocalDate startDate, LocalDate endDate) {
+        boolean acquired = false;
         try {
+            requestLimiter.acquire();
+            acquired = true;
             String params = dataKey + ",day," + startDate + "," + endDate + ",320,qfq";
             String url = historyUrl + "?param=" + URLEncoder.encode(params, StandardCharsets.UTF_8);
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -151,6 +158,10 @@ public class TencentStockHistoryClient {
             throw new BizException("历史行情查询被中断，请稍后重试");
         } catch (IllegalArgumentException e) {
             throw new BizException("历史行情服务地址或股票代码无效");
+        } finally {
+            if (acquired) {
+                requestLimiter.release();
+            }
         }
     }
 

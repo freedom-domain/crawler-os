@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.collect.common.exception.BizException;
 import com.collect.finance.dto.FundManagementItem;
 import com.collect.finance.dto.FundWatchlistRequest;
+import com.collect.finance.dto.FullHistorySyncResult;
 import com.collect.finance.entity.FundHistoryCacheKey;
 import com.collect.finance.entity.FundHistoryCacheRecord;
 import com.collect.finance.entity.FundWatchlist;
@@ -92,6 +93,30 @@ public class FundManagementService {
         }
     }
 
+    public FullHistorySyncResult syncAllHistory(String fundType, String code) {
+        LocalDate startDate = LocalDate.of(1900, 1, 1);
+        LocalDate endDate = LocalDate.now(MARKET_ZONE);
+        if (ONSHORE.equals(fundType)) {
+            int totalPoints = 0;
+            List<String> failures = new java.util.ArrayList<>();
+            for (String frequency : List.of("day", "week", "month")) {
+                try {
+                    totalPoints += onshoreClient.getHistory(code, startDate, endDate, frequency).getPoints().size();
+                } catch (RuntimeException exception) {
+                    failures.add(frequency + "线：" + errorMessage(exception));
+                }
+            }
+            if (!failures.isEmpty()) {
+                return new FullHistorySyncResult(totalPoints,
+                        "部分周期同步失败；" + totalPoints + " 个数据点已缓存。" + String.join("；", failures),
+                        false);
+            }
+            return new FullHistorySyncResult(totalPoints, "日/周/月线同步完成", true);
+        }
+        var response = offshoreClient.getHistory(code, startDate, endDate);
+        return new FullHistorySyncResult(response.getPoints().size(), "历史净值同步完成", true);
+    }
+
     public void clearCache(String fundType, String code, String frequency) {
         FundHistoryCacheKey key = validateKey(fundType, code, frequency);
         cacheMapper.delete(new QueryWrapper<FundHistoryCacheRecord>()
@@ -154,5 +179,9 @@ public class FundManagementService {
 
     private String keyId(FundHistoryCacheKey key) {
         return key.getFundType() + ':' + key.getCode() + ':' + key.getFrequency();
+    }
+
+    private String errorMessage(RuntimeException exception) {
+        return exception.getMessage() == null ? "未知错误" : exception.getMessage();
     }
 }

@@ -5,6 +5,10 @@ import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
+const elementThemeSassData = `@use "element-plus/theme-chalk/src/common/var.scss" as * with ($colors: (
+  "primary": ("base": #0f9f9a)
+));`
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -24,13 +28,22 @@ export default defineConfig({
   },
   css: {
     preprocessorOptions: {
-      // Element Plus 按需引入的组件样式基于 sass 变量编译
+      // Element Plus 按需引入的组件样式基于 Sass 变量编译
+      scss: {
+        api: 'modern-compiler',
+        additionalData: elementThemeSassData
+      },
       sass: {
-        additionalData: `@use "element-plus/theme-chalk/src/common/var.scss" as * with ($colors: (
-          "primary": ("base": "#0f9f9a")
-        ));`
+        api: 'modern-compiler',
+        additionalData: elementThemeSassData
       }
     }
+  },
+  optimizeDeps: {
+    include: [
+      'element-plus/es/components/button/style/index',
+      'element-plus/es/components/container/style/index'
+    ]
   },
   build: {
     // 分包策略：

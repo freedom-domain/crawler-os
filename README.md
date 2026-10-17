@@ -155,6 +155,8 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 投资总览与股票模拟交易已移至股票管理页面的按钮弹窗中；已有数据库需执行 `docker/mysql/migration/029_move_investment_overview_to_stock_management.sql` 移除旧的独立菜单权限，原 `/investment/overview` 地址会兼容跳转至股票管理页面。
 
+基金管理和股票管理页面提供“同步全部历史行情”后台任务，可手动同步目录中全部基金（场内日/周/月线、场外净值）或股票（日线）的数据源完整历史。任务按标的记录状态、同步数据点数与错误详情，可在页面查看最新任务的进度和逐项结果；执行中的任务可取消，当前标的完成后停止，尚未开始的标的会标记为已取消，已写入的数据不会回滚。两页工具栏均可配置腾讯历史行情请求并发数（1-20），保存后立即生效且在 Finance 服务重启后保留；建议先从 1 开始，调高可能增加数据源压力。已有数据库需依次执行 `docker/mysql/migration/031_history_sync_tasks.sql` 和 `docker/mysql/migration/032_history_sync_concurrency.sql`。
+
 ### 3. 启动前端
 
 ```bash

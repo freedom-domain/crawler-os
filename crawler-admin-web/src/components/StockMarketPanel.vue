@@ -28,15 +28,67 @@
           <strong>{{ historyResult.name }}（{{ historyResult.code }}）</strong>
           <span>{{ historyResult.points.length }} 个交易日</span>
         </div>
+        <el-tabs v-model="chartType" class="chart-type-tabs">
+          <el-tab-pane label="折线图" name="line" />
+          <el-tab-pane label="K 线图" name="candlestick" />
+        </el-tabs>
         <div v-if="historyResult.points.length" class="history-chart">
-          <div class="chart-value chart-top">¥{{ money(historyMaxClose) }}</div>
+          <div class="chart-value chart-top">¥{{ money(chartMaxPrice) }}</div>
           <svg viewBox="0 0 1000 220" preserveAspectRatio="none" role="img" :aria-label="`${historyResult.name}历史收盘价走势`">
             <line x1="0" y1="30" x2="1000" y2="30" class="chart-grid" />
             <line x1="0" y1="110" x2="1000" y2="110" class="chart-grid" />
             <line x1="0" y1="190" x2="1000" y2="190" class="chart-grid" />
-            <polyline :points="historyChartPoints" class="chart-line" />
+            <polyline v-if="chartType === 'line'" :points="historyChartPoints" class="chart-line" />
+            <g v-else v-for="candle in historyCandles" :key="candle.date">
+              <line
+                :x1="candle.x"
+                :y1="candle.highY"
+                :x2="candle.x"
+                :y2="candle.lowY"
+                :class="candle.isUp ? 'candle-wick candle-up' : 'candle-wick candle-down'"
+              />
+              <rect
+                :x="candle.x - candle.width / 2"
+                :y="candle.bodyY"
+                :width="candle.width"
+                :height="candle.bodyHeight"
+                :class="candle.isUp ? 'candle-body candle-up' : 'candle-body candle-down'"
+              />
+            </g>
+            <template v-if="historyHoverIndex !== null">
+              <line
+                :x1="historyChartCoordinates[historyHoverIndex]?.x"
+                y1="20"
+                :x2="historyChartCoordinates[historyHoverIndex]?.x"
+                y2="200"
+                class="chart-crosshair"
+              />
+              <circle
+                :cx="historyHoverCoordinate?.x"
+                :cy="historyHoverCoordinate?.y"
+                r="5"
+                class="chart-hover-dot"
+              />
+            </template>
+            <rect
+              x="0"
+              y="20"
+              width="1000"
+              height="180"
+              class="chart-interaction-area"
+              @pointermove="updateChartHover"
+              @pointerleave="historyHoverIndex = null"
+            />
           </svg>
-          <div class="chart-value chart-bottom">¥{{ money(historyMinClose) }}</div>
+          <div v-if="historyHoverPoint" class="chart-hover-label">
+            <strong>{{ historyHoverPoint.date }}</strong>
+            <span>开盘 ¥{{ money(historyHoverPoint.open) }}</span>
+            <span>收盘 ¥{{ money(historyHoverPoint.close) }}</span>
+            <span>最高 ¥{{ money(historyHoverPoint.high) }}</span>
+            <span>最低 ¥{{ money(historyHoverPoint.low) }}</span>
+            <span :class="tone(historyHoverPoint.changePercent)">涨跌 {{ percent(historyHoverPoint.changePercent) }}</span>
+          </div>
+          <div class="chart-value chart-bottom">¥{{ money(chartMinPrice) }}</div>
           <div class="chart-dates">
             <span>{{ historyResult.points[0]?.date }}</span>
             <span>{{ historyResult.points[historyResult.points.length - 1]?.date }}</span>
@@ -167,6 +219,11 @@ interface StockHistoryPoint {
   changePercent: number
 }
 
+interface ChartCoordinate {
+  x: number
+  y: number
+}
+
 interface StockBacktestEntry {
   scheduledDate: string
   tradeDate: string
@@ -224,6 +281,8 @@ const historyEndDate = ref(initialEndDate)
 const historySource = ref<DataSource>('api')
 const historyResult = ref<{ code: string; name: string; points: StockHistoryPoint[] } | null>(null)
 const historyLoading = ref(false)
+const historyHoverIndex = ref<number | null>(null)
+const chartType = ref<'line' | 'candlestick'>('line')
 const backtestStartDate = ref(initialStartDate)
 const backtestEndDate = ref(initialEndDate)
 const weekday = ref(1)
@@ -240,15 +299,61 @@ const weekdays = [
 
 const historyPoints = computed(() => historyResult.value?.points || [])
 const recentHistoryPoints = computed(() => [...historyPoints.value].slice(-20).reverse())
+const historyHoverPoint = computed(() => historyHoverIndex.value === null
+  ? null
+  : historyPoints.value[historyHoverIndex.value] || null)
 const historyMinClose = computed(() => historyPoints.value.length
   ? Math.min(...historyPoints.value.map(point => Number(point.close)))
   : 0)
 const historyMaxClose = computed(() => historyPoints.value.length
   ? Math.max(...historyPoints.value.map(point => Number(point.close)))
   : 0)
-const historyChartPoints = computed(() => {
+const historyMinLow = computed(() => historyPoints.value.length
+  ? Math.min(...historyPoints.value.map(point => Number(point.low)))
+  : 0)
+const historyMaxHigh = computed(() => historyPoints.value.length
+  ? Math.max(...historyPoints.value.map(point => Number(point.high)))
+  : 0)
+const chartMinPrice = computed(() => chartType.value === 'candlestick' ? historyMinLow.value : historyMinClose.value)
+const chartMaxPrice = computed(() => chartType.value === 'candlestick' ? historyMaxHigh.value : historyMaxClose.value)
+const historyCandles = computed(() => {
   const points = historyPoints.value
-  if (!points.length) return ''
+  if (!points.length) return []
+  const min = historyMinLow.value
+  const max = historyMaxHigh.value
+  const padding = max === min ? Math.max(max * 0.02, 0.01) : 0
+  const range = max - min + padding * 2 || 1
+  const yFor = (value: number) => 200 - (value - min + padding) / range * 180
+  const width = Math.max(1.5, Math.min(10, 800 / points.length))
+  return points.map((point, index) => {
+    const x = points.length === 1 ? 500 : index / (points.length - 1) * 1000
+    const openY = yFor(Number(point.open))
+    const closeY = yFor(Number(point.close))
+    const bodyY = Math.min(openY, closeY)
+    return {
+      date: point.date,
+      x: Number(x.toFixed(1)),
+      highY: yFor(Number(point.high)),
+      lowY: yFor(Number(point.low)),
+      bodyY,
+      bodyHeight: Math.max(1, Math.abs(closeY - openY)),
+      width,
+      closeY,
+      isUp: Number(point.close) >= Number(point.open)
+    }
+  })
+})
+const historyHoverCoordinate = computed<ChartCoordinate | null>(() => {
+  if (historyHoverIndex.value === null) return null
+  if (chartType.value === 'candlestick') {
+    const candle = historyCandles.value[historyHoverIndex.value]
+    return candle ? { x: candle.x, y: candle.closeY } : null
+  }
+  return historyChartCoordinates.value[historyHoverIndex.value] || null
+})
+const historyChartCoordinates = computed(() => {
+  const points = historyPoints.value
+  if (!points.length) return []
   const min = historyMinClose.value
   const max = historyMaxClose.value
   const padding = max === min ? Math.max(max * 0.02, 0.01) : 0
@@ -256,9 +361,21 @@ const historyChartPoints = computed(() => {
   return points.map((point, index) => {
     const x = points.length === 1 ? 500 : index / (points.length - 1) * 1000
     const y = 200 - (Number(point.close) - min + padding) / range * 180
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) }
+  })
 })
+const historyChartPoints = computed(() => historyChartCoordinates.value
+  .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '))
+const updateChartHover = (event: PointerEvent) => {
+  const pointCount = historyPoints.value.length
+  if (pointCount < 1) return
+  const target = event.currentTarget
+  if (!(target instanceof SVGElement)) return
+  const { left, width } = target.getBoundingClientRect()
+  if (width <= 0) return
+  const normalizedX = Math.max(0, Math.min(1, (event.clientX - left) / width))
+  historyHoverIndex.value = pointCount === 1 ? 0 : Math.round(normalizedX * (pointCount - 1))
+}
 const comparisonRows = computed(() => {
   const result = backtestResult.value
   if (!result) return []
@@ -303,6 +420,7 @@ const tone = (value: number | null | undefined) =>
 
 watch(() => props.code, () => {
   historyResult.value = null
+  historyHoverIndex.value = null
   backtestResult.value = null
   historyStartDate.value = initialStartDate
   historyEndDate.value = initialEndDate
@@ -313,6 +431,7 @@ watch(() => props.code, () => {
 const loadHistory = async () => {
   historyLoading.value = true
   historyResult.value = null
+  historyHoverIndex.value = null
   try {
     const response: any = await stockHistory({
       code: props.code,
@@ -376,6 +495,15 @@ const runBacktest = async () => {
   margin-bottom: 12px;
   color: #34495e;
 }
+.chart-type-tabs {
+  height: 38px;
+}
+.chart-type-tabs :deep(.el-tabs__header) {
+  margin-bottom: 4px;
+}
+.chart-type-tabs :deep(.el-tabs__content) {
+  display: none;
+}
 .history-chart {
   position: relative;
   height: 250px;
@@ -399,6 +527,63 @@ const runBacktest = async () => {
   stroke: #0f9f9a;
   stroke-width: 2.5;
   vector-effect: non-scaling-stroke;
+}
+.candle-wick {
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+.candle-body {
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.candle-up {
+  fill: #d9534f;
+  stroke: #d9534f;
+}
+.candle-down {
+  fill: #16a085;
+  stroke: #16a085;
+}
+.chart-interaction-area {
+  fill: transparent;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+.chart-crosshair {
+  stroke: #64748b;
+  stroke-dasharray: 4 4;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.chart-hover-dot {
+  fill: #fff;
+  stroke: #0f9f9a;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.chart-hover-label {
+  position: absolute;
+  top: 0;
+  right: 36px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  max-width: calc(100% - 100px);
+  padding: 6px 9px;
+  border: 1px solid #e8edf2;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 2px 8px rgb(35 52 72 / 8%);
+  color: #586579;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-hover-label strong {
+  color: #29384a;
 }
 .chart-value {
   position: absolute;
