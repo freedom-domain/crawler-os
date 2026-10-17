@@ -107,19 +107,19 @@ mvn -pl crawler-file-service spring-boot:run
 mvn -pl crawler-worker spring-boot:run
 ```
 
-或 Docker 一键启动全部应用：
+或通过本地预编译 JAR 构建轻量运行镜像并启动全部应用：
 
 ```bash
-./scripts/build-local.sh
+./scripts/build-docker-images/build-all.sh
 docker-compose up -d crawler-gateway crawler-user-service crawler-finance-service crawler-spider-service \
   crawler-search-service crawler-file-service crawler-worker crawler-admin-web
 ```
 
-Compose 中除 finance-service 外的应用使用本地专用的 `docker/Dockerfile-app-local`，仅提供 JRE 运行环境并复制本机 Maven 生成的 JAR；请先执行本地 Maven 构建。finance-service 使用模块内的 [Dockerfile](./crawler-finance-service/Dockerfile)，在 Docker 构建阶段编译模块并打包运行镜像。
+Compose 默认使用本地 `latest` 镜像，不在 `docker compose up` 时编译源码。`build-all.sh` 会先用本机 Maven 构建全部后端模块，再为每个镜像只发送对应 JAR 和运行 Dockerfile；前端镜像仍在 Node 构建阶段运行 `npm ci` 和生产构建。修改源码后请先重新构建镜像，再启动或重建对应容器。使用自定义 `IMAGE_TAG` 时，构建与 Compose 启动都需设置相同标签。
 
 ### 本地 Docker 镜像构建（可选）
 
-以下命令仅用于需要本地运行应用容器时构建镜像。脚本先调用本机 Maven 构建后端，再构建运行时镜像；finance-service 使用独立的多阶段 Dockerfile，在镜像构建阶段再次构建自身及其 Maven 依赖。
+以下命令用于本地构建应用镜像。脚本先调用本机 Maven 构建后端，再构建仅包含运行时 JRE 和对应 JAR 的镜像。
 
 ```bash
 ./scripts/build-docker-images/build-all.sh
@@ -134,7 +134,7 @@ BUILD_JOBS=3 ./scripts/build-docker-images/build-all.sh
 
 也可以继续通过对应的 `crawler-*.sh` 脚本单独构建镜像。默认镜像标签为 `latest`，可通过 `IMAGE_TAG` 指定其他标签。
 
-本地构建入口是 `scripts/build-local.sh`，普通服务镜像使用 `docker/Dockerfile-app-local`；finance-service 使用 `crawler-finance-service/Dockerfile` 在镜像构建阶段编译。GitHub Actions 则由 `.github/workflows/docker-publish.yml` 独立使用 Docker Buildx 在构建容器内执行 Maven，并在适用时发布到 GHCR；Actions 不调用本地构建脚本，也不依赖本地 `target/` 产物。
+GitHub Actions 会在 Java 21 环境中编译各服务 JAR，再用小型临时构建上下文制作运行镜像；不会在 Docker 构建阶段重复运行 Maven。前端镜像继续由其多阶段 Dockerfile 构建。
 
 前端容器使用 Nginx 提供生产构建文件，并将 `/api` 请求转发到网关：
 

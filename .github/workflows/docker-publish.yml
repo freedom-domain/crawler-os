@@ -69,6 +69,28 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Set up Java
+        if: matrix.service != 'crawler-admin-web'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build Java service JAR
+        if: matrix.service != 'crawler-admin-web'
+        run: mvn -B -ntp -pl "${{ matrix.service }}" -am -DskipTests package
+
+      - name: Prepare Java runtime image context
+        if: matrix.service != 'crawler-admin-web'
+        shell: bash
+        run: |
+          service="${{ matrix.service }}"
+          context=".docker-build-context"
+          mkdir -p "$context/$service/target"
+          cp "$service/target/$service"-*.jar "$context/$service/target/"
+          cp docker/Dockerfile-app "$context/Dockerfile"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -95,9 +117,9 @@ jobs:
       - name: Build and publish image
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          build-args: ${{ matrix.build_arg }}
+          context: ${{ matrix.service == 'crawler-admin-web' && matrix.context || './.docker-build-context' }}
+          file: ${{ matrix.service == 'crawler-admin-web' && matrix.dockerfile || './.docker-build-context/Dockerfile' }}
+          build-args: ${{ matrix.service == 'crawler-admin-web' && '' || matrix.build_arg }}
           push: ${{ github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

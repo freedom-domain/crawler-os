@@ -110,11 +110,7 @@ services:
 
   # ===================== 应用服务 =====================
   crawler-gateway:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile-app-local
-      args:
-        SERVICE: crawler-gateway
+    image: crawler-gateway:${IMAGE_TAG:-latest}
     container_name: crawler-gateway
     restart: always
     environment:
@@ -128,11 +124,7 @@ services:
       - crawler-net
 
   crawler-user-service:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile-app-local
-      args:
-        SERVICE: crawler-user-service
+    image: crawler-user-service:${IMAGE_TAG:-latest}
     container_name: crawler-user-service
     restart: always
     environment:
@@ -148,11 +140,7 @@ services:
       - crawler-net
 
   crawler-finance-service:
-    build:
-      context: .
-      dockerfile: crawler-finance-service/Dockerfile
-      args:
-        SERVICE: crawler-finance-service
+    image: crawler-finance-service:${IMAGE_TAG:-latest}
     container_name: crawler-finance-service
     restart: always
     environment:
@@ -171,11 +159,7 @@ services:
       - crawler-net
 
   crawler-spider-service:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile-app-local
-      args:
-        SERVICE: crawler-spider-service
+    image: crawler-spider-service:${IMAGE_TAG:-latest}
     container_name: crawler-spider-service
     restart: always
     environment:
@@ -193,11 +177,7 @@ services:
       - crawler-net
 
   crawler-search-service:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile-app-local
-      args:
-        SERVICE: crawler-search-service
+    image: crawler-search-service:${IMAGE_TAG:-latest}
     container_name: crawler-search-service
     restart: always
     environment:
@@ -217,11 +197,7 @@ services:
       - crawler-net
 
   crawler-file-service:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile-app-local
-      args:
-        SERVICE: crawler-file-service
+    image: crawler-file-service:${IMAGE_TAG:-latest}
     container_name: crawler-file-service
     restart: always
     environment:
@@ -241,11 +217,7 @@ services:
       - crawler-net
 
   crawler-worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile-app-local
-      args:
-        SERVICE: crawler-worker
+    image: crawler-worker:${IMAGE_TAG:-latest}
     container_name: crawler-worker
     restart: always
     environment:
@@ -269,9 +241,7 @@ services:
       - crawler-net
 
   crawler-admin-web:
-    build:
-      context: ./crawler-admin-web
-      dockerfile: Dockerfile
+    image: crawler-admin-web:${IMAGE_TAG:-latest}
     container_name: crawler-admin-web
     restart: always
     environment:
