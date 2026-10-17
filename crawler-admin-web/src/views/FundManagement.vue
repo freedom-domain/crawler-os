@@ -24,10 +24,15 @@
           />
         </el-form-item>
         <el-form-item label="基金类型">
-          <el-select v-model="fundType" style="width: 150px" @change="searchCatalog">
-            <el-option label="全部基金" value="" />
+          <el-select v-model="fundType" clearable placeholder="全部基金" style="width: 150px" @change="searchCatalog">
             <el-option label="场内基金" value="ONSHORE" />
             <el-option label="场外基金" value="OFFSHORE" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关注状态">
+          <el-select v-model="catalogWatchStatus" clearable placeholder="全部状态" style="width: 140px" @change="searchCatalog">
+            <el-option label="已关注" value="watched" />
+            <el-option label="未关注" value="unwatched" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -52,9 +57,17 @@
         <el-table-column prop="code" label="代码" width="105" />
         <el-table-column prop="name" label="基金名称" min-width="220" show-overflow-tooltip />
         <el-table-column prop="category" label="基金类型" min-width="155" show-overflow-tooltip />
-        <el-table-column label="关注状态" width="105">
+        <el-table-column label="关注状态" width="125">
           <template #default="{ row }">
-            <el-tag :type="row.watched ? 'success' : 'info'">{{ row.watched ? '已关注' : '未关注' }}</el-tag>
+            <el-switch
+              :model-value="row.watched"
+              active-text="已关注"
+              inactive-text="未关注"
+              inline-prompt
+              :loading="busyKey === catalogRowKey(row)"
+              :disabled="busyKey === catalogRowKey(row)"
+              @change="(value: string | number | boolean) => setCatalogWatchStatus(row, Boolean(value))"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
@@ -63,9 +76,8 @@
               <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="simulate" :icon="Coin">模拟投资</el-dropdown-item>
+                  <el-dropdown-item command="history" :icon="TrendCharts">历史行情</el-dropdown-item>
                   <el-dropdown-item command="detail" :icon="View">详情</el-dropdown-item>
-                  <el-dropdown-item v-if="!row.watched" command="watch" :icon="Star">加入关注</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -87,7 +99,7 @@
       />
     </el-card>
 
-    <el-dialog v-model="watchlistVisible" title="关注清单" width="min(1100px, 94vw)" destroy-on-close>
+    <el-dialog v-model="watchlistVisible" title="关注清单" width="min(1200px, 96vw)" destroy-on-close>
       <p class="dialog-description">关注的基金会参与定时行情更新；此处也列出仅有历史缓存的基金。取消关注不会删除缓存。</p>
       <el-form class="watchlist-add-form" inline @submit.prevent="addManualWatch">
         <el-form-item label="类型">
@@ -110,7 +122,37 @@
           <el-button type="primary" :loading="addingManual" @click="addManualWatch">加入关注</el-button>
         </el-form-item>
       </el-form>
-      <el-table :data="watchedFunds" v-loading="watchlistLoading" stripe border max-height="60vh">
+      <div class="refresh-schedule-toolbar">
+        <span>自动同步频率</span>
+        <el-select v-model="refreshFrequency" class="refresh-schedule-select">
+          <el-option label="每小时（整点）" value="HOURLY" />
+          <el-option label="每个工作日（18:30）" value="DAILY" />
+          <el-option label="每周一（18:30）" value="WEEKLY" />
+        </el-select>
+        <el-button type="primary" :loading="refreshScheduleSaving" @click="saveRefreshSchedule">保存</el-button>
+      </div>
+      <div class="watchlist-toolbar">
+        <el-input
+          v-model="watchlistKeyword"
+          clearable
+          placeholder="搜索代码或基金名称"
+          :prefix-icon="Search"
+          class="watchlist-search"
+          @input="watchlistPage = 1"
+          @clear="watchlistPage = 1"
+        />
+        <el-select v-model="watchlistFundType" clearable placeholder="全部类型" class="watchlist-type-filter" @change="watchlistPage = 1">
+          <el-option label="场内基金" value="ONSHORE" />
+          <el-option label="场外基金" value="OFFSHORE" />
+        </el-select>
+        <el-select v-model="watchlistStatus" clearable placeholder="全部状态" class="watchlist-status-filter" @change="watchlistPage = 1">
+          <el-option label="已关注" value="watched" />
+          <el-option label="仅缓存" value="cached" />
+        </el-select>
+        <el-button :icon="Refresh" @click="resetWatchlistFilters">清除筛选</el-button>
+        <span class="watchlist-count">共 {{ filteredWatchFunds.length.toLocaleString() }} 项</span>
+      </div>
+      <el-table :data="pagedWatchFunds" v-loading="watchlistLoading" stripe border max-height="55vh">
         <el-table-column label="类型" width="85">
           <template #default="{ row }">{{ row.fundType === 'ONSHORE' ? '场内' : '场外' }}</template>
         </el-table-column>
@@ -125,9 +167,17 @@
         <el-table-column prop="latestDate" label="最新行情日期" width="125">
           <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="95">
+        <el-table-column label="关注状态" width="125">
           <template #default="{ row }">
-            <el-tag :type="row.watched ? 'success' : 'info'">{{ row.watched ? '已关注' : '仅缓存' }}</el-tag>
+            <el-switch
+              :model-value="row.watched"
+              :active-text="'已关注'"
+              :inactive-text="'仅缓存'"
+              inline-prompt
+              :loading="busyKey === rowKey(row)"
+              :disabled="busyKey === rowKey(row)"
+              @change="(value: string | number | boolean) => setWatchStatus(row, Boolean(value))"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
@@ -144,12 +194,6 @@
                     :disabled="busyKey === rowKey(row)"
                   >取消关注</el-dropdown-item>
                   <el-dropdown-item
-                    v-else
-                    command="watch"
-                    :icon="Star"
-                    :disabled="busyKey === rowKey(row)"
-                  >加入关注</el-dropdown-item>
-                  <el-dropdown-item
                     command="clear"
                     :icon="Delete"
                     :disabled="!row.cachedPoints || busyKey === rowKey(row)"
@@ -161,8 +205,20 @@
             </el-dropdown>
           </template>
         </el-table-column>
-        <template #empty><el-empty description="关注清单为空，可在基金目录中添加关注" /></template>
+        <template #empty>
+          <el-empty :description="watchedFunds.length ? '没有符合条件的基金' : '关注清单为空，可在基金目录中添加关注'" />
+        </template>
       </el-table>
+      <el-pagination
+        v-if="filteredWatchFunds.length > 0"
+        class="watchlist-pagination"
+        v-model:current-page="watchlistPage"
+        v-model:page-size="watchlistPageSize"
+        :total="filteredWatchFunds.length"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="watchlistPage = 1"
+      />
       <template #footer>
         <el-button @click="watchlistVisible = false">关闭</el-button>
       </template>
@@ -170,7 +226,7 @@
 
     <el-dialog
       v-model="fundPageVisible"
-      :title="fundPageType === 'onshore-fund' ? '场内基金模拟投资' : '场外基金模拟投资'"
+      :title="fundPageType === 'onshore-fund' ? '场内基金历史行情' : '场外基金历史行情'"
       width="min(1400px, 96vw)"
       top="3vh"
       class="fund-page-dialog"
@@ -302,9 +358,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Coin, Delete, MoreFilled, Refresh, Search, Star, View } from '@element-plus/icons-vue'
+import { Delete, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
 import FundCodeSelect from '@/components/FundCodeSelect.vue'
 import InvestmentView from '@/views/Investment.vue'
@@ -316,6 +372,8 @@ import {
   fundHistoryCacheClear,
   fundHistoryRefresh,
   fundManagementList,
+  fundRefreshScheduleGet,
+  fundRefreshScheduleUpdate,
   fundWatchlistAdd,
   fundWatchlistRemove
 } from '@/api'
@@ -393,10 +451,18 @@ const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
 const fundType = ref<FundType | ''>('')
+const catalogWatchStatus = ref<'watched' | 'unwatched' | ''>('')
 const loading = ref(false)
 const syncing = ref(false)
 const watchlistVisible = ref(false)
 const watchlistLoading = ref(false)
+const watchlistKeyword = ref('')
+const watchlistFundType = ref<FundType | ''>('')
+const watchlistStatus = ref<'watched' | 'cached' | ''>('')
+const watchlistPage = ref(1)
+const watchlistPageSize = ref(20)
+const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
+const refreshScheduleSaving = ref(false)
 const fundPageVisible = ref(false)
 const fundPageType = ref<'onshore-fund' | 'offshore-fund'>('onshore-fund')
 const fundPageCode = ref('')
@@ -406,6 +472,21 @@ const detailTab = ref('profile')
 const profileUpdating = ref(false)
 const busyKey = ref('')
 const detail = ref<FundCatalogItem | null>(null)
+const filteredWatchFunds = computed(() => {
+  const normalizedKeyword = watchlistKeyword.value.trim().toLocaleLowerCase()
+  return watchedFunds.value.filter(row => {
+    if (watchlistFundType.value && row.fundType !== watchlistFundType.value) return false
+    if (watchlistStatus.value === 'watched' && !row.watched) return false
+    if (watchlistStatus.value === 'cached' && row.watched) return false
+    if (!normalizedKeyword) return true
+    return [row.code, row.name, row.category, row.pinyin]
+      .some(value => value?.toLocaleLowerCase().includes(normalizedKeyword))
+  })
+})
+const pagedWatchFunds = computed(() => {
+  const start = (watchlistPage.value - 1) * watchlistPageSize.value
+  return filteredWatchFunds.value.slice(start, start + watchlistPageSize.value)
+})
 const lastSyncedAt = ref('')
 const addingManual = ref(false)
 const manualForm = ref<{ fundType: FundType; code: string; frequency: string }>({
@@ -416,6 +497,7 @@ const manualForm = ref<{ fundType: FundType; code: string; frequency: string }>(
 
 const frequencyLabel = (frequency: string) => ({ day: '日线', week: '周线', month: '月线' }[frequency] || frequency)
 const rowKey = (row: FundManagementItem) => `${row.fundType}:${row.code}:${row.frequency}`
+const catalogRowKey = (row: FundCatalogItem) => `catalog:${row.fundType}:${row.code}`
 const requestKey = (row: FundManagementItem) => ({
   fundType: row.fundType,
   code: row.code,
@@ -438,6 +520,9 @@ const loadCatalog = async () => {
     const response: any = await fundCatalogPage({
       keyword: keyword.value.trim() || undefined,
       fundType: fundType.value || undefined,
+      watched: catalogWatchStatus.value === 'watched'
+        ? true
+        : catalogWatchStatus.value === 'unwatched' ? false : undefined,
       page: page.value,
       pageSize: pageSize.value
     })
@@ -459,7 +544,15 @@ const searchCatalog = () => {
 const resetFilters = () => {
   keyword.value = ''
   fundType.value = ''
+  catalogWatchStatus.value = ''
   searchCatalog()
+}
+
+const resetWatchlistFilters = () => {
+  watchlistKeyword.value = ''
+  watchlistFundType.value = ''
+  watchlistStatus.value = ''
+  watchlistPage.value = 1
 }
 
 const syncCatalog = async () => {
@@ -488,9 +581,37 @@ const loadWatchlist = async () => {
   }
 }
 
+const loadRefreshSchedule = async () => {
+  try {
+    const response: any = await fundRefreshScheduleGet()
+    refreshFrequency.value = response.data.frequency
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  }
+}
+
+const saveRefreshSchedule = async () => {
+  refreshScheduleSaving.value = true
+  try {
+    const response: any = await fundRefreshScheduleUpdate(refreshFrequency.value)
+    refreshFrequency.value = response.data.frequency
+    ElMessage.success('基金自动同步频率已保存')
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    refreshScheduleSaving.value = false
+  }
+}
+
+watch(() => filteredWatchFunds.value.length, count => {
+  const lastPage = Math.max(1, Math.ceil(count / watchlistPageSize.value))
+  if (watchlistPage.value > lastPage) watchlistPage.value = lastPage
+})
+
 const openWatchlist = () => {
+  watchlistPage.value = 1
   watchlistVisible.value = true
-  void loadWatchlist()
+  void Promise.all([loadWatchlist(), loadRefreshSchedule()])
 }
 
 const openFundPage = (row: FundCatalogItem) => {
@@ -521,23 +642,36 @@ const addManualWatch = async () => {
   }
 }
 
-const watchFund = async (row: FundCatalogItem) => {
+const setCatalogWatchStatus = async (row: FundCatalogItem, watched: boolean) => {
+  if (watched === row.watched) return
+  if (!watched && !await confirm(`取消关注 ${row.name || row.code} 的全部行情周期？已缓存的历史行情会保留。`, {
+    title: '取消基金关注',
+    confirmText: '取消关注'
+  })) return
+
+  busyKey.value = catalogRowKey(row)
   try {
-    await fundWatchlistAdd({ fundType: row.fundType, code: row.code, frequency: 'day' })
-    ElMessage.success(`${row.name} 已加入日线关注清单`)
+    if (watched) {
+      await fundWatchlistAdd({ fundType: row.fundType, code: row.code, frequency: 'day' })
+      ElMessage.success(`${row.name || row.code} 已加入日线关注清单`)
+    } else {
+      await fundWatchlistRemove({ fundType: row.fundType, code: row.code })
+      ElMessage.success(`${row.name || row.code} 已取消关注`)
+    }
     await Promise.all([loadCatalog(), watchlistVisible.value ? loadWatchlist() : Promise.resolve()])
   } catch (error) {
     ElMessage.error(errorMessage(error))
+    await Promise.all([loadCatalog(), watchlistVisible.value ? loadWatchlist() : Promise.resolve()])
+  } finally {
+    busyKey.value = ''
   }
 }
 
 const handleCatalogCommand = (command: string, row: FundCatalogItem) => {
-  if (command === 'simulate') {
+  if (command === 'history') {
     openFundPage(row)
   } else if (command === 'detail') {
     void openDetail(row)
-  } else if (command === 'watch') {
-    void watchFund(row)
   }
 }
 
@@ -546,10 +680,32 @@ const handleWatchlistCommand = (command: string, row: FundManagementItem) => {
     void refreshFund(row)
   } else if (command === 'remove') {
     void removeFund(row)
-  } else if (command === 'watch') {
-    void watchFund(row)
   } else if (command === 'clear') {
     void clearCache(row)
+  }
+}
+
+const setWatchStatus = async (row: FundManagementItem, watched: boolean) => {
+  if (watched === row.watched) return
+  if (!watched && !await confirm(`取消关注 ${row.name || row.code}（${frequencyLabel(row.frequency)}）？已缓存的历史行情会保留。`, {
+    title: '取消基金关注',
+    confirmText: '取消关注'
+  })) return
+
+  busyKey.value = rowKey(row)
+  try {
+    if (watched) {
+      await fundWatchlistAdd({ ...requestKey(row), frequency: row.frequency })
+      ElMessage.success('已加入关注清单')
+    } else {
+      await fundWatchlistRemove(requestKey(row))
+      ElMessage.success('已从关注清单移除')
+    }
+    await Promise.all([loadWatchlist(), loadCatalog()])
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    busyKey.value = ''
   }
 }
 
@@ -692,6 +848,42 @@ onMounted(loadCatalog)
 .watchlist-add-form {
   margin-bottom: 2px;
 }
+.refresh-schedule-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 16px;
+  color: #526174;
+  font-size: 13px;
+}
+.refresh-schedule-select {
+  width: 210px;
+}
+.watchlist-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 12px;
+}
+.watchlist-search {
+  width: 260px;
+}
+.watchlist-type-filter {
+  width: 150px;
+}
+.watchlist-status-filter {
+  width: 140px;
+}
+.watchlist-count {
+  margin-left: auto;
+  color: #8792a2;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.watchlist-pagination {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
 .detail-note {
   margin: 18px 0 0;
   padding: 10px 12px;
@@ -717,6 +909,25 @@ onMounted(loadCatalog)
   .catalog-summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .watchlist-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .refresh-schedule-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .refresh-schedule-select {
+    width: 100%;
+  }
+  .watchlist-search,
+  .watchlist-type-filter,
+  .watchlist-status-filter {
+    width: 100%;
+  }
+  .watchlist-count {
+    margin-left: 0;
   }
   .history-toolbar :deep(.el-date-editor) {
     width: 100%;

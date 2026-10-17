@@ -86,6 +86,19 @@ export const simulateFundDca = (data: {
   amount: number
   weekday: number
 }) => request.post('/investment/fund/dca', data)
+export const stockHistory = (params: {
+  code: string
+  startDate: string
+  endDate: string
+  source: 'api' | 'database'
+}) => request.get('/investment/stock/history', { params })
+export const simulateStockBacktest = (data: {
+  code: string
+  startDate: string
+  endDate: string
+  amount: number
+  weekday: number
+}) => request.post('/investment/stock/backtest', data)
 export const offExchangeFundHistory = (params: {
   code: string
   startDate: string
@@ -103,9 +116,13 @@ export const simulateOffExchangeFundDca = (data: {
   redemptionFeeRate: number
 }) => request.post('/investment/off-exchange-fund/dca', data)
 export const fundManagementList = () => request.get('/investment/fund-management')
+export const fundRefreshScheduleGet = () => request.get('/investment/fund-management/refresh-schedule')
+export const fundRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY') =>
+  request.put('/investment/fund-management/refresh-schedule', { frequency })
 export const fundCatalogPage = (params: {
   keyword?: string
   fundType?: 'ONSHORE' | 'OFFSHORE'
+  watched?: boolean
   page: number
   pageSize: number
 }) => request.get('/investment/fund-management/catalog', { params })
@@ -127,7 +144,7 @@ export const stockCatalogProfileRefresh = (code: string) =>
 export const stockCatalogSync = () => request.post('/investment/stock-management/catalog/sync')
 export const fundWatchlistAdd = (data: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string; frequency: string }) =>
   request.post('/investment/fund-management/watchlist', data)
-export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency: string }) =>
+export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency?: string }) =>
   request.delete('/investment/fund-management/watchlist', { params })
 export const fundHistoryRefresh = (params: { fundType: string; code: string; frequency: string }) =>
   request.post('/investment/fund-management/refresh', null, { params })

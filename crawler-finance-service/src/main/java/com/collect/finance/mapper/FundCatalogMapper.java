@@ -21,6 +21,9 @@ public interface FundCatalogMapper extends BaseMapper<FundCatalog> {
                        SELECT 1 FROM fund_watchlist w
                        WHERE w.fund_type = f.fund_type AND w.code = f.code
                    ) AS watched,
+                   (SELECT GROUP_CONCAT(DISTINCT w.frequency ORDER BY w.frequency)
+                    FROM fund_watchlist w
+                    WHERE w.fund_type = f.fund_type AND w.code = f.code) AS watchlistFrequencies,
                    f.synced_at AS syncedAt
             FROM fund_catalog f
             <where>
@@ -32,12 +35,19 @@ public interface FundCatalogMapper extends BaseMapper<FundCatalog> {
                          OR f.name LIKE CONCAT('%', #{keyword}, '%')
                          OR f.pinyin LIKE CONCAT('%', #{keyword}, '%'))
                 </if>
+                <if test="watched != null">
+                    AND EXISTS(
+                        SELECT 1 FROM fund_watchlist w
+                        WHERE w.fund_type = f.fund_type AND w.code = f.code
+                    ) = #{watched}
+                </if>
             </where>
             ORDER BY f.name, f.code
             LIMIT #{limit} OFFSET #{offset}
             </script>
             """)
     List<FundCatalogItem> selectCatalogPage(@Param("keyword") String keyword, @Param("fundType") String fundType,
+                                            @Param("watched") Boolean watched,
                                             @Param("limit") int limit, @Param("offset") long offset);
 
     @Select("""
@@ -53,10 +63,17 @@ public interface FundCatalogMapper extends BaseMapper<FundCatalog> {
                          OR f.name LIKE CONCAT('%', #{keyword}, '%')
                          OR f.pinyin LIKE CONCAT('%', #{keyword}, '%'))
                 </if>
+                <if test="watched != null">
+                    AND EXISTS(
+                        SELECT 1 FROM fund_watchlist w
+                        WHERE w.fund_type = f.fund_type AND w.code = f.code
+                    ) = #{watched}
+                </if>
             </where>
             </script>
             """)
-    long countCatalog(@Param("keyword") String keyword, @Param("fundType") String fundType);
+    long countCatalog(@Param("keyword") String keyword, @Param("fundType") String fundType,
+                      @Param("watched") Boolean watched);
 
     @Select("""
             SELECT f.fund_type AS fundType, f.code, f.name, f.category, f.pinyin,

@@ -3,7 +3,7 @@
     <header class="page-heading">
       <div>
         <h1>股票管理</h1>
-        <p>同步 A 股目录，查看公司资料与主营业务，并从股票列表直接进行模拟投资。</p>
+        <p>同步 A 股目录，查看公司资料、历史行情与回测，并从股票列表直接进行模拟投资。</p>
       </div>
       <el-button type="primary" :icon="Refresh" :loading="syncing" @click="syncCatalog">同步股票信息</el-button>
     </header>
@@ -54,6 +54,7 @@
               <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item command="market-data" :icon="TrendCharts">历史行情</el-dropdown-item>
                   <el-dropdown-item command="simulate" :icon="Coin">模拟投资</el-dropdown-item>
                   <el-dropdown-item command="detail" :icon="View">详情</el-dropdown-item>
                 </el-dropdown-menu>
@@ -80,7 +81,7 @@
     <el-dialog
       v-model="detailVisible"
       :title="detail?.name ? `${detail.name}（${detail.code}）` : '股票详情'"
-      width="min(1000px, 94vw)"
+      width="min(1200px, 96vw)"
       top="4vh"
       class="stock-detail-dialog"
       destroy-on-close
@@ -142,6 +143,24 @@
     </el-dialog>
 
     <el-dialog
+      v-model="marketDataVisible"
+      :title="`${marketDataStock?.name || '股票'}（${marketDataStock?.code || ''}）· 历史行情与回测`"
+      width="min(1200px, 96vw)"
+      top="4vh"
+      class="stock-market-dialog"
+      destroy-on-close
+    >
+      <el-tabs v-model="marketDataTab" class="stock-market-tabs">
+        <el-tab-pane label="历史行情" name="history">
+          <StockMarketPanel v-if="marketDataStock" :code="marketDataStock.code" mode="history" />
+        </el-tab-pane>
+        <el-tab-pane label="回测" name="backtest">
+          <StockMarketPanel v-if="marketDataStock" :code="marketDataStock.code" mode="backtest" />
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+
+    <el-dialog
       v-model="investmentVisible"
       :title="`模拟投资 · ${investmentStock?.name || ''}`"
       width="min(900px, 96vw)"
@@ -162,7 +181,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Coin, MoreFilled, Refresh, Search, View } from '@element-plus/icons-vue'
+import { Coin, MoreFilled, Refresh, Search, TrendCharts, View } from '@element-plus/icons-vue'
+import StockMarketPanel from '@/components/StockMarketPanel.vue'
 import InvestmentView from '@/views/Investment.vue'
 import { stockCatalogDetail, stockCatalogPage, stockCatalogProfileRefresh, stockCatalogSync } from '@/api'
 
@@ -207,6 +227,9 @@ const detailLoading = ref(false)
 const detailTab = ref('security')
 const profileUpdating = ref(false)
 const detail = ref<StockItem | null>(null)
+const marketDataVisible = ref(false)
+const marketDataTab = ref('history')
+const marketDataStock = ref<StockItem | null>(null)
 const investmentVisible = ref(false)
 const investmentStock = ref<StockItem | null>(null)
 
@@ -298,11 +321,19 @@ const openInvestment = (stock: StockItem) => {
   investmentVisible.value = true
 }
 
+const openMarketData = (stock: StockItem) => {
+  marketDataStock.value = stock
+  marketDataTab.value = 'history'
+  marketDataVisible.value = true
+}
+
 const handleCommand = (command: string, stock: StockItem) => {
   if (command === 'detail') {
     void openDetail(stock)
   } else if (command === 'simulate') {
     openInvestment(stock)
+  } else if (command === 'market-data') {
+    openMarketData(stock)
   }
 }
 

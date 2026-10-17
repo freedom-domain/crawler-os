@@ -73,6 +73,14 @@ public class FundManagementService {
                 .eq(FundWatchlist::getFrequency, key.getFrequency()));
     }
 
+    @Transactional
+    public void removeAllFromWatchlist(String fundType, String code) {
+        FundHistoryCacheKey key = validateKey(fundType, code, "day");
+        watchlistMapper.delete(new LambdaQueryWrapper<FundWatchlist>()
+                .eq(FundWatchlist::getFundType, key.getFundType())
+                .eq(FundWatchlist::getCode, key.getCode()));
+    }
+
     public void refresh(String fundType, String code, String frequency) {
         FundHistoryCacheKey key = validateKey(fundType, code, frequency);
         LocalDate endDate = LocalDate.now(MARKET_ZONE);

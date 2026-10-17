@@ -13,7 +13,7 @@
     <artifactId>crawler-finance-service</artifactId>
     <packaging>jar</packaging>
     <name>crawler-finance-service</name>
-    <description>Investment and fund history service</description>
+    <description>Investment, stock and fund history service</description>
 
     <dependencies>
         <dependency>

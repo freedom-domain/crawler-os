@@ -281,6 +281,21 @@ CREATE TABLE IF NOT EXISTS fund_history_cache (
     KEY idx_fund_history_cache_date (code, fund_type, frequency, trade_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS stock_history_cache (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    code CHAR(6) NOT NULL,
+    trade_date DATE NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    open DECIMAL(20,8),
+    close DECIMAL(20,8),
+    high DECIMAL(20,8),
+    low DECIMAL(20,8),
+    volume DECIMAL(28,6),
+    change_percent DECIMAL(12,6),
+    UNIQUE KEY uk_stock_history_cache (code, trade_date),
+    KEY idx_stock_history_cache_date (code, trade_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS fund_watchlist (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     fund_type VARCHAR(16) NOT NULL,
@@ -290,6 +305,15 @@ CREATE TABLE IF NOT EXISTS fund_watchlist (
     UNIQUE KEY uk_fund_watchlist (fund_type, code, frequency),
     KEY idx_fund_watchlist_code (code, fund_type, frequency)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS fund_refresh_setting (
+    id TINYINT UNSIGNED PRIMARY KEY,
+    frequency VARCHAR(16) NOT NULL DEFAULT 'DAILY',
+    last_run_slot VARCHAR(32),
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO fund_refresh_setting (id, frequency) VALUES (1, 'DAILY');
 
 CREATE TABLE IF NOT EXISTS fund_catalog (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

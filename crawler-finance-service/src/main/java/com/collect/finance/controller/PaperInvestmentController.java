@@ -12,6 +12,7 @@ import com.collect.finance.dto.FundDcaRequest;
 import com.collect.finance.dto.FundDcaResponse;
 import com.collect.finance.dto.FundHistoryResponse;
 import com.collect.finance.dto.FundManagementItem;
+import com.collect.finance.dto.FundRefreshSchedule;
 import com.collect.finance.dto.FundWatchlistRequest;
 import com.collect.finance.dto.OffExchangeFundDcaRequest;
 import com.collect.finance.dto.OffExchangeFundDcaResponse;
@@ -19,16 +20,22 @@ import com.collect.finance.dto.OffExchangeFundHistoryResponse;
 import com.collect.finance.dto.StockCatalogItem;
 import com.collect.finance.dto.StockCatalogPage;
 import com.collect.finance.dto.StockCatalogSyncResult;
+import com.collect.finance.dto.StockBacktestRequest;
+import com.collect.finance.dto.StockBacktestResponse;
+import com.collect.finance.dto.StockHistoryResponse;
 import com.collect.finance.service.FundCatalogService;
 import com.collect.finance.service.FundInvestmentBacktestService;
 import com.collect.finance.service.FundManagementService;
+import com.collect.finance.service.FundRefreshSettingService;
 import com.collect.finance.service.OffExchangeFundBacktestService;
 import com.collect.finance.service.PaperInvestmentService;
 import com.collect.finance.service.StockCatalogService;
+import com.collect.finance.service.StockInvestmentBacktestService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -45,20 +52,26 @@ public class PaperInvestmentController {
     private final FundInvestmentBacktestService fundInvestmentBacktestService;
     private final OffExchangeFundBacktestService offExchangeFundBacktestService;
     private final FundManagementService fundManagementService;
+    private final FundRefreshSettingService fundRefreshSettingService;
     private final StockCatalogService stockCatalogService;
+    private final StockInvestmentBacktestService stockInvestmentBacktestService;
 
     public PaperInvestmentController(PaperInvestmentService investmentService,
                                      FundCatalogService fundCatalogService,
                                      FundInvestmentBacktestService fundInvestmentBacktestService,
                                      OffExchangeFundBacktestService offExchangeFundBacktestService,
                                      FundManagementService fundManagementService,
-                                     StockCatalogService stockCatalogService) {
+                                     FundRefreshSettingService fundRefreshSettingService,
+                                     StockCatalogService stockCatalogService,
+                                     StockInvestmentBacktestService stockInvestmentBacktestService) {
         this.investmentService = investmentService;
         this.fundCatalogService = fundCatalogService;
         this.fundInvestmentBacktestService = fundInvestmentBacktestService;
         this.offExchangeFundBacktestService = offExchangeFundBacktestService;
         this.fundManagementService = fundManagementService;
+        this.fundRefreshSettingService = fundRefreshSettingService;
         this.stockCatalogService = stockCatalogService;
+        this.stockInvestmentBacktestService = stockInvestmentBacktestService;
     }
 
     @GetMapping("/account")
@@ -69,6 +82,19 @@ public class PaperInvestmentController {
     @GetMapping("/quote")
     public R<InvestmentQuote> quote(@RequestParam String code) {
         return R.ok(investmentService.getQuote(code));
+    }
+
+    @GetMapping("/stock/history")
+    public R<StockHistoryResponse> stockHistory(@RequestParam String code,
+                                                @RequestParam String startDate,
+                                                @RequestParam String endDate,
+                                                @RequestParam(defaultValue = "api") String source) {
+        return R.ok(stockInvestmentBacktestService.history(code, startDate, endDate, source));
+    }
+
+    @PostMapping("/stock/backtest")
+    public R<StockBacktestResponse> simulateStockBacktest(@Valid @RequestBody StockBacktestRequest request) {
+        return R.ok(stockInvestmentBacktestService.simulate(request));
     }
 
     @PostMapping("/trade")
@@ -114,12 +140,23 @@ public class PaperInvestmentController {
         return R.ok(fundManagementService.list());
     }
 
+    @GetMapping("/fund-management/refresh-schedule")
+    public R<FundRefreshSchedule> fundRefreshSchedule() {
+        return R.ok(fundRefreshSettingService.getSchedule());
+    }
+
+    @PutMapping("/fund-management/refresh-schedule")
+    public R<FundRefreshSchedule> updateFundRefreshSchedule(@RequestBody FundRefreshSchedule schedule) {
+        return R.ok(fundRefreshSettingService.updateSchedule(schedule));
+    }
+
     @GetMapping("/fund-management/catalog")
     public R<FundCatalogPage> fundCatalog(@RequestParam(required = false) String keyword,
                                           @RequestParam(required = false) String fundType,
+                                          @RequestParam(required = false) Boolean watched,
                                           @RequestParam(defaultValue = "1") int page,
                                           @RequestParam(defaultValue = "20") int pageSize) {
-        return R.ok(fundCatalogService.page(keyword, fundType, page, pageSize));
+        return R.ok(fundCatalogService.page(keyword, fundType, watched, page, pageSize));
     }
 
     @GetMapping("/fund-management/catalog/detail")
@@ -168,8 +205,12 @@ public class PaperInvestmentController {
 
     @DeleteMapping("/fund-management/watchlist")
     public R<Void> removeFundFromWatchlist(@RequestParam String fundType, @RequestParam String code,
-                                           @RequestParam String frequency) {
-        fundManagementService.removeFromWatchlist(fundType, code, frequency);
+                                           @RequestParam(required = false) String frequency) {
+        if (frequency == null || frequency.isBlank()) {
+            fundManagementService.removeAllFromWatchlist(fundType, code);
+        } else {
+            fundManagementService.removeFromWatchlist(fundType, code, frequency);
+        }
         return R.ok();
     }
 

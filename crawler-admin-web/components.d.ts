@@ -62,6 +62,7 @@ declare module 'vue' {
     SearchResultItem: typeof import('./src/components/SearchResultItem.vue')['default']
     SearchResultList: typeof import('./src/components/SearchResultList.vue')['default']
     SearchResultsFrame: typeof import('./src/components/SearchResultsFrame.vue')['default']
+    StockMarketPanel: typeof import('./src/components/StockMarketPanel.vue')['default']
     TableRowActions: typeof import('./src/components/TableRowActions.vue')['default']
     TagEditorDialog: typeof import('./src/components/TagEditorDialog.vue')['default']
   }

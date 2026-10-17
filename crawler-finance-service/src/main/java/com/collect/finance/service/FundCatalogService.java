@@ -31,15 +31,15 @@ public class FundCatalogService {
         this.profileClient = profileClient;
     }
 
-    public FundCatalogPage page(String rawKeyword, String rawFundType, int rawPage, int rawPageSize) {
+    public FundCatalogPage page(String rawKeyword, String rawFundType, Boolean watched, int rawPage, int rawPageSize) {
         String keyword = rawKeyword == null || rawKeyword.isBlank() ? null : rawKeyword.trim();
         String fundType = normalizeFundType(rawFundType, true);
         int page = Math.max(rawPage, 1);
         int pageSize = Math.min(Math.max(rawPageSize, 1), MAX_PAGE_SIZE);
         long offset = (long) (page - 1) * pageSize;
         FundCatalogPage result = new FundCatalogPage();
-        result.setItems(catalogMapper.selectCatalogPage(keyword, fundType, pageSize, offset));
-        result.setTotal(catalogMapper.countCatalog(keyword, fundType));
+        result.setItems(catalogMapper.selectCatalogPage(keyword, fundType, watched, pageSize, offset));
+        result.setTotal(catalogMapper.countCatalog(keyword, fundType, watched));
         return result;
     }
 
