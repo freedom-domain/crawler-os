@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 
@@ -12,13 +11,11 @@ COPY crawler-search-service/pom.xml crawler-search-service/pom.xml
 COPY crawler-file-service/pom.xml crawler-file-service/pom.xml
 COPY crawler-worker/pom.xml crawler-worker/pom.xml
 
-RUN --mount=type=cache,id=crawler-os-maven,target=/root/.m2 \
-    mvn -B -ntp -pl crawler-finance-service -am dependency:go-offline -DskipTests -q
+RUN mvn -B -ntp -pl crawler-finance-service -am dependency:go-offline -DskipTests
 
 COPY crawler-common/src/ crawler-common/src/
 COPY crawler-finance-service/src/ crawler-finance-service/src/
-RUN --mount=type=cache,id=crawler-os-maven,target=/root/.m2 \
-    mvn -B -ntp -pl crawler-finance-service -am package -DskipTests -q
+RUN mvn -B -ntp -pl crawler-finance-service -am package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
