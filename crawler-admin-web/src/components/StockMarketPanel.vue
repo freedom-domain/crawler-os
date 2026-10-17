@@ -100,21 +100,21 @@
           </div>
         </div>
         <el-empty v-else description="所选日期范围没有交易行情" :image-size="64" />
-        <el-table :data="recentHistoryPoints" stripe max-height="360">
+        <el-table :data="recentHistoryPoints" class="market-history-table" stripe max-height="360">
           <el-table-column prop="date" label="日期" min-width="120" />
-          <el-table-column label="开盘" min-width="95" align="right">
+          <el-table-column label="开盘" min-width="100" align="right">
             <template #default="{ row }">¥{{ money(row.open) }}</template>
           </el-table-column>
-          <el-table-column label="收盘" min-width="95" align="right">
+          <el-table-column label="收盘" min-width="100" align="right">
             <template #default="{ row }">¥{{ money(row.close) }}</template>
           </el-table-column>
-          <el-table-column label="最高" min-width="95" align="right">
+          <el-table-column label="最高" min-width="100" align="right">
             <template #default="{ row }">¥{{ money(row.high) }}</template>
           </el-table-column>
-          <el-table-column label="最低" min-width="95" align="right">
+          <el-table-column label="最低" min-width="100" align="right">
             <template #default="{ row }">¥{{ money(row.low) }}</template>
           </el-table-column>
-          <el-table-column label="涨跌幅" min-width="95" align="right">
+          <el-table-column label="涨跌幅" min-width="100" align="right">
             <template #default="{ row }"><span :class="tone(row.changePercent)">{{ percent(row.changePercent) }}</span></template>
           </el-table-column>
         </el-table>

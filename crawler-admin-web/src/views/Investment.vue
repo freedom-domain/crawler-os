@@ -251,7 +251,7 @@
         <div v-if="historyResult.analysis" class="analysis-tables">
           <div>
             <h4>月度收益</h4>
-            <el-table :data="recentMonthlyReturns" stripe max-height="320">
+            <el-table :data="recentMonthlyReturns" class="market-history-table" stripe max-height="320">
               <el-table-column prop="period" label="月份" min-width="110" />
               <el-table-column label="收益率" min-width="100" align="right">
                 <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
@@ -260,7 +260,7 @@
           </div>
           <div>
             <h4>滚动一年收益</h4>
-            <el-table :data="recentRollingReturns" stripe max-height="320">
+            <el-table :data="recentRollingReturns" class="market-history-table" stripe max-height="320">
               <el-table-column prop="period" label="截至日期" min-width="120" />
               <el-table-column label="近一年收益率" min-width="120" align="right">
                 <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
@@ -269,7 +269,7 @@
             <p v-if="!historyResult.analysis.rollingOneYearReturns?.length" class="fee-note">所选数据尚不足一年，暂无完整滚动一年数据。</p>
           </div>
         </div>
-        <el-table :data="recentHistoryPoints" stripe max-height="440">
+        <el-table :data="recentHistoryPoints" class="market-history-table" stripe max-height="360">
           <el-table-column prop="date" label="日期" min-width="120" />
           <el-table-column label="开盘" min-width="100" align="right">
             <template #default="{ row }">¥{{ money(row.open) }}</template>
@@ -502,7 +502,7 @@
         <div v-if="offExchangeHistoryResult.analysis" class="analysis-tables">
           <div>
             <h4>月度收益</h4>
-            <el-table :data="recentOffExchangeMonthlyReturns" stripe max-height="320">
+            <el-table :data="recentOffExchangeMonthlyReturns" class="market-history-table" stripe max-height="320">
               <el-table-column prop="period" label="月份" min-width="110" />
               <el-table-column label="收益率" min-width="100" align="right">
                 <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
@@ -511,7 +511,7 @@
           </div>
           <div>
             <h4>滚动一年收益</h4>
-            <el-table :data="recentOffExchangeRollingReturns" stripe max-height="320">
+            <el-table :data="recentOffExchangeRollingReturns" class="market-history-table" stripe max-height="320">
               <el-table-column prop="period" label="截至日期" min-width="120" />
               <el-table-column label="近一年收益率" min-width="120" align="right">
                 <template #default="{ row }"><span :class="profitTone(row.returnPercent)">{{ signedPercent(row.returnPercent) }}</span></template>
@@ -520,7 +520,7 @@
             <p v-if="!offExchangeHistoryResult.analysis.rollingOneYearReturns?.length" class="fee-note">所选数据尚不足一年，暂无完整滚动一年数据。</p>
           </div>
         </div>
-        <el-table :data="recentOffExchangeNavPoints" stripe max-height="440">
+        <el-table :data="recentOffExchangeNavPoints" class="market-history-table" stripe max-height="360">
           <el-table-column prop="date" label="净值日期" min-width="120" />
           <el-table-column label="单位净值" min-width="110" align="right">
             <template #default="{ row }">¥{{ money(row.unitNav) }}</template>
