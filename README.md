@@ -151,6 +151,10 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 股票管理需在已有数据库执行 `docker/mysql/migration/025_stock_management.sql`。股票目录默认从新浪财经公开接口同步 A 股代码和名称（不需要 API Key；该接口不提供行业字段），并按代码识别市场；可通过 Finance 服务配置项 `investment.stock-list-url` 覆盖目录接口地址。股票详情通过东方财富补充并保存上市公司档案，另提供腾讯财经日线历史行情查询与缓存、每周定投回测（并与相同投入的一次性买入对比）；使用已有数据库时还需执行 `docker/mysql/migration/026_stock_history_cache.sql`。历史行情可选 API 查询并缓存或读取数据库已有缓存；回测按前复权收盘价、100 股整手和佣金 0.03%（最低 ¥5）估算，不含卖出及印花税。目录中的“模拟投资”操作会打开预填股票代码的模拟交易窗口。请确认部署 Finance 服务的主机能够通过 HTTPS 访问所配置的数据源。
 
+股票关注清单需在已有数据库执行 `docker/mysql/migration/028_stock_watchlist.sql` 和 `docker/mysql/migration/030_stock_refresh_schedule.sql`。股票管理页面可从目录关注/取消股票，在关注清单中查看缓存状态、手动更新行情，并设置自动同步频率：每小时整点、每个工作日 18:35 或每周一 18:35（上海时区，默认为每个工作日 18:35）；Finance 服务会自动刷新关注股票最近 30 天的日线行情。
+
+投资总览与股票模拟交易已移至股票管理页面的按钮弹窗中；已有数据库需执行 `docker/mysql/migration/029_move_investment_overview_to_stock_management.sql` 移除旧的独立菜单权限，原 `/investment/overview` 地址会兼容跳转至股票管理页面。
+
 ### 3. 启动前端
 
 ```bash

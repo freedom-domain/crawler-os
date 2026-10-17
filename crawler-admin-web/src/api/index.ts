@@ -134,6 +134,7 @@ export const fundCatalogSync = () => request.post('/investment/fund-management/c
 export const stockCatalogPage = (params: {
   keyword?: string
   market?: '上海' | '深圳' | '北京'
+  watched?: boolean
   page: number
   pageSize: number
 }) => request.get('/investment/stock-management/catalog', { params })
@@ -142,6 +143,16 @@ export const stockCatalogDetail = (code: string) =>
 export const stockCatalogProfileRefresh = (code: string) =>
   request.post('/investment/stock-management/catalog/profile/refresh', null, { params: { code } })
 export const stockCatalogSync = () => request.post('/investment/stock-management/catalog/sync')
+export const stockWatchlistList = () => request.get('/investment/stock-management/watchlist')
+export const stockWatchlistAdd = (code: string) =>
+  request.post('/investment/stock-management/watchlist', null, { params: { code } })
+export const stockWatchlistRemove = (code: string) =>
+  request.delete('/investment/stock-management/watchlist', { params: { code } })
+export const stockWatchlistRefresh = (code: string) =>
+  request.post('/investment/stock-management/watchlist/refresh', null, { params: { code } })
+export const stockRefreshScheduleGet = () => request.get('/investment/stock-management/refresh-schedule')
+export const stockRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY') =>
+  request.put('/investment/stock-management/refresh-schedule', { frequency })
 export const fundWatchlistAdd = (data: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string; frequency: string }) =>
   request.post('/investment/fund-management/watchlist', data)
 export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency?: string }) =>

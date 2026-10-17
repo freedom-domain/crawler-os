@@ -33,7 +33,7 @@ public class StockCatalogService {
         this.quoteClient = quoteClient;
     }
 
-    public StockCatalogPage page(String rawKeyword, String rawMarket, int rawPage, int rawPageSize) {
+    public StockCatalogPage page(String rawKeyword, String rawMarket, Boolean watched, int rawPage, int rawPageSize) {
         String keyword = rawKeyword == null || rawKeyword.isBlank() ? null : rawKeyword.trim();
         String market = rawMarket == null || rawMarket.isBlank() ? null : rawMarket.trim();
         if (market != null && !List.of("上海", "深圳", "北京").contains(market)) {
@@ -43,8 +43,8 @@ public class StockCatalogService {
         int pageSize = Math.min(Math.max(rawPageSize, 1), MAX_PAGE_SIZE);
         long offset = (long) (page - 1) * pageSize;
         StockCatalogPage result = new StockCatalogPage();
-        result.setItems(catalogMapper.selectCatalogPage(keyword, market, pageSize, offset));
-        result.setTotal(catalogMapper.countCatalog(keyword, market));
+        result.setItems(catalogMapper.selectCatalogPage(keyword, market, watched, pageSize, offset));
+        result.setTotal(catalogMapper.countCatalog(keyword, market, watched));
         return result;
     }
 

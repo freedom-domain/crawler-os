@@ -13,6 +13,7 @@ public class StockCatalogItem {
     private String market;
     private String industry;
     private LocalDateTime syncedAt;
+    private Boolean watched;
     private String companyName;
     private String formerNames;
     private String legalRepresentative;

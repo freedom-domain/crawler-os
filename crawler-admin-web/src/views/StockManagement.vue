@@ -5,7 +5,11 @@
         <h1>股票管理</h1>
         <p>同步 A 股目录，查看公司资料、历史行情与回测，并从股票列表直接进行模拟投资。</p>
       </div>
-      <el-button type="primary" :icon="Refresh" :loading="syncing" @click="syncCatalog">同步股票信息</el-button>
+      <div class="heading-actions">
+        <el-button :icon="Star" @click="openWatchlist">关注清单</el-button>
+        <el-button :icon="Coin" @click="openInvestmentOverview">投资总览</el-button>
+        <el-button type="primary" :icon="Refresh" :loading="syncing" @click="syncCatalog">同步股票信息</el-button>
+      </div>
     </header>
 
     <el-card shadow="never" class="stock-catalog-card">
@@ -27,6 +31,12 @@
             <el-option label="北京" value="北京" />
           </el-select>
         </el-form-item>
+        <el-form-item label="关注状态">
+          <el-select v-model="watched" clearable placeholder="全部状态" style="width: 140px" @change="searchCatalog">
+            <el-option label="已关注" :value="true" />
+            <el-option label="未关注" :value="false" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" :loading="loading" @click="searchCatalog">查询</el-button>
           <el-button :icon="Refresh" :disabled="loading" @click="resetFilters">重置</el-button>
@@ -44,6 +54,19 @@
         <el-table-column prop="market" label="市场" width="95" />
         <el-table-column prop="industry" label="所属行业" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.industry || '暂无' }}</template>
+        </el-table-column>
+        <el-table-column label="关注状态" width="125">
+          <template #default="{ row }">
+            <el-switch
+              :model-value="row.watched"
+              active-text="已关注"
+              inactive-text="未关注"
+              inline-prompt
+              :loading="watchBusyCode === row.code"
+              :disabled="watchBusyCode === row.code"
+              @change="(value: string | number | boolean) => setStockWatchStatus(row, Boolean(value))"
+            />
+          </template>
         </el-table-column>
         <el-table-column label="目录同步时间" min-width="155">
           <template #default="{ row }">{{ formatDateTime(row.syncedAt) }}</template>
@@ -77,6 +100,73 @@
         @change="loadCatalog"
       />
     </el-card>
+
+    <el-dialog v-model="watchlistVisible" title="股票关注清单" width="min(1100px, 96vw)" destroy-on-close>
+      <div class="refresh-schedule-toolbar">
+        <span>自动同步频率</span>
+        <el-select v-model="refreshFrequency" class="refresh-schedule-select">
+          <el-option label="每小时（整点）" value="HOURLY" />
+          <el-option label="每个工作日（18:35）" value="DAILY" />
+          <el-option label="每周一（18:35）" value="WEEKLY" />
+        </el-select>
+        <el-button type="primary" :loading="refreshScheduleSaving" @click="saveRefreshSchedule">保存</el-button>
+      </div>
+      <div class="watchlist-toolbar">
+        <el-input
+          v-model="watchlistKeyword"
+          clearable
+          placeholder="搜索股票代码或名称"
+          :prefix-icon="Search"
+          class="watchlist-search"
+          @input="watchlistPage = 1"
+          @clear="watchlistPage = 1"
+        />
+        <span class="watchlist-count">共 {{ filteredWatchlist.length.toLocaleString() }} 只</span>
+      </div>
+      <el-table :data="pagedWatchlist" v-loading="watchlistLoading" stripe border max-height="55vh">
+        <el-table-column prop="code" label="股票代码" width="110" />
+        <el-table-column prop="name" label="股票名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="market" label="市场" width="90" />
+        <el-table-column prop="industry" label="所属行业" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.industry || '暂无' }}</template>
+        </el-table-column>
+        <el-table-column label="历史行情点数" width="125" align="right">
+          <template #default="{ row }">{{ row.cachedPoints || 0 }}</template>
+        </el-table-column>
+        <el-table-column label="最新行情日期" width="125">
+          <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="60" fixed="right" align="center">
+          <template #default="{ row }">
+            <el-dropdown trigger="click" @command="(command: string) => handleWatchlistCommand(command, row)">
+              <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="refresh" :icon="Refresh" :disabled="watchBusyCode === row.code">立即更新</el-dropdown-item>
+                  <el-dropdown-item command="remove" :icon="Star" :disabled="watchBusyCode === row.code">取消关注</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty :description="watchlist.length ? '没有符合条件的股票' : '关注清单为空，可在股票目录中开启关注'" />
+        </template>
+      </el-table>
+      <el-pagination
+        v-if="filteredWatchlist.length > 0"
+        class="watchlist-pagination"
+        v-model:current-page="watchlistPage"
+        v-model:page-size="watchlistPageSize"
+        :total="filteredWatchlist.length"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="watchlistPage = 1"
+      />
+      <template #footer>
+        <el-button @click="watchlistVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog
       v-model="detailVisible"
@@ -161,6 +251,17 @@
     </el-dialog>
 
     <el-dialog
+      v-model="investmentOverviewVisible"
+      title="投资总览"
+      width="min(1400px, 96vw)"
+      top="3vh"
+      class="investment-overview-dialog"
+      destroy-on-close
+    >
+      <InvestmentView v-if="investmentOverviewVisible" page-type="overview" />
+    </el-dialog>
+
+    <el-dialog
       v-model="investmentVisible"
       :title="`模拟投资 · ${investmentStock?.name || ''}`"
       width="min(900px, 96vw)"
@@ -179,12 +280,24 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Coin, MoreFilled, Refresh, Search, TrendCharts, View } from '@element-plus/icons-vue'
+import { Coin, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
+import { confirm } from '@/utils/confirm'
 import StockMarketPanel from '@/components/StockMarketPanel.vue'
 import InvestmentView from '@/views/Investment.vue'
-import { stockCatalogDetail, stockCatalogPage, stockCatalogProfileRefresh, stockCatalogSync } from '@/api'
+import {
+  stockCatalogDetail,
+  stockCatalogPage,
+  stockCatalogProfileRefresh,
+  stockCatalogSync,
+  stockWatchlistAdd,
+  stockWatchlistList,
+  stockWatchlistRefresh,
+  stockWatchlistRemove,
+  stockRefreshScheduleGet,
+  stockRefreshScheduleUpdate
+} from '@/api'
 
 interface StockItem {
   code: string
@@ -192,6 +305,7 @@ interface StockItem {
   market: string
   industry: string | null
   syncedAt: string
+  watched: boolean
   companyName?: string | null
   formerNames?: string | null
   legalRepresentative?: string | null
@@ -213,15 +327,26 @@ interface StockItem {
   quoteTime?: string | null
 }
 
+interface StockWatchlistRow {
+  code: string
+  name: string
+  market: string | null
+  industry: string | null
+  cachedPoints: number
+  latestDate: string | null
+}
+
 const stocks = ref<StockItem[]>([])
 const keyword = ref('')
 const market = ref<'' | '上海' | '深圳' | '北京'>('')
+const watched = ref<boolean | undefined>(undefined)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const loading = ref(false)
 const syncing = ref(false)
 const lastSyncedAt = ref('')
+const investmentOverviewVisible = ref(false)
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailTab = ref('security')
@@ -232,6 +357,26 @@ const marketDataTab = ref('history')
 const marketDataStock = ref<StockItem | null>(null)
 const investmentVisible = ref(false)
 const investmentStock = ref<StockItem | null>(null)
+const watchlistVisible = ref(false)
+const watchlistLoading = ref(false)
+const watchlist = ref<StockWatchlistRow[]>([])
+const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
+const refreshScheduleSaving = ref(false)
+const watchlistKeyword = ref('')
+const watchlistPage = ref(1)
+const watchlistPageSize = ref(20)
+const watchBusyCode = ref('')
+const filteredWatchlist = computed(() => {
+  const query = watchlistKeyword.value.trim().toLocaleLowerCase()
+  if (!query) return watchlist.value
+  return watchlist.value.filter(stock =>
+    stock.code.toLocaleLowerCase().includes(query) || stock.name.toLocaleLowerCase().includes(query)
+  )
+})
+const pagedWatchlist = computed(() => {
+  const start = (watchlistPage.value - 1) * watchlistPageSize.value
+  return filteredWatchlist.value.slice(start, start + watchlistPageSize.value)
+})
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : '操作失败，请稍后重试'
 const formatDateTime = (value: string | null | undefined) => value ? value.replace('T', ' ').slice(0, 16) : '暂无'
@@ -248,6 +393,7 @@ const loadCatalog = async () => {
     const response: any = await stockCatalogPage({
       keyword: keyword.value.trim() || undefined,
       market: market.value || undefined,
+      watched: watched.value,
       page: page.value,
       pageSize: pageSize.value
     })
@@ -262,6 +408,114 @@ const loadCatalog = async () => {
   }
 }
 
+const loadWatchlist = async () => {
+  watchlistLoading.value = true
+  try {
+    const response: any = await stockWatchlistList()
+    watchlist.value = response.data || []
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    watchlistLoading.value = false
+  }
+}
+
+const loadRefreshSchedule = async () => {
+  try {
+    const response: any = await stockRefreshScheduleGet()
+    refreshFrequency.value = response.data.frequency
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  }
+}
+
+const saveRefreshSchedule = async () => {
+  refreshScheduleSaving.value = true
+  try {
+    const response: any = await stockRefreshScheduleUpdate(refreshFrequency.value)
+    refreshFrequency.value = response.data.frequency
+    ElMessage.success('股票自动同步频率已保存')
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    refreshScheduleSaving.value = false
+  }
+}
+
+watch(() => filteredWatchlist.value.length, count => {
+  const lastPage = Math.max(1, Math.ceil(count / watchlistPageSize.value))
+  if (watchlistPage.value > lastPage) watchlistPage.value = lastPage
+})
+
+const openWatchlist = () => {
+  watchlistPage.value = 1
+  watchlistVisible.value = true
+  void Promise.all([loadWatchlist(), loadRefreshSchedule()])
+}
+
+const setStockWatchStatus = async (stock: StockItem, watched: boolean) => {
+  if (watched === stock.watched) return
+  if (!watched && !await confirm(`取消关注 ${stock.name}（${stock.code}）？已缓存的历史行情会保留。`, {
+    title: '取消股票关注',
+    confirmText: '取消关注'
+  })) return
+
+  watchBusyCode.value = stock.code
+  try {
+    if (watched) {
+      await stockWatchlistAdd(stock.code)
+      ElMessage.success(`${stock.name} 已加入关注清单`)
+    } else {
+      await stockWatchlistRemove(stock.code)
+      ElMessage.success(`${stock.name} 已取消关注`)
+    }
+    await Promise.all([loadCatalog(), watchlistVisible.value ? loadWatchlist() : Promise.resolve()])
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+    await loadCatalog()
+  } finally {
+    watchBusyCode.value = ''
+  }
+}
+
+const removeWatchedStock = async (stock: StockWatchlistRow) => {
+  if (!await confirm(`取消关注 ${stock.name}（${stock.code}）？已缓存的历史行情会保留。`, {
+    title: '取消股票关注',
+    confirmText: '取消关注'
+  })) return
+  watchBusyCode.value = stock.code
+  try {
+    await stockWatchlistRemove(stock.code)
+    ElMessage.success(`${stock.name} 已取消关注`)
+    await Promise.all([loadWatchlist(), loadCatalog()])
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    watchBusyCode.value = ''
+  }
+}
+
+const handleWatchlistCommand = (command: string, stock: StockWatchlistRow) => {
+  if (command === 'refresh') {
+    void refreshWatchedStock(stock)
+  } else if (command === 'remove') {
+    void removeWatchedStock(stock)
+  }
+}
+
+const refreshWatchedStock = async (stock: StockWatchlistRow) => {
+  watchBusyCode.value = stock.code
+  try {
+    await stockWatchlistRefresh(stock.code)
+    ElMessage.success(`${stock.name} 历史行情已更新`)
+    await loadWatchlist()
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    watchBusyCode.value = ''
+  }
+}
+
 const searchCatalog = () => {
   page.value = 1
   void loadCatalog()
@@ -270,6 +524,7 @@ const searchCatalog = () => {
 const resetFilters = () => {
   keyword.value = ''
   market.value = ''
+  watched.value = undefined
   searchCatalog()
 }
 
@@ -321,6 +576,10 @@ const openInvestment = (stock: StockItem) => {
   investmentVisible.value = true
 }
 
+const openInvestmentOverview = () => {
+  investmentOverviewVisible.value = true
+}
+
 const openMarketData = (stock: StockItem) => {
   marketDataStock.value = stock
   marketDataTab.value = 'history'
@@ -347,11 +606,16 @@ onMounted(loadCatalog)
   gap: 18px;
 }
 .page-heading,
+.heading-actions,
 .catalog-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+.heading-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .page-heading h1 {
   margin: 0;
@@ -383,6 +647,36 @@ onMounted(loadCatalog)
   font-weight: 700;
   color: #0f9f9a;
 }
+.watchlist-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.watchlist-search {
+  width: 280px;
+}
+.watchlist-count {
+  margin-left: auto;
+  color: #8792a2;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.watchlist-pagination {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.refresh-schedule-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  color: #526174;
+  font-size: 13px;
+}
+.refresh-schedule-select {
+  width: 210px;
+}
 .detail-note {
   margin: 18px 0 0;
   padding: 10px 12px;
@@ -397,23 +691,47 @@ onMounted(loadCatalog)
     align-items: flex-start;
     flex-direction: column;
   }
+  .heading-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .watchlist-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .refresh-schedule-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .refresh-schedule-select {
+    width: 100%;
+  }
+  .watchlist-search {
+    width: 100%;
+  }
+  .watchlist-count {
+    margin-left: 0;
+  }
 }
 </style>
 
 <style>
 .stock-detail-dialog .el-dialog__body,
-.stock-investment-dialog .el-dialog__body {
+.stock-investment-dialog .el-dialog__body,
+.investment-overview-dialog .el-dialog__body {
   max-height: 76vh;
   overflow: auto;
   padding: 18px 24px 22px;
 }
 .stock-detail-dialog .el-dialog__header,
-.stock-investment-dialog .el-dialog__header {
+.stock-investment-dialog .el-dialog__header,
+.investment-overview-dialog .el-dialog__header {
   padding-bottom: 14px;
   border-bottom: 1px solid #e8edf2;
 }
 .stock-detail-dialog .el-dialog__title,
-.stock-investment-dialog .el-dialog__title {
+.stock-investment-dialog .el-dialog__title,
+.investment-overview-dialog .el-dialog__title {
   color: #203247;
   font-size: 19px;
   font-weight: 700;
@@ -448,7 +766,8 @@ onMounted(loadCatalog)
 }
 @media (max-width: 650px) {
   .stock-detail-dialog .el-dialog__body,
-  .stock-investment-dialog .el-dialog__body {
+  .stock-investment-dialog .el-dialog__body,
+  .investment-overview-dialog .el-dialog__body {
     padding: 14px 12px 18px;
   }
   .stock-detail-dialog .stock-detail-descriptions .el-descriptions__label {

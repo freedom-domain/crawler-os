@@ -296,6 +296,23 @@ CREATE TABLE IF NOT EXISTS stock_history_cache (
     KEY idx_stock_history_cache_date (code, trade_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS stock_watchlist (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    code CHAR(6) NOT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_stock_watchlist_code (code),
+    KEY idx_stock_watchlist_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS stock_refresh_setting (
+    id TINYINT UNSIGNED PRIMARY KEY,
+    frequency VARCHAR(16) NOT NULL DEFAULT 'DAILY',
+    last_run_slot VARCHAR(32),
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO stock_refresh_setting (id, frequency) VALUES (1, 'DAILY');
+
 CREATE TABLE IF NOT EXISTS fund_watchlist (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     fund_type VARCHAR(16) NOT NULL,
@@ -418,7 +435,6 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (16, '我的收藏', 'favorite', 0, 1, '/favorite', 'Folder', 6),
 (17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7),
 (18, '模拟投资', 'investment', 0, 0, NULL, 'TrendCharts', 8),
-(19, '股票模拟交易', 'investment:overview', 18, 1, '/investment/overview', 'Odometer', 1),
 (23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 3),
 (24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2);
 
@@ -426,8 +442,8 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 19),(1, 23),(1, 24),
-(2, 18),(2, 19),(2, 23),(2, 24);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
+(2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

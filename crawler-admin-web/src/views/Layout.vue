@@ -143,8 +143,9 @@ const restoreTabs = () => {
     const restored = saved.filter((tab): tab is { key: string; path: string; title: string; name?: string } =>
       tab && typeof tab.key === 'string' && typeof tab.path === 'string' && typeof tab.title === 'string' && tab.path !== '/login'
     ).map(tab => {
-      const path = tab.path === '/investment' ? '/investment/overview' : tab.path
-      const name = tab.path === '/investment' ? 'InvestmentOverview' : tab.name
+      const isLegacyInvestmentPath = ['/investment', '/investment/overview'].includes(tab.path)
+      const path = isLegacyInvestmentPath ? '/investment/stock-management' : tab.path
+      const name = isLegacyInvestmentPath ? 'StockManagement' : tab.name
       return { ...tab, key: path, path, name }
     })
     const uniqueRestored = [...new Map(restored.map(tab => [tab.path, tab])).values()]

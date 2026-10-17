@@ -77,6 +77,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="history" :icon="TrendCharts">历史行情</el-dropdown-item>
+                  <el-dropdown-item v-if="row.watched" command="watch-detail" :icon="Star">关注详情</el-dropdown-item>
                   <el-dropdown-item command="detail" :icon="View">详情</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -100,28 +101,7 @@
     </el-card>
 
     <el-dialog v-model="watchlistVisible" title="关注清单" width="min(1200px, 96vw)" destroy-on-close>
-      <p class="dialog-description">关注的基金会参与定时行情更新；此处也列出仅有历史缓存的基金。取消关注不会删除缓存。</p>
-      <el-form class="watchlist-add-form" inline @submit.prevent="addManualWatch">
-        <el-form-item label="类型">
-          <el-select v-model="manualForm.fundType" style="width: 130px" @change="resetManualFrequency">
-            <el-option label="场内基金" value="ONSHORE" />
-            <el-option label="场外基金" value="OFFSHORE" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="代码">
-          <FundCodeSelect v-model="manualForm.code" :fund-type="manualForm.fundType" />
-        </el-form-item>
-        <el-form-item v-if="manualForm.fundType === 'ONSHORE'" label="周期">
-          <el-select v-model="manualForm.frequency" style="width: 100px">
-            <el-option label="日线" value="day" />
-            <el-option label="周线" value="week" />
-            <el-option label="月线" value="month" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :loading="addingManual" @click="addManualWatch">加入关注</el-button>
-        </el-form-item>
-      </el-form>
+      <p class="dialog-description">此处仅显示已关注的基金；取消关注不会删除已有历史行情缓存。</p>
       <div class="refresh-schedule-toolbar">
         <span>自动同步频率</span>
         <el-select v-model="refreshFrequency" class="refresh-schedule-select">
@@ -145,10 +125,6 @@
           <el-option label="场内基金" value="ONSHORE" />
           <el-option label="场外基金" value="OFFSHORE" />
         </el-select>
-        <el-select v-model="watchlistStatus" clearable placeholder="全部状态" class="watchlist-status-filter" @change="watchlistPage = 1">
-          <el-option label="已关注" value="watched" />
-          <el-option label="仅缓存" value="cached" />
-        </el-select>
         <el-button :icon="Refresh" @click="resetWatchlistFilters">清除筛选</el-button>
         <span class="watchlist-count">共 {{ filteredWatchFunds.length.toLocaleString() }} 项</span>
       </div>
@@ -167,17 +143,9 @@
         <el-table-column prop="latestDate" label="最新行情日期" width="125">
           <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
         </el-table-column>
-        <el-table-column label="关注状态" width="125">
+        <el-table-column label="关注状态" width="95">
           <template #default="{ row }">
-            <el-switch
-              :model-value="row.watched"
-              :active-text="'已关注'"
-              :inactive-text="'仅缓存'"
-              inline-prompt
-              :loading="busyKey === rowKey(row)"
-              :disabled="busyKey === rowKey(row)"
-              @change="(value: string | number | boolean) => setWatchStatus(row, Boolean(value))"
-            />
+            <el-tag type="success">已关注</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
@@ -206,7 +174,7 @@
           </template>
         </el-table-column>
         <template #empty>
-          <el-empty :description="watchedFunds.length ? '没有符合条件的基金' : '关注清单为空，可在基金目录中添加关注'" />
+          <el-empty :description="hasWatchedFunds ? '没有符合条件的基金' : '关注清单为空，可在基金目录中添加关注'" />
         </template>
       </el-table>
       <el-pagination
@@ -303,45 +271,9 @@
               </el-descriptions>
             </el-tab-pane>
 
-            <el-tab-pane label="关注与缓存" name="cache">
-              <el-descriptions class="fund-detail-descriptions" :column="3" border>
-            <el-descriptions-item label="关注状态">{{ detail.watched ? '已关注' : '未关注' }}</el-descriptions-item>
-            <el-descriptions-item label="关注周期">
-              {{ detail.watchlistFrequencies ? detail.watchlistFrequencies.split(',').map(frequencyLabel).join('、') : '未关注' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="首次关注时间">{{ formatDateTime(detail.firstWatchedAt) }}</el-descriptions-item>
-            <el-descriptions-item label="缓存点数">{{ detail.cachedPoints || 0 }}</el-descriptions-item>
-            <el-descriptions-item label="日线缓存">{{ detail.dailyCachedPoints || 0 }}</el-descriptions-item>
-            <el-descriptions-item v-if="detail.fundType === 'ONSHORE'" label="周线缓存">{{ detail.weeklyCachedPoints || 0 }}</el-descriptions-item>
-            <el-descriptions-item v-if="detail.fundType === 'ONSHORE'" label="月线缓存">{{ detail.monthlyCachedPoints || 0 }}</el-descriptions-item>
-            <el-descriptions-item label="缓存起始日期">{{ detail.cachedStartDate || '暂无' }}</el-descriptions-item>
-            <el-descriptions-item label="最新缓存日期">{{ detail.latestMarketDate || '暂无' }}</el-descriptions-item>
-            <el-descriptions-item label="缓存区间表现">{{ cachedPeriodReturn(detail) }}</el-descriptions-item>
-            <el-descriptions-item label="区间最高价/净值">{{ formatPrice(detail.periodHigh) }}</el-descriptions-item>
-            <el-descriptions-item label="区间最低价/净值">{{ formatPrice(detail.periodLow) }}</el-descriptions-item>
-              </el-descriptions>
-            </el-tab-pane>
-
-            <el-tab-pane label="最新缓存行情" name="latest">
-              <el-descriptions class="fund-detail-descriptions" :column="3" border>
-            <template v-if="detail.fundType === 'ONSHORE'">
-              <el-descriptions-item label="开盘价">{{ formatPrice(detail.latestOpen) }}</el-descriptions-item>
-              <el-descriptions-item label="收盘价">{{ formatPrice(detail.latestClose) }}</el-descriptions-item>
-              <el-descriptions-item label="涨跌幅">{{ formatPercent(detail.latestChangePercent) }}</el-descriptions-item>
-              <el-descriptions-item label="最高价">{{ formatPrice(detail.latestHigh) }}</el-descriptions-item>
-              <el-descriptions-item label="最低价">{{ formatPrice(detail.latestLow) }}</el-descriptions-item>
-              <el-descriptions-item label="成交量">{{ detail.latestVolume == null ? '暂无' : detail.latestVolume }}</el-descriptions-item>
-            </template>
-            <template v-else>
-              <el-descriptions-item label="单位净值">{{ formatPrice(detail.latestUnitNav) }}</el-descriptions-item>
-              <el-descriptions-item label="累计净值">{{ formatPrice(detail.latestCumulativeNav) }}</el-descriptions-item>
-              <el-descriptions-item label="日涨跌幅">{{ formatPercent(detail.latestChangePercent) }}</el-descriptions-item>
-            </template>
-              </el-descriptions>
-            </el-tab-pane>
           </el-tabs>
         </template>
-        <p class="detail-note">基金规模与档案背景来自东方财富基金档案，规模以页面标注的披露日期为准；行情摘要仅展示本系统已缓存的数据，不会在打开详情时请求历史行情接口。</p>
+        <p class="detail-note">基金规模与档案背景来自东方财富基金档案，规模以页面标注的披露日期为准。</p>
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
@@ -354,6 +286,65 @@
         >更新基金档案</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="watchDetailVisible"
+      :title="watchDetail ? `${watchDetail.name}（${watchDetail.code}）· 关注详情` : '关注详情'"
+      width="min(1000px, 94vw)"
+      class="fund-detail-dialog"
+      destroy-on-close
+    >
+      <div v-loading="watchDetailLoading" class="fund-detail-content">
+        <el-tabs v-if="watchDetail" v-model="watchDetailTab" class="fund-detail-tabs">
+          <el-tab-pane label="关注与缓存" name="cache">
+            <el-descriptions class="fund-detail-descriptions" :column="3" border>
+              <el-descriptions-item label="关注状态">{{ watchDetail.watched ? '已关注' : '未关注' }}</el-descriptions-item>
+              <el-descriptions-item label="关注周期">
+                {{ watchDetail.watchlistFrequencies ? watchDetail.watchlistFrequencies.split(',').map(frequencyLabel).join('、') : '未关注' }}
+              </el-descriptions-item>
+              <el-descriptions-item label="首次关注时间">{{ formatDateTime(watchDetail.firstWatchedAt) }}</el-descriptions-item>
+              <el-descriptions-item label="缓存点数">{{ watchDetail.cachedPoints || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="日线缓存">{{ watchDetail.dailyCachedPoints || 0 }}</el-descriptions-item>
+              <el-descriptions-item v-if="watchDetail.fundType === 'ONSHORE'" label="周线缓存">{{ watchDetail.weeklyCachedPoints || 0 }}</el-descriptions-item>
+              <el-descriptions-item v-if="watchDetail.fundType === 'ONSHORE'" label="月线缓存">{{ watchDetail.monthlyCachedPoints || 0 }}</el-descriptions-item>
+              <el-descriptions-item label="缓存起始日期">{{ watchDetail.cachedStartDate || '暂无' }}</el-descriptions-item>
+              <el-descriptions-item label="最新缓存日期">{{ watchDetail.latestMarketDate || '暂无' }}</el-descriptions-item>
+              <el-descriptions-item label="缓存区间表现">{{ cachedPeriodReturn(watchDetail) }}</el-descriptions-item>
+              <el-descriptions-item label="区间最高价/净值">{{ formatPrice(watchDetail.periodHigh) }}</el-descriptions-item>
+              <el-descriptions-item label="区间最低价/净值">{{ formatPrice(watchDetail.periodLow) }}</el-descriptions-item>
+            </el-descriptions>
+          </el-tab-pane>
+          <el-tab-pane label="最新缓存行情" name="latest">
+            <el-descriptions class="fund-detail-descriptions" :column="3" border>
+              <template v-if="watchDetail.fundType === 'ONSHORE'">
+                <el-descriptions-item label="开盘价">{{ formatPrice(watchDetail.latestOpen) }}</el-descriptions-item>
+                <el-descriptions-item label="收盘价">{{ formatPrice(watchDetail.latestClose) }}</el-descriptions-item>
+                <el-descriptions-item label="涨跌幅">{{ formatPercent(watchDetail.latestChangePercent) }}</el-descriptions-item>
+                <el-descriptions-item label="最高价">{{ formatPrice(watchDetail.latestHigh) }}</el-descriptions-item>
+                <el-descriptions-item label="最低价">{{ formatPrice(watchDetail.latestLow) }}</el-descriptions-item>
+                <el-descriptions-item label="成交量">{{ watchDetail.latestVolume == null ? '暂无' : watchDetail.latestVolume }}</el-descriptions-item>
+              </template>
+              <template v-else>
+                <el-descriptions-item label="单位净值">{{ formatPrice(watchDetail.latestUnitNav) }}</el-descriptions-item>
+                <el-descriptions-item label="累计净值">{{ formatPrice(watchDetail.latestCumulativeNav) }}</el-descriptions-item>
+                <el-descriptions-item label="日涨跌幅">{{ formatPercent(watchDetail.latestChangePercent) }}</el-descriptions-item>
+              </template>
+            </el-descriptions>
+          </el-tab-pane>
+        </el-tabs>
+        <p class="detail-note">行情数据为系统已缓存内容，不会在打开关注详情时请求历史行情接口。</p>
+      </div>
+      <template #footer>
+        <el-button
+          type="primary"
+          :icon="Refresh"
+          :loading="watchDetailRefreshing"
+          :disabled="watchDetailLoading || !watchDetail?.watched"
+          @click="refreshWatchDetail"
+        >立即更新</el-button>
+        <el-button @click="watchDetailVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -362,7 +353,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
-import FundCodeSelect from '@/components/FundCodeSelect.vue'
 import InvestmentView from '@/views/Investment.vue'
 import {
   fundCatalogDetail,
@@ -458,7 +448,6 @@ const watchlistVisible = ref(false)
 const watchlistLoading = ref(false)
 const watchlistKeyword = ref('')
 const watchlistFundType = ref<FundType | ''>('')
-const watchlistStatus = ref<'watched' | 'cached' | ''>('')
 const watchlistPage = ref(1)
 const watchlistPageSize = ref(20)
 const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
@@ -470,14 +459,19 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailTab = ref('profile')
 const profileUpdating = ref(false)
+const watchDetailVisible = ref(false)
+const watchDetailLoading = ref(false)
+const watchDetailRefreshing = ref(false)
+const watchDetailTab = ref('cache')
 const busyKey = ref('')
 const detail = ref<FundCatalogItem | null>(null)
+const watchDetail = ref<FundCatalogItem | null>(null)
+const hasWatchedFunds = computed(() => watchedFunds.value.some(row => row.watched))
 const filteredWatchFunds = computed(() => {
   const normalizedKeyword = watchlistKeyword.value.trim().toLocaleLowerCase()
   return watchedFunds.value.filter(row => {
+    if (!row.watched) return false
     if (watchlistFundType.value && row.fundType !== watchlistFundType.value) return false
-    if (watchlistStatus.value === 'watched' && !row.watched) return false
-    if (watchlistStatus.value === 'cached' && row.watched) return false
     if (!normalizedKeyword) return true
     return [row.code, row.name, row.category, row.pinyin]
       .some(value => value?.toLocaleLowerCase().includes(normalizedKeyword))
@@ -488,12 +482,6 @@ const pagedWatchFunds = computed(() => {
   return filteredWatchFunds.value.slice(start, start + watchlistPageSize.value)
 })
 const lastSyncedAt = ref('')
-const addingManual = ref(false)
-const manualForm = ref<{ fundType: FundType; code: string; frequency: string }>({
-  fundType: 'ONSHORE',
-  code: '',
-  frequency: 'day'
-})
 
 const frequencyLabel = (frequency: string) => ({ day: '日线', week: '周线', month: '月线' }[frequency] || frequency)
 const rowKey = (row: FundManagementItem) => `${row.fundType}:${row.code}:${row.frequency}`
@@ -551,7 +539,6 @@ const resetFilters = () => {
 const resetWatchlistFilters = () => {
   watchlistKeyword.value = ''
   watchlistFundType.value = ''
-  watchlistStatus.value = ''
   watchlistPage.value = 1
 }
 
@@ -620,28 +607,6 @@ const openFundPage = (row: FundCatalogItem) => {
   fundPageVisible.value = true
 }
 
-const resetManualFrequency = () => {
-  manualForm.value.frequency = 'day'
-}
-
-const addManualWatch = async () => {
-  if (!manualForm.value.code) {
-    ElMessage.warning('请选择基金代码')
-    return
-  }
-  addingManual.value = true
-  try {
-    await fundWatchlistAdd({ ...manualForm.value, code: manualForm.value.code.trim() })
-    ElMessage.success('已加入关注清单')
-    manualForm.value.code = ''
-    await Promise.all([loadWatchlist(), loadCatalog()])
-  } catch (error) {
-    ElMessage.error(errorMessage(error))
-  } finally {
-    addingManual.value = false
-  }
-}
-
 const setCatalogWatchStatus = async (row: FundCatalogItem, watched: boolean) => {
   if (watched === row.watched) return
   if (!watched && !await confirm(`取消关注 ${row.name || row.code} 的全部行情周期？已缓存的历史行情会保留。`, {
@@ -670,6 +635,8 @@ const setCatalogWatchStatus = async (row: FundCatalogItem, watched: boolean) => 
 const handleCatalogCommand = (command: string, row: FundCatalogItem) => {
   if (command === 'history') {
     openFundPage(row)
+  } else if (command === 'watch-detail') {
+    void openWatchDetail(row)
   } else if (command === 'detail') {
     void openDetail(row)
   }
@@ -682,30 +649,6 @@ const handleWatchlistCommand = (command: string, row: FundManagementItem) => {
     void removeFund(row)
   } else if (command === 'clear') {
     void clearCache(row)
-  }
-}
-
-const setWatchStatus = async (row: FundManagementItem, watched: boolean) => {
-  if (watched === row.watched) return
-  if (!watched && !await confirm(`取消关注 ${row.name || row.code}（${frequencyLabel(row.frequency)}）？已缓存的历史行情会保留。`, {
-    title: '取消基金关注',
-    confirmText: '取消关注'
-  })) return
-
-  busyKey.value = rowKey(row)
-  try {
-    if (watched) {
-      await fundWatchlistAdd({ ...requestKey(row), frequency: row.frequency })
-      ElMessage.success('已加入关注清单')
-    } else {
-      await fundWatchlistRemove(requestKey(row))
-      ElMessage.success('已从关注清单移除')
-    }
-    await Promise.all([loadWatchlist(), loadCatalog()])
-  } catch (error) {
-    ElMessage.error(errorMessage(error))
-  } finally {
-    busyKey.value = ''
   }
 }
 
@@ -769,6 +712,71 @@ const openDetail = async (row: FundCatalogItem) => {
     ElMessage.error(errorMessage(error))
   } finally {
     detailLoading.value = false
+  }
+}
+
+const openWatchDetail = async (row: FundCatalogItem) => {
+  watchDetailVisible.value = true
+  watchDetailLoading.value = true
+  watchDetailTab.value = 'cache'
+  watchDetail.value = null
+  try {
+    const response: any = await fundCatalogDetail({ fundType: row.fundType, code: row.code })
+    watchDetail.value = response.data
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    watchDetailLoading.value = false
+  }
+}
+
+const refreshWatchDetail = async () => {
+  if (!watchDetail.value) return
+  const frequencies = (watchDetail.value.watchlistFrequencies || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter((value): value is 'day' | 'week' | 'month' =>
+      ['day', 'week', 'month'].includes(value)
+    )
+  if (frequencies.length === 0) {
+    ElMessage.error('该基金没有可更新的关注周期，请刷新基金目录后重试')
+    return
+  }
+
+  watchDetailRefreshing.value = true
+  const failures: string[] = []
+  try {
+    for (const frequency of frequencies) {
+      try {
+        await fundHistoryRefresh({
+          fundType: watchDetail.value.fundType,
+          code: watchDetail.value.code,
+          frequency
+        })
+      } catch (error) {
+        failures.push(`${frequencyLabel(frequency)}：${errorMessage(error)}`)
+      }
+    }
+
+    const response: any = await fundCatalogDetail({
+      fundType: watchDetail.value.fundType,
+      code: watchDetail.value.code
+    })
+    watchDetail.value = response.data
+    await Promise.all([
+      loadCatalog(),
+      watchlistVisible.value ? loadWatchlist() : Promise.resolve()
+    ])
+
+    if (failures.length > 0) {
+      ElMessage.error(`部分行情更新失败：${failures.join('；')}`)
+    } else {
+      ElMessage.success('关注基金行情已更新')
+    }
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+  } finally {
+    watchDetailRefreshing.value = false
   }
 }
 
@@ -845,9 +853,6 @@ onMounted(loadCatalog)
 .action-more-btn:hover {
   color: #0c8a85;
 }
-.watchlist-add-form {
-  margin-bottom: 2px;
-}
 .refresh-schedule-toolbar {
   display: flex;
   align-items: center;
@@ -870,9 +875,6 @@ onMounted(loadCatalog)
 }
 .watchlist-type-filter {
   width: 150px;
-}
-.watchlist-status-filter {
-  width: 140px;
 }
 .watchlist-count {
   margin-left: auto;
@@ -922,8 +924,7 @@ onMounted(loadCatalog)
     width: 100%;
   }
   .watchlist-search,
-  .watchlist-type-filter,
-  .watchlist-status-filter {
+  .watchlist-type-filter {
     width: 100%;
   }
   .watchlist-count {

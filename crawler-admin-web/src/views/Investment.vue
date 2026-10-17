@@ -1,20 +1,12 @@
 <template>
   <section class="investment-page">
     <template v-if="pageType === 'overview'">
-    <header class="page-heading">
+    <header v-if="!tradeOnly" class="page-heading">
       <div>
-        <h1>{{ tradeOnly ? '股票模拟投资' : '投资总览与股票模拟交易' }}</h1>
-        <p v-if="!tradeOnly">查看虚拟账户资产并模拟 A 股买卖；成交按行情接口报价，报价可能延迟，不构成投资建议。</p>
-        <p v-else>模拟买卖股票，并查看持仓与最近成交；报价可能延迟，不构成投资建议。</p>
+        <p>查看虚拟账户资产、持仓与最近成交。</p>
       </div>
-      <el-button v-if="!tradeOnly" :icon="Refresh" :loading="loading" @click="loadAccount">刷新资产</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="loadAccount">刷新资产</el-button>
     </header>
-
-    <el-tabs v-if="tradeOnly" v-model="tradeActiveTab" class="trade-only-tabs">
-      <el-tab-pane label="模拟交易" name="trade" />
-      <el-tab-pane label="持仓" name="positions" />
-      <el-tab-pane label="最近成交" name="trades" />
-    </el-tabs>
 
     <div v-if="!tradeOnly" class="asset-grid" v-loading="loading">
       <article class="asset-card">
@@ -38,9 +30,41 @@
         <small>{{ signedPercent(account?.profitPercent) }}</small>
       </article>
     </div>
+    <div v-else class="asset-grid" v-loading="loading">
+      <article class="asset-card">
+        <span>当前股票持有数量</span>
+        <strong>{{ currentStockPosition?.quantity || 0 }} 股</strong>
+        <small>{{ currentStockCode || '尚未选择股票' }}</small>
+      </article>
+      <article class="asset-card">
+        <span>当前股票持仓成本</span>
+        <strong>¥{{ money(currentStockPosition?.costValue) }}</strong>
+        <small>成本价 ¥{{ money(currentStockPosition?.averageCost) }}</small>
+      </article>
+      <article class="asset-card">
+        <span>当前股票持仓市值</span>
+        <strong>¥{{ money(currentStockPosition?.marketValue) }}</strong>
+        <small>现价 ¥{{ money(currentStockPosition?.currentPrice) }}</small>
+      </article>
+      <article class="asset-card" :class="profitTone(currentStockPosition?.unrealizedProfit)">
+        <span>当前股票浮动盈亏</span>
+        <strong>{{ signedMoney(currentStockPosition?.unrealizedProfit) }}</strong>
+        <small>{{ signedPercent(currentStockPosition?.profitPercent) }}</small>
+      </article>
+    </div>
+
+    <el-tabs v-if="tradeOnly" v-model="tradeActiveTab" class="trade-only-tabs">
+      <el-tab-pane label="模拟交易" name="trade" />
+      <el-tab-pane label="持仓" name="positions" />
+      <el-tab-pane label="最近成交" name="trades" />
+    </el-tabs>
+    <el-tabs v-else v-model="overviewActiveTab" class="trade-only-tabs">
+      <el-tab-pane label="我的持仓" name="positions" />
+      <el-tab-pane label="最近成交" name="trades" />
+    </el-tabs>
     </template>
 
-    <template v-if="pageType === 'overview' && (!tradeOnly || tradeActiveTab === 'trade')">
+    <template v-if="pageType === 'overview' && tradeOnly && tradeActiveTab === 'trade'">
     <el-card class="quote-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -57,6 +81,7 @@
             maxlength="6"
             placeholder="例如 600000"
             inputmode="numeric"
+            :readonly="tradeOnly"
             @keyup.enter="loadQuote"
           />
         </el-form-item>
@@ -600,7 +625,7 @@
     </el-tabs>
     </template>
 
-    <template v-if="pageType === 'overview' && (!tradeOnly || tradeActiveTab === 'positions')">
+    <template v-if="pageType === 'overview' && (tradeOnly ? tradeActiveTab === 'positions' : overviewActiveTab === 'positions')">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -635,7 +660,7 @@
     </el-card>
     </template>
 
-    <template v-if="pageType === 'overview' && (!tradeOnly || tradeActiveTab === 'trades')">
+    <template v-if="pageType === 'overview' && (tradeOnly ? tradeActiveTab === 'trades' : overviewActiveTab === 'trades')">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -772,6 +797,9 @@ const currentStockName = computed(() =>
   || currentStockCode.value
   || '当前股票'
 )
+const currentStockPosition = computed(() =>
+  account.value?.positions?.find((item: any) => item.code === currentStockCode.value) || null
+)
 const toDateString = (date: Date) => {
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
   return localDate.toISOString().slice(0, 10)
@@ -783,6 +811,7 @@ const initialEndDate = toDateString(today)
 const onshoreActiveTab = ref('history')
 const offshoreActiveTab = ref('history')
 const tradeActiveTab = ref<'trade' | 'positions' | 'trades'>('trade')
+const overviewActiveTab = ref<'positions' | 'trades'>('positions')
 const fundCode = ref('')
 const historyStartDate = ref(initialStartDate)
 const historyEndDate = ref(initialEndDate)

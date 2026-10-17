@@ -16,24 +16,32 @@ public interface StockCatalogMapper extends BaseMapper<StockCatalog> {
 
     @Select("""
             <script>
-            SELECT code, name, market, industry, synced_at AS syncedAt
-            FROM stock_catalog
+            SELECT s.code, s.name, s.market, s.industry, s.synced_at AS syncedAt,
+                   EXISTS(SELECT 1 FROM stock_watchlist w WHERE w.code = s.code) AS watched
+            FROM stock_catalog s
             <where>
                 <if test="keyword != null and keyword != ''">
-                    (code LIKE CONCAT('%', #{keyword}, '%')
-                     OR name LIKE CONCAT('%', #{keyword}, '%')
-                     OR industry LIKE CONCAT('%', #{keyword}, '%'))
+                    (s.code LIKE CONCAT('%', #{keyword}, '%')
+                     OR s.name LIKE CONCAT('%', #{keyword}, '%')
+                     OR s.industry LIKE CONCAT('%', #{keyword}, '%'))
                 </if>
                 <if test="market != null and market != ''">
-                    AND market = #{market}
+                    AND s.market = #{market}
+                </if>
+                <if test="watched != null and watched">
+                    AND EXISTS(SELECT 1 FROM stock_watchlist w WHERE w.code = s.code)
+                </if>
+                <if test="watched != null and !watched">
+                    AND NOT EXISTS(SELECT 1 FROM stock_watchlist w WHERE w.code = s.code)
                 </if>
             </where>
-            ORDER BY code
+            ORDER BY s.code
             LIMIT #{limit} OFFSET #{offset}
             </script>
             """)
     List<StockCatalogItem> selectCatalogPage(@Param("keyword") String keyword, @Param("market") String market,
-                                             @Param("limit") int limit, @Param("offset") long offset);
+                                             @Param("watched") Boolean watched, @Param("limit") int limit,
+                                             @Param("offset") long offset);
 
     @Select("""
             <script>
@@ -48,10 +56,17 @@ public interface StockCatalogMapper extends BaseMapper<StockCatalog> {
                 <if test="market != null and market != ''">
                     AND market = #{market}
                 </if>
+                <if test="watched != null and watched">
+                    AND EXISTS(SELECT 1 FROM stock_watchlist w WHERE w.code = stock_catalog.code)
+                </if>
+                <if test="watched != null and !watched">
+                    AND NOT EXISTS(SELECT 1 FROM stock_watchlist w WHERE w.code = stock_catalog.code)
+                </if>
             </where>
             </script>
             """)
-    long countCatalog(@Param("keyword") String keyword, @Param("market") String market);
+    long countCatalog(@Param("keyword") String keyword, @Param("market") String market,
+                      @Param("watched") Boolean watched);
 
     @Select("""
             SELECT s.code, s.name, s.market, s.industry, s.synced_at AS syncedAt,
