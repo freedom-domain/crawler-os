@@ -30,11 +30,17 @@ if [[ -n "$build_arg" ]]; then
     "$repo_root/scripts/build-local.sh" -pl "$service" -am
   fi
 
+  build_context="$(mktemp -d)"
+  trap 'rm -rf "$build_context"' EXIT
+  mkdir -p "$build_context/$service/target"
+  cp "$repo_root/$service"/target/*.jar "$build_context/$service/target/"
+  cp "$repo_root/$dockerfile" "$build_context/Dockerfile"
+
   docker build \
     --tag "$image:$image_tag" \
-    --file "$repo_root/$dockerfile" \
+    --file "$build_context/Dockerfile" \
     --build-arg "$build_arg" \
-    "$repo_root/$context"
+    "$build_context"
 else
   docker build \
     --tag "$image:$image_tag" \

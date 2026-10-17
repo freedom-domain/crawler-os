@@ -6,4 +6,4 @@ exec "$script_dir/_build-image.sh" \
   crawler-finance-service \
   crawler-finance-service/Dockerfile \
   . \
-  ""
+  SERVICE=crawler-finance-service

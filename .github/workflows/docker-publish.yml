@@ -42,8 +42,8 @@ jobs:
             build_arg: SERVICE=crawler-user-service
           - service: crawler-finance-service
             context: .
-            dockerfile: ./crawler-finance-service/Dockerfile
-            build_arg: ""
+            dockerfile: ./docker/Dockerfile-app
+            build_arg: SERVICE=crawler-finance-service
           - service: crawler-spider-service
             context: .
             dockerfile: ./docker/Dockerfile-app
