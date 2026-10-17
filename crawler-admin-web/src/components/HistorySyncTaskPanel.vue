@@ -2,53 +2,71 @@
   <div class="history-sync-panel">
     <el-dialog
       v-model="concurrencyDialogVisible"
-      title="历史行情 API 与并发设置"
-      width="min(520px, 94vw)"
+      title="历史行情同步设置"
+      width="min(620px, 94vw)"
       :close-on-click-modal="!concurrencySaving"
       :close-on-press-escape="!concurrencySaving"
     >
-      <div v-loading="concurrencyLoading">
-        <div class="concurrency-setting">
-          <span>历史行情任务并发数</span>
-          <el-input-number
-            v-model="concurrency"
-            :min="1"
-            :max="20"
-            :step="1"
-            controls-position="right"
-            :disabled="concurrencyLoading || concurrencySaving"
-            aria-label="历史行情任务并发数"
-          />
-        </div>
-        <div class="concurrency-setting">
-          <span>请求间隔（毫秒）</span>
-          <el-input-number
-            v-model="requestIntervalMillis"
-            :min="0"
-            :max="60000"
-            :step="100"
-            controls-position="right"
-            :disabled="concurrencyLoading || concurrencySaving"
-            aria-label="历史行情请求间隔毫秒"
-          />
-        </div>
-        <p class="concurrency-hint">
-          请求开始之间至少间隔此时长；0 表示不限制。并发数控制同时执行的任务和请求数量，间隔与并发数共同生效。默认 1000 毫秒。
-        </p>
-        <div class="concurrency-setting api-provider-setting">
-          <span>启用的历史行情 API</span>
-          <el-select
+      <div v-loading="concurrencyLoading" class="concurrency-settings">
+        <section class="concurrency-section">
+          <div class="section-heading">
+            <h3>同步速度</h3>
+            <p>设置同步任务的处理规模和行情请求节奏。</p>
+          </div>
+          <div class="concurrency-fields">
+            <div class="concurrency-field">
+              <label for="history-sync-concurrency">任务并发数</label>
+              <div class="field-control">
+                <el-input-number
+                  id="history-sync-concurrency"
+                  v-model="concurrency"
+                  :min="1"
+                  :max="20"
+                  :step="1"
+                  controls-position="right"
+                  :disabled="concurrencyLoading || concurrencySaving"
+                  aria-label="历史行情任务并发数"
+                />
+                <span class="field-unit">个任务</span>
+              </div>
+              <p class="field-hint">同时处理的标的数量，范围为 1–20；并发越高，请求压力也越大。</p>
+            </div>
+            <div class="concurrency-field">
+              <label for="history-sync-interval">请求间隔</label>
+              <div class="field-control">
+                <el-input-number
+                  id="history-sync-interval"
+                  v-model="requestIntervalMillis"
+                  :min="0"
+                  :max="60000"
+                  :step="100"
+                  controls-position="right"
+                  :disabled="concurrencyLoading || concurrencySaving"
+                  aria-label="历史行情请求间隔毫秒"
+                />
+                <span class="field-unit">毫秒</span>
+              </div>
+              <p class="field-hint">相邻请求至少间隔此时长；设为 0 表示不限制，默认 1,000 毫秒。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="concurrency-section provider-section">
+          <div class="section-heading">
+            <h3>行情数据源</h3>
+            <p>选择历史行情同步时可使用的数据源，至少启用一个。</p>
+          </div>
+          <el-checkbox-group
             v-model="providers"
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
-            placeholder="至少选择一个 API"
+            class="provider-options"
             :disabled="concurrencyLoading || concurrencySaving"
             aria-label="启用的历史行情 API"
           >
-            <el-option v-for="option in providerOptions" :key="option.value" :label="option.label" :value="option.value" />
-          </el-select>
-        </div>
+            <el-checkbox v-for="option in providerOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </el-checkbox>
+          </el-checkbox-group>
+        </section>
       </div>
       <template #footer>
         <el-button :disabled="concurrencySaving" @click="concurrencyDialogVisible = false">取消</el-button>
@@ -89,31 +107,33 @@
           <p v-if="task.message" class="task-message">{{ task.message }}</p>
         </div>
 
-        <el-table :data="task.items" stripe border max-height="52vh" v-loading="loadingTask">
-          <el-table-column label="类型" width="85">
-            <template #default="{ row }">{{ row.fundType === 'ONSHORE' ? '场内基金' : row.fundType === 'OFFSHORE' ? '场外基金' : '股票' }}</template>
-          </el-table-column>
-          <el-table-column prop="code" label="代码" width="100" />
-          <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
-          <el-table-column label="同步状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="taskStatusType(row.status)" size="small">{{ taskStatusLabel(row.status) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="数据点数" width="100" align="right">
-            <template #default="{ row }">{{ row.pointCount ?? '—' }}</template>
-          </el-table-column>
-          <el-table-column prop="message" label="同步结果 / 错误" min-width="230" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.message || '等待处理' }}</template>
-          </el-table-column>
-          <el-table-column label="开始时间" min-width="155">
-            <template #default="{ row }">{{ dateTime(row.startedAt) }}</template>
-          </el-table-column>
-          <el-table-column label="完成时间" min-width="155">
-            <template #default="{ row }">{{ dateTime(row.finishedAt) }}</template>
-          </el-table-column>
-          <template #empty><el-empty description="该目录当前没有可同步的标的" /></template>
-        </el-table>
+        <div class="table-scroll-wrapper">
+          <el-table :data="task.items" stripe resizable border max-height="52vh" v-loading="loadingTask">
+            <el-table-column label="类型" width="100" resizable>
+              <template #default="{ row }">{{ row.fundType === 'ONSHORE' ? '场内基金' : row.fundType === 'OFFSHORE' ? '场外基金' : '股票' }}</template>
+            </el-table-column>
+            <el-table-column prop="code" label="代码" width="110" resizable />
+            <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip resizable />
+            <el-table-column label="同步状态" width="110" resizable>
+              <template #default="{ row }">
+                <el-tag :type="taskStatusType(row.status)" size="small">{{ taskStatusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="数据点数" width="110" align="right" resizable>
+              <template #default="{ row }">{{ row.pointCount ?? '—' }}</template>
+            </el-table-column>
+            <el-table-column prop="message" label="同步结果 / 错误" min-width="230" show-overflow-tooltip resizable>
+              <template #default="{ row }">{{ row.message || '等待处理' }}</template>
+            </el-table-column>
+            <el-table-column label="开始时间" min-width="170" resizable>
+              <template #default="{ row }">{{ dateTime(row.startedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="完成时间" min-width="170" resizable>
+              <template #default="{ row }">{{ dateTime(row.finishedAt) }}</template>
+            </el-table-column>
+            <template #empty><el-empty description="该目录当前没有可同步的标的" /></template>
+          </el-table>
+        </div>
         <el-pagination
           v-if="task.itemTotal > 0"
           class="task-pagination"
@@ -404,21 +424,65 @@ defineExpose({
 </script>
 
 <style scoped>
-.concurrency-setting {
+.concurrency-settings {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 22px;
 }
-.concurrency-setting > span {
-  color: var(--el-text-color-regular);
+.concurrency-section + .concurrency-section {
+  padding-top: 20px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.section-heading {
+  margin-bottom: 16px;
+}
+.section-heading h3 {
+  margin: 0;
+  color: var(--el-text-color-primary);
+  font-size: 15px;
   font-weight: 600;
 }
-.concurrency-hint {
-  margin: 14px 0 0;
+.section-heading p,
+.field-hint {
+  margin: 5px 0 0;
   color: var(--el-text-color-secondary);
   font-size: 13px;
   line-height: 1.6;
+}
+.concurrency-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.concurrency-field > label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+  font-weight: 600;
+}
+.field-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.field-control .el-input-number {
+  width: 160px;
+  max-width: 100%;
+}
+.field-unit {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.provider-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  min-height: 32px;
+}
+.provider-options :deep(.el-checkbox) {
+  margin-right: 0;
 }
 .task-summary {
   display: flex;
@@ -453,6 +517,10 @@ defineExpose({
 @media (max-width: 650px) {
   .history-sync-panel {
     flex-wrap: wrap;
+  }
+  .concurrency-fields {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 }
 </style>

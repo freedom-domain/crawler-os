@@ -13,17 +13,18 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="watchlist" :icon="Star">关注清单</el-dropdown-item>
-              <el-dropdown-item command="history-sync">同步全部历史行情</el-dropdown-item>
-              <el-dropdown-item command="sync-records">历史行情同步记录</el-dropdown-item>
-              <el-dropdown-item command="concurrency">历史行情 API 与并发设置</el-dropdown-item>
               <el-dropdown-item command="overview" :icon="Coin">投资总览</el-dropdown-item>
-              <el-dropdown-item command="catalog-sync" :icon="Refresh" :disabled="syncing">同步股票信息</el-dropdown-item>
+              <el-dropdown-item command="sync-management" :icon="Refresh">同步管理</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <HistorySyncTaskPanel ref="historySyncPanel" instrument-type="STOCK" />
       </div>
     </header>
+    <SyncManagementDialog
+      ref="syncManagementDialog"
+      instrument-type="STOCK"
+      @catalog-synced="onStockCatalogSynced"
+    />
 
     <el-card shadow="never" class="stock-catalog-card">
       <el-form class="filter-form" inline @submit.prevent="searchCatalog">
@@ -297,18 +298,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Coin, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
+import SyncManagementDialog from '@/components/SyncManagementDialog.vue'
 import StockMarketPanel from '@/components/StockMarketPanel.vue'
-import HistorySyncTaskPanel from '@/components/HistorySyncTaskPanel.vue'
 import InvestmentView from '@/views/Investment.vue'
 import {
   stockCatalogDetail,
   stockCatalogPage,
   stockCatalogProfileRefresh,
-  stockCatalogSync,
   stockWatchlistAdd,
   stockWatchlistList,
   stockWatchlistRefresh,
@@ -355,6 +355,7 @@ interface StockWatchlistRow {
 }
 
 const stocks = ref<StockItem[]>([])
+const syncManagementDialog = ref<InstanceType<typeof SyncManagementDialog> | null>(null)
 const keyword = ref('')
 const market = ref<'' | '上海' | '深圳' | '北京'>('')
 const watched = ref<boolean | undefined>(undefined)
@@ -362,8 +363,6 @@ const page = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
 const loading = ref(false)
-const syncing = ref(false)
-const historySyncPanel = ref<InstanceType<typeof HistorySyncTaskPanel> | null>(null)
 const lastSyncedAt = ref('')
 const investmentOverviewVisible = ref(false)
 const detailVisible = ref(false)
@@ -474,11 +473,10 @@ const openWatchlist = () => {
 
 const handleManagementAction = (command: string) => {
   if (command === 'watchlist') openWatchlist()
-  else if (command === 'history-sync') void historySyncPanel.value?.startTask()
-  else if (command === 'sync-records') void historySyncPanel.value?.openLatest()
-  else if (command === 'concurrency') historySyncPanel.value?.openConcurrencySettings()
   else if (command === 'overview') openInvestmentOverview()
-  else if (command === 'catalog-sync') void syncCatalog()
+  else if (command === 'sync-management') {
+    syncManagementDialog.value?.open()
+  }
 }
 
 const setStockWatchStatus = async (stock: StockItem, watched: boolean) => {
@@ -556,20 +554,6 @@ const resetFilters = () => {
   searchCatalog()
 }
 
-const syncCatalog = async () => {
-  syncing.value = true
-  try {
-    const response: any = await stockCatalogSync()
-    ElMessage.success(`股票信息同步完成：共 ${response.data.total.toLocaleString()} 只`)
-    page.value = 1
-    await loadCatalog()
-  } catch (error) {
-    ElMessage.error(errorMessage(error))
-  } finally {
-    syncing.value = false
-  }
-}
-
 const openDetail = async (stock: StockItem) => {
   detailVisible.value = true
   detailLoading.value = true
@@ -624,7 +608,16 @@ const handleCommand = (command: string, stock: StockItem) => {
   }
 }
 
-onMounted(loadCatalog)
+const onStockCatalogSynced = () => {
+  page.value = 1
+  void loadCatalog()
+}
+
+onMounted(() => {
+  window.addEventListener('stock-catalog-synced', onStockCatalogSynced)
+  void loadCatalog()
+})
+onBeforeUnmount(() => window.removeEventListener('stock-catalog-synced', onStockCatalogSynced))
 </script>
 
 <style scoped>

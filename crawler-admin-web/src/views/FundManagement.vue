@@ -13,16 +13,17 @@
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item command="watchlist" :icon="Star">关注清单</el-dropdown-item>
-              <el-dropdown-item command="history-sync">同步全部历史行情</el-dropdown-item>
-              <el-dropdown-item command="sync-records">历史行情同步记录</el-dropdown-item>
-              <el-dropdown-item command="concurrency">历史行情 API 与并发设置</el-dropdown-item>
-              <el-dropdown-item command="catalog-sync" :icon="Refresh" :disabled="syncing">同步基金目录</el-dropdown-item>
+              <el-dropdown-item command="sync-management" :icon="Refresh">同步管理</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <HistorySyncTaskPanel ref="historySyncPanel" instrument-type="FUND" />
       </div>
     </header>
+    <SyncManagementDialog
+      ref="syncManagementDialog"
+      instrument-type="FUND"
+      @catalog-synced="onFundCatalogSynced"
+    />
 
     <el-card shadow="never" class="catalog-card">
       <el-form class="filter-form" inline @submit.prevent="searchCatalog">
@@ -366,17 +367,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, Delete, MoreFilled, Refresh, Search, Star, TrendCharts, View } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
-import HistorySyncTaskPanel from '@/components/HistorySyncTaskPanel.vue'
+import SyncManagementDialog from '@/components/SyncManagementDialog.vue'
 import InvestmentView from '@/views/Investment.vue'
 import {
   fundCatalogDetail,
   fundCatalogPage,
   fundCatalogProfileRefresh,
-  fundCatalogSync,
   fundHistoryCacheClear,
   fundHistoryRefresh,
   fundManagementList,
@@ -453,6 +453,7 @@ interface FundManagementItem extends FundCatalogItem {
 }
 
 const catalog = ref<FundCatalogItem[]>([])
+const syncManagementDialog = ref<InstanceType<typeof SyncManagementDialog> | null>(null)
 const watchedFunds = ref<FundManagementItem[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -461,8 +462,6 @@ const keyword = ref('')
 const fundType = ref<FundType | ''>('')
 const catalogWatchStatus = ref<'watched' | 'unwatched' | ''>('')
 const loading = ref(false)
-const syncing = ref(false)
-const historySyncPanel = ref<InstanceType<typeof HistorySyncTaskPanel> | null>(null)
 const watchlistVisible = ref(false)
 const watchlistLoading = ref(false)
 const watchlistKeyword = ref('')
@@ -562,20 +561,6 @@ const resetWatchlistFilters = () => {
   watchlistPage.value = 1
 }
 
-const syncCatalog = async () => {
-  syncing.value = true
-  try {
-    const response: any = await fundCatalogSync()
-    const result = response.data
-    ElMessage.success(`基金目录同步完成：共 ${result.total} 只（场内 ${result.onshore}，场外 ${result.offshore}）`)
-    await loadCatalog()
-  } catch (error) {
-    ElMessage.error(errorMessage(error))
-  } finally {
-    syncing.value = false
-  }
-}
-
 const loadWatchlist = async () => {
   watchlistLoading.value = true
   try {
@@ -623,10 +608,9 @@ const openWatchlist = () => {
 
 const handleManagementAction = (command: string) => {
   if (command === 'watchlist') openWatchlist()
-  else if (command === 'history-sync') void historySyncPanel.value?.startTask()
-  else if (command === 'sync-records') void historySyncPanel.value?.openLatest()
-  else if (command === 'concurrency') historySyncPanel.value?.openConcurrencySettings()
-  else if (command === 'catalog-sync') void syncCatalog()
+  else if (command === 'sync-management') {
+    syncManagementDialog.value?.open()
+  }
 }
 
 const openFundPage = (row: FundCatalogItem) => {
@@ -826,7 +810,16 @@ const refreshFundProfile = async () => {
   }
 }
 
-onMounted(loadCatalog)
+const onFundCatalogSynced = () => {
+  page.value = 1
+  void loadCatalog()
+}
+
+onMounted(() => {
+  window.addEventListener('fund-catalog-synced', onFundCatalogSynced)
+  void loadCatalog()
+})
+onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCatalogSynced))
 </script>
 
 <style scoped>
