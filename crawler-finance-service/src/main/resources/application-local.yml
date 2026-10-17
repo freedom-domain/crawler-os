@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:mysql://192.168.31.2:3306/crawler_platform_local?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: mysql_FxYHD4
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:192.168.31.2:8848}
+        namespace: ${NACOS_NAMESPACE:crawler-local}
+  data:
+    redis:
+      host: 192.168.31.2
+      port: 6379
+      password: redis_4rzHHD
+
+logging:
+  level:
+    com.collect.finance.mapper: DEBUG
+    org.apache.ibatis: DEBUG

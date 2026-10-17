@@ -102,6 +102,26 @@ export const simulateOffExchangeFundDca = (data: {
   subscriptionFeeRate: number
   redemptionFeeRate: number
 }) => request.post('/investment/off-exchange-fund/dca', data)
+export const fundManagementList = () => request.get('/investment/fund-management')
+export const fundCatalogPage = (params: {
+  keyword?: string
+  fundType?: 'ONSHORE' | 'OFFSHORE'
+  page: number
+  pageSize: number
+}) => request.get('/investment/fund-management/catalog', { params })
+export const fundCatalogDetail = (params: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string }) =>
+  request.get('/investment/fund-management/catalog/detail', { params })
+export const fundCatalogProfileRefresh = (params: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string }) =>
+  request.post('/investment/fund-management/catalog/profile/refresh', null, { params })
+export const fundCatalogSync = () => request.post('/investment/fund-management/catalog/sync')
+export const fundWatchlistAdd = (data: { fundType: 'ONSHORE' | 'OFFSHORE'; code: string; frequency: string }) =>
+  request.post('/investment/fund-management/watchlist', data)
+export const fundWatchlistRemove = (params: { fundType: string; code: string; frequency: string }) =>
+  request.delete('/investment/fund-management/watchlist', { params })
+export const fundHistoryRefresh = (params: { fundType: string; code: string; frequency: string }) =>
+  request.post('/investment/fund-management/refresh', null, { params })
+export const fundHistoryCacheClear = (params: { fundType: string; code: string; frequency: string }) =>
+  request.delete('/investment/fund-management/cache', { params })
 export const syncSearchHistory = (keywords: string[]) => request.post('/search/history/sync', keywords)
 export const clearSearchHistory = () => request.delete('/search/history')
 export const deleteSearchHistory = (keyword: string) => request.delete('/search/history/item', { params: { keyword } })

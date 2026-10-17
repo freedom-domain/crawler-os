@@ -24,6 +24,7 @@ collect-x/
 ├── crawler-common            # 公共模块
 ├── crawler-gateway           # API 网关 (8080)
 ├── crawler-user-service      # 用户/角色/权限 (8081)
+├── crawler-finance-service   # 模拟投资/基金行情 (8085)
 ├── crawler-spider-service    # 爬虫/任务/调度 (8082)
 ├── crawler-search-service    # 数据搜索 (8083)
 ├── crawler-file-service      # 文件管理 (8084)
@@ -42,10 +43,10 @@ Web Admin (Vue3)
 API Gateway (8080)
       │
  ┌────┼───────────┬──────────┐
- │    │           │          │
-User  Spider     Search     File
- │    │           │          │
- └────┴─────┬─────┴──────────┘
+ │    │      │    │          │
+User Finance Spider Search  File
+ │    │      │    │          │
+ └────┴──────┴────┴──────────┘
             │
     MySQL / ES / MinIO
              │
@@ -99,6 +100,7 @@ Kafka 任务 topic 按环境隔离：默认环境使用 `spider_task_topic-defau
 # 依次启动（每个模块独立端口）
 mvn -pl crawler-gateway spring-boot:run
 mvn -pl crawler-user-service spring-boot:run
+mvn -pl crawler-finance-service spring-boot:run
 mvn -pl crawler-spider-service spring-boot:run
 mvn -pl crawler-search-service spring-boot:run
 mvn -pl crawler-file-service spring-boot:run
@@ -109,15 +111,15 @@ mvn -pl crawler-worker spring-boot:run
 
 ```bash
 ./scripts/build-local.sh
-docker-compose up -d crawler-gateway crawler-user-service crawler-spider-service \
+docker-compose up -d crawler-gateway crawler-user-service crawler-finance-service crawler-spider-service \
   crawler-search-service crawler-file-service crawler-worker crawler-admin-web
 ```
 
-Compose 使用本地专用的 `docker/Dockerfile-app-local`，仅提供 JRE 运行环境并复制本机 Maven 生成的 JAR；请先执行本地 Maven 构建。
+Compose 中除 finance-service 外的应用使用本地专用的 `docker/Dockerfile-app-local`，仅提供 JRE 运行环境并复制本机 Maven 生成的 JAR；请先执行本地 Maven 构建。finance-service 使用模块内的 [Dockerfile](./crawler-finance-service/Dockerfile)，在 Docker 构建阶段编译模块并打包运行镜像。
 
 ### 本地 Docker 镜像构建（可选）
 
-以下命令仅用于需要本地运行应用容器时构建镜像。脚本先调用本机 Maven 构建后端，再构建运行时镜像；Maven 不会在镜像中运行。
+以下命令仅用于需要本地运行应用容器时构建镜像。脚本先调用本机 Maven 构建后端，再构建运行时镜像；finance-service 使用独立的多阶段 Dockerfile，在镜像构建阶段再次构建自身及其 Maven 依赖。
 
 ```bash
 ./scripts/build-docker-images/build-all.sh
@@ -132,7 +134,7 @@ BUILD_JOBS=3 ./scripts/build-docker-images/build-all.sh
 
 也可以继续通过对应的 `crawler-*.sh` 脚本单独构建镜像。默认镜像标签为 `latest`，可通过 `IMAGE_TAG` 指定其他标签。
 
-本地构建入口是 `scripts/build-local.sh`，本地镜像使用 `docker/Dockerfile-app-local`。GitHub Actions 则由 `.github/workflows/docker-publish.yml` 独立使用 Docker Buildx 和 `docker/Dockerfile-app` 在构建容器内执行 Maven，并在适用时发布到 GHCR；Actions 不调用本地构建脚本，也不依赖本地 `target/` 产物。
+本地构建入口是 `scripts/build-local.sh`，普通服务镜像使用 `docker/Dockerfile-app-local`；finance-service 使用 `crawler-finance-service/Dockerfile` 在镜像构建阶段编译。GitHub Actions 则由 `.github/workflows/docker-publish.yml` 独立使用 Docker Buildx 在构建容器内执行 Maven，并在适用时发布到 GHCR；Actions 不调用本地构建脚本，也不依赖本地 `target/` 产物。
 
 前端容器使用 Nginx 提供生产构建文件，并将 `/api` 请求转发到网关：
 
@@ -145,7 +147,7 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。
 
-启用模拟投资功能时，已有数据库需依次执行 `docker/mysql/migration/017_paper_investment.sql`、`docker/mysql/migration/018_investment_type_menus.sql`、`docker/mysql/migration/019_merge_stock_trading_into_investment_overview.sql` 和 `docker/mysql/migration/020_fund_history_cache.sql`。模拟账户在用户首次打开功能时创建，每个账户默认有 ¥100,000 虚拟资金；投资菜单分为股票模拟交易（含账户总览）、场内基金和场外基金。实时行情来自腾讯财经公开报价接口；场内基金历史行情和周定投回测使用腾讯历史行情接口，场外基金历史净值和周定投回测使用东方财富接口。场内和场外历史行情均会缓存到数据库，查询时可选择 API（查询后缓存）或数据库；选择数据库时需要先通过 API 查询缓存对应代码、周期和日期范围的数据。历史行情分析包含区间/年化收益、最大回撤、年化波动率、夏普/索提诺比率、月度收益和滚动一年收益；风险调整比率假设无风险利率为 0%，场内使用复权收盘价，场外优先使用累计净值，缺失累计净值时使用单位净值。定投回测同时按相同累计投入对比区间首日一次性买入，费用和整手规则依基金类型估算。所有指标基于所选历史区间，不代表未来收益。场外基金定投回测中，申购费率从每期投入中扣除，期末赎回费按用户输入的比例估算；实际净值公布、申购确认和持有期赎回费可能与模拟假设不同。
+启用模拟投资功能时，已有数据库需依次执行 `docker/mysql/migration/017_paper_investment.sql`、`docker/mysql/migration/018_investment_type_menus.sql`、`docker/mysql/migration/019_merge_stock_trading_into_investment_overview.sql`、`docker/mysql/migration/020_fund_history_cache.sql`、`docker/mysql/migration/021_fund_watchlist.sql`、`docker/mysql/migration/022_fund_catalog.sql`、`docker/mysql/migration/023_move_fund_pages_to_catalog.sql` 和 `docker/mysql/migration/024_fund_profile.sql`。模拟投资和基金行情由独立的 `crawler-finance-service` 提供；模拟账户在用户首次打开功能时创建，每个账户默认有 ¥100,000 虚拟资金。投资菜单包含投资总览和基金管理。基金管理可同步东方财富基金目录并按代码、名称或拼音筛选基金；基金详情展示已保存的档案与缓存行情，点击“更新基金档案”时会从东方财富获取并更新基金规模、管理团队、费率及投资背景等信息。场内基金和场外基金行情/定投页面通过基金管理目录页上的按钮弹窗打开。关注清单在弹窗中维护，已有缓存可手动更新或清除；取消关注不会删除已有缓存。实时行情来自腾讯财经公开报价接口；场内基金历史行情和周定投回测使用腾讯历史行情接口，场外基金历史净值和周定投回测使用东方财富接口。场内和场外历史行情均会缓存到数据库，查询时可选择 API（查询后缓存）或数据库；选择数据库时需要先通过 API 查询缓存对应代码、周期和日期范围的数据。finance-service 会在上海时区每个工作日 18:30 自动刷新数据库中已有缓存或关注清单中的基金历史行情（场内日/周/月线和场外净值）；可通过 `investment.history-refresh-cron` 覆盖默认 cron。刷新只重查最近数据窗口，以更新近期及最近公布的行情。历史行情分析包含区间/年化收益、最大回撤、年化波动率、夏普/索提诺比率、月度收益和滚动一年收益；风险调整比率假设无风险利率为 0%，场内使用复权收盘价，场外优先使用累计净值，缺失累计净值时使用单位净值。定投回测同时按相同累计投入对比区间首日一次性买入，费用和整手规则依基金类型估算。所有指标基于所选历史区间，不代表未来收益。场外基金定投回测中，申购费率从每期投入中扣除，期末赎回费按用户输入的比例估算；实际净值公布、申购确认和持有期赎回费可能与模拟假设不同。
 
 ### 3. 启动前端
 
@@ -179,6 +181,7 @@ npm run build      # 生产构建到 dist/
 |------|------|
 | Gateway | 8080 |
 | User Service | 8081 |
+| Finance Service | 8085 |
 | Spider Service | 8082 |
 | Search Service | 8083 |
 | File Service | 8084 |

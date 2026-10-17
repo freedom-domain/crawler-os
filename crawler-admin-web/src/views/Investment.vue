@@ -85,6 +85,8 @@
     </template>
 
     <template v-if="pageType === 'onshore-fund'">
+    <el-tabs v-model="onshoreActiveTab" class="fund-tabs">
+    <el-tab-pane label="基金历史行情" name="history">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -96,7 +98,7 @@
       </template>
       <el-form class="history-form" inline @submit.prevent="loadFundHistory">
         <el-form-item label="基金代码">
-          <el-input v-model="fundCode" maxlength="6" placeholder="510300 / 159915" inputmode="numeric" />
+          <FundCodeSelect v-model="fundCode" fund-type="ONSHORE" />
         </el-form-item>
         <el-form-item label="周期">
           <el-select v-model="historyFrequency" style="width: 100px">
@@ -133,7 +135,36 @@
             <line x1="0" y1="110" x2="1000" y2="110" class="chart-grid" />
             <line x1="0" y1="190" x2="1000" y2="190" class="chart-grid" />
             <polyline :points="historyChartPoints" class="chart-line" />
+            <template v-if="historyHoverIndex !== null">
+              <line
+                :x1="historyChartCoordinates[historyHoverIndex]?.x"
+                y1="20"
+                :x2="historyChartCoordinates[historyHoverIndex]?.x"
+                y2="200"
+                class="chart-crosshair"
+              />
+              <circle
+                :cx="historyChartCoordinates[historyHoverIndex]?.x"
+                :cy="historyChartCoordinates[historyHoverIndex]?.y"
+                r="5"
+                class="chart-hover-dot"
+              />
+            </template>
+            <rect
+              x="0"
+              y="20"
+              width="1000"
+              height="180"
+              class="chart-interaction-area"
+              @pointermove="updateChartHover($event, historyPoints.length, 'onshore')"
+              @pointerleave="historyHoverIndex = null"
+            />
           </svg>
+          <div v-if="historyHoverPoint" class="chart-hover-label">
+            <strong>{{ historyHoverPoint.date }}</strong>
+            <span>收盘 ¥{{ money(historyHoverPoint.close) }}</span>
+            <span :class="profitTone(historyHoverPoint.changePercent)">涨跌 {{ signedPercent(historyHoverPoint.changePercent) }}</span>
+          </div>
           <div class="chart-value chart-bottom">¥{{ money(historyMinClose) }}</div>
           <div class="chart-dates">
             <span>{{ historyResult.points[0]?.date }}</span>
@@ -215,7 +246,8 @@
       </div>
       <el-empty v-else-if="!historyLoading" description="选择基金代码和日期范围后查询历史行情" :image-size="64" />
     </el-card>
-
+    </el-tab-pane>
+    <el-tab-pane label="定投回测" name="dca">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -227,7 +259,7 @@
       </template>
       <el-form class="history-form" inline @submit.prevent="runDcaSimulation">
         <el-form-item label="基金代码">
-          <el-input v-model="fundCode" maxlength="6" placeholder="510300 / 159915" inputmode="numeric" />
+          <FundCodeSelect v-model="fundCode" fund-type="ONSHORE" />
         </el-form-item>
         <el-form-item label="开始日期">
           <el-date-picker v-model="dcaStartDate" type="date" value-format="YYYY-MM-DD" />
@@ -306,9 +338,13 @@
       </template>
       <el-empty v-else-if="!dcaLoading" description="设置基金、定投金额和时间段后运行回测" :image-size="64" />
     </el-card>
+    </el-tab-pane>
+    </el-tabs>
     </template>
 
     <template v-if="pageType === 'offshore-fund'">
+    <el-tabs v-model="offshoreActiveTab" class="fund-tabs">
+    <el-tab-pane label="基金历史行情" name="history">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -320,7 +356,7 @@
       </template>
       <el-form class="history-form" inline @submit.prevent="loadOffExchangeFundHistory">
         <el-form-item label="场外基金代码">
-          <el-input v-model="offExchangeFundCode" maxlength="6" placeholder="例如 000001" inputmode="numeric" />
+          <FundCodeSelect v-model="offExchangeFundCode" fund-type="OFFSHORE" />
         </el-form-item>
         <el-form-item label="开始日期">
           <el-date-picker v-model="offExchangeHistoryStartDate" type="date" value-format="YYYY-MM-DD" />
@@ -350,7 +386,36 @@
             <line x1="0" y1="110" x2="1000" y2="110" class="chart-grid" />
             <line x1="0" y1="190" x2="1000" y2="190" class="chart-grid" />
             <polyline :points="offExchangeNavChartPoints" class="chart-line" />
+            <template v-if="offExchangeHoverIndex !== null">
+              <line
+                :x1="offExchangeNavChartCoordinates[offExchangeHoverIndex]?.x"
+                y1="20"
+                :x2="offExchangeNavChartCoordinates[offExchangeHoverIndex]?.x"
+                y2="200"
+                class="chart-crosshair"
+              />
+              <circle
+                :cx="offExchangeNavChartCoordinates[offExchangeHoverIndex]?.x"
+                :cy="offExchangeNavChartCoordinates[offExchangeHoverIndex]?.y"
+                r="5"
+                class="chart-hover-dot"
+              />
+            </template>
+            <rect
+              x="0"
+              y="20"
+              width="1000"
+              height="180"
+              class="chart-interaction-area"
+              @pointermove="updateChartHover($event, offExchangeNavPoints.length, 'offshore')"
+              @pointerleave="offExchangeHoverIndex = null"
+            />
           </svg>
+          <div v-if="offExchangeHoverPoint" class="chart-hover-label">
+            <strong>{{ offExchangeHoverPoint.date }}</strong>
+            <span>单位净值 ¥{{ money(offExchangeHoverPoint.unitNav) }}</span>
+            <span :class="profitTone(offExchangeHoverPoint.changePercent)">涨跌 {{ signedPercent(offExchangeHoverPoint.changePercent) }}</span>
+          </div>
           <div class="chart-value chart-bottom">¥{{ money(offExchangeNavMin) }}</div>
           <div class="chart-dates">
             <span>{{ offExchangeHistoryResult.points[0]?.date }}</span>
@@ -426,7 +491,8 @@
       </div>
       <el-empty v-else-if="!offExchangeHistoryLoading" description="输入场外基金代码和日期范围后查询净值" :image-size="64" />
     </el-card>
-
+    </el-tab-pane>
+    <el-tab-pane label="定投回测" name="dca">
     <el-card class="table-card" shadow="never">
       <template #header>
         <div class="section-heading">
@@ -438,7 +504,7 @@
       </template>
       <el-form class="history-form" inline @submit.prevent="runOffExchangeFundDca">
         <el-form-item label="场外基金代码">
-          <el-input v-model="offExchangeFundCode" maxlength="6" placeholder="例如 000001" inputmode="numeric" />
+          <FundCodeSelect v-model="offExchangeFundCode" fund-type="OFFSHORE" />
         </el-form-item>
         <el-form-item label="开始日期">
           <el-date-picker v-model="offExchangeDcaStartDate" type="date" value-format="YYYY-MM-DD" />
@@ -523,6 +589,8 @@
       </template>
       <el-empty v-else-if="!offExchangeDcaLoading" description="设置场外基金、定投金额、费率和时间段后运行回测" :image-size="64" />
     </el-card>
+    </el-tab-pane>
+    </el-tabs>
     </template>
 
     <template v-if="pageType === 'overview'">
@@ -638,9 +706,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import FundCodeSelect from '@/components/FundCodeSelect.vue'
 import {
   fundHistory,
   investmentAccount,
@@ -653,6 +722,7 @@ import {
 
 const props = defineProps<{
   pageType: 'overview' | 'onshore-fund' | 'offshore-fund'
+  initialCode?: string
 }>()
 
 interface Quote {
@@ -664,6 +734,11 @@ interface Quote {
   previousClose: number
   changePercent: number
   quoteTime: string
+}
+
+interface ChartCoordinate {
+  x: number
+  y: number
 }
 
 const account = ref<any>(null)
@@ -685,25 +760,29 @@ const oneYearAgo = new Date(today)
 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
 const initialStartDate = toDateString(oneYearAgo)
 const initialEndDate = toDateString(today)
-const fundCode = ref('159915')
+const onshoreActiveTab = ref('history')
+const offshoreActiveTab = ref('history')
+const fundCode = ref('')
 const historyStartDate = ref(initialStartDate)
 const historyEndDate = ref(initialEndDate)
 const historyFrequency = ref('day')
 const historySource = ref<'api' | 'database'>('api')
 const historyResult = ref<any>(null)
 const historyLoading = ref(false)
+const historyHoverIndex = ref<number | null>(null)
 const dcaStartDate = ref(initialStartDate)
 const dcaEndDate = ref(initialEndDate)
 const dcaWeekday = ref(1)
 const dcaAmount = ref(500)
 const dcaResult = ref<any>(null)
 const dcaLoading = ref(false)
-const offExchangeFundCode = ref('000001')
+const offExchangeFundCode = ref('')
 const offExchangeHistoryStartDate = ref(initialStartDate)
 const offExchangeHistoryEndDate = ref(initialEndDate)
 const offExchangeHistorySource = ref<'api' | 'database'>('api')
 const offExchangeHistoryResult = ref<any>(null)
 const offExchangeHistoryLoading = ref(false)
+const offExchangeHoverIndex = ref<number | null>(null)
 const offExchangeDcaStartDate = ref(initialStartDate)
 const offExchangeDcaEndDate = ref(initialEndDate)
 const offExchangeDcaWeekday = ref(1)
@@ -720,15 +799,34 @@ const weekdays = [
   { value: 5, label: '星期五' }
 ]
 
+watch(
+  () => [props.pageType, props.initialCode] as const,
+  ([pageType, initialCode]) => {
+    if (!initialCode) return
+    if (pageType === 'onshore-fund') {
+      fundCode.value = initialCode
+    } else if (pageType === 'offshore-fund') {
+      offExchangeFundCode.value = initialCode
+    }
+  },
+  { immediate: true }
+)
+
 const quoteAvailableQuantity = computed(() =>
   account.value?.positions?.find((item: any) => item.code === quote.value?.code)?.availableQuantity || 0
 )
 const historyPoints = computed(() => historyResult.value?.points || [])
 const recentHistoryPoints = computed(() => [...historyPoints.value].slice(-20).reverse())
+const historyHoverPoint = computed(() => historyHoverIndex.value === null
+  ? null
+  : historyPoints.value[historyHoverIndex.value] || null)
 const recentMonthlyReturns = computed(() => [...(historyResult.value?.analysis?.monthlyReturns || [])].slice(-12).reverse())
 const recentRollingReturns = computed(() => [...(historyResult.value?.analysis?.rollingOneYearReturns || [])].slice(-12).reverse())
 const offExchangeNavPoints = computed(() => offExchangeHistoryResult.value?.points || [])
 const recentOffExchangeNavPoints = computed(() => [...offExchangeNavPoints.value].slice(-20).reverse())
+const offExchangeHoverPoint = computed(() => offExchangeHoverIndex.value === null
+  ? null
+  : offExchangeNavPoints.value[offExchangeHoverIndex.value] || null)
 const recentOffExchangeMonthlyReturns = computed(() =>
   [...(offExchangeHistoryResult.value?.analysis?.monthlyReturns || [])].slice(-12).reverse())
 const recentOffExchangeRollingReturns = computed(() =>
@@ -791,9 +889,9 @@ const offExchangeNavMin = computed(() => offExchangeNavPoints.value.length
 const offExchangeNavMax = computed(() => offExchangeNavPoints.value.length
   ? Math.max(...offExchangeNavPoints.value.map((point: any) => Number(point.unitNav)))
   : 0)
-const offExchangeNavChartPoints = computed(() => {
+const offExchangeNavChartCoordinates = computed<ChartCoordinate[]>(() => {
   const points = offExchangeNavPoints.value
-  if (!points.length) return ''
+  if (!points.length) return []
   const values = points.map((point: any) => Number(point.unitNav))
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -802,18 +900,20 @@ const offExchangeNavChartPoints = computed(() => {
   return values.map((value: number, index: number) => {
     const x = points.length === 1 ? 500 : index / (points.length - 1) * 1000
     const y = 200 - (value - min + padding) / range * 180
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) }
+  })
 })
+const offExchangeNavChartPoints = computed(() => offExchangeNavChartCoordinates.value
+  .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '))
 const historyMinClose = computed(() => historyPoints.value.length
   ? Math.min(...historyPoints.value.map((point: any) => Number(point.close)))
   : 0)
 const historyMaxClose = computed(() => historyPoints.value.length
   ? Math.max(...historyPoints.value.map((point: any) => Number(point.close)))
   : 0)
-const historyChartPoints = computed(() => {
+const historyChartCoordinates = computed<ChartCoordinate[]>(() => {
   const points = historyPoints.value
-  if (!points.length) return ''
+  if (!points.length) return []
   const values = points.map((point: any) => Number(point.close))
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -822,9 +922,23 @@ const historyChartPoints = computed(() => {
   return values.map((value: number, index: number) => {
     const x = points.length === 1 ? 500 : index / (points.length - 1) * 1000
     const y = 200 - (value - min + padding) / range * 180
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
+    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) }
+  })
 })
+const historyChartPoints = computed(() => historyChartCoordinates.value
+  .map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' '))
+
+const updateChartHover = (event: PointerEvent, pointCount: number, chart: 'onshore' | 'offshore') => {
+  if (pointCount < 1) return
+  const target = event.currentTarget
+  if (!(target instanceof SVGElement)) return
+  const { left, width } = target.getBoundingClientRect()
+  if (width <= 0) return
+  const normalizedX = Math.max(0, Math.min(1, (event.clientX - left) / width))
+  const index = pointCount === 1 ? 0 : Math.round(normalizedX * (pointCount - 1))
+  if (chart === 'onshore') historyHoverIndex.value = index
+  else offExchangeHoverIndex.value = index
+}
 const estimatedAmount = computed(() => Number(quote.value?.currentPrice || 0) * tradeQuantity.value)
 const estimatedCommission = computed(() => Math.max(5, Math.ceil(estimatedAmount.value * 0.0003 * 100) / 100))
 const estimatedStampTax = computed(() =>
@@ -939,6 +1053,7 @@ const submitTrade = async () => {
 const loadFundHistory = async () => {
   historyLoading.value = true
   historyResult.value = null
+  historyHoverIndex.value = null
   try {
     const response: any = await fundHistory({
       code: fundCode.value.trim(),
@@ -977,6 +1092,7 @@ const runDcaSimulation = async () => {
 const loadOffExchangeFundHistory = async () => {
   offExchangeHistoryLoading.value = true
   offExchangeHistoryResult.value = null
+  offExchangeHoverIndex.value = null
   try {
     const response: any = await offExchangeFundHistory({
       code: offExchangeFundCode.value.trim(),
@@ -1168,6 +1284,47 @@ onMounted(() => {
   width: 100%;
   height: 200px;
   overflow: visible;
+}
+.chart-interaction-area {
+  fill: transparent;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+.chart-crosshair {
+  stroke: #64748b;
+  stroke-dasharray: 4 4;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.chart-hover-dot {
+  fill: #fff;
+  stroke: #0f9f9a;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.chart-hover-label {
+  position: absolute;
+  top: 0;
+  right: 38px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  max-width: calc(100% - 100px);
+  padding: 6px 9px;
+  border: 1px solid #e8edf2;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 2px 8px rgb(35 52 72 / 8%);
+  color: #586579;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-hover-label strong {
+  color: #29384a;
 }
 .chart-grid {
   stroke: #e8edf2;

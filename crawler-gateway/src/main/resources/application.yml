@@ -21,7 +21,7 @@ spring:
               predicates:
                 - Path=/api/user/**
             - id: investment-service
-              uri: lb://crawler-user-service
+              uri: lb://crawler-finance-service
               predicates:
                 - Path=/api/investment/**
             - id: dict-service

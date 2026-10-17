@@ -15,6 +15,7 @@
         <module>crawler-common</module>
         <module>crawler-gateway</module>
         <module>crawler-user-service</module>
+        <module>crawler-finance-service</module>
         <module>crawler-spider-service</module>
         <module>crawler-search-service</module>
         <module>crawler-file-service</module>

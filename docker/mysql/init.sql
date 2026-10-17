@@ -283,6 +283,63 @@ CREATE TABLE IF NOT EXISTS fund_history_cache (
     KEY idx_fund_history_cache_date (code, fund_type, frequency, trade_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS fund_watchlist (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    fund_type VARCHAR(16) NOT NULL,
+    code CHAR(6) NOT NULL,
+    frequency VARCHAR(8) NOT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_fund_watchlist (fund_type, code, frequency),
+    KEY idx_fund_watchlist_code (code, fund_type, frequency)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS fund_catalog (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    fund_type VARCHAR(16) NOT NULL,
+    code CHAR(6) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    category VARCHAR(64),
+    pinyin VARCHAR(128),
+    synced_at DATETIME NOT NULL,
+    UNIQUE KEY uk_fund_catalog (fund_type, code),
+    KEY idx_fund_catalog_name (name, code),
+    KEY idx_fund_catalog_type_code (fund_type, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS fund_profile (
+    fund_type VARCHAR(16) NOT NULL,
+    code CHAR(6) NOT NULL,
+    fund_full_name VARCHAR(255),
+    issue_date VARCHAR(64),
+    established_date VARCHAR(64),
+    establishment_scale VARCHAR(128),
+    net_asset_scale VARCHAR(128),
+    net_asset_scale_as_of VARCHAR(64),
+    share_scale VARCHAR(128),
+    share_scale_as_of VARCHAR(64),
+    management_company VARCHAR(255),
+    custodian VARCHAR(255),
+    manager_names TEXT,
+    distribution_since_launch VARCHAR(255),
+    management_fee_rate VARCHAR(128),
+    custodian_fee_rate VARCHAR(128),
+    service_fee_rate VARCHAR(128),
+    max_subscription_fee_rate VARCHAR(128),
+    max_purchase_fee_rate VARCHAR(128),
+    max_redemption_fee_rate VARCHAR(128),
+    benchmark TEXT,
+    tracking_target VARCHAR(255),
+    investment_objective MEDIUMTEXT,
+    investment_philosophy MEDIUMTEXT,
+    investment_scope MEDIUMTEXT,
+    investment_strategy MEDIUMTEXT,
+    dividend_policy MEDIUMTEXT,
+    risk_return_feature MEDIUMTEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (fund_type, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 初始化角色
 INSERT INTO sys_role (id, name, code, description, status) VALUES
 (1, '管理员', 'admin', '系统管理员', 1),
@@ -309,15 +366,14 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7),
 (18, '模拟投资', 'investment', 0, 0, NULL, 'TrendCharts', 8),
 (19, '股票模拟交易', 'investment:overview', 18, 1, '/investment/overview', 'Odometer', 1),
-(21, '场内基金', 'investment:onshore-fund', 18, 1, '/investment/onshore-fund', 'Coin', 2),
-(22, '场外基金', 'investment:offshore-fund', 18, 1, '/investment/offshore-fund', 'DataLine', 3);
+(23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 2);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
-(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 19),(1, 21),(1, 22),
-(2, 18),(2, 19),(2, 21),(2, 22);
+(1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 19),(1, 23),
+(2, 18),(2, 19),(2, 23);
 
 -- 默认管理员 (密码: admin123, MD5)
 INSERT INTO sys_user (id, username, password, nickname, status, role_id) VALUES

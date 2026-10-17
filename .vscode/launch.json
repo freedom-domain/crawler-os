@@ -25,6 +25,13 @@
         },
         {
             "type": "java",
+            "name": "Run Java FinanceServiceApplication",
+            "request": "launch",
+            "mainClass": "com.collect.finance.FinanceServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
             "name": "Run Java FileServiceApplication",
             "request": "launch",
             "mainClass": "com.collect.file.FileServiceApplication",

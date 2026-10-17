@@ -42,6 +42,7 @@ fi
 build_scripts=(
   crawler-gateway
   crawler-user-service
+  crawler-finance-service
   crawler-spider-service
   crawler-search-service
   crawler-file-service

@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 7
+      max-parallel: 8
       matrix:
         include:
           - service: crawler-gateway
@@ -40,6 +40,10 @@ jobs:
             context: .
             dockerfile: ./docker/Dockerfile-app
             build_arg: SERVICE=crawler-user-service
+          - service: crawler-finance-service
+            context: .
+            dockerfile: ./crawler-finance-service/Dockerfile
+            build_arg: ""
           - service: crawler-spider-service
             context: .
             dockerfile: ./docker/Dockerfile-app
