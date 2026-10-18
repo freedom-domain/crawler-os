@@ -4,7 +4,6 @@ dist/
 *.log
 .idea/
 .env
-docker-compose.override.yml
 .DS_Store
 *.iml
 docker-data/
