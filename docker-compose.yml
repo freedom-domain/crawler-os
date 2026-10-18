@@ -176,6 +176,22 @@ services:
     networks:
       - crawler-net
 
+  crawler-ip-service:
+    image: crawler-ip-service:${IMAGE_TAG:-latest}
+    container_name: crawler-ip-service
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+    depends_on:
+      - nacos
+      - mysql
+    networks:
+      - crawler-net
+
   crawler-search-service:
     image: crawler-search-service:${IMAGE_TAG:-latest}
     container_name: crawler-search-service

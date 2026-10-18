@@ -3,7 +3,6 @@ package com.collect.gateway.filter;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -25,13 +24,16 @@ import java.util.List;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     @Value("${jwt.secret:crawler-platform-jwt-secret-key-must-be-long-enough-256}")
     private String secret;
 
     private final ReactiveStringRedisTemplate redisTemplate;
+
+    public AuthGlobalFilter(ReactiveStringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
 
     private static final List<String> WHITE_LIST = List.of(
             "/api/user/login",

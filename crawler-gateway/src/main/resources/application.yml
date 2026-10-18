@@ -40,6 +40,10 @@ spring:
               uri: lb://crawler-spider-service
               predicates:
                 - Path=/api/spider/**
+            - id: cf-ip-service
+              uri: lb://crawler-ip-service
+              predicates:
+                - Path=/api/cf-ip/**
             - id: search-service
               uri: lb://crawler-search-service
               predicates:

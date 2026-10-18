@@ -26,7 +26,8 @@ collect-x/
 ├── crawler-user-service      # 用户/角色/权限 (8081)
 ├── crawler-finance-service   # 模拟投资/基金行情 (8085)
 ├── crawler-spider-service    # 爬虫/任务/调度 (8082)
-├── crawler-search-service    # 数据搜索 (8083)
+├── crawler-ip-service       # Cloudflare IP 管理与测速 (8086)
+├── crawler-search-service   # 数据搜索 (8083)
 ├── crawler-file-service      # 文件管理 (8084)
 ├── crawler-worker            # 爬虫执行集群 (8090)
 ├── crawler-admin-web         # 前端 (5173)
@@ -43,8 +44,8 @@ Web Admin (Vue3)
 API Gateway (8080)
       │
  ┌────┼───────────┬──────────┐
- │    │      │    │          │
-User Finance Spider Search  File
+ │    │      │    │      │   │
+User Finance Spider IP   Search File
  │    │      │    │          │
  └────┴──────┴────┴──────────┘
             │
@@ -102,6 +103,7 @@ mvn -pl crawler-gateway spring-boot:run
 mvn -pl crawler-user-service spring-boot:run
 mvn -pl crawler-finance-service spring-boot:run
 mvn -pl crawler-spider-service spring-boot:run
+mvn -pl crawler-ip-service spring-boot:run
 mvn -pl crawler-search-service spring-boot:run
 mvn -pl crawler-file-service spring-boot:run
 mvn -pl crawler-worker spring-boot:run
@@ -112,7 +114,7 @@ mvn -pl crawler-worker spring-boot:run
 ```bash
 ./scripts/build-docker-images/build-all.sh
 docker-compose up -d crawler-gateway crawler-user-service crawler-finance-service crawler-spider-service \
-  crawler-search-service crawler-file-service crawler-worker crawler-admin-web
+  crawler-ip-service crawler-search-service crawler-file-service crawler-worker crawler-admin-web
 ```
 
 Compose 默认使用本地 `latest` 镜像，不在 `docker compose up` 时编译源码。`build-all.sh` 会先用本机 Maven 构建全部后端模块，再为每个镜像只发送对应 JAR 和运行 Dockerfile；前端镜像仍在 Node 构建阶段运行 `npm ci` 和生产构建。修改源码后请先重新构建镜像，再启动或重建对应容器。使用自定义 `IMAGE_TAG` 时，构建与 Compose 启动都需设置相同标签。
@@ -152,6 +154,8 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 股票管理需在已有数据库执行 `docker/mysql/migration/025_stock_management.sql`。股票目录默认从新浪财经公开接口同步 A 股代码和名称（不需要 API Key；该接口不提供行业字段），并按代码识别市场；可通过 Finance 服务配置项 `investment.stock-list-url` 覆盖目录接口地址。股票详情通过东方财富补充并保存上市公司档案，另提供腾讯财经日线历史行情查询与缓存、每周定投回测（并与相同投入的一次性买入对比）；使用已有数据库时还需执行 `docker/mysql/migration/026_stock_history_cache.sql`。历史行情可选 API 查询并缓存或读取数据库已有缓存；回测按前复权收盘价、100 股整手和佣金 0.03%（最低 ¥5）估算，不含卖出及印花税。目录中的“模拟投资”操作会打开预填股票代码的模拟交易窗口。请确认部署 Finance 服务的主机能够通过 HTTPS 访问所配置的数据源。
 
 股票关注清单需在已有数据库执行 `docker/mysql/migration/028_stock_watchlist.sql` 和 `docker/mysql/migration/030_stock_refresh_schedule.sql`。股票管理页面可从目录关注/取消股票，在关注清单中查看缓存状态、手动更新行情，并设置自动同步频率：每小时整点、每个工作日 18:35 或每周一 18:35（上海时区，默认为每个工作日 18:35）；Finance 服务会自动刷新关注股票最近 30 天的日线行情。
+
+Cloudflare IP 优选由独立的 `crawler-ip-service`（8086）提供，已有数据库需执行 `docker/mysql/migration/036_cf_ip_management.sql` 和 `docker/mysql/migration/037_remove_vless_fields.sql`。管理员可从 Cloudflare 官方接口初始化 IPv4/IPv6 CIDR 清单，并为全球任播网段维护自定义地区标签；每个网段默认抽测一个地址，最多每段 5 个且单次总量限制为 200 个，IPv6 网段不会展开；抽样会跳过候选列表中已有的 IP，重复执行时继续抽取尚未添加的地址。常规探测记录从 IP 服务主机 TCP 连接候选 IP:443 的耗时、针对指定 SNI 且校验证书的 TLS 握手耗时，以及经 `speed.cloudflare.com` 获取最多 256 KiB 的 HTTPS 下载速度（Mbps）。SNI 仅随常规 TLS 本次测试结果返回，不存入数据库，前端刷新后不会保留。也可手工添加公网 IP，批量常规测试最多 100 个样本；可导出当前页面会话内使用当前 SNI 测试通过的 IP、端口、SNI 和测试指标 CSV，供配置 v2rayN 节点时使用（该 CSV 不是可直接导入的完整节点配置）。测试从 IP 服务主机发起；该功能只维护候选清单和测试结果，不会修改 DNS、代理或爬虫请求配置。
 
 投资总览与股票模拟交易已移至股票管理页面的按钮弹窗中；已有数据库需执行 `docker/mysql/migration/029_move_investment_overview_to_stock_management.sql` 移除旧的独立菜单权限，原 `/investment/overview` 地址会兼容跳转至股票管理页面。
 

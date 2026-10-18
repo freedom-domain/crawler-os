@@ -44,6 +44,7 @@ build_scripts=(
   crawler-user-service
   crawler-finance-service
   crawler-spider-service
+  crawler-ip-service
   crawler-search-service
   crawler-file-service
   crawler-worker

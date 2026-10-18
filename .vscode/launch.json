@@ -11,6 +11,13 @@
         },
         {
             "type": "java",
+            "name": "Run Java IpServiceApplication",
+            "request": "launch",
+            "mainClass": "com.collect.ip.IpServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
             "name": "Run Java SearchServiceApplication",
             "request": "launch",
             "mainClass": "com.collect.search.SearchServiceApplication",

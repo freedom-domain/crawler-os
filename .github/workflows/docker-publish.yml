@@ -48,6 +48,10 @@ jobs:
             context: .
             dockerfile: ./docker/Dockerfile-app
             build_arg: SERVICE=crawler-spider-service
+          - service: crawler-ip-service
+            context: .
+            dockerfile: ./docker/Dockerfile-ip-service
+            build_arg: SERVICE=crawler-ip-service
           - service: crawler-search-service
             context: .
             dockerfile: ./docker/Dockerfile-app

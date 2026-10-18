@@ -198,3 +198,15 @@ export const dictUpdate = (id: number, data: any) => request.put(`/dict/${id}`, 
 export const dictDelete = (id: number) => request.delete(`/dict/${id}`)
 
 export const filePage = (params: any) => request.get('/file/page', { params })
+
+export const cfIpList = () => request.get('/cf-ip')
+export const cfIpAdd = (ips: string) => request.post('/cf-ip', { ips })
+export const cfIpProbe = (ids: number[], tlsServerName: string) =>
+  request.post('/cf-ip/probe', { ids, tlsServerName }, { timeout: 180_000 })
+export const cfIpDelete = (id: number) => request.delete(`/cf-ip/${id}`)
+export const cfIpRanges = () => request.get('/cf-ip/ranges')
+export const cfIpInitializeRanges = () => request.post('/cf-ip/ranges/initialize')
+export const cfIpUpdateRangeRegion = (id: number, region: string) =>
+  request.put(`/cf-ip/ranges/${id}/region`, { region })
+export const cfIpProbeRanges = (samplesPerRange: number, tlsServerName: string) =>
+  request.post('/cf-ip/ranges/probe', { samplesPerRange, tlsServerName }, { timeout: 180_000 })

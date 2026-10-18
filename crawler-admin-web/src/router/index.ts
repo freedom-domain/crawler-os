@@ -42,6 +42,7 @@ const router = createRouter({
         { path: 'user', name: 'User', component: () => import('@/views/User.vue') },
         { path: 'role', name: 'Role', component: () => import('@/views/Role.vue') },
         { path: 'permission', name: 'Permission', component: () => import('@/views/Permission.vue') },
+        { path: 'cf-ip-management', name: 'CfIpManagement', component: () => import('@/views/CfIpManagement.vue') },
         { path: 'profile', name: 'Profile', component: () => import('@/views/Profile.vue') }
       ]
     }

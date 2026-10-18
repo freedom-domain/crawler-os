@@ -313,6 +313,36 @@ CREATE TABLE IF NOT EXISTS stock_refresh_setting (
 
 INSERT IGNORE INTO stock_refresh_setting (id, frequency) VALUES (1, 'DAILY');
 
+CREATE TABLE IF NOT EXISTS cf_ip_candidate (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    ip_address VARCHAR(45) NOT NULL,
+    region VARCHAR(64) NOT NULL DEFAULT '全球任播',
+    source_range_id BIGINT,
+    latency_ms INT,
+    ping_ms DECIMAL(9,3),
+    tls_ms DECIMAL(9,3),
+    speed_mbps DECIMAL(10,3),
+    status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    error_message VARCHAR(255),
+    last_tested_at DATETIME,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_cf_ip_candidate_address (ip_address),
+    KEY idx_cf_ip_candidate_latency (status, latency_ms)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS cf_ip_range (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    cidr VARCHAR(64) NOT NULL,
+    ip_version TINYINT NOT NULL,
+    region VARCHAR(64) NOT NULL DEFAULT '全球任播',
+    active TINYINT NOT NULL DEFAULT 1,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_cf_ip_range_cidr (cidr),
+    KEY idx_cf_ip_range_active_version (active, ip_version, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS history_sync_setting (
     id TINYINT PRIMARY KEY,
     max_concurrent_requests INT NOT NULL DEFAULT 1,
@@ -481,13 +511,15 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (17, '图片预览记录', 'image-history', 0, 1, '/image-history', 'Picture', 7),
 (18, '模拟投资', 'investment', 0, 0, NULL, 'TrendCharts', 8),
 (23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 3),
-(24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2);
+(24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2),
+(25, 'CF IP 优选', 'cf-ip:manage', 12, 1, '/cf-ip-management', 'Connection', 4);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
 (1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
+(1, 25),
 (2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)
