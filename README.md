@@ -145,6 +145,8 @@ docker-compose up -d crawler-admin-web
 # http://127.0.0.1:5173
 ```
 
+本机可在被 Git 忽略的 `docker-compose.override.yml` 中覆盖 MySQL root 和各服务的 `MYSQL_PASSWORD`；Compose 会自动合并该文件。不要将包含真实口令的覆盖文件提交到仓库。已有 MySQL 数据卷不会因修改环境变量而自动更改数据库用户密码；必须确保覆盖配置与数据库当前密码一致。
+
 Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关位于同一 Docker 网络的场景。若在 1Panel 中单独部署前端容器，请为其设置 `API_UPSTREAM` 环境变量，值为**从前端容器内部可访问**的网关地址，例如 `http://<网关容器IP或网络别名>:8080`。配置后重建并重新部署前端镜像；浏览器仍通过同域 `/api` 请求，不需要在前端源码中配置 API 地址。
 
 已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。

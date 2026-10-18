@@ -7,7 +7,7 @@ services:
     container_name: crawler-mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_ROOT_PASSWORD: "${MYSQL_PASSWORD:-root123}"
       TZ: Asia/Shanghai
     ports:
       - "3306:3306"
@@ -132,7 +132,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
     depends_on:
       - nacos
       - mysql
@@ -148,7 +148,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
       REDIS_HOST: redis
       REDIS_PASSWORD: ""
     depends_on:
@@ -167,7 +167,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
       KAFKA_BOOTSTRAP: kafka:9092
     depends_on:
       - nacos
@@ -185,7 +185,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
     depends_on:
       - nacos
       - mysql
@@ -201,7 +201,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
       ES_URLS: http://elasticsearch:9200
       ES_USER: ""
       ES_PASSWORD: ""
@@ -221,7 +221,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS: admin
       MINIO_SECRET: admin123
@@ -241,7 +241,7 @@ services:
       NACOS_NAMESPACE: crawler-default
       MYSQL_HOST: mysql
       MYSQL_USER: root
-      MYSQL_PASSWORD: root123
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
       KAFKA_BOOTSTRAP: kafka:9092
       ES_URLS: http://elasticsearch:9200
       MINIO_ENDPOINT: http://minio:9000

@@ -32,7 +32,7 @@ public class CfIpController {
     }
 
     @Operation(summary = "获取 Cloudflare IP 候选列表")
-    @GetMapping
+    @GetMapping({"", "/"})
     public R<List<CfIpCandidate>> list() {
         requirePermission();
         return R.ok(service.list());
@@ -68,7 +68,7 @@ public class CfIpController {
     }
 
     @Operation(summary = "批量添加 Cloudflare IP 候选")
-    @PostMapping
+    @PostMapping({"", "/"})
     public R<Integer> add(@Valid @RequestBody CfIpCandidatesReq req) {
         requirePermission();
         return R.ok(service.addCandidates(req.getIps()));

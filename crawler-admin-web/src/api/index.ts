@@ -199,8 +199,8 @@ export const dictDelete = (id: number) => request.delete(`/dict/${id}`)
 
 export const filePage = (params: any) => request.get('/file/page', { params })
 
-export const cfIpList = () => request.get('/cf-ip')
-export const cfIpAdd = (ips: string) => request.post('/cf-ip', { ips })
+export const cfIpList = () => request.get('/cf-ip/')
+export const cfIpAdd = (ips: string) => request.post('/cf-ip/', { ips })
 export const cfIpProbe = (ids: number[], tlsServerName: string) =>
   request.post('/cf-ip/probe', { ids, tlsServerName }, { timeout: 180_000 })
 export const cfIpDelete = (id: number) => request.delete(`/cf-ip/${id}`)
