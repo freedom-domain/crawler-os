@@ -3,6 +3,7 @@ package com.collect.ip.service;
 import com.collect.common.exception.BizException;
 import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.mapper.CfIpCandidateMapper;
+import com.collect.ip.mapper.CfIpRangeMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -26,9 +27,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -41,11 +45,15 @@ public class CfIpProbeService {
     private static final int MAX_RESPONSE_BYTES = 1_048_576;
     private static final int MAX_CONCURRENT_PROBES = 8;
     private static final String SPEED_TEST_HOST = "speed.cloudflare.com";
+    private static final Pattern CF_RAY_PATTERN = Pattern.compile("^[0-9a-fA-F]+-([A-Z]{3})$",
+            Pattern.CASE_INSENSITIVE);
 
     private final CfIpCandidateMapper mapper;
+    private final CfIpRangeMapper rangeMapper;
 
-    public CfIpProbeService(CfIpCandidateMapper mapper) {
+    public CfIpProbeService(CfIpCandidateMapper mapper, CfIpRangeMapper rangeMapper) {
         this.mapper = mapper;
+        this.rangeMapper = rangeMapper;
     }
 
     public List<CfIpCandidate> probe(List<CfIpCandidate> candidates, String tlsServerName) {
@@ -71,6 +79,11 @@ public class CfIpProbeService {
                     throw new BizException("IP 测试结果写入失败，请检查服务日志");
                 }
             }
+            Set<Long> updatedRangeIds = results.stream()
+                    .filter(candidate -> candidate.getSourceRangeId() != null && candidate.getColoUpdatedAt() != null)
+                    .map(candidate -> candidate.getSourceRangeId())
+                    .collect(java.util.stream.Collectors.toSet());
+            updatedRangeIds.forEach(rangeMapper::refreshColoFromCandidateObservations);
             return results;
         }
     }
@@ -162,8 +175,13 @@ public class CfIpProbeService {
                 tls.setSSLParameters(parameters);
                 tls.startHandshake();
                 long speedStarted = System.nanoTime();
-                long bytesReceived = downloadTestBody(tls);
+                DownloadResult downloadResult = downloadTestBody(tls);
                 long elapsedNanos = System.nanoTime() - speedStarted;
+                if (downloadResult.coloCode() != null) {
+                    candidate.setColo(downloadResult.coloCode());
+                    candidate.setColoUpdatedAt(LocalDateTime.now());
+                }
+                long bytesReceived = downloadResult.bytesReceived();
                 if (bytesReceived > 0 && elapsedNanos > 0) {
                     double mbps = bytesReceived * 8.0 / elapsedNanos * 1_000.0;
                     candidate.setSpeedMbps(BigDecimal.valueOf(mbps).setScale(3, RoundingMode.HALF_UP));
@@ -174,7 +192,7 @@ public class CfIpProbeService {
         }
     }
 
-    private long downloadTestBody(SSLSocket socket) throws IOException {
+    private DownloadResult downloadTestBody(SSLSocket socket) throws IOException {
         OutputStream output = socket.getOutputStream();
         output.write(("GET /__down?bytes=" + DOWNLOAD_BYTES + " HTTP/1.1\r\n"
                 + "Host: " + SPEED_TEST_HOST + "\r\n"
@@ -198,9 +216,10 @@ public class CfIpProbeService {
                         line.substring(colon + 1).trim());
             }
         }
+        String coloCode = coloCodeFromCfRay(headers.get("cf-ray"));
         String transferEncoding = headers.getOrDefault("transfer-encoding", "");
         if (transferEncoding.toLowerCase(Locale.ROOT).contains("chunked")) {
-            return readChunkedBody(input);
+            return new DownloadResult(readChunkedBody(input), coloCode);
         }
         String contentLength = headers.get("content-length");
         if (contentLength != null) {
@@ -213,9 +232,17 @@ public class CfIpProbeService {
             if (length < 0 || length > MAX_RESPONSE_BYTES) {
                 throw new IOException("测速响应长度超出限制");
             }
-            return readExactBody(input, length);
+            return new DownloadResult(readExactBody(input, length), coloCode);
         }
-        return readUntilEnd(input, MAX_RESPONSE_BYTES);
+        return new DownloadResult(readUntilEnd(input, MAX_RESPONSE_BYTES), coloCode);
+    }
+
+    static String coloCodeFromCfRay(String cfRay) {
+        if (cfRay == null) {
+            return null;
+        }
+        Matcher matcher = CF_RAY_PATTERN.matcher(cfRay.trim());
+        return matcher.matches() ? matcher.group(1).toUpperCase(Locale.ROOT) : null;
     }
 
     private long readChunkedBody(InputStream input) throws IOException {
@@ -305,5 +332,8 @@ public class CfIpProbeService {
     private String safeMessage(IOException exception) {
         String message = exception.getMessage();
         return message == null || message.isBlank() ? "连接失败" : message;
+    }
+
+    private record DownloadResult(long bytesReceived, String coloCode) {
     }
 }

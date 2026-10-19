@@ -16,6 +16,7 @@ public class CfIpRange {
     private String cidr;
     private Integer ipVersion;
     private String region;
+    private String colo;
     private Boolean active;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

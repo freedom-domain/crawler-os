@@ -17,6 +17,8 @@ public class CfIpCandidate {
     private Long id;
     private String ipAddress;
     private String region;
+    private String colo;
+    private LocalDateTime coloUpdatedAt;
     private Long sourceRangeId;
     @TableField(exist = false)
     private String tlsServerName;

@@ -3,7 +3,7 @@
     <header class="page-heading">
       <div>
         <h1>Cloudflare IP 优选</h1>
-        <p>同步 Cloudflare 官方全球任播网段，抽样测试 TCP 连接、TLS 握手和 HTTPS 下载速度。</p>
+        <p>同步 Cloudflare 官方全球任播网段并测试连接；机房代码按测速响应识别，代表 IP 服务主机本次到达的节点。</p>
       </div>
       <div v-if="activeTab === 'candidates'" class="heading-actions">
         <el-button :icon="Download" :disabled="v2raynCandidates.length === 0" @click="exportV2rayn">
@@ -48,6 +48,9 @@
         </el-select>
         <el-select v-model="regionFilter" clearable filterable placeholder="全部地区" class="filter-select">
           <el-option v-for="region in availableRegions" :key="region" :label="region" :value="region" />
+        </el-select>
+        <el-select v-model="coloFilter" clearable filterable placeholder="全部数据中心 colo" class="filter-select">
+          <el-option v-for="colo in availableColos" :key="colo" :label="colo" :value="colo" />
         </el-select>
         <el-select v-model="statusFilter" placeholder="全部连接状态" class="filter-select">
           <el-option label="全部连接状态" value="ALL" />
@@ -128,6 +131,9 @@
           <el-table-column type="index" label="#" width="64" align="center" />
           <el-table-column prop="ipAddress" label="IP 地址" min-width="190" />
           <el-table-column prop="region" label="地区" width="130" />
+          <el-table-column prop="colo" label="数据中心 colo" width="135" align="center">
+            <template #default="{ row }">{{ row.colo || '-' }}</template>
+          </el-table-column>
           <el-table-column label="TCP 443 (ms)" width="125" align="right">
             <template #default="{ row }">{{ formatMetric(row.pingMs) }}</template>
           </el-table-column>
@@ -148,8 +154,18 @@
           <el-table-column label="最近测试时间" min-width="170">
             <template #default="{ row }">{{ formatDateTime(row.lastTestedAt) || '-' }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="76" fixed="right" align="center">
+          <el-table-column label="操作" width="120" fixed="right" align="center">
             <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                :icon="Connection"
+                :loading="probingCandidateId === row.id"
+                :disabled="probeBusy || rangeProbeBusy"
+                @click="probeCandidate(row)"
+              >
+                测试
+              </el-button>
               <el-button
                 link
                 type="danger"
@@ -170,51 +186,72 @@
         v-model:current-page="page"
         v-model:page-size="pageSize"
         :total="matchingCandidates.length"
-        :page-sizes="[20, 50, 100]"
+        :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
       />
     </el-card>
 
-    <el-card v-if="activeTab === 'ranges'" shadow="never" class="candidate-card">
-      <div class="section-heading">
+    <el-card v-if="activeTab === 'ranges'" shadow="never" class="candidate-card range-card">
+      <div class="section-heading range-section-heading">
         <div>
           <h2>Cloudflare 官方 IP 网段</h2>
           <p>网段为全球任播，不代表固定地理位置；可按需维护自己的地区标签。</p>
         </div>
-        <div class="range-test-controls">
+      </div>
+      <div class="range-settings-row">
+        <label class="range-sni-control">
+          <span>TLS serverName/SNI</span>
           <el-input
             v-model="tlsServerName"
             clearable
             maxlength="253"
             placeholder="v2rayN TLS serverName/SNI"
-            class="sni-input"
           />
-          <label class="sample-count-control">
-            <span>每段抽样</span>
-            <el-input-number v-model="samplesPerRange" :min="1" :max="5" :step="1" />
-          </label>
-          <el-button :icon="Refresh" :loading="rangeInitBusy" @click="initializeRanges">
-            初始化官方网段
-          </el-button>
-          <el-button
-            type="primary"
-            :icon="Connection"
-            :loading="rangeProbeBusy"
-            :disabled="ranges.length === 0 || rangeProbeBusy || probeBusy"
-            @click="probeRanges"
-          >
-            测试各网段样本
-          </el-button>
-        </div>
+        </label>
+        <label class="sample-count-control">
+          <span>每段抽样</span>
+          <el-input-number v-model="samplesPerRange" :min="1" :max="5" :step="1" />
+        </label>
+      </div>
+      <div class="range-actions-row">
+        <el-button :icon="Refresh" :loading="rangeInitBusy" @click="initializeRanges">
+          初始化官方网段
+        </el-button>
+        <el-button
+          type="primary"
+          :icon="Connection"
+          :loading="rangeProbeBusy"
+          :disabled="ranges.length === 0 || rangeProbeBusy || probeBusy"
+          @click="probeRanges"
+        >
+          测试各网段样本
+        </el-button>
       </div>
       <div class="probe-note">
         每段最多抽样 5 个地址，本次最多测试 200 个样本；Ping 指标为从 IP 服务主机 TCP 连接候选 IP:443 的耗时，不依赖 ICMP。
-        TLS 使用上方填写的 serverName/SNI 与证书校验，必须与 v2rayN 节点配置一致；SNI 仅随本次测试结果返回，不写入数据库，刷新页面后不会保留。测速单独使用 speed.cloudflare.com，下载上限约 256 KiB。
+        TLS 使用上方填写的 serverName/SNI 与证书校验，必须与 v2rayN 节点配置一致；测速单独使用 speed.cloudflare.com，下载上限约 256 KiB。
+        CIDR 数据中心 colo 按已探测候选 IP 的 colo 多数票自动归类，平票时取最近一次观测。
       </div>
-      <el-table :data="ranges" v-loading="rangesLoading" stripe border max-height="280">
+      <div class="range-filter-toolbar">
+        <el-input v-model="rangeKeyword" clearable placeholder="搜索 CIDR 网段" class="range-filter-input" />
+        <el-select v-model="rangeIpVersionFilter" clearable placeholder="全部版本" class="range-filter-select">
+          <el-option label="IPv4" value="4" />
+          <el-option label="IPv6" value="6" />
+        </el-select>
+        <el-input v-model="rangeRegionFilter" clearable placeholder="筛选地区标签" class="range-filter-input" />
+        <el-select v-model="rangeColoFilter" clearable filterable placeholder="全部数据中心 colo" class="range-filter-select">
+          <el-option v-for="colo in availableRangeColos" :key="colo" :label="colo" :value="colo" />
+        </el-select>
+        <el-button :icon="Refresh" @click="resetRangeFilters">重置筛选</el-button>
+        <span class="filter-count">显示 {{ filteredRanges.length }} / {{ ranges.length }}</span>
+      </div>
+      <el-table :data="pagedRanges" v-loading="rangesLoading" stripe border max-height="min(65vh, 560px)">
         <el-table-column prop="cidr" label="CIDR 网段" min-width="190" />
         <el-table-column prop="ipVersion" label="版本" width="80" align="center">
           <template #default="{ row }">IPv{{ row.ipVersion }}</template>
+        </el-table-column>
+        <el-table-column prop="colo" label="数据中心 colo" width="135" align="center">
+          <template #default="{ row }">{{ row.colo || '-' }}</template>
         </el-table-column>
         <el-table-column label="地区标签" min-width="230">
           <template #default="{ row }">
@@ -231,7 +268,18 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!rangesLoading && ranges.length === 0" description="尚未初始化官方网段" />
+      <el-pagination
+        v-if="filteredRanges.length > rangePageSize"
+        v-model:current-page="rangePage"
+        v-model:page-size="rangePageSize"
+        :total="filteredRanges.length"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+      />
+      <el-empty
+        v-if="!rangesLoading && filteredRanges.length === 0"
+        :description="ranges.length === 0 ? '尚未初始化官方网段' : '没有符合筛选条件的网段'"
+      />
     </el-card>
 
     <el-dialog v-model="importDialogVisible" title="添加候选 IP" width="min(620px, calc(100vw - 32px))">
@@ -274,6 +322,7 @@ interface CfIpCandidate {
   id: number
   ipAddress: string
   region: string
+  colo: string | null
   tlsServerName: string | null
   latencyMs: number | null
   pingMs: number | null
@@ -289,6 +338,7 @@ interface CfIpRange {
   cidr: string
   ipVersion: number
   region: string
+  colo: string | null
   active: boolean
 }
 
@@ -305,20 +355,28 @@ const probeAllBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
 const savingRegionId = ref<number | null>(null)
+const probingCandidateId = ref<number | null>(null)
 const probeProgress = ref(0)
 const importDialogVisible = ref(false)
 const importText = ref('')
 const rangeRegions = ref<Record<number, string>>({})
+const rangeKeyword = ref('')
+const rangeIpVersionFilter = ref('')
+const rangeRegionFilter = ref('')
+const rangeColoFilter = ref('')
+const rangePage = ref(1)
+const rangePageSize = ref(10)
 const samplesPerRange = ref(1)
 const tlsServerName = ref('www.cloudflare.com')
 const keyword = ref('')
 const ipVersionFilter = ref('')
 const regionFilter = ref('')
+const coloFilter = ref('')
 const statusFilter = ref('ALL')
 const maxTlsMs = ref<number | undefined>()
 const minSpeedMbps = ref<number | undefined>()
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(10)
 
 const matchingCandidates = computed(() => {
   const query = keyword.value.trim().toLowerCase()
@@ -326,6 +384,7 @@ const matchingCandidates = computed(() => {
     if (query && !candidate.ipAddress.toLowerCase().includes(query)) return false
     if (ipVersionFilter.value && (candidate.ipAddress.includes(':') ? '6' : '4') !== ipVersionFilter.value) return false
     if (regionFilter.value && candidate.region !== regionFilter.value) return false
+    if (coloFilter.value && candidate.colo !== coloFilter.value) return false
     if (statusFilter.value !== 'ALL' && candidate.status !== statusFilter.value) return false
     if (maxTlsMs.value !== undefined && (candidate.tlsMs === null || candidate.tlsMs > maxTlsMs.value)) return false
     if (minSpeedMbps.value !== undefined
@@ -333,11 +392,34 @@ const matchingCandidates = computed(() => {
     return true
   })
 })
+const filteredRanges = computed(() => {
+  const cidrQuery = rangeKeyword.value.trim().toLowerCase()
+  const regionQuery = rangeRegionFilter.value.trim().toLowerCase()
+  return ranges.value.filter(range => {
+    if (cidrQuery && !range.cidr.toLowerCase().includes(cidrQuery)) return false
+    if (rangeIpVersionFilter.value && String(range.ipVersion) !== rangeIpVersionFilter.value) return false
+    if (regionQuery && !(rangeRegions.value[range.id] || '').toLowerCase().includes(regionQuery)) return false
+    if (rangeColoFilter.value && range.colo !== rangeColoFilter.value) return false
+    return true
+  })
+})
+const pagedRanges = computed(() => {
+  const start = (rangePage.value - 1) * rangePageSize.value
+  return filteredRanges.value.slice(start, start + rangePageSize.value)
+})
 const availableRegions = computed(() =>
   Array.from(new Set(candidates.value.map(candidate => candidate.region).filter(Boolean))).sort((a, b) => a.localeCompare(b))
 )
+const availableColos = computed(() =>
+  Array.from(new Set(candidates.value.map(candidate => candidate.colo).filter((colo): colo is string => Boolean(colo))))
+    .sort((a, b) => a.localeCompare(b))
+)
+const availableRangeColos = computed(() =>
+  Array.from(new Set(ranges.value.map(range => range.colo).filter((colo): colo is string => Boolean(colo))))
+    .sort((a, b) => a.localeCompare(b))
+)
 const hasActiveFilters = computed(() =>
-  Boolean(keyword.value.trim() || ipVersionFilter.value || regionFilter.value
+  Boolean(keyword.value.trim() || ipVersionFilter.value || regionFilter.value || coloFilter.value
     || statusFilter.value !== 'ALL'
     || maxTlsMs.value !== undefined || minSpeedMbps.value !== undefined)
 )
@@ -361,20 +443,42 @@ const fastestLatency = computed(() => {
   return timings.length ? Math.min(...timings) : null
 })
 
-watch([keyword, ipVersionFilter, regionFilter, statusFilter, maxTlsMs, minSpeedMbps], async () => {
+watch([keyword, ipVersionFilter, regionFilter, coloFilter, statusFilter, maxTlsMs, minSpeedMbps], async () => {
   page.value = 1
   selectedCandidates.value = []
   await nextTick()
   candidateTable.value?.clearSelection()
 })
 
+watch([matchingCandidates, pageSize], () => {
+  const lastPage = Math.max(1, Math.ceil(matchingCandidates.value.length / pageSize.value))
+  if (page.value > lastPage) page.value = lastPage
+})
+
+watch([rangeKeyword, rangeIpVersionFilter, rangeRegionFilter, rangeColoFilter], () => {
+  rangePage.value = 1
+})
+watch([filteredRanges, rangePageSize], () => {
+  const lastPage = Math.max(1, Math.ceil(filteredRanges.value.length / rangePageSize.value))
+  if (rangePage.value > lastPage) rangePage.value = lastPage
+})
+
 const resetFilters = () => {
   keyword.value = ''
   ipVersionFilter.value = ''
   regionFilter.value = ''
+  coloFilter.value = ''
   statusFilter.value = 'ALL'
   maxTlsMs.value = undefined
   minSpeedMbps.value = undefined
+}
+
+const resetRangeFilters = () => {
+  rangeKeyword.value = ''
+  rangeIpVersionFilter.value = ''
+  rangeRegionFilter.value = ''
+  rangeColoFilter.value = ''
+  rangePage.value = 1
 }
 
 const loadCandidates = async () => {
@@ -397,6 +501,12 @@ const loadRanges = async () => {
     rangesLoading.value = false
   }
 }
+
+watch(activeTab, tab => {
+  if (tab === 'ranges') {
+    loadRanges().catch(() => ElMessage.error('加载 Cloudflare 官方 IP 网段失败'))
+  }
+})
 
 const initializeRanges = async () => {
   rangeInitBusy.value = true
@@ -497,6 +607,24 @@ const probeBatch = async (ids: number[]) => {
   const response = await cfIpProbe(ids, serverName) as { data: CfIpCandidate[] }
   mergeProbeResults(response.data || [])
   probeProgress.value += ids.length
+}
+
+const probeCandidate = async (candidate: CfIpCandidate) => {
+  const serverName = validatedTlsServerName()
+  if (!serverName) return
+  probingCandidateId.value = candidate.id
+  probeBusy.value = true
+  try {
+    const response = await cfIpProbe([candidate.id], serverName) as { data: CfIpCandidate[] }
+    mergeProbeResults(response.data || [])
+    await loadRanges()
+    ElMessage.success(`已完成 ${candidate.ipAddress} 的测试`)
+  } catch {
+    ElMessage.error(`${candidate.ipAddress} 测试失败，请检查 IP 服务日志`)
+  } finally {
+    probingCandidateId.value = null
+    probeBusy.value = false
+  }
 }
 
 const probeSelected = async () => {
@@ -611,11 +739,14 @@ onMounted(() => {
 .section-heading h2 { color: var(--ink-950); font-size: 16px; }
 .section-heading p { margin-top: 5px; color: var(--ink-700); font-size: 12px; }
 .heading-actions, .toolbar-actions { display: flex; align-items: center; gap: 10px; }
-.range-test-controls, .region-editor { display: flex; align-items: center; gap: 8px; }
-.range-test-controls { color: var(--ink-700); font-size: 12px; }
-.sni-input { flex: 1 1 220px; min-width: 200px; max-width: 270px; }
+.range-section-heading { margin-bottom: 16px; }
+.range-settings-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.range-sni-control { display: flex; flex: 0 1 360px; flex-direction: column; gap: 6px; color: var(--ink-700); font-size: 12px; }
+.range-actions-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.region-editor { display: flex; align-items: center; gap: 8px; }
 .sample-count-control { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; white-space: nowrap; }
-.range-test-controls :deep(.el-input-number) { width: 112px !important; flex: 0 0 112px; }
+.sample-count-control { color: var(--ink-700); font-size: 12px; }
+.sample-count-control :deep(.el-input-number) { width: 112px !important; flex: 0 0 112px; }
 .region-editor :deep(.el-input) { max-width: 180px; }
 .summary-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .summary-row :deep(.el-card__body) { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
@@ -625,21 +756,27 @@ onMounted(() => {
 .candidate-card { min-height: 300px; }
 .management-tabs { margin-bottom: 0; }
 .filter-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.range-filter-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 14px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
+.range-filter-input { width: 190px; }
+.range-filter-select { width: 175px; }
 .filter-keyword { width: 210px; }
 .filter-select { width: 160px; }
 .filter-number { width: 135px; }
 .filter-count { margin-left: auto; color: var(--ink-700); font-size: 12px; white-space: nowrap; }
 .candidate-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .selection-hint, .muted, .probe-note, .dialog-tip { color: var(--ink-700); font-size: 12px; }
-.probe-note { margin-bottom: 12px; line-height: 1.6; }
+.probe-note { margin: 12px 0 0; line-height: 1.6; }
 .latency { font-variant-numeric: tabular-nums; }
 .dialog-tip { margin-top: 10px; line-height: 1.6; }
 
 @media (max-width: 900px) {
   .page-heading, .candidate-toolbar, .section-heading { align-items: stretch; flex-direction: column; }
   .heading-actions, .toolbar-actions { flex-wrap: wrap; }
-  .range-test-controls { flex-wrap: wrap; }
+  .range-settings-row { align-items: stretch; }
+  .range-sni-control { flex: 1 1 100%; }
+  .range-actions-row .el-button { flex: 1 1 180px; }
   .filter-toolbar > * { flex: 1 1 145px; }
+  .range-filter-toolbar > * { flex: 1 1 145px; }
   .filter-count { flex: 1 1 100%; margin-left: 0; }
 }
 

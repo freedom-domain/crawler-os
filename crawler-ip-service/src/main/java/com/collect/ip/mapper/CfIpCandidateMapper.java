@@ -48,6 +48,8 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
                 ping_ms = #{pingMs},
                 tls_ms = #{tlsMs},
                 speed_mbps = #{speedMbps},
+                colo = COALESCE(#{colo}, colo),
+                colo_updated_at = COALESCE(#{coloUpdatedAt}, colo_updated_at),
                 status = #{status},
                 error_message = #{errorMessage},
                 last_tested_at = #{lastTestedAt},
@@ -63,4 +65,5 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
             WHERE source_range_id = #{rangeId}
             """)
     int updateRangeRegion(@Param("rangeId") Long rangeId, @Param("region") String region);
+
 }

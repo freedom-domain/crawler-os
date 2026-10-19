@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.collect.ip.entity.CfIpRange;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -21,6 +23,21 @@ public interface CfIpRangeMapper extends BaseMapper<CfIpRange> {
 
     @org.apache.ibatis.annotations.Update("UPDATE cf_ip_range SET active = 0")
     int deactivateAll();
+
+    @Update("""
+            UPDATE cf_ip_range
+            SET colo = (
+                SELECT colo
+                FROM cf_ip_candidate
+                WHERE source_range_id = #{rangeId} AND colo IS NOT NULL
+                GROUP BY colo
+                ORDER BY COUNT(*) DESC, MAX(colo_updated_at) DESC, colo ASC
+                LIMIT 1
+            ),
+            update_time = CURRENT_TIMESTAMP
+            WHERE id = #{rangeId}
+            """)
+    int refreshColoFromCandidateObservations(@Param("rangeId") Long rangeId);
 
     @Insert("""
             INSERT INTO cf_ip_range (cidr, ip_version, region, active)
