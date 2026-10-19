@@ -31,7 +31,6 @@
           <Fold v-if="!collapsed" />
           <Expand v-else />
         </el-icon>
-        <div class="breadcrumb"><span>工作台</span><b>/</b><strong>{{ currentTitle || '概览' }}</strong><span v-if="activeCount > 1" class="tab-count">{{ activeCount }} 个标签页</span></div>
         <el-tabs
           v-model="activeTab"
           type="card"
@@ -134,7 +133,6 @@ const activeTab = computed({
   set: (value: string) => router.push(value)
 })
 const cachedRouteNames = computed(() => tabs.value.map(tab => tab.name).filter(Boolean) as string[])
-const activeCount = computed(() => tabs.value.length)
 
 const restoreTabs = () => {
   try {
@@ -364,20 +362,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('crawler-menu-cache-invalidated', loadMenu)
 })
 
-const currentTitle = computed(() => {
-  const findTitle = (items: any[]): string => {
-    for (const item of items) {
-      if (item.path === route.path) return item.name
-      if (item.children?.length) {
-        const found = findTitle(item.children)
-        if (found) return found
-      }
-    }
-    return ''
-  }
-  return findTitle(menuList.value) || ''
-})
-
 const handleCommand = async (cmd: string) => {
   if (cmd === 'profile') {
     router.push('/profile')
@@ -494,11 +478,6 @@ const handleCommand = async (cmd: string) => {
   backdrop-filter: blur(12px);
 }
 .collapse-btn { flex: 0 0 auto; font-size: 20px; cursor: pointer; margin: 0 22px; color: #486581; }
-.breadcrumb { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.breadcrumb span, .breadcrumb b, .breadcrumb strong { white-space: nowrap; }
-.breadcrumb span, .breadcrumb b { color: #9fb3c8; font-weight: 500; }
-.breadcrumb strong { color: #102a43; font-size: 16px; font-weight: 800; }
-.tab-count { margin-left: 10px; padding: 2px 9px; border-radius: 999px; color: #087f7d; background: #e2f6f3; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .user-info { flex: 0 0 auto; margin-left: 0; margin-right: 24px; }
 .user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
 :deep(.user-info .el-tooltip__trigger:hover) { outline: none; border-color: transparent; box-shadow: none; }
@@ -528,10 +507,7 @@ const handleCommand = async (cmd: string) => {
   .aside.is-open { transform: translateX(0); }
   .header { height: 56px; }
   .collapse-btn { margin: 0 14px; }
-  .breadcrumb { font-size: 13px; }
-  .breadcrumb strong { font-size: 14px; }
   .app-tabs { margin-left: 14px; margin-right: 12px; }
-  .tab-count { display: none; }
   .user-info { margin-right: 12px; }
   :deep(.el-main) { padding: 14px; }
 }
