@@ -39,7 +39,6 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509TrustManager;
 import javax.net.ssl.TrustManager;
 import java.net.InetAddress;
-import java.net.ProtocolException;
 import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
@@ -88,7 +87,7 @@ public class CrawlerEngine {
     /** 响应体大小上限（字节）；0=不限制。超限时拒绝处理，防止大页面撑爆堆内存 */
     @Value("${app.http.max-response-bytes:10485760}")
     private long httpMaxResponseBytes;
-    /** 仅使用 HTTP/2 */
+    /** 优先使用 HTTP/2；服务端不支持时回退到 HTTP/1.1 */
     @Value("${app.http.protocol:h2}")
     private String httpProtocol;
     /** 瞬时网络错误及 404/5xx 响应重试次数，仅对幂等请求生效；0=不重试 */
@@ -537,16 +536,6 @@ public class CrawlerEngine {
                 .writeTimeout(Math.max(1, settings.readTimeoutSeconds()), TimeUnit.SECONDS)
                 .followRedirects(true)
                 .protocols(resolveHttpProtocols(httpProtocol))
-                .addNetworkInterceptor(chain -> {
-                    Response response = chain.proceed(chain.request());
-                    if (response.protocol() != Protocol.HTTP_2) {
-                        Protocol negotiatedProtocol = response.protocol();
-                        response.close();
-                        throw new ProtocolException("HTTP/2 required, but server negotiated "
-                                + negotiatedProtocol);
-                    }
-                    return response;
-                })
                 .connectionPool(sharedPool != null ? sharedPool
                         : new ConnectionPool(
                                 Math.max(0, settings.maxIdleConnections()),
