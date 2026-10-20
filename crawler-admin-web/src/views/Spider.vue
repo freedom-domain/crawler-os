@@ -325,7 +325,7 @@
         <el-form-item label="最大深度">
           <el-input-number v-model="form.maxDepth" :min="0" :max="5" />
         </el-form-item>
-        <el-form-item label="自定义Header">
+        <el-form-item label="HTML请求Header">
           <div class="header-editor">
             <div v-if="headerRows.length === 0" class="header-editor-empty">未配置 Header，点击下方按钮添加</div>
             <div v-for="(row, index) in headerRows" :key="index" class="header-editor-row">
@@ -335,7 +335,19 @@
             </div>
             <el-button type="primary" plain :icon="Plus" @click="addHeaderRow">添加 Header</el-button>
           </div>
-          <div class="form-tip">配置后，该爬虫发起的每次 HTTP 请求都会带上这些 Header；同名 Header 会覆盖内置默认值</div>
+          <div class="form-tip">用于网页和 JS/CSS 资源请求；同名 Header 会覆盖内置默认值</div>
+        </el-form-item>
+        <el-form-item label="图片请求Header">
+          <div class="header-editor">
+            <div v-if="imageHeaderRows.length === 0" class="header-editor-empty">未配置 Header，点击下方按钮添加</div>
+            <div v-for="(row, index) in imageHeaderRows" :key="index" class="header-editor-row">
+              <el-input v-model="row.name" placeholder="名称，如 Referer" class="header-editor-name" />
+              <el-input v-model="row.value" placeholder="值" class="header-editor-value" />
+              <el-button type="danger" :icon="Delete" circle @click="removeImageHeaderRow(index)" />
+            </div>
+            <el-button type="primary" plain :icon="Plus" @click="addImageHeaderRow">添加 Header</el-button>
+          </div>
+          <div class="form-tip">仅用于图片下载请求；例如图片站点要求来源页时，可配置 Referer</div>
         </el-form-item>
         <el-form-item label="排除URL">
           <el-select
@@ -493,6 +505,7 @@ const isHttpUrl = (value: string): boolean => {
 
 // 自定义 Header 编辑器：UI 用 [{name, value}] 行，提交时序列化成 "名称: 值\n" 文本存 form.headers
 const headerRows = ref<{ name: string; value: string }[]>([])
+const imageHeaderRows = ref<{ name: string; value: string }[]>([])
 const parseHeadersToRows = (text: string) => {
   if (!text || !text.trim()) return []
   return text.split('\n').map(line => line.split('#', 2)[0].trim()).filter(Boolean).map(line => {
@@ -509,6 +522,15 @@ const addHeaderRow = () => headerRows.value.push({ name: '', value: '' })
 const removeHeaderRow = (index: number) => headerRows.value.splice(index, 1)
 const syncHeadersToForm = () => { form.value.headers = serializeHeaderRows() }
 watch(headerRows, syncHeadersToForm, { deep: true })
+const addImageHeaderRow = () => imageHeaderRows.value.push({ name: '', value: '' })
+const removeImageHeaderRow = (index: number) => imageHeaderRows.value.splice(index, 1)
+const syncImageHeadersToForm = () => {
+  form.value.imageHeaders = imageHeaderRows.value
+    .filter(r => Boolean(r.name.trim()) && Boolean(r.value.trim()))
+    .map(r => `${r.name.trim()}: ${r.value.trim()}`)
+    .join('\n')
+}
+watch(imageHeaderRows, syncImageHeadersToForm, { deep: true })
 
 // 排除URL：后端存 JSON 数组字符串，前端用数组（el-select 动态标签）
 const parseExcludedUrls = (text: string): string[] => {
@@ -525,7 +547,7 @@ const parseExcludedUrls = (text: string): string[] => {
 }
 const form = ref({
   name: '', description: '', type: 'http', group: '', isPublic: 0,
-  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, forceOverwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] as string[]
+  contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, forceOverwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', imageHeaders: '', excludedUrls: [] as string[]
 })
 
 // 调度表达式生成器
@@ -717,8 +739,9 @@ const resetFilters = () => {
 
 const showCreate = () => {
   editingId.value = null
-  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, forceOverwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', excludedUrls: [] }
+  form.value = { name: '', description: '', type: 'http', group: '', isPublic: 0, contentSelector: '', imageSelector: '', imageXpath: '', vipSelector: '', vipSelectorContent: '', overwriteHtml: 0, forceOverwriteHtml: 0, overwriteImage: 0, readCache: 0, readCacheMissOnline: 0, schedule: '', maxDepth: 2, timeout: 15000, followRobots: 0, skipTlsVerify: 0, headers: '', imageHeaders: '', excludedUrls: [] }
   headerRows.value = []
+  imageHeaderRows.value = []
   startUrlsStr.value = ''
   scheduleTarget.value = ''
   scheduleType.value = ''
@@ -773,9 +796,10 @@ const showEdit = async (row: any) => {
   form.value = {
     name: d.name, description: d.description || '', type: d.type, group: d.group || '', isPublic: d.isPublic ?? 0,
     contentSelector: d.contentSelector || '', imageSelector: d.imageSelector || '', imageXpath: d.imageXpath || '', vipSelector: d.vipSelector || '', vipSelectorContent: d.vipSelectorContent || '', overwriteHtml: d.overwriteHtml ?? 0, forceOverwriteHtml: d.forceOverwriteHtml ?? 0, overwriteImage: d.overwriteImage ?? 0, readCache: d.readCache ?? 0, readCacheMissOnline: d.readCacheMissOnline ?? 0,
-    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0, headers: d.headers || '', excludedUrls: parseExcludedUrls(d.excludedUrls)
+    schedule: d.schedule || '', maxDepth: d.maxDepth ?? 2, timeout: d.timeout ?? 15000, followRobots: d.followRobots ?? 0, skipTlsVerify: d.skipTlsVerify ?? 0, headers: d.headers || '', imageHeaders: d.imageHeaders || '', excludedUrls: parseExcludedUrls(d.excludedUrls)
   }
   headerRows.value = parseHeadersToRows(d.headers || '')
+  imageHeaderRows.value = parseHeadersToRows(d.imageHeaders || '')
   try {
     const urls = JSON.parse(d.startUrls || '[]')
     startUrlsStr.value = urls.join(', ')
@@ -880,6 +904,7 @@ const buildUpdatePayload = (detail: any) => {
     followRobots: detail.followRobots ?? 0,
     skipTlsVerify: detail.skipTlsVerify ?? 0,
     headers: detail.headers || '',
+    imageHeaders: detail.imageHeaders || '',
     excludedUrls: parseExcludedUrls(detail.excludedUrls)
   }
 }

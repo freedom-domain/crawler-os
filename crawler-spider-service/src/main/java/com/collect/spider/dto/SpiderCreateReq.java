@@ -57,6 +57,8 @@ public class SpiderCreateReq {
 
     private String headers;
 
+    private String imageHeaders;
+
     private List<String> excludedUrls;
 
     private Integer followRobots = 0;

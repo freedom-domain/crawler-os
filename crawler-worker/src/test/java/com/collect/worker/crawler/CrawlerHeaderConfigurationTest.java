@@ -62,12 +62,16 @@ class CrawlerHeaderConfigurationTest {
     }
 
     @Test
-    void applyConfiguredHeaders_shouldReturnSameRequestWhenNoHeaders() {
+    void applyConfiguredHeaders_shouldApplyRefererOnlyWhenConfigured() {
         Request request = new Request.Builder()
-                .url("https://example.com/a")
+                .url("https://cdn.example.com/image.jpg")
                 .header("User-Agent", UA)
                 .build();
-        assertEquals(request, CrawlerEngine.applyConfiguredHeaders(request, null));
-        assertEquals(request, CrawlerEngine.applyConfiguredHeaders(request, "  "));
+        Request withoutReferer = CrawlerEngine.applyConfiguredHeaders(request, null);
+        Request withReferer = CrawlerEngine.applyConfiguredHeaders(
+                request, "Referer: https://www.example.com/article");
+
+        assertEquals(null, withoutReferer.header("Referer"));
+        assertEquals("https://www.example.com/article", withReferer.header("Referer"));
     }
 }

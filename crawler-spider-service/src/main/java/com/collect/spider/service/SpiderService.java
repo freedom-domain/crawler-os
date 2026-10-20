@@ -84,6 +84,7 @@ public class SpiderService {
         spider.setMaxDepth(req.getMaxDepth());
         spider.setTimeout(req.getTimeout());
         spider.setHeaders(req.getHeaders());
+        spider.setImageHeaders(req.getImageHeaders());
         spider.setExcludedUrls(req.getExcludedUrls() == null ? null : JSON.toJSONString(req.getExcludedUrls()));
         spider.setFollowRobots(req.getFollowRobots());
         spider.setSkipTlsVerify(req.getSkipTlsVerify() == null ? 0 : req.getSkipTlsVerify());
@@ -158,6 +159,7 @@ public class SpiderService {
             config.setMaxDepth(spider.getMaxDepth());
             config.setTimeout(spider.getTimeout());
             config.setHeaders(spider.getHeaders());
+            config.setImageHeaders(spider.getImageHeaders());
             config.setExcludedUrls(spider.getExcludedUrls() == null || spider.getExcludedUrls().isBlank()
                     ? null : JSON.parseArray(spider.getExcludedUrls(), String.class));
             config.setFollowRobots(spider.getFollowRobots());
@@ -234,6 +236,7 @@ public class SpiderService {
         exist.setMaxDepth(req.getMaxDepth());
         exist.setTimeout(req.getTimeout());
         exist.setHeaders(req.getHeaders());
+        exist.setImageHeaders(req.getImageHeaders());
         exist.setExcludedUrls(req.getExcludedUrls() == null ? null : JSON.toJSONString(req.getExcludedUrls()));
         exist.setFollowRobots(req.getFollowRobots());
         exist.setSkipTlsVerify(req.getSkipTlsVerify() == null ? 0 : req.getSkipTlsVerify());
@@ -507,6 +510,7 @@ public class SpiderService {
         msg.setMaxDepth(spider.getMaxDepth());
         msg.setTimeout(spider.getTimeout());
         msg.setHeaders(spider.getHeaders());
+        msg.setImageHeaders(spider.getImageHeaders());
         msg.setExcludedUrls(spider.getExcludedUrls());
         msg.setFollowRobots(spider.getFollowRobots());
         msg.setSkipTlsVerify(spider.getSkipTlsVerify() == null ? 0 : spider.getSkipTlsVerify());

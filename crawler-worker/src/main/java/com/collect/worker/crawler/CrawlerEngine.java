@@ -594,8 +594,11 @@ public class CrawlerEngine {
             return taskClient;
         }
         // 非爬取线程（如 robots 预加载）回退到共享客户端
+        return httpClientForHeaders(msg, msg.getHeaders());
+    }
+
+    private OkHttpClient httpClientForHeaders(TaskMessage msg, String headers) {
         boolean skipTls = Integer.valueOf(1).equals(msg.getSkipTlsVerify());
-        String headers = msg.getHeaders();
         if (headers == null || headers.isBlank()) {
             return skipTls ? unverifiedHttpClient : verifiedHttpClient;
         }
@@ -1483,7 +1486,7 @@ public class CrawlerEngine {
                             saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
                             return objectName;
                         }
-                        byte[] data = downloadBytes(imageSrc, msg, execution);
+                        byte[] data = downloadImageBytes(imageSrc, msg, execution);
                         if (execution.isCancelled() || data == null || data.length == 0) {
                             return null;
                         }
@@ -1877,8 +1880,18 @@ public class CrawlerEngine {
     }
 
     private byte[] downloadBytes(String src, TaskMessage msg, TaskExecutionContext execution) throws Exception {
+        return downloadBytes(src, msg, execution, httpClient(msg));
+    }
+
+    private byte[] downloadImageBytes(String src, TaskMessage msg,
+                                      TaskExecutionContext execution) throws Exception {
+        return downloadBytes(src, msg, execution, httpClientForHeaders(msg, msg.getImageHeaders()));
+    }
+
+    private byte[] downloadBytes(String src, TaskMessage msg, TaskExecutionContext execution,
+                                 OkHttpClient client) throws Exception {
         Request request = buildRequest(src, msg);
-        return executeRequest(httpClient(msg), request, execution, msg, response -> {
+        return executeRequest(client, request, execution, msg, response -> {
             if (!response.isSuccessful() || response.body() == null) {
                 return null;
             }

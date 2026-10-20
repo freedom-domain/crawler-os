@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS spider (
     max_depth INT DEFAULT 2,
     timeout INT DEFAULT 15000,
     headers TEXT,
+    image_headers TEXT,
     excluded_urls TEXT,
     follow_robots TINYINT DEFAULT 0,
     skip_tls_verify TINYINT NOT NULL DEFAULT 0,
