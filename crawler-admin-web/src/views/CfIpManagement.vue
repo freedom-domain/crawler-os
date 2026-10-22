@@ -154,8 +154,15 @@
           <el-table-column label="最近测试时间" min-width="170">
             <template #default="{ row }">{{ formatDateTime(row.lastTestedAt) || '-' }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="120" fixed="right" align="center">
+          <el-table-column label="操作" width="160" fixed="right" align="center">
             <template #default="{ row }">
+              <el-button
+                link
+                type="primary"
+                :icon="CopyDocument"
+                :aria-label="`复制 IP ${row.ipAddress}`"
+                @click="copyCandidateIp(row)"
+              />
               <el-button
                 link
                 type="primary"
@@ -721,6 +728,15 @@ const copyAvailable = async () => {
     ElMessage.success(`已复制 ${availableCandidates.value.length} 个可用 IP`)
   } catch {
     ElMessage.error('复制失败，请检查浏览器剪贴板权限')
+  }
+}
+
+const copyCandidateIp = async (candidate: CfIpCandidate) => {
+  try {
+    await navigator.clipboard.writeText(candidate.ipAddress)
+    ElMessage.success(`已复制 ${candidate.ipAddress}`)
+  } catch {
+    ElMessage.error(`复制 ${candidate.ipAddress} 失败，请检查浏览器剪贴板权限`)
   }
 }
 
