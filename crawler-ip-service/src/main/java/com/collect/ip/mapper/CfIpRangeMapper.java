@@ -21,6 +21,14 @@ public interface CfIpRangeMapper extends BaseMapper<CfIpRange> {
             """)
     List<CfIpRange> selectActive();
 
+    @Select("""
+            SELECT *
+            FROM cf_ip_range
+            WHERE active = 1 AND enabled = 1
+            ORDER BY ip_version ASC, cidr ASC
+            """)
+    List<CfIpRange> selectEnabled();
+
     @org.apache.ibatis.annotations.Update("UPDATE cf_ip_range SET active = 0")
     int deactivateAll();
 

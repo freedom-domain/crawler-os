@@ -5,6 +5,7 @@ import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
 import com.collect.ip.dto.CfIpCandidatesReq;
 import com.collect.ip.dto.CfIpProbeReq;
+import com.collect.ip.dto.CfIpRangeEnabledReq;
 import com.collect.ip.dto.CfIpRangeProbeReq;
 import com.collect.ip.dto.CfIpRangeRegionReq;
 import com.collect.ip.entity.CfIpCandidate;
@@ -60,7 +61,15 @@ public class CfIpController {
         return R.ok(rangeService.updateRegion(id, req.getRegion()));
     }
 
-    @Operation(summary = "对每个 Cloudflare 网段执行有限地址抽样测试")
+    @Operation(summary = "启用或停用 Cloudflare 网段优选")
+    @PutMapping("/ranges/{id}/enabled")
+    public R<CfIpRange> updateRangeEnabled(@PathVariable Long id,
+                                           @Valid @RequestBody CfIpRangeEnabledReq req) {
+        requirePermission();
+        return R.ok(rangeService.updateEnabled(id, req.getEnabled()));
+    }
+
+    @Operation(summary = "对已启用的 Cloudflare 网段执行有限地址抽样测试")
     @PostMapping("/ranges/probe")
     public R<List<CfIpCandidate>> probeRangeSamples(@Valid @RequestBody CfIpRangeProbeReq req) {
         requirePermission();

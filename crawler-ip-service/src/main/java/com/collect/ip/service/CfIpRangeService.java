@@ -86,14 +86,24 @@ public class CfIpRangeService {
         return rangeMapper.selectById(id);
     }
 
+    public CfIpRange updateEnabled(Long id, boolean enabled) {
+        CfIpRange range = rangeMapper.selectById(id);
+        if (range == null || !Boolean.TRUE.equals(range.getActive())) {
+            throw new BizException("Cloudflare 网段不存在，请刷新后重试");
+        }
+        range.setEnabled(enabled);
+        rangeMapper.updateById(range);
+        return rangeMapper.selectById(id);
+    }
+
     public List<CfIpCandidate> probeSamples(int samplesPerRange, String tlsServerName) {
         if (samplesPerRange < 1 || samplesPerRange > MAX_SAMPLES_PER_RANGE) {
             throw new BizException("每个网段抽样数必须在 1 到 " + MAX_SAMPLES_PER_RANGE + " 之间");
         }
-        List<CfIpRange> ranges = rangeMapper.selectActive();
+        List<CfIpRange> ranges = rangeMapper.selectEnabled();
         long totalProbes = (long) ranges.size() * samplesPerRange;
         if (totalProbes == 0) {
-            throw new BizException("请先初始化 Cloudflare 官方 IP 网段");
+            throw new BizException("没有启用的 Cloudflare IP 网段，请先启用至少一个网段");
         }
         if (totalProbes > MAX_TOTAL_PROBES) {
             throw new BizException("本次抽样超过安全上限 " + MAX_TOTAL_PROBES + "，请减少每个网段的抽样数");

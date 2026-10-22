@@ -18,6 +18,7 @@ public class CfIpRange {
     private String region;
     private String colo;
     private Boolean active;
+    private Boolean enabled;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

@@ -208,5 +208,7 @@ export const cfIpRanges = () => request.get('/cf-ip/ranges')
 export const cfIpInitializeRanges = () => request.post('/cf-ip/ranges/initialize')
 export const cfIpUpdateRangeRegion = (id: number, region: string) =>
   request.put(`/cf-ip/ranges/${id}/region`, { region })
+export const cfIpUpdateRangeEnabled = (id: number, enabled: boolean) =>
+  request.put(`/cf-ip/ranges/${id}/enabled`, { enabled })
 export const cfIpProbeRanges = (samplesPerRange: number, tlsServerName: string) =>
   request.post('/cf-ip/ranges/probe', { samplesPerRange, tlsServerName }, { timeout: 180_000 })

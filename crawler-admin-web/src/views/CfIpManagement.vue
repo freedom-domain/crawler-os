@@ -202,7 +202,7 @@
       <div class="section-heading range-section-heading">
         <div>
           <h2>Cloudflare 官方 IP 网段</h2>
-          <p>网段为全球任播，不代表固定地理位置；可按需维护自己的地区标签。</p>
+          <p>网段为全球任播，不代表固定地理位置；可按需维护地区标签，并停用不参与抽样优选的网段。</p>
         </div>
       </div>
       <div class="range-settings-row">
@@ -228,11 +228,12 @@
           type="primary"
           :icon="Connection"
           :loading="rangeProbeBusy"
-          :disabled="ranges.length === 0 || rangeProbeBusy || probeBusy"
+          :disabled="enabledRangeCount === 0 || rangeProbeBusy || probeBusy"
           @click="probeRanges"
         >
-          测试各网段样本
+          测试启用网段样本
         </el-button>
+        <span class="filter-count">已启用 {{ enabledRangeCount }} / {{ ranges.length }}</span>
       </div>
       <div class="probe-note">
         每段最多抽样 5 个地址，本次最多测试 200 个样本；Ping 指标为从 IP 服务主机 TCP 连接候选 IP:443 的耗时，不依赖 ICMP。
@@ -256,6 +257,15 @@
         <el-table-column prop="cidr" label="CIDR 网段" min-width="190" />
         <el-table-column prop="ipVersion" label="版本" width="80" align="center">
           <template #default="{ row }">IPv{{ row.ipVersion }}</template>
+        </el-table-column>
+        <el-table-column label="优选启用" width="110" align="center">
+          <template #default="{ row }">
+            <el-switch
+              v-model="row.enabled"
+              :disabled="savingEnabledId === row.id || rangeProbeBusy || rangeInitBusy"
+              @change="saveRangeEnabled(row)"
+            />
+          </template>
         </el-table-column>
         <el-table-column prop="colo" label="数据中心 colo" width="135" align="center">
           <template #default="{ row }">{{ row.colo || '-' }}</template>
@@ -320,6 +330,7 @@ import {
   cfIpProbe,
   cfIpProbeRanges,
   cfIpRanges,
+  cfIpUpdateRangeEnabled,
   cfIpUpdateRangeRegion
 } from '@/api'
 import { Connection, CopyDocument, Delete, Download, Plus, Refresh, Search } from '@element-plus/icons-vue'
@@ -347,6 +358,7 @@ interface CfIpRange {
   region: string
   colo: string | null
   active: boolean
+  enabled: boolean
 }
 
 const candidates = ref<CfIpCandidate[]>([])
@@ -362,6 +374,7 @@ const probeAllBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
 const savingRegionId = ref<number | null>(null)
+const savingEnabledId = ref<number | null>(null)
 const probingCandidateId = ref<number | null>(null)
 const probeProgress = ref(0)
 const importDialogVisible = ref(false)
@@ -425,6 +438,7 @@ const availableRangeColos = computed(() =>
   Array.from(new Set(ranges.value.map(range => range.colo).filter((colo): colo is string => Boolean(colo))))
     .sort((a, b) => a.localeCompare(b))
 )
+const enabledRangeCount = computed(() => ranges.value.filter(range => range.enabled).length)
 const hasActiveFilters = computed(() =>
   Boolean(keyword.value.trim() || ipVersionFilter.value || regionFilter.value || coloFilter.value
     || statusFilter.value !== 'ALL'
@@ -538,6 +552,23 @@ const saveRangeRegion = async (range: CfIpRange) => {
     ElMessage.error(`保存 ${range.cidr} 的地区标签失败`)
   } finally {
     savingRegionId.value = null
+  }
+}
+
+const saveRangeEnabled = async (range: CfIpRange) => {
+  savingEnabledId.value = range.id
+  try {
+    await cfIpUpdateRangeEnabled(range.id, range.enabled)
+    ElMessage.success(`${range.cidr} 已${range.enabled ? '启用' : '停用'}优选`)
+  } catch {
+    ElMessage.error(`更新 ${range.cidr} 的优选状态失败`)
+    try {
+      await loadRanges()
+    } catch {
+      ElMessage.error('刷新网段状态失败，请手动刷新页面确认开关状态')
+    }
+  } finally {
+    savingEnabledId.value = null
   }
 }
 
