@@ -41,9 +41,9 @@ public class CfIpProbeService {
     private static final int CONNECT_TIMEOUT_MILLIS = 2_500;
     private static final int SOCKET_READ_TIMEOUT_MILLIS = 5_000;
     private static final int TCP_PROBE_TIMEOUT_MILLIS = 2_500;
-    private static final int DOWNLOAD_BYTES = 262_144;
-    private static final int MAX_RESPONSE_BYTES = 1_048_576;
-    private static final int MAX_CONCURRENT_PROBES = 8;
+    private static final int DOWNLOAD_BYTES = 30_000_000;
+    private static final int MAX_RESPONSE_BYTES = 32_000_000;
+    private static final int MAX_CONCURRENT_PROBES = 1;
     private static final String SPEED_TEST_HOST = "speed.cloudflare.com";
     private static final Pattern CF_RAY_PATTERN = Pattern.compile("^[0-9a-fA-F]+-([A-Z]{3})$",
             Pattern.CASE_INSENSITIVE);

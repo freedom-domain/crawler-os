@@ -229,7 +229,7 @@
       </div>
       <div class="probe-note">
         每段最多抽样 5 个地址，本次最多测试 200 个样本；Ping 指标为从 IP 服务主机 TCP 连接候选 IP:443 的耗时，不依赖 ICMP。
-        TLS 使用上方填写的 serverName/SNI 与证书校验，必须与 v2rayN 节点配置一致；测速单独使用 speed.cloudflare.com，下载上限约 256 KiB。
+        TLS 使用上方填写的 serverName/SNI 与证书校验，必须与 v2rayN 节点配置一致；测速单独使用 speed.cloudflare.com，单次下载约 30 MB。
         CIDR 数据中心 colo 按已探测候选 IP 的 colo 多数票自动归类，平票时取最近一次观测。
       </div>
       <div class="range-filter-toolbar">
