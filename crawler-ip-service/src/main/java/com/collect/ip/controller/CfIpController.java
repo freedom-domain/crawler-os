@@ -3,6 +3,7 @@ package com.collect.ip.controller;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
+import com.collect.ip.dto.CfIpCandidatesDeleteReq;
 import com.collect.ip.dto.CfIpCandidatesReq;
 import com.collect.ip.dto.CfIpProbeReq;
 import com.collect.ip.dto.CfIpRangeEnabledReq;
@@ -88,6 +89,13 @@ public class CfIpController {
     public R<List<CfIpCandidate>> probe(@Valid @RequestBody CfIpProbeReq req) {
         requirePermission();
         return R.ok(service.probe(req.getIds(), req.getTlsServerName()));
+    }
+
+    @Operation(summary = "批量删除 Cloudflare IP 候选")
+    @DeleteMapping("/batch")
+    public R<Integer> deleteBatch(@Valid @RequestBody CfIpCandidatesDeleteReq req) {
+        requirePermission();
+        return R.ok(service.deleteCandidates(req.getIds()));
     }
 
     @Operation(summary = "删除 Cloudflare IP 候选")

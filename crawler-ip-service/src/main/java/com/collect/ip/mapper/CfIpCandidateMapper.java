@@ -2,6 +2,7 @@ package com.collect.ip.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.collect.ip.entity.CfIpCandidate;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -41,6 +42,17 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
             </script>
             """)
     List<CfIpCandidate> selectByIds(@Param("ids") List<Long> ids);
+
+    @Delete("""
+            <script>
+            DELETE FROM cf_ip_candidate
+            WHERE id IN
+            <foreach collection="ids" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+            </script>
+            """)
+    int deleteByIds(@Param("ids") List<Long> ids);
 
     @Update("""
             UPDATE cf_ip_candidate

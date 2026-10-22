@@ -41,6 +41,7 @@
           placeholder="搜索 IP 地址"
           :prefix-icon="Search"
           class="filter-keyword"
+          @keyup.enter="applyFilters"
         />
         <el-select v-model="ipVersionFilter" clearable placeholder="IP 版本" class="filter-select">
           <el-option label="IPv4" value="4" />
@@ -78,6 +79,7 @@
           placeholder="速度下限 Mbps"
           class="filter-number"
         />
+        <el-button type="primary" :icon="Search" @click="applyFilters">查询</el-button>
         <el-button :icon="Refresh" @click="resetFilters">重置筛选</el-button>
         <span class="filter-count">显示 {{ matchingCandidates.length }} / {{ candidates.length }}</span>
       </div>
@@ -92,6 +94,15 @@
             @click="probeSelected"
           >
             测试所选
+          </el-button>
+          <el-button
+            type="danger"
+            :icon="Delete"
+            :disabled="selectedCandidates.length === 0 || probeBusy || rangeProbeBusy || deleteSelectedBusy"
+            :loading="deleteSelectedBusy"
+            @click="deleteSelected"
+          >
+            删除所选
           </el-button>
           <el-button
             type="primary"
@@ -126,7 +137,7 @@
           <el-table-column
             type="selection"
             width="48"
-            :selectable="() => !probeBusy && !rangeProbeBusy"
+            :selectable="() => !probeBusy && !rangeProbeBusy && !deleteSelectedBusy"
           />
           <el-table-column type="index" label="#" width="64" align="center" />
           <el-table-column prop="ipAddress" label="IP 地址" min-width="190" />
@@ -177,7 +188,7 @@
                 link
                 type="danger"
                 :icon="Delete"
-                :disabled="probeBusy || rangeProbeBusy"
+                :disabled="probeBusy || rangeProbeBusy || deleteSelectedBusy"
                 aria-label="删除 IP"
                 @click="deleteCandidate(row)"
               />
@@ -325,6 +336,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cfIpAdd,
   cfIpDelete,
+  cfIpDeleteBatch,
   cfIpInitializeRanges,
   cfIpList,
   cfIpProbe,
@@ -371,6 +383,7 @@ const rangesLoading = ref(false)
 const importBusy = ref(false)
 const probeBusy = ref(false)
 const probeAllBusy = ref(false)
+const deleteSelectedBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
 const savingRegionId = ref<number | null>(null)
@@ -395,20 +408,30 @@ const coloFilter = ref('')
 const statusFilter = ref('ALL')
 const maxTlsMs = ref<number | undefined>()
 const minSpeedMbps = ref<number | undefined>()
+const appliedFilters = ref({
+  keyword: '',
+  ipVersion: '',
+  region: '',
+  colo: '',
+  status: 'ALL',
+  maxTlsMs: undefined as number | undefined,
+  minSpeedMbps: undefined as number | undefined
+})
 const page = ref(1)
 const pageSize = ref(10)
 
 const matchingCandidates = computed(() => {
-  const query = keyword.value.trim().toLowerCase()
+  const filters = appliedFilters.value
+  const query = filters.keyword.trim().toLowerCase()
   return candidates.value.filter(candidate => {
     if (query && !candidate.ipAddress.toLowerCase().includes(query)) return false
-    if (ipVersionFilter.value && (candidate.ipAddress.includes(':') ? '6' : '4') !== ipVersionFilter.value) return false
-    if (regionFilter.value && candidate.region !== regionFilter.value) return false
-    if (coloFilter.value && candidate.colo !== coloFilter.value) return false
-    if (statusFilter.value !== 'ALL' && candidate.status !== statusFilter.value) return false
-    if (maxTlsMs.value !== undefined && (candidate.tlsMs === null || candidate.tlsMs > maxTlsMs.value)) return false
-    if (minSpeedMbps.value !== undefined
-        && (candidate.speedMbps === null || candidate.speedMbps < minSpeedMbps.value)) return false
+    if (filters.ipVersion && (candidate.ipAddress.includes(':') ? '6' : '4') !== filters.ipVersion) return false
+    if (filters.region && candidate.region !== filters.region) return false
+    if (filters.colo && candidate.colo !== filters.colo) return false
+    if (filters.status !== 'ALL' && candidate.status !== filters.status) return false
+    if (filters.maxTlsMs !== undefined && (candidate.tlsMs === null || candidate.tlsMs > filters.maxTlsMs)) return false
+    if (filters.minSpeedMbps !== undefined
+        && (candidate.speedMbps === null || candidate.speedMbps < filters.minSpeedMbps)) return false
     return true
   })
 })
@@ -440,9 +463,9 @@ const availableRangeColos = computed(() =>
 )
 const enabledRangeCount = computed(() => ranges.value.filter(range => range.enabled).length)
 const hasActiveFilters = computed(() =>
-  Boolean(keyword.value.trim() || ipVersionFilter.value || regionFilter.value || coloFilter.value
-    || statusFilter.value !== 'ALL'
-    || maxTlsMs.value !== undefined || minSpeedMbps.value !== undefined)
+  Boolean(appliedFilters.value.keyword.trim() || appliedFilters.value.ipVersion || appliedFilters.value.region
+    || appliedFilters.value.colo || appliedFilters.value.status !== 'ALL'
+    || appliedFilters.value.maxTlsMs !== undefined || appliedFilters.value.minSpeedMbps !== undefined)
 )
 const pagedCandidates = computed(() => {
   const start = (page.value - 1) * pageSize.value
@@ -464,7 +487,7 @@ const fastestLatency = computed(() => {
   return timings.length ? Math.min(...timings) : null
 })
 
-watch([keyword, ipVersionFilter, regionFilter, coloFilter, statusFilter, maxTlsMs, minSpeedMbps], async () => {
+watch(appliedFilters, async () => {
   page.value = 1
   selectedCandidates.value = []
   await nextTick()
@@ -492,6 +515,19 @@ const resetFilters = () => {
   statusFilter.value = 'ALL'
   maxTlsMs.value = undefined
   minSpeedMbps.value = undefined
+  applyFilters()
+}
+
+const applyFilters = () => {
+  appliedFilters.value = {
+    keyword: keyword.value,
+    ipVersion: ipVersionFilter.value,
+    region: regionFilter.value,
+    colo: coloFilter.value,
+    status: statusFilter.value,
+    maxTlsMs: maxTlsMs.value,
+    minSpeedMbps: minSpeedMbps.value
+  }
 }
 
 const resetRangeFilters = () => {
@@ -717,6 +753,45 @@ const deleteCandidate = async (candidate: CfIpCandidate) => {
     await loadCandidates()
   } catch {
     ElMessage.error('删除候选 IP 失败')
+  }
+}
+
+const deleteSelected = async () => {
+  const selected = [...selectedCandidates.value]
+  if (!selected.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selected.length} 个候选 IP？此操作不可撤销。`,
+      '批量删除确认',
+      {
+        type: 'warning',
+        confirmButtonText: '删除所选',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+
+  deleteSelectedBusy.value = true
+  let deletedCount: number
+  try {
+    const response = await cfIpDeleteBatch(selected.map(candidate => candidate.id)) as { data: number }
+    deletedCount = response.data
+  } catch {
+    ElMessage.error('批量删除候选 IP 失败，列表未刷新；请稍后重试')
+    deleteSelectedBusy.value = false
+    return
+  }
+  selectedCandidates.value = []
+  await nextTick()
+  candidateTable.value?.clearSelection()
+  deleteSelectedBusy.value = false
+  ElMessage.success(`已删除 ${deletedCount} 个候选 IP`)
+  try {
+    await loadCandidates()
+  } catch {
+    ElMessage.error('删除成功，但列表刷新失败，请手动刷新确认结果')
   }
 }
 

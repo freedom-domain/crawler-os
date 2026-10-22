@@ -5,6 +5,7 @@ import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.mapper.CfIpCandidateMapper;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -67,6 +68,25 @@ public class CfIpCandidateService {
         if (mapper.deleteById(id) == 0) {
             throw new BizException("IP 候选记录不存在");
         }
+    }
+
+    @Transactional
+    public int deleteCandidates(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BizException("请选择需要删除的 IP");
+        }
+        List<Long> distinctIds = ids.stream().distinct().toList();
+        if (distinctIds.size() > MAX_IMPORT_COUNT) {
+            throw new BizException("单次最多删除 " + MAX_IMPORT_COUNT + " 个 IP");
+        }
+        if (mapper.selectByIds(distinctIds).size() != distinctIds.size()) {
+            throw new BizException("部分 IP 候选记录已不存在，请刷新列表后重试");
+        }
+        int deleted = mapper.deleteByIds(distinctIds);
+        if (deleted != distinctIds.size()) {
+            throw new BizException("部分 IP 候选记录删除失败，请刷新列表后重试");
+        }
+        return deleted;
     }
 
     public List<CfIpCandidate> probe(List<Long> ids, String tlsServerName) {

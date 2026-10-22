@@ -204,6 +204,7 @@ export const cfIpAdd = (ips: string) => request.post('/cf-ip/', { ips })
 export const cfIpProbe = (ids: number[], tlsServerName: string) =>
   request.post('/cf-ip/probe', { ids, tlsServerName }, { timeout: 180_000 })
 export const cfIpDelete = (id: number) => request.delete(`/cf-ip/${id}`)
+export const cfIpDeleteBatch = (ids: number[]) => request.delete('/cf-ip/batch', { data: { ids } })
 export const cfIpRanges = () => request.get('/cf-ip/ranges')
 export const cfIpInitializeRanges = () => request.post('/cf-ip/ranges/initialize')
 export const cfIpUpdateRangeRegion = (id: number, region: string) =>
