@@ -18,14 +18,21 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 			+ "<if test='category != null and category != \"\"'>AND f.category = #{category}</if> "
 	    + "<if test='spiderId != null'>AND f.spider_id = #{spiderId}</if> "
 			+ "<if test='fileName != null and fileName != \"\"'>AND f.file_name LIKE CONCAT('%', #{fileName}, '%')</if> "
-			+ "<if test='title != null and title != \"\"'>AND f.title LIKE CONCAT('%', #{title}, '%')</if> "
+			+ "<if test='title != null and title != \"\"'>"
+			+ "<choose>"
+			+ "<when test='useTitleFullText'>AND MATCH(f.title) AGAINST (#{titleSearch} IN BOOLEAN MODE)</when> "
+			+ "<otherwise>AND f.title LIKE CONCAT('%', #{title}, '%')</otherwise> "
+			+ "</choose>"
+			+ "</if> "
 	    + "ORDER BY f.create_time DESC, f.id DESC"
 	    + "</script>")
     IPage<FileMetadata> selectFilePage(Page<FileMetadata> page,
 				       @Param("category") String category,
 									   @Param("spiderId") Long spiderId,
 									   @Param("fileName") String fileName,
-									   @Param("title") String title);
+									   @Param("title") String title,
+									   @Param("titleSearch") String titleSearch,
+									   @Param("useTitleFullText") boolean useTitleFullText);
 
     @Select("SELECT * FROM file_metadata WHERE object_name = #{objectName} AND deleted = 0 LIMIT 1")
     FileMetadata selectByObjectName(@Param("objectName") String objectName);

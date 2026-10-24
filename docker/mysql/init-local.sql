@@ -170,6 +170,10 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     create_time DATETIME,
     update_time DATETIME,
     KEY idx_file_query (deleted, category, spider_id, create_time, id),
+    KEY idx_file_page (deleted, create_time, id),
+    KEY idx_file_category_page (deleted, category, create_time, id),
+    KEY idx_file_spider_page (deleted, spider_id, create_time, id),
+    FULLTEXT KEY idx_file_title_ngram (title) WITH PARSER ngram,
     KEY idx_file_object (deleted, object_name(191)),
     UNIQUE KEY uk_file_source (source(768))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

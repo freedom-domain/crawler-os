@@ -412,6 +412,13 @@ public class FileService {
     public IPage<FileMetadata> page(int current, int size, String category, Long spiderId, String fileName, String title) {
         current = Math.max(1, current);
         size = Math.min(Math.max(1, size), 100);
-        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, fileName, title);
+        boolean useTitleFullText = title != null
+            && title.codePointCount(0, title.length()) >= 2
+            && title.codePoints().allMatch(Character::isLetterOrDigit);
+        String titleSearch = useTitleFullText
+            ? "\"" + title.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+            : null;
+        return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, fileName,
+            title, titleSearch, useTitleFullText);
     }
 }
