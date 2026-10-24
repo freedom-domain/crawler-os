@@ -61,7 +61,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         String path = request.getPath().value();
 
         log.debug("AuthFilter: path={}", path);
-        if (WHITE_LIST.stream().anyMatch(path::startsWith)) {
+        if ("/api/cf-ip/available".equals(path)
+                || WHITE_LIST.stream().anyMatch(path::startsWith)) {
             log.debug("AuthFilter: path={} matched whitelist", path);
             return chain.filter(exchange);
         }

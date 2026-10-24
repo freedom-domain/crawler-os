@@ -40,6 +40,12 @@ public class CfIpController {
         return R.ok(service.list());
     }
 
+    @Operation(summary = "公开获取随机可连接的 Cloudflare IP")
+    @GetMapping(value = "/available", produces = "text/plain; charset=UTF-8")
+    public String available(@RequestParam(value = "count", defaultValue = "10") int count) {
+        return String.join("\n", service.randomAvailableIpAddresses(count));
+    }
+
     @Operation(summary = "获取 Cloudflare 官方 IP 网段")
     @GetMapping("/ranges")
     public R<List<CfIpRange>> ranges() {

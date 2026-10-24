@@ -29,6 +29,11 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
     @Select("SELECT ip_address FROM cf_ip_candidate")
     List<String> selectAllIpAddresses();
 
+    @Select("SELECT * FROM cf_ip_candidate " +
+            "WHERE status = 'AVAILABLE' AND speed_mbps IS NOT NULL " +
+            "ORDER BY RAND() LIMIT #{count}")
+    List<CfIpCandidate> selectRandomAvailableCandidates(@Param("count") int count);
+
     @Select("SELECT * FROM cf_ip_candidate WHERE ip_address = #{ipAddress} LIMIT 1")
     CfIpCandidate selectByIpAddress(@Param("ipAddress") String ipAddress);
 

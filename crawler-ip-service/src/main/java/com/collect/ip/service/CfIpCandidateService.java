@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
+import java.math.RoundingMode;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -19,6 +20,7 @@ public class CfIpCandidateService {
 
     private static final int MAX_IMPORT_COUNT = 1_000;
     private static final int MAX_PROBE_COUNT = 100;
+    private static final int MAX_PUBLIC_IP_COUNT = 100;
     private final CfIpCandidateMapper mapper;
     private final CfIpProbeService probeService;
 
@@ -29,6 +31,20 @@ public class CfIpCandidateService {
 
     public List<CfIpCandidate> list() {
         return mapper.selectAllOrdered();
+    }
+
+    public List<String> randomAvailableIpAddresses(int count) {
+        if (count < 1 || count > MAX_PUBLIC_IP_COUNT) {
+            throw new BizException("数量必须在 1 到 " + MAX_PUBLIC_IP_COUNT + " 之间");
+        }
+        return mapper.selectRandomAvailableCandidates(count).stream()
+                .map(candidate -> String.format("%s#%s 自选官方优选 %sMB/s",
+                        candidate.getIpAddress(),
+                        candidate.getRegion() == null || candidate.getRegion().isBlank()
+                                ? "-" : candidate.getRegion(),
+                        candidate.getSpeedMbps().divide(java.math.BigDecimal.valueOf(8), 2, RoundingMode.HALF_UP)
+                                .toPlainString()))
+                .toList();
     }
 
     public int addCandidates(String rawIps) {
