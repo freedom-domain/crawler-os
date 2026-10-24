@@ -19,4 +19,5 @@ public class FileMetadata extends BaseEntity {
     private String category;
     private Long spiderId;
     private String source;
+    private String referrer;
 }

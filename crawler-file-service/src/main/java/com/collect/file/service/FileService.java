@@ -133,7 +133,8 @@ public class FileService {
         }
     }
 
-    public int deleteByCondition(String category, Long spiderId, String fileName, String title) {
+    public int deleteByCondition(String category, Long spiderId, String fileName, String title,
+                                 String source, String referrer) {
         QueryWrapper<FileMetadata> query = new QueryWrapper<>();
         if (category != null && !category.isBlank()) {
             query.eq("category", category);
@@ -146,6 +147,12 @@ public class FileService {
         }
         if (title != null && !title.isBlank()) {
             query.like("title", title);
+        }
+        if (source != null && !source.isBlank()) {
+            query.like("source", source);
+        }
+        if (referrer != null && !referrer.isBlank()) {
+            query.like("referrer", referrer);
         }
         int deleted = 0;
         for (FileMetadata metadata : fileMetadataMapper.selectList(query)) {
@@ -409,7 +416,8 @@ public class FileService {
     }
 
     @SuppressWarnings("null")
-    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId, String fileName, String title) {
+    public IPage<FileMetadata> page(int current, int size, String category, Long spiderId,
+                                    String fileName, String title, String source, String referrer) {
         current = Math.max(1, current);
         size = Math.min(Math.max(1, size), 100);
         boolean useTitleFullText = title != null
@@ -419,6 +427,6 @@ public class FileService {
             ? "\"" + title.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
             : null;
         return fileMetadataMapper.selectFilePage(new Page<>(current, size), category, spiderId, fileName,
-            title, titleSearch, useTitleFullText);
+            title, titleSearch, useTitleFullText, source, referrer);
     }
 }

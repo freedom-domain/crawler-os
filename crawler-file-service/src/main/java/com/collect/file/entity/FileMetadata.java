@@ -22,4 +22,5 @@ public class FileMetadata extends BaseEntity {
     @TableField(exist = false)
     private String crawlerName;
     private String source;
+    private String referrer;
 }

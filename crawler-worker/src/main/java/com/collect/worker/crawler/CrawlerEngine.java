@@ -120,7 +120,7 @@ public class CrawlerEngine {
     private final ThreadLocal<OkHttpClient> currentTaskClient = new ThreadLocal<>();
     /** 任务状态本地缓存（taskId -> (status, pausedAt, expireAt)），TTL 1s，LRU 上限 1024 条 */
     private final Map<Long, TaskStatusCache> taskStatusCache = buildLruCache(1024);
-    record WebResource(String url, String category, String objectName, String contentType) {}
+    record WebResource(String url, String referrer, String category, String objectName, String contentType) {}
 
     record RobotsCacheEntry(RobotsRules rules, long expireAt) {}
 
@@ -1483,7 +1483,7 @@ public class CrawlerEngine {
                         // 不覆盖时，若图片已存在则跳过下载
                         if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                             skippedCounter.incrementAndGet();
-                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc, pageUrl);
                             return objectName;
                         }
                         byte[] data = downloadImageBytes(imageSrc, msg, execution);
@@ -1496,7 +1496,7 @@ public class CrawlerEngine {
                             objectName = "images/" + ObjectNameUtils.hashUrl(imageSrc) + realExt;
                             if (!overwrite && minioHelper.objectExists(imageBucket, objectName)) {
                                 skippedCounter.incrementAndGet();
-                                saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                                saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc, pageUrl);
                                 return objectName;
                             }
                         }
@@ -1505,13 +1505,13 @@ public class CrawlerEngine {
                                 : null;
                         if (hasSameBytes(existingData, data)) {
                             skippedCounter.incrementAndGet();
-                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc);
+                            saveExistingFileMetadata(objectName, msg.getSpiderId(), title, imageSrc, pageUrl);
                             return objectName;
                         }
                         // 覆盖模式下 putObject 会直接覆盖已存在的对象
                         minioHelper.putImage(imageBucket, objectName, data, guessContentType(realExt));
                         saveFileMetadata(imageBucket, objectName, data.length, guessContentType(realExt), "image",
-                            msg.getSpiderId(), title, imageSrc);
+                            msg.getSpiderId(), title, imageSrc, pageUrl);
                         uploadedCounter.incrementAndGet();
                         // 仅存储 MinIO 相对路径（objectName），前端通过后端接口按 objectName 获取图片
                         return objectName;
@@ -1711,7 +1711,7 @@ public class CrawlerEngine {
                 String htmlObject = "html/" + urlHash + ".html";
                 minioHelper.putHtml(htmlBucket, htmlObject, html);
                 saveFileMetadata(htmlBucket, htmlObject, html.getBytes(java.nio.charset.StandardCharsets.UTF_8).length,
-                        "text/html; charset=utf-8", "html", msg.getSpiderId(), title, url);
+                        "text/html; charset=utf-8", "html", msg.getSpiderId(), title, url, null);
             }
             if (!saveResources) {
                 return;
@@ -1726,7 +1726,7 @@ public class CrawlerEngine {
                 String objectName = "js/" + ObjectNameUtils.hashUrl(jsUrl)
                         + (extension.isEmpty() ? ".js" : extension);
                 enqueueResource(resourceQueue, processedResourceUrls,
-                        new WebResource(jsUrl, "js", objectName, "application/javascript"));
+                        new WebResource(jsUrl, url, "js", objectName, "application/javascript"));
             }
             for (String source : doc.$("link[rel~=stylesheet][href]", "href").all()) {
                 String cssUrl = resolveResourceUrl(url, source);
@@ -1735,7 +1735,7 @@ public class CrawlerEngine {
                 }
                 String objectName = "css/" + ObjectNameUtils.hashUrl(cssUrl) + ".css";
                 enqueueResource(resourceQueue, processedResourceUrls,
-                        new WebResource(cssUrl, "css", objectName, "text/css"));
+                        new WebResource(cssUrl, url, "css", objectName, "text/css"));
             }
             // JS/CSS 与图片共享资源并发槽位，并在当前页面任务结束前完成。
             if (!resourceQueue.isEmpty()) {
@@ -1840,7 +1840,7 @@ public class CrawlerEngine {
 
     private void saveOrUpdateResourceMetadata(WebResource resource, long fileSize, Long spiderId, String title) {
         saveFileMetadata(jsBucket, resource.objectName(), fileSize, resource.contentType(),
-                resource.category(), spiderId, title, resource.url());
+                resource.category(), spiderId, title, resource.url(), resource.referrer());
     }
 
     private String resolveResourceUrl(String pageUrl, String source) {
@@ -1900,7 +1900,7 @@ public class CrawlerEngine {
     }
 
     private void saveFileMetadata(String bucket, String objectName, long fileSize, String contentType,
-                                  String category, Long spiderId, String title, String source) {
+                                  String category, Long spiderId, String title, String source, String referrer) {
         // 原子插入或更新：并发重复抓取时也能让文件信息保持最新。
         FileMetadata metadata = new FileMetadata();
         metadata.setBucket(bucket);
@@ -1912,6 +1912,7 @@ public class CrawlerEngine {
         metadata.setCategory(category);
         metadata.setSpiderId(spiderId);
         metadata.setSource(source);
+        metadata.setReferrer(referrer);
         fileMetadataMapper.upsert(metadata);
     }
 
@@ -1926,12 +1927,13 @@ public class CrawlerEngine {
         return "file";
     }
 
-    private void saveExistingFileMetadata(String objectName, Long spiderId, String title, String source) {
+    private void saveExistingFileMetadata(String objectName, Long spiderId, String title,
+                                          String source, String referrer) {
         try {
             StatObjectResponse stat = minioHelper.statObject(imageBucket, objectName);
             // 已存在时同步最新标题、来源等元数据，不需要重新上传对象。
             saveFileMetadata(imageBucket, objectName, stat.size(), stat.contentType(), inferCategory(objectName),
-                    spiderId, title, source);
+                    spiderId, title, source, referrer);
         } catch (Exception e) {
             log.warn("读取已有文件元数据失败: bucket={}, object={}", imageBucket, objectName, e);
         }

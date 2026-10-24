@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS file_metadata (
     category VARCHAR(32),
     spider_id BIGINT,
     source VARCHAR(1024),
+    referrer VARCHAR(1024),
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
     update_time DATETIME,

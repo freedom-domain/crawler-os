@@ -9,6 +9,12 @@
           <el-input v-model="filterFileName" placeholder="搜索文件名" clearable style="width: 200px" @keyup.enter="refresh" @clear="refresh" />
         </el-form-item>
         <el-form-item>
+          <el-input v-model="filterSource" placeholder="搜索源地址" clearable style="width: 240px" @keyup.enter="refresh" @clear="refresh" />
+        </el-form-item>
+        <el-form-item>
+          <el-input v-model="filterReferrer" placeholder="搜索来源地址" clearable style="width: 240px" @keyup.enter="refresh" @clear="refresh" />
+        </el-form-item>
+        <el-form-item>
           <el-select v-model="filterCategory" placeholder="全部分类" clearable style="width: 140px" @change="refresh">
             <el-option label="HTML" value="html" />
             <el-option label="JavaScript" value="js" />
@@ -43,10 +49,18 @@
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable border>
         <el-table-column type="selection" width="48"  resizable />
         <el-table-column prop="title" label="标题" min-width="500" show-overflow-tooltip resizable />
-        <el-table-column label="来源" min-width="700" show-overflow-tooltip resizable>
+        <el-table-column label="源地址" min-width="600" show-overflow-tooltip resizable>
           <template #default="{ row }">
             <el-link v-if="row.source" :href="row.source" target="_blank" rel="noopener noreferrer" type="primary">
               {{ row.source }}
+            </el-link>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源地址" min-width="600" show-overflow-tooltip resizable>
+          <template #default="{ row }">
+            <el-link v-if="row.referrer" :href="row.referrer" target="_blank" rel="noopener noreferrer" type="primary">
+              {{ row.referrer }}
             </el-link>
             <span v-else>-</span>
           </template>
@@ -150,6 +164,8 @@ const filterCategory = ref('')
 const filterSpider = ref<number | null>(null)
 const filterFileName = ref('')
 const filterTitle = ref('')
+const filterSource = ref('')
+const filterReferrer = ref('')
 const spiders = ref<any[]>([])
 const page = reactive({ current: 1, size: 15, total: 0 })
 const previewVisible = ref(false)
@@ -168,7 +184,8 @@ const htmlPreviewSource = ref('')
 const htmlPreviewBaseUrl = ref('')
 const htmlLocalizeResources = ref(true)
 const htmlShowSource = ref(false)
-const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterFileName.value.trim() || filterTitle.value.trim()))
+const hasFilters = computed(() => Boolean(filterCategory.value || filterSpider.value || filterFileName.value.trim()
+  || filterTitle.value.trim() || filterSource.value.trim() || filterReferrer.value.trim()))
 
 const categoryLabel = (category: string) => ({
   html: 'HTML',
@@ -195,6 +212,8 @@ const loadData = async () => {
     if (filterSpider.value) params.spiderId = filterSpider.value
     if (filterFileName.value.trim()) params.fileName = filterFileName.value.trim()
     if (filterTitle.value.trim()) params.title = filterTitle.value.trim()
+    if (filterSource.value.trim()) params.source = filterSource.value.trim()
+    if (filterReferrer.value.trim()) params.referrer = filterReferrer.value.trim()
     const res: any = await filePage(params)
     tableData.value = res?.data?.records || []
     page.total = res?.data?.total || 0
@@ -230,6 +249,8 @@ const syncSpiderFilter = () => {
 const resetFilters = () => {
   filterTitle.value = ''
   filterFileName.value = ''
+  filterSource.value = ''
+  filterReferrer.value = ''
   filterCategory.value = ''
   filterSpider.value = null
   syncSpiderFilter()
@@ -378,7 +399,9 @@ const removeByCondition = async () => {
         category: filterCategory.value || undefined,
         spiderId: filterSpider.value || undefined,
         fileName: filterFileName.value.trim() || undefined,
-        title: filterTitle.value.trim() || undefined
+        title: filterTitle.value.trim() || undefined,
+        source: filterSource.value.trim() || undefined,
+        referrer: filterReferrer.value.trim() || undefined
       }
     })
     ElMessage.success(`已删除 ${res?.data || 0} 个文件`)

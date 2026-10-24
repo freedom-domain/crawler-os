@@ -16,14 +16,17 @@ class WebResourceQueueTest {
         var queue = new LinkedHashMap<String, CrawlerEngine.WebResource>();
         var processedUrls = new HashSet<String>();
         var script = new CrawlerEngine.WebResource(
-                "https://example.com/shared", "js", "js/object.js", "application/javascript");
+                "https://example.com/shared", "https://example.com/page", "js",
+                "js/object.js", "application/javascript");
         var stylesheet = new CrawlerEngine.WebResource(
-                "https://example.com/shared", "css", "css/object.css", "text/css");
+                "https://example.com/shared", "https://example.com/page", "css",
+                "css/object.css", "text/css");
 
         assertTrue(CrawlerEngine.enqueueResource(queue, processedUrls, script));
         assertFalse(CrawlerEngine.enqueueResource(queue, processedUrls, stylesheet));
 
         assertEquals(1, queue.size());
         assertEquals("js", queue.get("https://example.com/shared").category());
+        assertEquals("https://example.com/page", queue.get("https://example.com/shared").referrer());
     }
 }

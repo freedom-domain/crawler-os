@@ -18,7 +18,9 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 			+ "<if test='category != null and category != \"\"'>AND f.category = #{category}</if> "
 	    + "<if test='spiderId != null'>AND f.spider_id = #{spiderId}</if> "
 			+ "<if test='fileName != null and fileName != \"\"'>AND f.file_name LIKE CONCAT('%', #{fileName}, '%')</if> "
-			+ "<if test='title != null and title != \"\"'>"
+	    + "<if test='source != null and source != \"\"'>AND f.source LIKE CONCAT('%', #{source}, '%')</if> "
+	    + "<if test='referrer != null and referrer != \"\"'>AND f.referrer LIKE CONCAT('%', #{referrer}, '%')</if> "
+	    + "<if test='title != null and title != \"\"'>"
 			+ "<choose>"
 			+ "<when test='useTitleFullText'>AND MATCH(f.title) AGAINST (#{titleSearch} IN BOOLEAN MODE)</when> "
 			+ "<otherwise>AND f.title LIKE CONCAT('%', #{title}, '%')</otherwise> "
@@ -32,7 +34,9 @@ public interface FileMetadataMapper extends BaseMapper<FileMetadata> {
 									   @Param("fileName") String fileName,
 									   @Param("title") String title,
 									   @Param("titleSearch") String titleSearch,
-									   @Param("useTitleFullText") boolean useTitleFullText);
+									   @Param("useTitleFullText") boolean useTitleFullText,
+									   @Param("source") String source,
+									   @Param("referrer") String referrer);
 
     @Select("SELECT * FROM file_metadata WHERE object_name = #{objectName} AND deleted = 0 LIMIT 1")
     FileMetadata selectByObjectName(@Param("objectName") String objectName);
