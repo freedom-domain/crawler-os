@@ -90,7 +90,7 @@
           <el-button
             :icon="Connection"
             :disabled="selectedCandidates.length === 0 || selectedCandidates.length > 100 || probeBusy || rangeProbeBusy"
-            :loading="probeBusy && !probeAllBusy"
+            :loading="probeBusy && !probeAllBusy && !probeRetryStatus"
             @click="probeSelected"
           >
             测试所选
@@ -112,6 +112,26 @@
             @click="probeAll"
           >
             {{ probeAllBusy ? `测试中 ${probeProgress}/${candidates.length}` : '测试全部' }}
+          </el-button>
+          <el-button
+            :icon="Refresh"
+            :disabled="retryAvailableCount === 0 || probeBusy || rangeProbeBusy"
+            :loading="probeRetryStatus === 'AVAILABLE'"
+            @click="retryByStatus('AVAILABLE')"
+          >
+            {{ probeRetryStatus === 'AVAILABLE'
+              ? `重试中 ${probeProgress}/${probeRetryTotal}`
+              : `重试可连接 (${retryAvailableCount})` }}
+          </el-button>
+          <el-button
+            :icon="Refresh"
+            :disabled="retryFailedCount === 0 || probeBusy || rangeProbeBusy"
+            :loading="probeRetryStatus === 'FAILED'"
+            @click="retryByStatus('FAILED')"
+          >
+            {{ probeRetryStatus === 'FAILED'
+              ? `重试中 ${probeProgress}/${probeRetryTotal}`
+              : `重试连接失败 (${retryFailedCount})` }}
           </el-button>
           <el-button
             :icon="CopyDocument"
@@ -383,6 +403,8 @@ const rangesLoading = ref(false)
 const importBusy = ref(false)
 const probeBusy = ref(false)
 const probeAllBusy = ref(false)
+const probeRetryStatus = ref<'AVAILABLE' | 'FAILED' | null>(null)
+const probeRetryTotal = ref(0)
 const deleteSelectedBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
@@ -473,6 +495,12 @@ const pagedCandidates = computed(() => {
 })
 const availableCandidates = computed(() =>
   candidates.value.filter(candidate => candidate.status === 'AVAILABLE' && candidate.latencyMs !== null)
+)
+const retryAvailableCount = computed(() =>
+  candidates.value.filter(candidate => candidate.status === 'AVAILABLE').length
+)
+const retryFailedCount = computed(() =>
+  candidates.value.filter(candidate => candidate.status === 'FAILED').length
 )
 const v2raynCandidates = computed(() => {
   const serverName = tlsServerName.value.trim().toLowerCase()
@@ -734,6 +762,30 @@ const probeAll = async () => {
   } finally {
     probeBusy.value = false
     probeAllBusy.value = false
+  }
+}
+
+const retryByStatus = async (status: 'AVAILABLE' | 'FAILED') => {
+  const ids = candidates.value
+    .filter(candidate => candidate.status === status)
+    .map(candidate => candidate.id)
+  if (!ids.length || probeBusy.value || rangeProbeBusy.value) return
+  probeBusy.value = true
+  probeRetryStatus.value = status
+  probeRetryTotal.value = ids.length
+  probeProgress.value = 0
+  try {
+    for (let start = 0; start < ids.length; start += 100) {
+      await probeBatch(ids.slice(start, start + 100))
+    }
+    ElMessage.success(`已重试 ${ids.length} 个${status === 'AVAILABLE' ? '可连接' : '连接失败'} IP`)
+    selectedCandidates.value = []
+  } catch {
+    ElMessage.error(`重试在 ${probeProgress.value} 个 IP 后中断`)
+  } finally {
+    probeBusy.value = false
+    probeRetryStatus.value = null
+    probeRetryTotal.value = 0
   }
 }
 
