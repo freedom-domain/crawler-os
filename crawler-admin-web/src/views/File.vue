@@ -42,7 +42,6 @@
       <div class="table-scroll-wrapper">
       <el-table :data="tableData" v-loading="loading" stripe @selection-change="selectedRows = $event" resizable border>
         <el-table-column type="selection" width="48"  resizable />
-        <el-table-column prop="id" label="ID" min-width="80" resizable />
         <el-table-column prop="title" label="标题" min-width="500" show-overflow-tooltip resizable />
         <el-table-column label="来源" min-width="700" show-overflow-tooltip resizable>
           <template #default="{ row }">
