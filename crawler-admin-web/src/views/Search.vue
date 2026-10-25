@@ -165,7 +165,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onActivated, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
@@ -780,10 +780,27 @@ const onSpiderChange = () => {
 }
 
 watch(() => route.query.spiderId, (value) => {
+  if (route.name !== 'Search') return
   const spiderId = Number(value)
   const nextSpider = Number.isInteger(spiderId) && spiderId > 0 ? spiderId : ''
   if (filterSpider.value !== nextSpider) {
     filterSpider.value = nextSpider
+    doSearch()
+  }
+})
+
+const syncCrawlerFiltersFromRoute = () => {
+  const spiderId = Number(route.query.spiderId)
+  const nextSpider = Number.isInteger(spiderId) && spiderId > 0 ? spiderId : ''
+  const nextGroup = String(route.query.group || '')
+  if (filterSpider.value === nextSpider && filterGroup.value === nextGroup) return false
+  filterSpider.value = nextSpider
+  filterGroup.value = nextGroup
+  return true
+}
+
+onActivated(() => {
+  if (route.name === 'Search' && syncCrawlerFiltersFromRoute()) {
     doSearch()
   }
 })

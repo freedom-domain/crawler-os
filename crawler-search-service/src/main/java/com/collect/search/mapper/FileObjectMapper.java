@@ -1,9 +1,9 @@
 package com.collect.search.mapper;
 
 import com.collect.search.entity.FileObjectRecord;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -13,7 +13,7 @@ public interface FileObjectMapper {
     @Select("""
             SELECT bucket, object_name AS objectName
             FROM file_metadata
-            WHERE spider_id = #{spiderId} AND deleted = 0
+            WHERE spider_id = #{spiderId}
             """)
     List<FileObjectRecord> selectBySpiderId(Long spiderId);
 
@@ -26,10 +26,9 @@ public interface FileObjectMapper {
             """)
     long countActiveTasksBySpiderId(Long spiderId);
 
-    @Update("""
-            UPDATE file_metadata
-            SET deleted = 1
-            WHERE spider_id = #{spiderId} AND deleted = 0
+    @Delete("""
+            DELETE FROM file_metadata
+            WHERE spider_id = #{spiderId}
             """)
-    int softDeleteBySpiderId(Long spiderId);
+    int deleteBySpiderId(Long spiderId);
 }

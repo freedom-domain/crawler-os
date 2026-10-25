@@ -494,7 +494,7 @@ public class SearchService {
         if (!response.failures().isEmpty()) {
             throw new IllegalStateException("ES 内容未能完整清理，失败分片数: " + response.failures().size());
         }
-        int deletedMetadata = fileObjectMapper.softDeleteBySpiderId(spiderId);
+        int deletedMetadata = fileObjectMapper.deleteBySpiderId(spiderId);
         return new SpiderContentClearResult(response.deleted(), deletedFiles, deletedMetadata);
     }
 
