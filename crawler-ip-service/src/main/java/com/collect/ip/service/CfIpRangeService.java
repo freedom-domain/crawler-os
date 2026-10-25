@@ -1,5 +1,7 @@
 package com.collect.ip.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
 import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.entity.CfIpRange;
@@ -56,6 +58,19 @@ public class CfIpRangeService {
 
     public List<CfIpRange> list() {
         return rangeMapper.selectActive();
+    }
+
+    public IPage<CfIpRange> page(int current, int size, String cidr, Integer ipVersion, String region, String colo) {
+        if (ipVersion != null && ipVersion != 4 && ipVersion != 6) {
+            throw new BizException("IP 版本只能是 4 或 6");
+        }
+        return rangeMapper.selectActiveRangePage(
+                new Page<>(Math.max(1, current), Math.min(Math.max(1, size), 100)),
+                blankToNull(cidr), ipVersion, blankToNull(region), blankToNull(colo));
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     @Transactional

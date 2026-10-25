@@ -1,6 +1,10 @@
 package com.collect.ip.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.common.exception.BizException;
+import com.collect.ip.dto.CfIpCandidateFilters;
+import com.collect.ip.dto.CfIpCandidateSummary;
 import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.mapper.CfIpCandidateMapper;
 import org.springframework.dao.DuplicateKeyException;
@@ -31,6 +35,52 @@ public class CfIpCandidateService {
 
     public List<CfIpCandidate> list() {
         return mapper.selectAllOrdered();
+    }
+
+    public IPage<CfIpCandidate> page(int current, int size, String keyword, Integer ipVersion,
+                                     String region, String colo, String status,
+                                     Integer maxTlsMs, Integer minSpeedMbps) {
+        if (ipVersion != null && ipVersion != 4 && ipVersion != 6) {
+            throw new BizException("IP 版本只能是 4 或 6");
+        }
+        String normalizedStatus = normalizeStatus(status);
+        return mapper.selectCandidatePage(
+                new Page<>(Math.max(1, current), Math.min(Math.max(1, size), 100)),
+                blankToNull(keyword), ipVersion, blankToNull(region), blankToNull(colo), normalizedStatus,
+                maxTlsMs, minSpeedMbps);
+    }
+
+    public CfIpCandidateSummary summary() {
+        return mapper.selectSummary();
+    }
+
+    public CfIpCandidateFilters filters() {
+        return new CfIpCandidateFilters(mapper.selectDistinctRegions(), mapper.selectDistinctColos());
+    }
+
+    public List<Long> candidateIds(String status) {
+        String normalizedStatus = normalizeStatus(status);
+        return normalizedStatus == null
+                ? mapper.selectAllCandidateIds()
+                : mapper.selectCandidateIdsByStatus(normalizedStatus);
+    }
+
+    public List<String> availableCandidateIpAddresses() {
+        return mapper.selectAvailableCandidateIpAddresses();
+    }
+
+    private String normalizeStatus(String status) {
+        if (status == null || status.isBlank() || "ALL".equals(status)) {
+            return null;
+        }
+        if (!List.of("PENDING", "AVAILABLE", "FAILED").contains(status)) {
+            throw new BizException("无效的 IP 状态");
+        }
+        return status;
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public List<String> randomAvailableIpAddresses(int count) {

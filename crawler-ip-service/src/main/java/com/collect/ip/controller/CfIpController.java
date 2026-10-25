@@ -3,6 +3,8 @@ package com.collect.ip.controller;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
+import com.collect.ip.dto.CfIpCandidateFilters;
+import com.collect.ip.dto.CfIpCandidateSummary;
 import com.collect.ip.dto.CfIpCandidatesDeleteReq;
 import com.collect.ip.dto.CfIpCandidatesReq;
 import com.collect.ip.dto.CfIpProbeReq;
@@ -13,6 +15,7 @@ import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.entity.CfIpRange;
 import com.collect.ip.service.CfIpCandidateService;
 import com.collect.ip.service.CfIpRangeService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,6 +43,49 @@ public class CfIpController {
         return R.ok(service.list());
     }
 
+    @Operation(summary = "分页查询 Cloudflare IP 候选")
+    @GetMapping("/page")
+    public R<IPage<CfIpCandidate>> page(@RequestParam(value = "current", defaultValue = "1") int current,
+                                        @RequestParam(value = "size", defaultValue = "10") int size,
+                                        @RequestParam(value = "keyword", required = false) String keyword,
+                                        @RequestParam(value = "ipVersion", required = false) Integer ipVersion,
+                                        @RequestParam(value = "region", required = false) String region,
+                                        @RequestParam(value = "colo", required = false) String colo,
+                                        @RequestParam(value = "status", required = false) String status,
+                                        @RequestParam(value = "maxTlsMs", required = false) Integer maxTlsMs,
+                                        @RequestParam(value = "minSpeedMbps", required = false) Integer minSpeedMbps) {
+        requirePermission();
+        return R.ok(service.page(current, size, keyword, ipVersion, region, colo, status, maxTlsMs, minSpeedMbps));
+    }
+
+    @Operation(summary = "获取 Cloudflare IP 候选统计")
+    @GetMapping("/summary")
+    public R<CfIpCandidateSummary> summary() {
+        requirePermission();
+        return R.ok(service.summary());
+    }
+
+    @Operation(summary = "获取 Cloudflare IP 筛选项")
+    @GetMapping("/filters")
+    public R<CfIpCandidateFilters> filters() {
+        requirePermission();
+        return R.ok(service.filters());
+    }
+
+    @Operation(summary = "获取用于全量候选操作的 IP ID")
+    @GetMapping("/ids")
+    public R<List<Long>> candidateIds(@RequestParam(value = "status", required = false) String status) {
+        requirePermission();
+        return R.ok(service.candidateIds(status));
+    }
+
+    @Operation(summary = "获取全部可用候选 IP 地址")
+    @GetMapping("/available/ips")
+    public R<List<String>> availableCandidateIpAddresses() {
+        requirePermission();
+        return R.ok(service.availableCandidateIpAddresses());
+    }
+
     @Operation(summary = "公开获取随机可连接的 Cloudflare IP")
     @GetMapping(value = "/available", produces = "text/plain; charset=UTF-8")
     public String available(@RequestParam(value = "count", defaultValue = "10") int count) {
@@ -51,6 +97,18 @@ public class CfIpController {
     public R<List<CfIpRange>> ranges() {
         requirePermission();
         return R.ok(rangeService.list());
+    }
+
+    @Operation(summary = "筛选分页查询 Cloudflare 官方 IP 网段")
+    @GetMapping("/ranges/page")
+    public R<IPage<CfIpRange>> rangePage(@RequestParam(value = "current", defaultValue = "1") int current,
+                                         @RequestParam(value = "size", defaultValue = "10") int size,
+                                         @RequestParam(value = "cidr", required = false) String cidr,
+                                         @RequestParam(value = "ipVersion", required = false) Integer ipVersion,
+                                         @RequestParam(value = "region", required = false) String region,
+                                         @RequestParam(value = "colo", required = false) String colo) {
+        requirePermission();
+        return R.ok(rangeService.page(current, size, cidr, ipVersion, region, colo));
     }
 
     @Operation(summary = "初始化或更新 Cloudflare 官方 IP 网段")

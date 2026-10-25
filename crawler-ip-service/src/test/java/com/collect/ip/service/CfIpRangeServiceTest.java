@@ -5,6 +5,7 @@ import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.entity.CfIpRange;
 import com.collect.ip.mapper.CfIpCandidateMapper;
 import com.collect.ip.mapper.CfIpRangeMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -13,6 +14,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.mock;
@@ -54,6 +58,22 @@ class CfIpRangeServiceTest {
         when(rangeMapper.selectEnabled()).thenReturn(List.of(range("2400:cb00::/32", 6, 13L)));
 
         assertThrows(BizException.class, service::importEnabledIpv4Addresses);
+    }
+
+    @Test
+    void filtersAndBoundsRangePageQuery() {
+        when(rangeMapper.selectActiveRangePage(any(), any(), any(), any(), any()))
+                .thenReturn(new Page<>());
+
+        service.page(0, 500, " 103. ", 4, " APAC ", "SJC");
+
+        verify(rangeMapper).selectActiveRangePage(argThat(page -> page.getCurrent() == 1 && page.getSize() == 100),
+                eq("103."), eq(4), eq("APAC"), eq("SJC"));
+    }
+
+    @Test
+    void rejectsUnsupportedRangeIpVersion() {
+        assertThrows(BizException.class, () -> service.page(1, 10, null, 5, null, null));
     }
 
     @Test

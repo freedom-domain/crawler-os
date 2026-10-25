@@ -16,11 +16,12 @@
     <div class="summary-row">
       <el-card shadow="never">
         <span>候选 IP</span>
-        <strong>{{ candidates.length }}</strong>
+        <strong>{{ candidateSummary.total }}</strong>
       </el-card>
       <el-card shadow="never">
         <span>可用</span>
-        <strong class="available-count">{{ availableCandidates.length }}</strong>
+        <strong class="available-count">{{ candidateSummary.availableCount }}</strong>
+        <strong class="available-count">{{ candidateSummary.availableAddressCount }}</strong>
       </el-card>
       <el-card shadow="never">
         <span>最快 TLS</span>
@@ -38,7 +39,7 @@
         <el-input
           v-model="keyword"
           clearable
-          placeholder="搜索 IP 地址"
+          placeholder="按 IP 前缀搜索"
           :prefix-icon="Search"
           class="filter-keyword"
           @keyup.enter="applyFilters"
@@ -81,7 +82,7 @@
         />
         <el-button type="primary" :icon="Search" @click="applyFilters">查询</el-button>
         <el-button :icon="Refresh" @click="resetFilters">重置筛选</el-button>
-        <span class="filter-count">显示 {{ matchingCandidates.length }} / {{ candidates.length }}</span>
+        <span class="filter-count">匹配 {{ totalCandidates }} 个候选 IP</span>
       </div>
 
       <div class="candidate-toolbar">
@@ -107,11 +108,11 @@
           <el-button
             type="primary"
             :icon="Refresh"
-            :disabled="candidates.length === 0 || probeBusy || rangeProbeBusy"
+            :disabled="candidateSummary.total === 0 || probeBusy || rangeProbeBusy"
             :loading="probeAllBusy"
             @click="probeAll"
           >
-            {{ probeAllBusy ? `测试中 ${probeProgress}/${candidates.length}` : '测试全部' }}
+            {{ probeAllBusy ? `测试中 ${probeProgress}/${probeRetryTotal}` : '测试全部' }}
           </el-button>
           <el-button
             :icon="Refresh"
@@ -135,7 +136,7 @@
           </el-button>
           <el-button
             :icon="CopyDocument"
-            :disabled="availableCandidates.length === 0"
+            :disabled="candidateSummary.availableAddressCount === 0"
             @click="copyAvailable"
           >
             复制可用 IP
@@ -220,12 +221,14 @@
         </el-table>
       </div>
       <el-pagination
-        v-if="matchingCandidates.length > pageSize"
+        v-if="totalCandidates > pageSize"
         v-model:current-page="page"
         v-model:page-size="pageSize"
-        :total="matchingCandidates.length"
+        :total="totalCandidates"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
+        @current-change="loadCandidates"
+        @size-change="loadCandidates"
       />
     </el-card>
 
@@ -295,9 +298,9 @@
           <el-option v-for="colo in availableRangeColos" :key="colo" :label="colo" :value="colo" />
         </el-select>
         <el-button :icon="Refresh" @click="resetRangeFilters">重置筛选</el-button>
-        <span class="filter-count">显示 {{ filteredRanges.length }} / {{ ranges.length }}</span>
+        <span class="filter-count">匹配 {{ totalFilteredRanges }} 个网段</span>
       </div>
-      <el-table :data="pagedRanges" v-loading="rangesLoading" stripe border max-height="min(65vh, 560px)">
+      <el-table :data="rangePageRows" v-loading="rangesLoading" stripe border max-height="min(65vh, 560px)">
         <el-table-column prop="cidr" label="CIDR 网段" min-width="190" />
         <el-table-column prop="ipVersion" label="版本" width="80" align="center">
           <template #default="{ row }">IPv{{ row.ipVersion }}</template>
@@ -330,15 +333,17 @@
         </el-table-column>
       </el-table>
       <el-pagination
-        v-if="filteredRanges.length > rangePageSize"
+        v-if="totalFilteredRanges > rangePageSize"
         v-model:current-page="rangePage"
         v-model:page-size="rangePageSize"
-        :total="filteredRanges.length"
+        :total="totalFilteredRanges"
         :page-sizes="[10, 20, 50, 100]"
         layout="total, sizes, prev, pager, next, jumper"
+        @current-change="loadRangePage"
+        @size-change="changeRangePageSize"
       />
       <el-empty
-        v-if="!rangesLoading && filteredRanges.length === 0"
+        v-if="!rangesLoading && totalFilteredRanges === 0"
         :description="ranges.length === 0 ? '尚未初始化官方网段' : '没有符合筛选条件的网段'"
       />
     </el-card>
@@ -368,14 +373,19 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   cfIpAdd,
+  cfIpAvailableAddresses,
+  cfIpCandidateIds,
   cfIpDelete,
   cfIpDeleteBatch,
+  cfIpFilters,
   cfIpInitializeRanges,
   cfIpImportEnabledIpv4,
-  cfIpList,
+  cfIpPage,
   cfIpProbe,
   cfIpProbeRanges,
+  cfIpRangePage,
   cfIpRanges,
+  cfIpSummary,
   cfIpUpdateRangeEnabled,
   cfIpUpdateRangeRegion
 } from '@/api'
@@ -407,8 +417,31 @@ interface CfIpRange {
   enabled: boolean
 }
 
+interface CfIpCandidateSummary {
+  total: number
+  availableCount: number
+  availableAddressCount: number
+  pendingCount: number
+  failedCount: number
+  fastestTlsMs: number | null
+}
+
 const candidates = ref<CfIpCandidate[]>([])
+const probedCandidates = ref<CfIpCandidate[]>([])
 const ranges = ref<CfIpRange[]>([])
+const rangePageRows = ref<CfIpRange[]>([])
+const totalFilteredRanges = ref(0)
+const candidateSummary = ref<CfIpCandidateSummary>({
+  total: 0,
+  availableCount: 0,
+  availableAddressCount: 0,
+  pendingCount: 0,
+  failedCount: 0,
+  fastestTlsMs: null
+})
+const totalCandidates = ref(0)
+const availableRegions = ref<string[]>([])
+const availableColos = ref<string[]>([])
 const activeTab = ref('candidates')
 const candidateTable = ref()
 const selectedCandidates = ref<CfIpCandidate[]>([])
@@ -457,43 +490,6 @@ const appliedFilters = ref({
 const page = ref(1)
 const pageSize = ref(10)
 
-const matchingCandidates = computed(() => {
-  const filters = appliedFilters.value
-  const query = filters.keyword.trim().toLowerCase()
-  return candidates.value.filter(candidate => {
-    if (query && !candidate.ipAddress.toLowerCase().includes(query)) return false
-    if (filters.ipVersion && (candidate.ipAddress.includes(':') ? '6' : '4') !== filters.ipVersion) return false
-    if (filters.region && candidate.region !== filters.region) return false
-    if (filters.colo && candidate.colo !== filters.colo) return false
-    if (filters.status !== 'ALL' && candidate.status !== filters.status) return false
-    if (filters.maxTlsMs !== undefined && (candidate.tlsMs === null || candidate.tlsMs > filters.maxTlsMs)) return false
-    if (filters.minSpeedMbps !== undefined
-        && (candidate.speedMbps === null || candidate.speedMbps < filters.minSpeedMbps)) return false
-    return true
-  })
-})
-const filteredRanges = computed(() => {
-  const cidrQuery = rangeKeyword.value.trim().toLowerCase()
-  const regionQuery = rangeRegionFilter.value.trim().toLowerCase()
-  return ranges.value.filter(range => {
-    if (cidrQuery && !range.cidr.toLowerCase().includes(cidrQuery)) return false
-    if (rangeIpVersionFilter.value && String(range.ipVersion) !== rangeIpVersionFilter.value) return false
-    if (regionQuery && !(rangeRegions.value[range.id] || '').toLowerCase().includes(regionQuery)) return false
-    if (rangeColoFilter.value && range.colo !== rangeColoFilter.value) return false
-    return true
-  })
-})
-const pagedRanges = computed(() => {
-  const start = (rangePage.value - 1) * rangePageSize.value
-  return filteredRanges.value.slice(start, start + rangePageSize.value)
-})
-const availableRegions = computed(() =>
-  Array.from(new Set(candidates.value.map(candidate => candidate.region).filter(Boolean))).sort((a, b) => a.localeCompare(b))
-)
-const availableColos = computed(() =>
-  Array.from(new Set(candidates.value.map(candidate => candidate.colo).filter((colo): colo is string => Boolean(colo))))
-    .sort((a, b) => a.localeCompare(b))
-)
 const availableRangeColos = computed(() =>
   Array.from(new Set(ranges.value.map(range => range.colo).filter((colo): colo is string => Boolean(colo))))
     .sort((a, b) => a.localeCompare(b))
@@ -507,18 +503,11 @@ const hasActiveFilters = computed(() =>
     || appliedFilters.value.colo || appliedFilters.value.status !== 'ALL'
     || appliedFilters.value.maxTlsMs !== undefined || appliedFilters.value.minSpeedMbps !== undefined)
 )
-const pagedCandidates = computed(() => {
-  const start = (page.value - 1) * pageSize.value
-  return matchingCandidates.value.slice(start, start + pageSize.value)
-})
+const pagedCandidates = computed(() => candidates.value)
+const retryAvailableCount = computed(() => candidateSummary.value.availableCount)
+const retryFailedCount = computed(() => candidateSummary.value.failedCount)
 const availableCandidates = computed(() =>
-  candidates.value.filter(candidate => candidate.status === 'AVAILABLE' && candidate.latencyMs !== null)
-)
-const retryAvailableCount = computed(() =>
-  candidates.value.filter(candidate => candidate.status === 'AVAILABLE').length
-)
-const retryFailedCount = computed(() =>
-  candidates.value.filter(candidate => candidate.status === 'FAILED').length
+  probedCandidates.value.filter(candidate => candidate.status === 'AVAILABLE' && candidate.latencyMs !== null)
 )
 const v2raynCandidates = computed(() => {
   const serverName = tlsServerName.value.trim().toLowerCase()
@@ -526,33 +515,25 @@ const v2raynCandidates = computed(() => {
     ? availableCandidates.value.filter(candidate => candidate.tlsServerName?.toLowerCase() === serverName)
     : []
 })
-const fastestLatency = computed(() => {
-  const timings = availableCandidates.value
-    .map(candidate => candidate.tlsMs)
-    .filter((timing): timing is number => timing !== null)
-  return timings.length ? Math.min(...timings) : null
-})
+const fastestLatency = computed(() => candidateSummary.value.fastestTlsMs)
 
 watch(appliedFilters, async () => {
   page.value = 1
   selectedCandidates.value = []
   await nextTick()
   candidateTable.value?.clearSelection()
+  await loadCandidates()
 })
 
-watch([matchingCandidates, pageSize], () => {
-  const lastPage = Math.max(1, Math.ceil(matchingCandidates.value.length / pageSize.value))
-  if (page.value > lastPage) page.value = lastPage
-})
-
+let rangeFilterTimer: ReturnType<typeof setTimeout> | null = null
 watch([rangeKeyword, rangeIpVersionFilter, rangeRegionFilter, rangeColoFilter], () => {
   rangePage.value = 1
+  if (rangeFilterTimer) clearTimeout(rangeFilterTimer)
+  rangeFilterTimer = setTimeout(() => {
+    rangeFilterTimer = null
+    void loadRangePage().catch(() => ElMessage.error('筛选 Cloudflare IP 网段失败'))
+  }, 250)
 })
-watch([filteredRanges, rangePageSize], () => {
-  const lastPage = Math.max(1, Math.ceil(filteredRanges.value.length / rangePageSize.value))
-  if (rangePage.value > lastPage) rangePage.value = lastPage
-})
-
 const resetFilters = () => {
   keyword.value = ''
   ipVersionFilter.value = ''
@@ -582,24 +563,79 @@ const resetRangeFilters = () => {
   rangeRegionFilter.value = ''
   rangeColoFilter.value = ''
   rangePage.value = 1
+  if (rangeFilterTimer) {
+    clearTimeout(rangeFilterTimer)
+    rangeFilterTimer = null
+  }
+  void loadRangePage().catch(() => ElMessage.error('重置网段筛选失败'))
+}
+
+const changeRangePageSize = () => {
+  rangePage.value = 1
+  void loadRangePage().catch(() => ElMessage.error('加载 Cloudflare IP 网段失败'))
 }
 
 const loadCandidates = async () => {
   loading.value = true
   try {
-    const response = await cfIpList() as { data: CfIpCandidate[] }
-    candidates.value = response.data || []
+    const filters = appliedFilters.value
+    const response = await cfIpPage({
+      current: page.value,
+      size: pageSize.value,
+      keyword: filters.keyword.trim() || undefined,
+      ipVersion: filters.ipVersion || undefined,
+      region: filters.region || undefined,
+      colo: filters.colo || undefined,
+      status: filters.status === 'ALL' ? undefined : filters.status,
+      maxTlsMs: filters.maxTlsMs,
+      minSpeedMbps: filters.minSpeedMbps
+    }) as { data: { records: CfIpCandidate[]; total: number } }
+    candidates.value = response.data.records || []
+    totalCandidates.value = response.data.total || 0
+    const lastPage = Math.max(1, Math.ceil(totalCandidates.value / pageSize.value))
+    if (page.value > lastPage) {
+      page.value = lastPage
+      await loadCandidates()
+    }
   } finally {
     loading.value = false
   }
 }
 
+const loadSummary = async () => {
+  const response = await cfIpSummary() as { data: CfIpCandidateSummary }
+  candidateSummary.value = response.data
+}
+
+const loadCandidateFilters = async () => {
+  const response = await cfIpFilters() as { data: { regions: string[]; colos: string[] } }
+  availableRegions.value = response.data.regions || []
+  availableColos.value = response.data.colos || []
+}
+
+const refreshCandidateData = async () => {
+  await Promise.all([loadCandidates(), loadSummary(), loadCandidateFilters()])
+}
+
 const loadRanges = async () => {
+  const response = await cfIpRanges() as { data: CfIpRange[] }
+  ranges.value = response.data || []
+  rangeRegions.value = Object.fromEntries(ranges.value.map(range => [range.id, range.region]))
+}
+
+const loadRangePage = async () => {
   rangesLoading.value = true
   try {
-    const response = await cfIpRanges() as { data: CfIpRange[] }
-    ranges.value = response.data || []
-    rangeRegions.value = Object.fromEntries(ranges.value.map(range => [range.id, range.region]))
+    const response = await cfIpRangePage({
+      current: rangePage.value,
+      size: rangePageSize.value,
+      cidr: rangeKeyword.value.trim() || undefined,
+      ipVersion: rangeIpVersionFilter.value || undefined,
+      region: rangeRegionFilter.value.trim() || undefined,
+      colo: rangeColoFilter.value || undefined
+    }) as { data: { records: CfIpRange[]; total: number } }
+    rangePageRows.value = response.data.records || []
+    totalFilteredRanges.value = response.data.total || 0
   } finally {
     rangesLoading.value = false
   }
@@ -607,7 +643,8 @@ const loadRanges = async () => {
 
 watch(activeTab, tab => {
   if (tab === 'ranges') {
-    loadRanges().catch(() => ElMessage.error('加载 Cloudflare 官方 IP 网段失败'))
+    Promise.all([loadRanges(), loadRangePage()])
+      .catch(() => ElMessage.error('加载 Cloudflare 官方 IP 网段失败'))
   }
 })
 
@@ -615,7 +652,7 @@ const initializeRanges = async () => {
   rangeInitBusy.value = true
   try {
     const response = await cfIpInitializeRanges() as { data: number }
-    await loadRanges()
+    await Promise.all([loadRanges(), loadRangePage()])
     ElMessage.success(`已同步 ${response.data || 0} 个 Cloudflare 官方网段`)
   } catch {
     ElMessage.error('初始化官方网段失败，请检查 IP 服务网络和日志')
@@ -652,7 +689,7 @@ const saveRangeRegion = async (range: CfIpRange) => {
   try {
     await cfIpUpdateRangeRegion(range.id, rangeRegions.value[range.id] || '')
     ElMessage.success(`已更新 ${range.cidr} 的地区标签`)
-    await loadRanges()
+    await Promise.all([loadRanges(), loadRangePage(), refreshCandidateData()])
   } catch {
     ElMessage.error(`保存 ${range.cidr} 的地区标签失败`)
   } finally {
@@ -664,6 +701,7 @@ const saveRangeEnabled = async (range: CfIpRange) => {
   savingEnabledId.value = range.id
   try {
     await cfIpUpdateRangeEnabled(range.id, range.enabled)
+    await Promise.all([loadRanges(), loadRangePage()])
     ElMessage.success(`${range.cidr} 已${range.enabled ? '启用' : '停用'}优选`)
   } catch {
     ElMessage.error(`更新 ${range.cidr} 的优选状态失败`)
@@ -684,7 +722,7 @@ const probeRanges = async () => {
   try {
     const response = await cfIpProbeRanges(samplesPerRange.value, serverName) as { data: CfIpCandidate[] }
     mergeProbeResults(response.data || [])
-    await loadRanges()
+    await Promise.all([refreshCandidateData(), loadRanges(), loadRangePage()])
     ElMessage.success(`已完成 ${response.data?.length || 0} 个网段样本的 TCP、TLS 和测速测试`)
   } catch {
     ElMessage.error('网段抽样测试失败，请检查 IP 服务日志')
@@ -698,13 +736,23 @@ const formatMetric = (value: number | null) =>
 
 const mergeProbeResults = (results: CfIpCandidate[]) => {
   const candidatesById = new Map(candidates.value.map(candidate => [candidate.id, candidate]))
+  const probedById = new Map(probedCandidates.value.map(candidate => [candidate.id, candidate]))
   results.forEach(candidate => {
     const existing = candidatesById.get(candidate.id)
-    candidatesById.set(candidate.id, existing
-      ? { ...existing, ...candidate, tlsServerName: candidate.tlsServerName || existing.tlsServerName }
+    if (existing) {
+      candidatesById.set(candidate.id, {
+        ...existing,
+        ...candidate,
+        tlsServerName: candidate.tlsServerName || existing.tlsServerName
+      })
+    }
+    const probed = probedById.get(candidate.id)
+    probedById.set(candidate.id, probed
+      ? { ...probed, ...candidate, tlsServerName: candidate.tlsServerName || probed.tlsServerName }
       : candidate)
   })
   candidates.value = Array.from(candidatesById.values())
+  probedCandidates.value = Array.from(probedById.values())
 }
 
 const validatedTlsServerName = () => {
@@ -736,7 +784,8 @@ const submitImport = async () => {
     ElMessage.success(`已添加 ${response.data || 0} 个新候选 IP`)
     importText.value = ''
     importDialogVisible.value = false
-    await loadCandidates()
+    page.value = 1
+    await refreshCandidateData()
   } catch {
     ElMessage.error('添加候选 IP 失败')
   } finally {
@@ -760,7 +809,7 @@ const probeCandidate = async (candidate: CfIpCandidate) => {
   try {
     const response = await cfIpProbe([candidate.id], serverName) as { data: CfIpCandidate[] }
     mergeProbeResults(response.data || [])
-    await loadRanges()
+    await Promise.all([loadCandidates(), loadSummary(), loadRanges()])
     ElMessage.success(`已完成 ${candidate.ipAddress} 的测试`)
   } catch {
     ElMessage.error(`${candidate.ipAddress} 测试失败，请检查 IP 服务日志`)
@@ -777,6 +826,7 @@ const probeSelected = async () => {
   probeProgress.value = 0
   try {
     await probeBatch(ids)
+    await refreshCandidateData()
     ElMessage.success(`已完成 ${ids.length} 个 IP 的 TCP、TLS 和测速测试`)
     selectedCandidates.value = []
   } catch {
@@ -787,15 +837,19 @@ const probeSelected = async () => {
 }
 
 const probeAll = async () => {
-  const ids = candidates.value.map(candidate => candidate.id)
-  if (!ids.length) return
+  if (!validatedTlsServerName()) return
   probeBusy.value = true
   probeAllBusy.value = true
   probeProgress.value = 0
   try {
+    const response = await cfIpCandidateIds() as { data: number[] }
+    const ids = response.data || []
+    if (!ids.length) return
+    probeRetryTotal.value = ids.length
     for (let start = 0; start < ids.length; start += 100) {
       await probeBatch(ids.slice(start, start + 100))
     }
+    await refreshCandidateData()
     ElMessage.success(`已完成 ${ids.length} 个 IP 的 TCP、TLS 和测速测试`)
     selectedCandidates.value = []
   } catch {
@@ -803,22 +857,25 @@ const probeAll = async () => {
   } finally {
     probeBusy.value = false
     probeAllBusy.value = false
+    probeRetryTotal.value = 0
   }
 }
 
 const retryByStatus = async (status: 'AVAILABLE' | 'FAILED') => {
-  const ids = candidates.value
-    .filter(candidate => candidate.status === status)
-    .map(candidate => candidate.id)
-  if (!ids.length || probeBusy.value || rangeProbeBusy.value) return
+  if (probeBusy.value || rangeProbeBusy.value) return
+  if (!validatedTlsServerName()) return
   probeBusy.value = true
   probeRetryStatus.value = status
-  probeRetryTotal.value = ids.length
   probeProgress.value = 0
   try {
+    const response = await cfIpCandidateIds(status) as { data: number[] }
+    const ids = response.data || []
+    if (!ids.length) return
+    probeRetryTotal.value = ids.length
     for (let start = 0; start < ids.length; start += 100) {
       await probeBatch(ids.slice(start, start + 100))
     }
+    await refreshCandidateData()
     ElMessage.success(`已重试 ${ids.length} 个${status === 'AVAILABLE' ? '可连接' : '连接失败'} IP`)
     selectedCandidates.value = []
   } catch {
@@ -843,7 +900,7 @@ const deleteCandidate = async (candidate: CfIpCandidate) => {
   try {
     await cfIpDelete(candidate.id)
     ElMessage.success('已删除候选 IP')
-    await loadCandidates()
+    await refreshCandidateData()
   } catch {
     ElMessage.error('删除候选 IP 失败')
   }
@@ -882,7 +939,7 @@ const deleteSelected = async () => {
   deleteSelectedBusy.value = false
   ElMessage.success(`已删除 ${deletedCount} 个候选 IP`)
   try {
-    await loadCandidates()
+    await refreshCandidateData()
   } catch {
     ElMessage.error('删除成功，但列表刷新失败，请手动刷新确认结果')
   }
@@ -923,8 +980,10 @@ const exportV2rayn = () => {
 
 const copyAvailable = async () => {
   try {
-    await navigator.clipboard.writeText(availableCandidates.value.map(candidate => candidate.ipAddress).join('\n'))
-    ElMessage.success(`已复制 ${availableCandidates.value.length} 个可用 IP`)
+    const response = await cfIpAvailableAddresses() as { data: string[] }
+    const ips = response.data || []
+    await navigator.clipboard.writeText(ips.join('\n'))
+    ElMessage.success(`已复制 ${ips.length} 个可用 IP`)
   } catch {
     ElMessage.error('复制失败，请检查浏览器剪贴板权限')
   }
@@ -940,7 +999,7 @@ const copyCandidateIp = async (candidate: CfIpCandidate) => {
 }
 
 onMounted(() => {
-  Promise.all([loadCandidates(), loadRanges()])
+  Promise.all([loadCandidates(), loadSummary(), loadCandidateFilters(), loadRanges()])
     .catch(() => ElMessage.error('加载 Cloudflare IP 数据失败'))
 })
 </script>

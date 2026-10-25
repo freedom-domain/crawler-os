@@ -1,7 +1,10 @@
 package com.collect.ip.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ip.entity.CfIpCandidate;
+import com.collect.ip.dto.CfIpCandidateSummary;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -26,6 +29,75 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
                 id DESC
             """)
     List<CfIpCandidate> selectAllOrdered();
+
+    @Select("""
+            <script>
+            SELECT *
+            FROM cf_ip_candidate
+            <where>
+                <if test="keyword != null and keyword != ''">
+                    AND ip_address LIKE CONCAT(#{keyword}, '%')
+                </if>
+                <if test="ipVersion == 4">
+                    AND ip_address NOT LIKE '%:%'
+                </if>
+                <if test="ipVersion == 6">
+                    AND ip_address LIKE '%:%'
+                </if>
+                <if test="region != null and region != ''">
+                    AND region = #{region}
+                </if>
+                <if test="colo != null and colo != ''">
+                    AND colo = #{colo}
+                </if>
+                <if test="status != null and status != ''">
+                    AND status = #{status}
+                </if>
+                <if test="maxTlsMs != null">
+                    AND tls_ms IS NOT NULL AND tls_ms &lt;= #{maxTlsMs}
+                </if>
+                <if test="minSpeedMbps != null">
+                    AND speed_mbps IS NOT NULL AND speed_mbps &gt;= #{minSpeedMbps}
+                </if>
+            </where>
+            ORDER BY id DESC
+            </script>
+            """)
+    IPage<CfIpCandidate> selectCandidatePage(Page<CfIpCandidate> page,
+                                             @Param("keyword") String keyword,
+                                             @Param("ipVersion") Integer ipVersion,
+                                             @Param("region") String region,
+                                             @Param("colo") String colo,
+                                             @Param("status") String status,
+                                             @Param("maxTlsMs") Integer maxTlsMs,
+                                             @Param("minSpeedMbps") Integer minSpeedMbps);
+
+    @Select("""
+            SELECT COUNT(*) AS total,
+                   COALESCE(SUM(status = 'AVAILABLE'), 0) AS available_count,
+                   COALESCE(SUM(status = 'AVAILABLE' AND latency_ms IS NOT NULL), 0) AS available_address_count,
+                   COALESCE(SUM(status = 'PENDING'), 0) AS pending_count,
+                   COALESCE(SUM(status = 'FAILED'), 0) AS failed_count,
+                   MIN(CASE WHEN status = 'AVAILABLE' THEN tls_ms END) AS fastest_tls_ms
+                               MIN(CASE WHEN status = 'AVAILABLE' AND latency_ms IS NOT NULL THEN tls_ms END) AS fastest_tls_ms
+            FROM cf_ip_candidate
+            """)
+    CfIpCandidateSummary selectSummary();
+
+    @Select("SELECT DISTINCT region FROM cf_ip_candidate WHERE region IS NOT NULL ORDER BY region")
+    List<String> selectDistinctRegions();
+
+    @Select("SELECT DISTINCT colo FROM cf_ip_candidate WHERE colo IS NOT NULL AND colo != '' ORDER BY colo")
+    List<String> selectDistinctColos();
+
+    @Select("SELECT id FROM cf_ip_candidate ORDER BY id")
+    List<Long> selectAllCandidateIds();
+
+    @Select("SELECT id FROM cf_ip_candidate WHERE status = #{status} ORDER BY id")
+    List<Long> selectCandidateIdsByStatus(@Param("status") String status);
+
+    @Select("SELECT ip_address FROM cf_ip_candidate WHERE status = 'AVAILABLE' AND latency_ms IS NOT NULL ORDER BY id")
+    List<String> selectAvailableCandidateIpAddresses();
 
     @Select("SELECT ip_address FROM cf_ip_candidate")
     List<String> selectAllIpAddresses();

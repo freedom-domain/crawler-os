@@ -200,12 +200,18 @@ export const dictDelete = (id: number) => request.delete(`/dict/${id}`)
 export const filePage = (params: any) => request.get('/file/page', { params })
 
 export const cfIpList = () => request.get('/cf-ip/')
+export const cfIpPage = (params: any) => request.get('/cf-ip/page', { params })
+export const cfIpSummary = () => request.get('/cf-ip/summary')
+export const cfIpFilters = () => request.get('/cf-ip/filters')
+export const cfIpCandidateIds = (status?: string) => request.get('/cf-ip/ids', { params: { status } })
+export const cfIpAvailableAddresses = () => request.get('/cf-ip/available/ips')
 export const cfIpAdd = (ips: string) => request.post('/cf-ip/', { ips })
 export const cfIpProbe = (ids: number[], tlsServerName: string) =>
   request.post('/cf-ip/probe', { ids, tlsServerName }, { timeout: 180_000 })
 export const cfIpDelete = (id: number) => request.delete(`/cf-ip/${id}`)
 export const cfIpDeleteBatch = (ids: number[]) => request.delete('/cf-ip/batch', { data: { ids } })
 export const cfIpRanges = () => request.get('/cf-ip/ranges')
+export const cfIpRangePage = (params: any) => request.get('/cf-ip/ranges/page', { params })
 export const cfIpInitializeRanges = () => request.post('/cf-ip/ranges/initialize')
 export const cfIpUpdateRangeRegion = (id: number, region: string) =>
   request.put(`/cf-ip/ranges/${id}/region`, { region })
