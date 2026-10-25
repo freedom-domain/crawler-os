@@ -14,6 +14,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,6 +32,7 @@ public class CfIpRangeService {
     private static final URI CLOUDFLARE_IPS_URI = URI.create("https://api.cloudflare.com/client/v4/ips");
     private static final int MAX_SAMPLES_PER_RANGE = 5;
     private static final int MAX_TOTAL_PROBES = 200;
+    private static final int CANDIDATE_INSERT_BATCH_SIZE = 500;
 
     private final CfIpRangeMapper rangeMapper;
     private final CfIpCandidateMapper candidateMapper;
@@ -94,6 +96,42 @@ public class CfIpRangeService {
         range.setEnabled(enabled);
         rangeMapper.updateById(range);
         return rangeMapper.selectById(id);
+    }
+
+    public int importEnabledIpv4Addresses() {
+        List<CfIpRange> ranges = rangeMapper.selectEnabled().stream()
+                .filter(range -> Integer.valueOf(4).equals(range.getIpVersion()))
+                .toList();
+        if (ranges.isEmpty()) {
+            throw new BizException("没有启用的 Cloudflare IPv4 网段");
+        }
+
+        int inserted = 0;
+        List<CfIpCandidate> batch = new ArrayList<>(CANDIDATE_INSERT_BATCH_SIZE);
+        for (CfIpRange range : ranges) {
+            CidrBlock block = CidrBlock.parse(range.getCidr());
+            if (block.ipVersion() != 4) {
+                throw new BizException("Cloudflare 网段版本与 CIDR 不匹配：" + range.getCidr());
+            }
+            for (BigInteger offset = block.firstUsableOffset();
+                 offset.compareTo(block.lastUsableOffset()) <= 0;
+                 offset = offset.add(BigInteger.ONE)) {
+                CfIpCandidate candidate = new CfIpCandidate();
+                candidate.setIpAddress(block.addressAtOffset(offset));
+                candidate.setRegion(range.getRegion() == null || range.getRegion().isBlank()
+                        ? "全球任播" : range.getRegion());
+                candidate.setSourceRangeId(range.getId());
+                batch.add(candidate);
+                if (batch.size() == CANDIDATE_INSERT_BATCH_SIZE) {
+                    inserted += candidateMapper.insertIgnoreBatch(batch);
+                    batch.clear();
+                }
+            }
+        }
+        if (!batch.isEmpty()) {
+            inserted += candidateMapper.insertIgnoreBatch(batch);
+        }
+        return inserted;
     }
 
     public List<CfIpCandidate> probeSamples(int samplesPerRange, String tlsServerName) {

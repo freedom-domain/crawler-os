@@ -67,6 +67,21 @@ record CidrBlock(String cidr, int ipVersion, BigInteger network, int prefixLengt
         if (offset.compareTo(lastUsableOffset()) > 0) {
             throw new BizException("该网段可用 IP 地址少于请求的抽样数：" + cidr);
         }
+        return formatAddress(offset);
+    }
+
+    BigInteger firstUsableOffset() {
+        return ipVersion == 4 && prefixLength <= 30 ? BigInteger.ONE : BigInteger.ZERO;
+    }
+
+    String addressAtOffset(BigInteger offset) {
+        if (offset.compareTo(firstUsableOffset()) < 0 || offset.compareTo(lastUsableOffset()) > 0) {
+            throw new BizException("IP 地址偏移超出网段范围：" + cidr);
+        }
+        return formatAddress(offset);
+    }
+
+    private String formatAddress(BigInteger offset) {
         BigInteger value = network.add(offset);
         byte[] encoded = value.toByteArray();
         byte[] addressBytes = new byte[addressBits / 8];
@@ -79,7 +94,7 @@ record CidrBlock(String cidr, int ipVersion, BigInteger network, int prefixLengt
         }
     }
 
-    private BigInteger lastUsableOffset() {
+    BigInteger lastUsableOffset() {
         int hostBits = addressBits - prefixLength;
         BigInteger addressCount = BigInteger.ONE.shiftLeft(hostBits);
         if (ipVersion == 4 && prefixLength <= 30) {

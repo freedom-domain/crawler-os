@@ -252,14 +252,27 @@
         </label>
       </div>
       <div class="range-actions-row">
-        <el-button :icon="Refresh" :loading="rangeInitBusy" @click="initializeRanges">
+        <el-button
+          :icon="Refresh"
+          :loading="rangeInitBusy"
+          :disabled="rangeImportBusy || rangeProbeBusy"
+          @click="initializeRanges"
+        >
           初始化官方网段
+        </el-button>
+        <el-button
+          :icon="Plus"
+          :loading="rangeImportBusy"
+          :disabled="enabledIpv4RangeCount === 0 || rangeInitBusy || rangeImportBusy || rangeProbeBusy"
+          @click="importEnabledIpv4Ranges"
+        >
+          导入启用 IPv4 全部地址
         </el-button>
         <el-button
           type="primary"
           :icon="Connection"
           :loading="rangeProbeBusy"
-          :disabled="enabledRangeCount === 0 || rangeProbeBusy || probeBusy"
+          :disabled="enabledRangeCount === 0 || rangeProbeBusy || rangeImportBusy || probeBusy"
           @click="probeRanges"
         >
           测试启用网段样本
@@ -293,7 +306,7 @@
           <template #default="{ row }">
             <el-switch
               v-model="row.enabled"
-              :disabled="savingEnabledId === row.id || rangeProbeBusy || rangeInitBusy"
+              :disabled="savingEnabledId === row.id || rangeProbeBusy || rangeInitBusy || rangeImportBusy"
               @change="saveRangeEnabled(row)"
             />
           </template>
@@ -358,6 +371,7 @@ import {
   cfIpDelete,
   cfIpDeleteBatch,
   cfIpInitializeRanges,
+  cfIpImportEnabledIpv4,
   cfIpList,
   cfIpProbe,
   cfIpProbeRanges,
@@ -408,6 +422,7 @@ const probeRetryTotal = ref(0)
 const deleteSelectedBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
+const rangeImportBusy = ref(false)
 const savingRegionId = ref<number | null>(null)
 const savingEnabledId = ref<number | null>(null)
 const probingCandidateId = ref<number | null>(null)
@@ -484,6 +499,9 @@ const availableRangeColos = computed(() =>
     .sort((a, b) => a.localeCompare(b))
 )
 const enabledRangeCount = computed(() => ranges.value.filter(range => range.enabled).length)
+const enabledIpv4RangeCount = computed(() =>
+  ranges.value.filter(range => range.enabled && range.ipVersion === 4).length
+)
 const hasActiveFilters = computed(() =>
   Boolean(appliedFilters.value.keyword.trim() || appliedFilters.value.ipVersion || appliedFilters.value.region
     || appliedFilters.value.colo || appliedFilters.value.status !== 'ALL'
@@ -603,6 +621,29 @@ const initializeRanges = async () => {
     ElMessage.error('初始化官方网段失败，请检查 IP 服务网络和日志')
   } finally {
     rangeInitBusy.value = false
+  }
+}
+
+const importEnabledIpv4Ranges = async () => {
+  if (!enabledIpv4RangeCount.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将导入 ${enabledIpv4RangeCount.value} 个启用 IPv4 网段的全部可用地址，跳过网络地址、广播地址及数据库中已有的 IP。IPv6 网段不会导入；导入数量可能较大。`,
+      '确认导入启用网段',
+      { type: 'warning', confirmButtonText: '开始导入', cancelButtonText: '取消', closeOnClickModal: false }
+    )
+  } catch {
+    return
+  }
+
+  rangeImportBusy.value = true
+  try {
+    const response = await cfIpImportEnabledIpv4() as { data: number }
+    ElMessage.success(`导入完成，新增 ${response.data || 0} 个 IP，重复地址已跳过；候选列表未自动刷新`)
+  } catch {
+    ElMessage.error('导入启用 IPv4 网段失败，请检查 IP 服务日志')
+  } finally {
+    rangeImportBusy.value = false
   }
 }
 

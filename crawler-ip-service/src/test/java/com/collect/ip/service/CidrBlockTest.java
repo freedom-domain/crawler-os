@@ -3,6 +3,7 @@ package com.collect.ip.service;
 import com.collect.common.exception.BizException;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -17,6 +18,16 @@ class CidrBlockTest {
         assertEquals("103.21.244.1", block.sampleAddress(0));
         assertEquals("103.21.244.2", block.sampleAddress(1));
         assertThrows(BizException.class, () -> block.sampleAddress(2));
+    }
+
+    @Test
+    void enumeratesOnlyUsableIpv4Addresses() {
+        CidrBlock block = CidrBlock.parse("103.21.244.0/30");
+
+        assertEquals("103.21.244.1", block.addressAtOffset(block.firstUsableOffset()));
+        assertEquals("103.21.244.2", block.addressAtOffset(block.lastUsableOffset()));
+        assertThrows(BizException.class, () -> block.addressAtOffset(BigInteger.ZERO));
+        assertThrows(BizException.class, () -> block.addressAtOffset(BigInteger.valueOf(3)));
     }
 
     @Test

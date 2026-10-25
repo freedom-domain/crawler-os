@@ -76,6 +76,13 @@ public class CfIpController {
         return R.ok(rangeService.updateEnabled(id, req.getEnabled()));
     }
 
+    @Operation(summary = "将已启用 IPv4 网段的全部可用地址导入 IP 候选库")
+    @PostMapping("/ranges/import-enabled-ipv4")
+    public R<Integer> importEnabledIpv4Addresses() {
+        requirePermission();
+        return R.ok(rangeService.importEnabledIpv4Addresses());
+    }
+
     @Operation(summary = "对已启用的 Cloudflare 网段执行有限地址抽样测试")
     @PostMapping("/ranges/probe")
     public R<List<CfIpCandidate>> probeRangeSamples(@Valid @RequestBody CfIpRangeProbeReq req) {

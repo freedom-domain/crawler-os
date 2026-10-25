@@ -3,6 +3,7 @@ package com.collect.ip.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.collect.ip.entity.CfIpCandidate;
 import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -28,6 +29,17 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
 
     @Select("SELECT ip_address FROM cf_ip_candidate")
     List<String> selectAllIpAddresses();
+
+    @Insert("""
+            <script>
+            INSERT IGNORE INTO cf_ip_candidate (ip_address, region, source_range_id, status)
+            VALUES
+            <foreach collection="candidates" item="candidate" separator=",">
+                (#{candidate.ipAddress}, #{candidate.region}, #{candidate.sourceRangeId}, 'PENDING')
+            </foreach>
+            </script>
+            """)
+    int insertIgnoreBatch(@Param("candidates") List<CfIpCandidate> candidates);
 
     @Select("SELECT * FROM cf_ip_candidate " +
             "WHERE status = 'AVAILABLE' AND speed_mbps IS NOT NULL " +
