@@ -78,8 +78,7 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
                    COALESCE(SUM(status = 'AVAILABLE' AND latency_ms IS NOT NULL), 0) AS available_address_count,
                    COALESCE(SUM(status = 'PENDING'), 0) AS pending_count,
                    COALESCE(SUM(status = 'FAILED'), 0) AS failed_count,
-                   MIN(CASE WHEN status = 'AVAILABLE' THEN tls_ms END) AS fastest_tls_ms
-                               MIN(CASE WHEN status = 'AVAILABLE' AND latency_ms IS NOT NULL THEN tls_ms END) AS fastest_tls_ms
+                   MIN(CASE WHEN status = 'AVAILABLE' AND latency_ms IS NOT NULL THEN tls_ms END) AS fastest_tls_ms
             FROM cf_ip_candidate
             """)
     CfIpCandidateSummary selectSummary();
