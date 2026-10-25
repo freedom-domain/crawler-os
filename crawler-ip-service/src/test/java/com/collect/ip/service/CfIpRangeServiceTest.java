@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,8 +28,9 @@ class CfIpRangeServiceTest {
 
     private final CfIpRangeMapper rangeMapper = mock(CfIpRangeMapper.class);
     private final CfIpCandidateMapper candidateMapper = mock(CfIpCandidateMapper.class);
+        private final CfIpProbeService probeService = mock(CfIpProbeService.class);
     private final CfIpRangeService service = new CfIpRangeService(
-            rangeMapper, candidateMapper, mock(CfIpProbeService.class), mock(ObjectMapper.class));
+            rangeMapper, candidateMapper, probeService, mock(ObjectMapper.class));
 
     @Test
     void importsAllUsableAddressesFromEnabledIpv4RangesAndSkipsIpv6() {
@@ -74,6 +76,55 @@ class CfIpRangeServiceTest {
     @Test
     void rejectsUnsupportedRangeIpVersion() {
         assertThrows(BizException.class, () -> service.page(1, 10, null, 5, null, null));
+    }
+
+    @Test
+    void probesExistingUntestedCandidatesBeforeCreatingNewSamples() {
+        CfIpRange range = range("103.21.244.0/30", 4, 12L);
+        CfIpCandidate pending = new CfIpCandidate();
+        pending.setId(88L);
+        pending.setIpAddress("103.21.244.1");
+        pending.setSourceRangeId(range.getId());
+        pending.setStatus("PENDING");
+        when(rangeMapper.selectEnabled()).thenReturn(List.of(range));
+        when(candidateMapper.selectUntestedBySourceRangeId(12L, 1)).thenReturn(List.of(pending));
+        when(probeService.probe(anyList(), eq("www.cloudflare.com")))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<CfIpCandidate> tested = service.probeSamples(1, "www.cloudflare.com");
+
+        assertEquals(1, tested.size());
+        verify(probeService).probe(argThat(candidates -> candidates.size() == 1 && candidates.get(0) == pending),
+                eq("www.cloudflare.com"));
+        verify(candidateMapper, never()).selectAllIpAddresses();
+        verify(candidateMapper, never()).insert(any(CfIpCandidate.class));
+    }
+
+    @Test
+    void topsUpPendingSamplesWithoutDuplicatingExistingAddresses() {
+        CfIpRange range = range("103.21.244.0/30", 4, 12L);
+        CfIpCandidate pending = new CfIpCandidate();
+        pending.setId(88L);
+        pending.setIpAddress("103.21.244.1");
+        pending.setSourceRangeId(range.getId());
+        pending.setStatus("PENDING");
+        when(rangeMapper.selectEnabled()).thenReturn(List.of(range));
+        when(candidateMapper.selectUntestedBySourceRangeId(12L, 2)).thenReturn(List.of(pending));
+        when(candidateMapper.selectExistingIpAddresses(anyList())).thenReturn(List.of("103.21.244.1"));
+        when(candidateMapper.insert(any(CfIpCandidate.class))).thenAnswer(invocation -> {
+            CfIpCandidate inserted = invocation.getArgument(0);
+            inserted.setId(89L);
+            return 1;
+        });
+        when(probeService.probe(anyList(), eq("www.cloudflare.com")))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<CfIpCandidate> tested = service.probeSamples(2, "www.cloudflare.com");
+
+        assertEquals(2, tested.size());
+        assertEquals("103.21.244.1", tested.get(0).getIpAddress());
+        assertEquals("103.21.244.2", tested.get(1).getIpAddress());
+        verify(candidateMapper).selectExistingIpAddresses(List.of("103.21.244.1", "103.21.244.2"));
     }
 
     @Test

@@ -131,6 +131,29 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
             """)
     List<CfIpCandidate> selectByIds(@Param("ids") List<Long> ids);
 
+        @Select("""
+                        SELECT *
+                        FROM cf_ip_candidate
+                        WHERE source_range_id = #{rangeId}
+                            AND status = 'PENDING'
+                        ORDER BY id ASC
+                        LIMIT #{limit}
+                        """)
+        List<CfIpCandidate> selectUntestedBySourceRangeId(@Param("rangeId") Long rangeId,
+                                                                                                             @Param("limit") int limit);
+
+                                                            @Select("""
+                                                                    <script>
+                                                                    SELECT ip_address
+                                                                    FROM cf_ip_candidate
+                                                                    WHERE ip_address IN
+                                                                    <foreach collection="ipAddresses" item="ip" open="(" separator="," close=")">
+                                                                        #{ip}
+                                                                    </foreach>
+                                                                    </script>
+                                                                    """)
+                                                            List<String> selectExistingIpAddresses(@Param("ipAddresses") List<String> ipAddresses);
+
     @Delete("""
             <script>
             DELETE FROM cf_ip_candidate

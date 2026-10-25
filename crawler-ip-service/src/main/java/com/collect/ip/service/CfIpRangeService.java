@@ -35,6 +35,7 @@ public class CfIpRangeService {
     private static final int MAX_SAMPLES_PER_RANGE = 5;
     private static final int MAX_TOTAL_PROBES = 200;
     private static final int CANDIDATE_INSERT_BATCH_SIZE = 500;
+    private static final int SAMPLE_LOOKUP_BATCH_SIZE = 100;
 
     private final CfIpRangeMapper rangeMapper;
     private final CfIpCandidateMapper candidateMapper;
@@ -162,34 +163,61 @@ public class CfIpRangeService {
             throw new BizException("本次抽样超过安全上限 " + MAX_TOTAL_PROBES + "，请减少每个网段的抽样数");
         }
 
-        Set<String> existingIps = new HashSet<>(candidateMapper.selectAllIpAddresses());
+        Set<String> sampledIps = new HashSet<>();
         List<CfIpCandidate> candidates = new ArrayList<>((int) totalProbes);
+        List<CfIpCandidate> newCandidates = new ArrayList<>((int) totalProbes);
         for (CfIpRange range : ranges) {
             CidrBlock block = CidrBlock.parse(range.getCidr());
-            for (String ip : block.sampleAddresses(samplesPerRange, existingIps)) {
-                existingIps.add(ip);
-                CfIpCandidate candidate = new CfIpCandidate();
-                candidate.setIpAddress(ip);
-                candidate.setStatus("PENDING");
-                candidate.setRegion(range.getRegion());
-                candidate.setSourceRangeId(range.getId());
-                candidates.add(candidate);
+            List<CfIpCandidate> untested = candidateMapper.selectUntestedBySourceRangeId(
+                    range.getId(), samplesPerRange);
+            candidates.addAll(untested);
+            for (CfIpCandidate candidate : untested) {
+                sampledIps.add(candidate.getIpAddress());
+            }
+
+            int remainingSamples = samplesPerRange - untested.size();
+            if (remainingSamples == 0) {
+                continue;
+            }
+            BigInteger offset = block.firstUsableOffset();
+            while (remainingSamples > 0 && offset.compareTo(block.lastUsableOffset()) <= 0) {
+                List<String> lookupIps = new ArrayList<>(SAMPLE_LOOKUP_BATCH_SIZE);
+                while (lookupIps.size() < SAMPLE_LOOKUP_BATCH_SIZE
+                        && offset.compareTo(block.lastUsableOffset()) <= 0) {
+                    lookupIps.add(block.addressAtOffset(offset));
+                    offset = offset.add(BigInteger.ONE);
+                }
+                Set<String> existingIps = new HashSet<>(candidateMapper.selectExistingIpAddresses(lookupIps));
+                for (String ip : lookupIps) {
+                    if (remainingSamples == 0) {
+                        break;
+                    }
+                    if (existingIps.contains(ip) || !sampledIps.add(ip)) {
+                        continue;
+                    }
+                    CfIpCandidate candidate = new CfIpCandidate();
+                    candidate.setIpAddress(ip);
+                    candidate.setStatus("PENDING");
+                    candidate.setRegion(range.getRegion());
+                    candidate.setSourceRangeId(range.getId());
+                    newCandidates.add(candidate);
+                    remainingSamples--;
+                }
             }
         }
 
-        List<CfIpCandidate> insertedCandidates = new ArrayList<>(candidates.size());
-        for (CfIpCandidate candidate : candidates) {
+        for (CfIpCandidate candidate : newCandidates) {
             try {
                 candidateMapper.insert(candidate);
-                insertedCandidates.add(candidate);
+                candidates.add(candidate);
             } catch (DuplicateKeyException e) {
                 log.info("Skipped concurrently created sampled IP {}", candidate.getIpAddress());
             }
         }
-        if (insertedCandidates.isEmpty()) {
-            throw new BizException("抽样 IP 已被其他请求创建，请重试");
+        if (candidates.isEmpty()) {
+            throw new BizException("没有可抽样的 IP 地址，请检查启用网段");
         }
-        return probeService.probe(insertedCandidates, tlsServerName);
+        return probeService.probe(candidates, tlsServerName);
     }
 
     private List<CfIpRange> fetchOfficialRanges() {
