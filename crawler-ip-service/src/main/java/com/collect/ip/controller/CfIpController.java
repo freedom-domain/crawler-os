@@ -58,9 +58,12 @@ public class CfIpController {
                                         @RequestParam(value = "colo", required = false) String colo,
                                         @RequestParam(value = "status", required = false) String status,
                                         @RequestParam(value = "maxTlsMs", required = false) Integer maxTlsMs,
-                                        @RequestParam(value = "minSpeedMbps", required = false) Integer minSpeedMbps) {
+                                        @RequestParam(value = "minSpeedMbps", required = false) Integer minSpeedMbps,
+                                        @RequestParam(value = "sortBy", required = false) String sortBy,
+                                        @RequestParam(value = "sortOrder", required = false) String sortOrder) {
         requirePermission();
-        return R.ok(service.page(current, size, keyword, ipVersion, region, colo, status, maxTlsMs, minSpeedMbps));
+        return R.ok(service.page(current, size, keyword, ipVersion, region, colo, status,
+            maxTlsMs, minSpeedMbps, sortBy, sortOrder));
     }
 
     @Operation(summary = "获取 Cloudflare IP 候选统计")

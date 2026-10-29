@@ -61,14 +61,22 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
                     AND speed_mbps IS NOT NULL AND speed_mbps &gt;= #{minSpeedMbps}
                 </if>
             </where>
-            ORDER BY
-                CASE WHEN last_tested_at IS NULL THEN 1 ELSE 0 END,
-                last_tested_at DESC,
-                CASE WHEN speed_mbps IS NULL THEN 1 ELSE 0 END,
-                speed_mbps DESC,
-                CASE WHEN tls_ms IS NULL THEN 1 ELSE 0 END,
-                tls_ms ASC,
-                id DESC
+            <choose>
+                <when test="sortColumn != null and sortDirection != null">
+                    ORDER BY CASE WHEN ${sortColumn} IS NULL THEN 1 ELSE 0 END,
+                             ${sortColumn} ${sortDirection}, id DESC
+                </when>
+                <otherwise>
+                    ORDER BY
+                        CASE WHEN last_tested_at IS NULL THEN 1 ELSE 0 END,
+                        last_tested_at DESC,
+                        CASE WHEN speed_mbps IS NULL THEN 1 ELSE 0 END,
+                        speed_mbps DESC,
+                        CASE WHEN tls_ms IS NULL THEN 1 ELSE 0 END,
+                        tls_ms ASC,
+                        id DESC
+                </otherwise>
+            </choose>
             </script>
             """)
     IPage<CfIpCandidate> selectCandidatePage(Page<CfIpCandidate> page,
@@ -78,7 +86,9 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
                                              @Param("colo") String colo,
                                              @Param("status") String status,
                                              @Param("maxTlsMs") Integer maxTlsMs,
-                                             @Param("minSpeedMbps") Integer minSpeedMbps);
+                                             @Param("minSpeedMbps") Integer minSpeedMbps,
+                                             @Param("sortColumn") String sortColumn,
+                                             @Param("sortDirection") String sortDirection);
 
     @Select("""
             SELECT COUNT(*) AS total,

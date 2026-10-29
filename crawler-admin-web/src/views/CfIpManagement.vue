@@ -154,6 +154,7 @@
           resizable
           max-height="calc(100vh - 390px)"
           @selection-change="selectedCandidates = $event"
+          @sort-change="handleCandidateSortChange"
         >
           <el-table-column
             type="selection"
@@ -161,7 +162,7 @@
             :selectable="() => !probeBusy && !rangeProbeBusy && !deleteSelectedBusy"
           />
           <el-table-column type="index" label="#" width="64" align="center" />
-          <el-table-column prop="ipAddress" label="IP 地址" min-width="190" />
+          <el-table-column prop="ipAddress" label="IP 地址" min-width="190" sortable="custom" />
           <el-table-column prop="region" label="地区" width="130" />
           <el-table-column prop="colo" label="数据中心 colo" width="135" align="center">
             <template #default="{ row }">{{ row.colo || '-' }}</template>
@@ -169,10 +170,10 @@
           <el-table-column label="TCP 443 (ms)" width="125" align="right">
             <template #default="{ row }">{{ formatMetric(row.pingMs) }}</template>
           </el-table-column>
-          <el-table-column label="TLS (ms)" width="125" align="right">
+          <el-table-column prop="tlsMs" label="TLS (ms)" width="125" align="right" sortable="custom">
             <template #default="{ row }">{{ formatMetric(row.tlsMs) }}</template>
           </el-table-column>
-          <el-table-column label="测速 (Mbps)" width="135" align="right">
+          <el-table-column prop="speedMbps" label="测速 (Mbps)" width="135" align="right" sortable="custom">
             <template #default="{ row }">{{ formatMetric(row.speedMbps) }}</template>
           </el-table-column>
           <el-table-column label="状态" width="120" align="center">
@@ -183,7 +184,7 @@
           <el-table-column prop="errorMessage" label="测试结果" min-width="150">
             <template #default="{ row }">{{ row.errorMessage || '-' }}</template>
           </el-table-column>
-          <el-table-column label="最近测试时间" min-width="170">
+          <el-table-column prop="lastTestedAt" label="最近测试时间" min-width="170" sortable="custom">
             <template #default="{ row }">{{ formatDateTime(row.lastTestedAt) || '-' }}</template>
           </el-table-column>
           <el-table-column label="操作" width="160" fixed="right" align="center">
@@ -528,6 +529,8 @@ const appliedFilters = ref({
 })
 const page = ref(1)
 const pageSize = ref(10)
+const candidateSortBy = ref<string>()
+const candidateSortOrder = ref<'ascending' | 'descending'>()
 
 const availableRangeColos = computed(() =>
   Array.from(new Set(ranges.value.map(range => range.colo).filter((colo): colo is string => Boolean(colo))))
@@ -627,7 +630,9 @@ const loadCandidates = async () => {
       colo: filters.colo || undefined,
       status: filters.status === 'ALL' ? undefined : filters.status,
       maxTlsMs: filters.maxTlsMs,
-      minSpeedMbps: filters.minSpeedMbps
+      minSpeedMbps: filters.minSpeedMbps,
+      sortBy: candidateSortBy.value,
+      sortOrder: candidateSortOrder.value
     }) as { data: { records: CfIpCandidate[]; total: number } }
     candidates.value = response.data.records || []
     totalCandidates.value = response.data.total || 0
@@ -639,6 +644,16 @@ const loadCandidates = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const handleCandidateSortChange = ({ prop, order }: {
+  prop: string | undefined
+  order: 'ascending' | 'descending' | null
+}) => {
+  candidateSortBy.value = order ? prop : undefined
+  candidateSortOrder.value = order || undefined
+  page.value = 1
+  void loadCandidates().catch(() => ElMessage.error('排序候选 IP 失败'))
 }
 
 const loadSummary = async () => {

@@ -39,15 +39,40 @@ public class CfIpCandidateService {
 
     public IPage<CfIpCandidate> page(int current, int size, String keyword, Integer ipVersion,
                                      String region, String colo, String status,
-                                     Integer maxTlsMs, Integer minSpeedMbps) {
+                                     Integer maxTlsMs, Integer minSpeedMbps, String sortBy, String sortOrder) {
         if (ipVersion != null && ipVersion != 4 && ipVersion != 6) {
             throw new BizException("IP 版本只能是 4 或 6");
         }
         String normalizedStatus = normalizeStatus(status);
+        String sortColumn = normalizeSortColumn(sortBy);
+        String sortDirection = sortColumn == null ? null : normalizeSortDirection(sortOrder);
         return mapper.selectCandidatePage(
                 new Page<>(Math.max(1, current), Math.min(Math.max(1, size), 100)),
                 blankToNull(keyword), ipVersion, blankToNull(region), blankToNull(colo), normalizedStatus,
-                maxTlsMs, minSpeedMbps);
+                maxTlsMs, minSpeedMbps, sortColumn, sortDirection);
+    }
+
+    private String normalizeSortColumn(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return null;
+        }
+        return switch (sortBy) {
+            case "ipAddress" -> "ip_address";
+            case "lastTestedAt" -> "last_tested_at";
+            case "speedMbps" -> "speed_mbps";
+            case "tlsMs" -> "tls_ms";
+            default -> throw new BizException("不支持的候选 IP 排序字段");
+        };
+    }
+
+    private String normalizeSortDirection(String sortOrder) {
+        if ("ascending".equalsIgnoreCase(sortOrder)) {
+            return "ASC";
+        }
+        if ("descending".equalsIgnoreCase(sortOrder)) {
+            return "DESC";
+        }
+        throw new BizException("无效的候选 IP 排序方向");
     }
 
     public CfIpCandidateSummary summary() {

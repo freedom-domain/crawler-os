@@ -4,10 +4,16 @@ import com.collect.common.exception.BizException;
 import com.collect.ip.dto.CfIpRangeProbeScheduleReq;
 import com.collect.ip.entity.CfIpRangeProbeSchedule;
 import com.collect.ip.mapper.CfIpRangeProbeScheduleMapper;
+import org.apache.ibatis.session.Configuration;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -46,5 +52,19 @@ class CfIpRangeProbeSettingsServiceTest {
         when(mapper.selectSettings()).thenReturn(null);
 
         assertThrows(BizException.class, service::getSettings);
+    }
+
+    @Test
+    void claimRunSqlContainsLessThanOperator() {
+        Configuration configuration = new Configuration();
+        configuration.addMapper(CfIpRangeProbeScheduleMapper.class);
+
+        String sql = configuration.getMappedStatement(
+                        CfIpRangeProbeScheduleMapper.class.getName() + ".claimRun")
+                .getBoundSql(Map.of("runAt", LocalDateTime.now()))
+                .getSql();
+
+        assertTrue(sql.contains("last_run_at < ?"));
+        assertFalse(sql.contains("&lt;"));
     }
 }

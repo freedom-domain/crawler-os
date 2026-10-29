@@ -33,7 +33,7 @@ public interface CfIpRangeProbeScheduleMapper extends BaseMapper<CfIpRangeProbeS
             SET last_run_at = #{runAt}, update_time = CURRENT_TIMESTAMP
             WHERE id = 1
               AND enabled = 1
-              AND (last_run_at IS NULL OR last_run_at &lt; #{runAt})
+              AND (last_run_at IS NULL OR last_run_at < #{runAt})
             """)
     int claimRun(@Param("runAt") LocalDateTime runAt);
 }

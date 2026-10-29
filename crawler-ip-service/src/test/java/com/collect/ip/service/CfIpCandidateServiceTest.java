@@ -45,19 +45,47 @@ class CfIpCandidateServiceTest {
 
     @Test
     void clampsCandidatePageSizeAndNormalizesFilters() {
-        when(mapper.selectCandidatePage(any(), any(), any(), any(), any(), any(), any(), any()))
+        when(mapper.selectCandidatePage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new Page<>());
 
-        service.page(0, 500, " 198.41. ", 4, " ", "SJC", "ALL", 200, null);
+        service.page(0, 500, " 198.41. ", 4, " ", "SJC", "ALL", 200, null, null, null);
 
         verify(mapper).selectCandidatePage(argThat(page -> page.getCurrent() == 1 && page.getSize() == 100),
-            eq("198.41."), eq(4),
-                isNull(), eq("SJC"), isNull(), eq(200), isNull());
+                eq("198.41."), eq(4),
+                isNull(), eq("SJC"), isNull(), eq(200), isNull(), isNull(), isNull());
+    }
+
+    @Test
+    void mapsAllowedSortFieldsAndDirectionsToSqlValues() {
+        when(mapper.selectCandidatePage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new Page<>());
+
+        service.page(1, 10, null, null, null, null, null, null, null, "tlsMs", "ascending");
+
+        verify(mapper).selectCandidatePage(any(), any(), any(), any(), any(), any(), any(), any(),
+                eq("tls_ms"), eq("ASC"));
+    }
+
+    @Test
+    void mapsIpAddressSortToDatabaseColumn() {
+        when(mapper.selectCandidatePage(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new Page<>());
+
+        service.page(1, 10, null, null, null, null, null, null, null, "ipAddress", "ascending");
+
+        verify(mapper).selectCandidatePage(any(), any(), any(), any(), any(), any(), any(), any(),
+                eq("ip_address"), eq("ASC"));
+    }
+
+    @Test
+    void rejectsUnsupportedSortFields() {
+        assertThrows(BizException.class, () -> service.page(1, 10, null, null,
+                null, null, null, null, null, "id; DROP TABLE cf_ip_candidate", "descending"));
     }
 
     @Test
     void rejectsUnsupportedIpVersion() {
         assertThrows(BizException.class, () -> service.page(1, 10, null, 5,
-                null, null, null, null, null));
+            null, null, null, null, null, null, null));
     }
 }
