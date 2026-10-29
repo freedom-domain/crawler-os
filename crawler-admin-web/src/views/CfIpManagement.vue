@@ -19,9 +19,16 @@
         <strong>{{ candidateSummary.total }}</strong>
       </el-card>
       <el-card shadow="never">
-        <span>可用</span>
-        <strong class="available-count">{{ candidateSummary.availableCount }}</strong>
-        <strong class="available-count">{{ candidateSummary.availableAddressCount }}</strong>
+        <div class="available-counts">
+          <div>
+            <span>可连接记录</span>
+            <strong class="available-count">{{ candidateSummary.availableCount }}</strong>
+          </div>
+          <div>
+            <span>有延迟 IP</span>
+            <strong class="available-count">{{ candidateSummary.availableAddressCount }}</strong>
+          </div>
+        </div>
       </el-card>
       <el-card shadow="never">
         <span>最快 TLS</span>
@@ -1110,6 +1117,9 @@ onMounted(() => {
 .summary-row span { color: var(--ink-700); font-size: 13px; }
 .summary-row strong { color: var(--ink-950); font-size: 21px; }
 .summary-row .available-count { color: #16835f; }
+.available-counts { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.available-counts > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.available-counts span { font-size: 12px; }
 .candidate-card { min-height: 300px; }
 .management-tabs { margin-bottom: 0; }
 .filter-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
