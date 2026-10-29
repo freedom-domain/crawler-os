@@ -21,11 +21,12 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
             SELECT *
             FROM cf_ip_candidate
             ORDER BY
-                CASE WHEN tls_ms IS NOT NULL THEN 0 ELSE 1 END,
+                CASE WHEN last_tested_at IS NULL THEN 1 ELSE 0 END,
+                last_tested_at DESC,
                 CASE WHEN speed_mbps IS NULL THEN 1 ELSE 0 END,
                 speed_mbps DESC,
-                CASE WHEN ping_ms IS NULL THEN 1 ELSE 0 END,
-                ping_ms ASC,
+                CASE WHEN tls_ms IS NULL THEN 1 ELSE 0 END,
+                tls_ms ASC,
                 id DESC
             """)
     List<CfIpCandidate> selectAllOrdered();
@@ -60,7 +61,14 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
                     AND speed_mbps IS NOT NULL AND speed_mbps &gt;= #{minSpeedMbps}
                 </if>
             </where>
-            ORDER BY id DESC
+            ORDER BY
+                CASE WHEN last_tested_at IS NULL THEN 1 ELSE 0 END,
+                last_tested_at DESC,
+                CASE WHEN speed_mbps IS NULL THEN 1 ELSE 0 END,
+                speed_mbps DESC,
+                CASE WHEN tls_ms IS NULL THEN 1 ELSE 0 END,
+                tls_ms ASC,
+                id DESC
             </script>
             """)
     IPage<CfIpCandidate> selectCandidatePage(Page<CfIpCandidate> page,
