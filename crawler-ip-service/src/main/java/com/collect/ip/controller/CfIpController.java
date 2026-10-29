@@ -10,11 +10,13 @@ import com.collect.ip.dto.CfIpCandidatesReq;
 import com.collect.ip.dto.CfIpProbeReq;
 import com.collect.ip.dto.CfIpRangeEnabledReq;
 import com.collect.ip.dto.CfIpRangeProbeReq;
+import com.collect.ip.dto.CfIpRangeProbeScheduleReq;
 import com.collect.ip.dto.CfIpRangeRegionReq;
 import com.collect.ip.entity.CfIpCandidate;
 import com.collect.ip.entity.CfIpRange;
 import com.collect.ip.service.CfIpCandidateService;
 import com.collect.ip.service.CfIpRangeService;
+import com.collect.ip.service.CfIpRangeProbeSettingsService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,10 +32,13 @@ public class CfIpController {
 
     private final CfIpCandidateService service;
     private final CfIpRangeService rangeService;
+    private final CfIpRangeProbeSettingsService rangeProbeSettingsService;
 
-    public CfIpController(CfIpCandidateService service, CfIpRangeService rangeService) {
+    public CfIpController(CfIpCandidateService service, CfIpRangeService rangeService,
+                          CfIpRangeProbeSettingsService rangeProbeSettingsService) {
         this.service = service;
         this.rangeService = rangeService;
+        this.rangeProbeSettingsService = rangeProbeSettingsService;
     }
 
     @Operation(summary = "获取 Cloudflare IP 候选列表")
@@ -139,6 +144,21 @@ public class CfIpController {
     public R<Integer> importEnabledIpv4Addresses() {
         requirePermission();
         return R.ok(rangeService.importEnabledIpv4Addresses());
+    }
+
+    @Operation(summary = "获取启用网段定时抽样测试配置")
+    @GetMapping("/ranges/probe-schedule")
+    public R<CfIpRangeProbeScheduleReq> rangeProbeSchedule() {
+        requirePermission();
+        return R.ok(rangeProbeSettingsService.getSettings());
+    }
+
+    @Operation(summary = "更新启用网段定时抽样测试配置")
+    @PutMapping("/ranges/probe-schedule")
+    public R<CfIpRangeProbeScheduleReq> updateRangeProbeSchedule(
+            @Valid @RequestBody CfIpRangeProbeScheduleReq req) {
+        requirePermission();
+        return R.ok(rangeProbeSettingsService.updateSettings(req));
     }
 
     @Operation(summary = "对已启用的 Cloudflare 网段执行有限地址抽样测试")

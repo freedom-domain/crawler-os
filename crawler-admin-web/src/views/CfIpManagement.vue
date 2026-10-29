@@ -240,6 +240,18 @@
         </div>
       </div>
       <div class="range-settings-row">
+        <label class="sample-count-control">
+          <span>定时抽样</span>
+          <el-switch v-model="rangeProbeScheduleEnabled" active-text="启用" inactive-text="关闭" />
+        </label>
+        <label class="sample-count-control">
+          <span>执行频率</span>
+          <el-select v-model="rangeProbeFrequency" class="schedule-frequency-select">
+            <el-option label="每小时" value="HOURLY" />
+            <el-option label="每天 03:00" value="DAILY" />
+            <el-option label="每周一 03:00" value="WEEKLY" />
+          </el-select>
+        </label>
         <label class="range-sni-control">
           <span>TLS serverName/SNI</span>
           <el-input
@@ -253,7 +265,11 @@
           <span>每段抽样</span>
           <el-input-number v-model="samplesPerRange" :min="1" :max="5" :step="1" />
         </label>
+        <el-button type="primary" :loading="rangeScheduleSaving" @click="saveRangeProbeSchedule">
+          保存计划
+        </el-button>
       </div>
+      <div class="probe-note">定时抽样按上海时区执行；每小时在整点运行，每天或每周一于 03:00 运行。</div>
       <div class="range-actions-row">
         <el-button
           :icon="Refresh"
@@ -383,9 +399,11 @@ import {
   cfIpPage,
   cfIpProbe,
   cfIpProbeRanges,
+  cfIpRangeProbeSchedule,
   cfIpRangePage,
   cfIpRanges,
   cfIpSummary,
+  cfIpUpdateRangeProbeSchedule,
   cfIpUpdateRangeEnabled,
   cfIpUpdateRangeRegion
 } from '@/api'
@@ -455,6 +473,7 @@ const probeRetryTotal = ref(0)
 const deleteSelectedBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
+const rangeScheduleSaving = ref(false)
 const rangeImportBusy = ref(false)
 const savingRegionId = ref<number | null>(null)
 const savingEnabledId = ref<number | null>(null)
@@ -471,6 +490,8 @@ const rangePage = ref(1)
 const rangePageSize = ref(10)
 const samplesPerRange = ref(1)
 const tlsServerName = ref('www.cloudflare.com')
+const rangeProbeScheduleEnabled = ref(false)
+const rangeProbeFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
 const keyword = ref('')
 const ipVersionFilter = ref('')
 const regionFilter = ref('')
@@ -623,6 +644,38 @@ const loadRanges = async () => {
   rangeRegions.value = Object.fromEntries(ranges.value.map(range => [range.id, range.region]))
 }
 
+const loadRangeProbeSchedule = async () => {
+  const response = await cfIpRangeProbeSchedule() as {
+    data: {
+      enabled: boolean
+      frequency: 'HOURLY' | 'DAILY' | 'WEEKLY'
+      samplesPerRange: number
+      tlsServerName: string
+    }
+  }
+  rangeProbeScheduleEnabled.value = response.data.enabled
+  rangeProbeFrequency.value = response.data.frequency
+  samplesPerRange.value = response.data.samplesPerRange
+  tlsServerName.value = response.data.tlsServerName
+}
+
+const saveRangeProbeSchedule = async () => {
+  rangeScheduleSaving.value = true
+  try {
+    await cfIpUpdateRangeProbeSchedule({
+      enabled: rangeProbeScheduleEnabled.value,
+      frequency: rangeProbeFrequency.value,
+      samplesPerRange: samplesPerRange.value,
+      tlsServerName: tlsServerName.value.trim()
+    })
+    ElMessage.success('定时抽样计划已保存')
+  } catch {
+    ElMessage.error('保存定时抽样计划失败，请检查配置并重试')
+  } finally {
+    rangeScheduleSaving.value = false
+  }
+}
+
 const loadRangePage = async () => {
   rangesLoading.value = true
   try {
@@ -643,7 +696,7 @@ const loadRangePage = async () => {
 
 watch(activeTab, tab => {
   if (tab === 'ranges') {
-    Promise.all([loadRanges(), loadRangePage()])
+    Promise.all([loadRanges(), loadRangePage(), loadRangeProbeSchedule()])
       .catch(() => ElMessage.error('加载 Cloudflare 官方 IP 网段失败'))
   }
 })

@@ -221,3 +221,10 @@ export const cfIpImportEnabledIpv4 = () =>
   request.post('/cf-ip/ranges/import-enabled-ipv4', {}, { timeout: 600_000 })
 export const cfIpProbeRanges = (samplesPerRange: number, tlsServerName: string) =>
   request.post('/cf-ip/ranges/probe', { samplesPerRange, tlsServerName }, { timeout: 180_000 })
+export const cfIpRangeProbeSchedule = () => request.get('/cf-ip/ranges/probe-schedule')
+export const cfIpUpdateRangeProbeSchedule = (data: {
+  enabled: boolean
+  frequency: 'HOURLY' | 'DAILY' | 'WEEKLY'
+  samplesPerRange: number
+  tlsServerName: string
+}) => request.put('/cf-ip/ranges/probe-schedule', data)
