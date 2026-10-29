@@ -224,7 +224,7 @@ export const cfIpProbeRanges = (samplesPerRange: number, tlsServerName: string) 
 export const cfIpRangeProbeSchedule = () => request.get('/cf-ip/ranges/probe-schedule')
 export const cfIpUpdateRangeProbeSchedule = (data: {
   enabled: boolean
-  frequency: 'HOURLY' | 'DAILY' | 'WEEKLY'
+  frequency: 'EVERY_5_MINUTES' | 'EVERY_15_MINUTES' | 'EVERY_30_MINUTES' | 'HOURLY' | 'DAILY' | 'WEEKLY'
   samplesPerRange: number
   tlsServerName: string
 }) => request.put('/cf-ip/ranges/probe-schedule', data)

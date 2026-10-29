@@ -49,13 +49,14 @@ public class CfIpRangeProbeScheduler {
     }
 
     static boolean isDue(String frequency, LocalDateTime time) {
-        if (time.getMinute() != 0) {
-            return false;
-        }
         return switch (frequency) {
-            case "HOURLY" -> true;
-            case "DAILY" -> time.getHour() == 3;
-            case "WEEKLY" -> time.getHour() == 3 && time.getDayOfWeek() == DayOfWeek.MONDAY;
+            case "EVERY_5_MINUTES" -> time.getMinute() % 5 == 0;
+            case "EVERY_15_MINUTES" -> time.getMinute() % 15 == 0;
+            case "EVERY_30_MINUTES" -> time.getMinute() % 30 == 0;
+            case "HOURLY" -> time.getMinute() == 0;
+            case "DAILY" -> time.getMinute() == 0 && time.getHour() == 3;
+            case "WEEKLY" -> time.getMinute() == 0 && time.getHour() == 3
+                    && time.getDayOfWeek() == DayOfWeek.MONDAY;
             default -> false;
         };
     }

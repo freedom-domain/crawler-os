@@ -15,7 +15,7 @@ public class CfIpRangeProbeScheduleReq {
     private Boolean enabled;
 
     @NotBlank
-    @Pattern(regexp = "HOURLY|DAILY|WEEKLY")
+    @Pattern(regexp = "EVERY_5_MINUTES|EVERY_15_MINUTES|EVERY_30_MINUTES|HOURLY|DAILY|WEEKLY")
     private String frequency;
 
     @Min(1)

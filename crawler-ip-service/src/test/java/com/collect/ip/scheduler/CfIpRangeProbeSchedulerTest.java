@@ -31,6 +31,16 @@ class CfIpRangeProbeSchedulerTest {
     }
 
     @Test
+    void runsAtConfiguredMinuteIntervals() {
+        assertTrue(CfIpRangeProbeScheduler.isDue("EVERY_5_MINUTES", LocalDateTime.of(2026, 10, 29, 11, 10)));
+        assertFalse(CfIpRangeProbeScheduler.isDue("EVERY_5_MINUTES", LocalDateTime.of(2026, 10, 29, 11, 12)));
+        assertTrue(CfIpRangeProbeScheduler.isDue("EVERY_15_MINUTES", LocalDateTime.of(2026, 10, 29, 11, 45)));
+        assertFalse(CfIpRangeProbeScheduler.isDue("EVERY_15_MINUTES", LocalDateTime.of(2026, 10, 29, 11, 46)));
+        assertTrue(CfIpRangeProbeScheduler.isDue("EVERY_30_MINUTES", LocalDateTime.of(2026, 10, 29, 11, 30)));
+        assertFalse(CfIpRangeProbeScheduler.isDue("EVERY_30_MINUTES", LocalDateTime.of(2026, 10, 29, 11, 15)));
+    }
+
+    @Test
     void runsDailyAndWeeklyAtThreeInTheMorning() {
         assertTrue(CfIpRangeProbeScheduler.isDue("DAILY", LocalDateTime.of(2026, 10, 29, 3, 0)));
         assertFalse(CfIpRangeProbeScheduler.isDue("DAILY", LocalDateTime.of(2026, 10, 29, 4, 0)));

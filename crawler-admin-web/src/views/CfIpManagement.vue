@@ -238,38 +238,46 @@
           <h2>Cloudflare 官方 IP 网段</h2>
           <p>网段为全球任播，不代表固定地理位置；可按需维护地区标签，并停用不参与抽样优选的网段。</p>
         </div>
+        <div class="heading-actions">
+          <span class="probe-note">{{ rangeProbeScheduleEnabled ? '已启用' : '未启用' }} · {{ rangeProbeFrequencyLabel }}</span>
+          <el-button :icon="Setting" @click="rangeScheduleDialogVisible = true">定时抽样配置</el-button>
+        </div>
       </div>
-      <div class="range-settings-row">
-        <label class="sample-count-control">
-          <span>定时抽样</span>
-          <el-switch v-model="rangeProbeScheduleEnabled" active-text="启用" inactive-text="关闭" />
-        </label>
-        <label class="sample-count-control">
-          <span>执行频率</span>
-          <el-select v-model="rangeProbeFrequency" class="schedule-frequency-select">
-            <el-option label="每小时" value="HOURLY" />
-            <el-option label="每天 03:00" value="DAILY" />
-            <el-option label="每周一 03:00" value="WEEKLY" />
-          </el-select>
-        </label>
-        <label class="range-sni-control">
-          <span>TLS serverName/SNI</span>
-          <el-input
-            v-model="tlsServerName"
-            clearable
-            maxlength="253"
-            placeholder="v2rayN TLS serverName/SNI"
-          />
-        </label>
-        <label class="sample-count-control">
-          <span>每段抽样</span>
-          <el-input-number v-model="samplesPerRange" :min="1" :max="5" :step="1" />
-        </label>
-        <el-button type="primary" :loading="rangeScheduleSaving" @click="saveRangeProbeSchedule">
-          保存计划
-        </el-button>
-      </div>
-      <div class="probe-note">定时抽样按上海时区执行；每小时在整点运行，每天或每周一于 03:00 运行。</div>
+      <el-dialog v-model="rangeScheduleDialogVisible" title="定时抽样配置" width="520px">
+        <el-form label-position="top" class="range-schedule-form">
+          <el-form-item label="定时抽样">
+            <el-switch v-model="rangeProbeScheduleEnabled" active-text="启用" inactive-text="关闭" />
+          </el-form-item>
+          <el-form-item label="执行频率">
+            <el-select v-model="rangeProbeFrequency" class="range-schedule-frequency">
+              <el-option label="每 5 分钟" value="EVERY_5_MINUTES" />
+              <el-option label="每 15 分钟" value="EVERY_15_MINUTES" />
+              <el-option label="每 30 分钟" value="EVERY_30_MINUTES" />
+              <el-option label="每小时" value="HOURLY" />
+              <el-option label="每天 03:00" value="DAILY" />
+              <el-option label="每周一 03:00" value="WEEKLY" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="TLS serverName/SNI">
+            <el-input
+              v-model="tlsServerName"
+              clearable
+              maxlength="253"
+              placeholder="v2rayN TLS serverName/SNI"
+            />
+          </el-form-item>
+          <el-form-item label="每段抽样">
+            <el-input-number v-model="samplesPerRange" :min="1" :max="5" :step="1" />
+          </el-form-item>
+          <p class="probe-note">按上海时区执行；分钟频率在对应分钟触发，每天或每周一于 03:00 触发。</p>
+        </el-form>
+        <template #footer>
+          <el-button @click="rangeScheduleDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="rangeScheduleSaving" @click="saveRangeProbeSchedule">
+            保存计划
+          </el-button>
+        </template>
+      </el-dialog>
       <div class="range-actions-row">
         <el-button
           :icon="Refresh"
@@ -407,7 +415,7 @@ import {
   cfIpUpdateRangeEnabled,
   cfIpUpdateRangeRegion
 } from '@/api'
-import { Connection, CopyDocument, Delete, Download, Plus, Refresh, Search } from '@element-plus/icons-vue'
+import { Connection, CopyDocument, Delete, Download, Plus, Refresh, Search, Setting } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 
 interface CfIpCandidate {
@@ -474,6 +482,7 @@ const deleteSelectedBusy = ref(false)
 const rangeInitBusy = ref(false)
 const rangeProbeBusy = ref(false)
 const rangeScheduleSaving = ref(false)
+const rangeScheduleDialogVisible = ref(false)
 const rangeImportBusy = ref(false)
 const savingRegionId = ref<number | null>(null)
 const savingEnabledId = ref<number | null>(null)
@@ -491,7 +500,16 @@ const rangePageSize = ref(10)
 const samplesPerRange = ref(1)
 const tlsServerName = ref('www.cloudflare.com')
 const rangeProbeScheduleEnabled = ref(false)
-const rangeProbeFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
+type RangeProbeFrequency = 'EVERY_5_MINUTES' | 'EVERY_15_MINUTES' | 'EVERY_30_MINUTES' | 'HOURLY' | 'DAILY' | 'WEEKLY'
+const rangeProbeFrequency = ref<RangeProbeFrequency>('DAILY')
+const rangeProbeFrequencyLabel = computed(() => ({
+  EVERY_5_MINUTES: '每 5 分钟',
+  EVERY_15_MINUTES: '每 15 分钟',
+  EVERY_30_MINUTES: '每 30 分钟',
+  HOURLY: '每小时',
+  DAILY: '每天 03:00',
+  WEEKLY: '每周一 03:00'
+}[rangeProbeFrequency.value]))
 const keyword = ref('')
 const ipVersionFilter = ref('')
 const regionFilter = ref('')
@@ -648,7 +666,7 @@ const loadRangeProbeSchedule = async () => {
   const response = await cfIpRangeProbeSchedule() as {
     data: {
       enabled: boolean
-      frequency: 'HOURLY' | 'DAILY' | 'WEEKLY'
+      frequency: RangeProbeFrequency
       samplesPerRange: number
       tlsServerName: string
     }
@@ -669,6 +687,7 @@ const saveRangeProbeSchedule = async () => {
       tlsServerName: tlsServerName.value.trim()
     })
     ElMessage.success('定时抽样计划已保存')
+    rangeScheduleDialogVisible.value = false
   } catch {
     ElMessage.error('保存定时抽样计划失败，请检查配置并重试')
   } finally {
@@ -1067,13 +1086,9 @@ onMounted(() => {
 .section-heading p { margin-top: 5px; color: var(--ink-700); font-size: 12px; }
 .heading-actions, .toolbar-actions { display: flex; align-items: center; gap: 10px; }
 .range-section-heading { margin-bottom: 16px; }
-.range-settings-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-.range-sni-control { display: flex; flex: 0 1 360px; flex-direction: column; gap: 6px; color: var(--ink-700); font-size: 12px; }
 .range-actions-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .region-editor { display: flex; align-items: center; gap: 8px; }
-.sample-count-control { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; white-space: nowrap; }
-.sample-count-control { color: var(--ink-700); font-size: 12px; }
-.sample-count-control :deep(.el-input-number) { width: 112px !important; flex: 0 0 112px; }
+.range-schedule-form :deep(.el-input-number), .range-schedule-frequency { width: 100%; }
 .region-editor :deep(.el-input) { max-width: 180px; }
 .summary-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .summary-row :deep(.el-card__body) { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
@@ -1099,8 +1114,6 @@ onMounted(() => {
 @media (max-width: 900px) {
   .page-heading, .candidate-toolbar, .section-heading { align-items: stretch; flex-direction: column; }
   .heading-actions, .toolbar-actions { flex-wrap: wrap; }
-  .range-settings-row { align-items: stretch; }
-  .range-sni-control { flex: 1 1 100%; }
   .range-actions-row .el-button { flex: 1 1 180px; }
   .filter-toolbar > * { flex: 1 1 145px; }
   .range-filter-toolbar > * { flex: 1 1 145px; }
