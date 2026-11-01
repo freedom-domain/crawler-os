@@ -10,7 +10,6 @@ import com.microsoft.playwright.options.LoadState;
 import com.microsoft.playwright.options.WaitUntilState;
 import lombok.extern.slf4j.Slf4j;
 
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -38,15 +37,9 @@ final class PlaywrightHtmlRenderer {
         BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
                 .setHeadless(true)
                 .setArgs(java.util.List.of("--no-sandbox", "--disable-dev-shm-usage"));
-        String executablePath = System.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH");
-        if (executablePath != null && !executablePath.isBlank()) {
-            launchOptions.setExecutablePath(Path.of(executablePath));
-        }
 
-        Playwright.CreateOptions createOptions = new Playwright.CreateOptions();
-        if (executablePath != null && !executablePath.isBlank()) {
-            createOptions.setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1"));
-        }
+        Playwright.CreateOptions createOptions = new Playwright.CreateOptions()
+                .setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1"));
 
         try (Playwright playwright = Playwright.create(createOptions);
              Browser browser = playwright.chromium().launch(launchOptions);

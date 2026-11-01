@@ -1,10 +1,6 @@
-FROM eclipse-temurin:21-jre
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium \
-    && rm -rf /var/lib/apt/lists/*
+FROM mcr.microsoft.com/playwright/java:v1.51.0-noble
 WORKDIR /app
 COPY target/crawler-worker-*.jar /app/app.jar
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 EXPOSE 8090
 ENTRYPOINT ["java", "-Dnacos.logging.default.config.enabled=false", "-jar", "/app/app.jar"]
