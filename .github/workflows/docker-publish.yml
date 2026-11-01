@@ -62,7 +62,7 @@ jobs:
             build_arg: SERVICE=crawler-file-service
           - service: crawler-worker
             context: .
-            dockerfile: ./docker/Dockerfile-app
+            dockerfile: ./docker/Dockerfile-worker
             build_arg: SERVICE=crawler-worker
           - service: crawler-admin-web
             context: ./crawler-admin-web
@@ -93,7 +93,7 @@ jobs:
           context=".docker-build-context"
           mkdir -p "$context/$service/target"
           cp "$service/target/$service"-*.jar "$context/$service/target/"
-          cp docker/Dockerfile-app "$context/Dockerfile"
+          cp "${{ matrix.dockerfile }}" "$context/Dockerfile"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

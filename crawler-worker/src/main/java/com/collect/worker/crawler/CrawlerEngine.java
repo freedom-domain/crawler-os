@@ -1617,8 +1617,10 @@ public class CrawlerEngine {
             } else {
                 // 仅选择器：取命中元素自身及内部的 <img>
                 for (Selectable scope : matched) {
-                    for (String source : scope.xpath("//img/@src").all()) {
-                        addAbsoluteImageSource(sources, pageUrl, source);
+                    for (String attribute : List.of("src", "data-src", "data-original", "data-lazy-src")) {
+                        for (String source : scope.xpath("//img/@" + attribute).all()) {
+                            addAbsoluteImageSource(sources, pageUrl, source);
+                        }
                     }
                 }
             }
@@ -1979,6 +1981,11 @@ public class CrawlerEngine {
     }
 
     private Html fetch(String url, TaskMessage msg, TaskExecutionContext execution) throws Exception {
+        if ("playwright".equalsIgnoreCase(msg.getType())) {
+            String html = PlaywrightHtmlRenderer.render(url, msg.getImageSelector(), msg.getHeaders(),
+                    Integer.valueOf(1).equals(msg.getSkipTlsVerify()), msg.getTimeout());
+            return new Html(html, url);
+        }
         // 自定义 Header 由 httpClient(msg) 上的 Interceptor 统一注入（含重定向跳数），此处只设内置 Header
         Request request = new Request.Builder()
                 .url(url)

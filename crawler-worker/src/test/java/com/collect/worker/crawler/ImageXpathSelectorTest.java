@@ -36,6 +36,25 @@ class ImageXpathSelectorTest {
     }
 
     @Test
+    void shouldExtractLazyImageAttributesFromSelectedElements() {
+        var document = new Html("""
+                <div class="swiper-slide">
+                  <img src="/loaded.jpg">
+                  <img data-src="/lazy.jpg">
+                  <img data-original="/original.jpg">
+                </div>
+                """, "https://example.com/page");
+
+        var sources = CrawlerEngine.extractImageSources(
+                document, "https://example.com/page", ".swiper-slide", "");
+
+        assertEquals(java.util.List.of(
+                "https://example.com/loaded.jpg",
+                "https://example.com/lazy.jpg",
+                "https://example.com/original.jpg"), sources);
+    }
+
+    @Test
     void xpathShouldApplyToWholeDocumentWhenSelectorIsEmpty() {
         var document = new Html("""
                 <div class="selected"><img src="/inside.jpg"></div>

@@ -10,6 +10,7 @@
         <el-menu
           :default-active="route.path"
           :collapse="collapsed"
+          :unique-opened="true"
           router
           background-color="transparent"
           text-color="#b7c9d9"

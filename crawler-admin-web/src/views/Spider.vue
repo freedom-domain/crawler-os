@@ -263,6 +263,7 @@
             <el-option label="HTTP" value="http" />
             <el-option label="JS渲染" value="playwright" />
           </el-select>
+          <div class="form-tip">选择“JS渲染”后由无头 Chromium 执行页面脚本，再按图片选择器提取图片；worker 需部署浏览器运行环境</div>
         </el-form-item>
         <el-form-item label="起始URL" required>
           <el-input v-model="startUrlsStr" placeholder="多个URL用逗号分隔" />
