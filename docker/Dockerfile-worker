@@ -5,6 +5,7 @@ RUN apt-get update \
 WORKDIR /app
 ARG SERVICE
 COPY ${SERVICE}/target/${SERVICE}-*.jar /app/app.jar
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 EXPOSE 8090
 ENTRYPOINT ["java", "-Dnacos.logging.default.config.enabled=false", "-jar", "/app/app.jar"]

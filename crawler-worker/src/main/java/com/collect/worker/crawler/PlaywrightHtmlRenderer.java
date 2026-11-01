@@ -43,7 +43,12 @@ final class PlaywrightHtmlRenderer {
             launchOptions.setExecutablePath(Path.of(executablePath));
         }
 
-        try (Playwright playwright = Playwright.create();
+        Playwright.CreateOptions createOptions = new Playwright.CreateOptions();
+        if (executablePath != null && !executablePath.isBlank()) {
+            createOptions.setEnv(Map.of("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1"));
+        }
+
+        try (Playwright playwright = Playwright.create(createOptions);
              Browser browser = playwright.chromium().launch(launchOptions);
              BrowserContext context = browser.newContext(new Browser.NewContextOptions()
                      .setIgnoreHTTPSErrors(skipTlsVerify)
