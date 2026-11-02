@@ -844,15 +844,14 @@ onBeforeUnmount(() => {
   gap: 6px;
   min-height: 40px;
   padding: 0 12px;
-  border: 1px solid #dfe7ee;
+  border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.18);
   color: #486581;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(4px);
 }
 
 .home-button:hover {
