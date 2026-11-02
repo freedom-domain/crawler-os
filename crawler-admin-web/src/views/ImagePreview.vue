@@ -69,7 +69,7 @@
     </div>
 
     <!-- 只加载当前分页；图片进入视口附近时由浏览器按需加载 -->
-    <div v-else class="grid-wrapper" :class="{ 'pagination-open': totalPages > 1 }">
+    <div v-else class="grid-wrapper">
       <div class="grid" :style="gridStyle">
         <div
           v-for="(img, idx) in pageImages"
@@ -1182,7 +1182,7 @@ onBeforeUnmount(() => {
 /* ===== 图片网格 ===== */
 .grid-wrapper {
   position: relative;
-  padding: 20px 24px;
+  padding: 0;
   width: 100%;
 }
 .grid {
@@ -1190,15 +1190,13 @@ onBeforeUnmount(() => {
   /* 列数由页面输入控制（gridTemplateColumns 通过内联样式设置） */
   gap: 14px;
   justify-items: center;
+  min-height: 100vh;
 }
 .thumb {
   display: block;
   width: 100%;
-  /* 可视窗口高 - 上下 padding（40px）- 分页条悬浮区（约 60px），
-     避免图片撑满视口后盖住 fixed bottom 的分页条 */
-  height: calc(100vh - 100px);
+  height: 100vh;
   object-fit: contain;
-  border-radius: 10px;
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.15s, box-shadow 0.15s;
   background: #f8fbfb;
@@ -1207,9 +1205,8 @@ onBeforeUnmount(() => {
 .thumb-card {
   position: relative;
   width: 100%;
-  height: calc(100vh - 100px);
+  height: 100vh;
   overflow: hidden;
-  border-radius: 10px;
   background: #eaf0f2;
 }
 .thumb.thumb-ready {
@@ -1251,7 +1248,7 @@ onBeforeUnmount(() => {
 /* ===== 分页控件（悬浮于页面底部） ===== */
 .pagination {
   position: fixed;
-  bottom: 24px;
+  bottom: max(16px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -1260,26 +1257,22 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 8px 16px;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(8px);
-}
-/* 多页时：网格底部留白，避免首屏图片盖住悬浮分页条 */
-.grid-wrapper.pagination-open {
-  padding-bottom: 80px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.16);
 }
 .page-btn {
   padding: 5px 14px;
-  border: 1px solid #dfe7ee;
+  border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 6px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.7);
   color: #5e6c84;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
 }
 .page-btn:hover:not(:disabled) {
-  background: #f8fbfb;
+  background: rgba(255, 255, 255, 0.72);
   border-color: #8993a4;
 }
 .page-btn:disabled {
@@ -1288,8 +1281,15 @@ onBeforeUnmount(() => {
 }
 .page-info {
   font-size: 13px;
-  color: #8993a4;
+  color: #486581;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@supports (height: 100dvh) {
+  .grid { min-height: 100dvh; }
+  .thumb,
+  .thumb-card { height: 100dvh; }
 }
 
 /* ===== 首屏加载遮罩（盖在网格之上，网格已在渲染，图片在遮罩后加载） ===== */
@@ -1442,7 +1442,6 @@ onBeforeUnmount(() => {
 
 /* 响应式 */
 @media (max-width: 640px) {
-  .grid-wrapper { padding: 16px; }
   .grid { gap: 10px; }
   /* 移动端工具栏：竖向排列，固定宽度 */
   .toolbar-header {
@@ -1481,29 +1480,25 @@ onBeforeUnmount(() => {
     font-size: 12px;
     width: 100%;
   }
-  /* 移动端分页：贴底通栏，按钮加大便于点按 */
+  /* 移动端分页以紧凑悬浮条显示，并避开屏幕底部安全区 */
   .pagination {
-    left: 16px;
-    right: 16px;
-    bottom: 16px;
-    transform: none;
-    justify-content: space-between;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    justify-content: center;
     gap: 8px;
-    padding: 10px 14px;
-    border-radius: 14px;
+    padding: 6px 8px;
+    border-radius: 24px;
   }
   .page-btn {
-    flex: 1;
-    padding: 10px 0;
-    font-size: 14px;
-    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    border-radius: 16px;
   }
   .page-info {
     flex-shrink: 0;
     font-size: 13px;
   }
-  .thumb,
-  .thumb-card { height: calc(100dvh - 80px); }
   .viewer-stage img { max-width: calc(100vw - 60px); max-height: calc(100dvh - 100px); }
   .viewer-nav.prev { left: 10px; }
   .viewer-nav.next { right: 10px; }
