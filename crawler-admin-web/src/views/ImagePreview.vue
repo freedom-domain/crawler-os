@@ -1,5 +1,10 @@
 <template>
   <div ref="pageRoot" class="image-preview-page" @click="hideImageMenu">
+    <button type="button" class="home-button" @click="goHome">
+      <el-icon><House /></el-icon>
+      <span>返回首页</span>
+    </button>
+
     <!-- 工具栏触发按钮 -->
     <button 
       type="button" 
@@ -85,6 +90,11 @@
             @load="setImageLoadState(img, 'loaded')"
             @error="setImageLoadState(img, 'error')"
             @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
+            @touchstart="startImageLongPress($event, pageStart + idx)"
+            @touchmove="cancelImageLongPress"
+            @touchend="cancelImageLongPress"
+            @touchcancel="cancelImageLongPress"
+            @click.stop="handleImageClick"
           />
         </div>
         <div v-if="!images.length" class="empty-state">暂无图片</div>
@@ -137,6 +147,11 @@
             :alt="`图片 ${viewerIndex + 1}`"
             :style="{ transform: `scale(${viewerScale})` }"
             @contextmenu.prevent="openImageMenu($event, viewerIndex)"
+            @touchstart="startImageLongPress($event, viewerIndex)"
+            @touchmove="cancelImageLongPress"
+            @touchend="cancelImageLongPress"
+            @touchcancel="cancelImageLongPress"
+            @click.stop="handleImageClick"
           />
         </div>
 
@@ -171,8 +186,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
-import { useRoute } from 'vue-router'
-import { ArrowLeft, ArrowRight, Close, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowLeft, ArrowRight, Close, House, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { dictChildren, recordImagePreview, searchDeleteImage, searchDetail } from '@/api'
@@ -180,6 +195,7 @@ import { useUserStore } from '@/stores/user'
 import TagEditorDialog from '@/components/TagEditorDialog.vue'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const contentId = computed(() => typeof route.query.id === 'string' ? route.query.id : '')
 const pageRoot = ref<HTMLElement | null>(null)
@@ -208,6 +224,9 @@ const page = ref(1)
 const stageRef = ref<HTMLElement | null>(null)
 const imgRef = ref<HTMLImageElement | null>(null)
 const showToolbar = ref(false)
+let imageLongPressTimer: ReturnType<typeof setTimeout> | null = null
+let suppressImageClick = false
+let suppressImageClickTimer: ReturnType<typeof setTimeout> | null = null
 
 // 工具栏拖拽
 const triggerPos = ref({ x: 0, y: 0 })
@@ -480,14 +499,59 @@ const handleTagsSaved = (tags: string[]) => {
 }
 
 const openImageMenu = (event: MouseEvent, index: number) => {
+  openImageMenuAt(event.clientX, event.clientY, index)
+}
+
+const openImageMenuAt = (clientX: number, clientY: number, index: number) => {
   if (!userStore.token && !sourceUrl.value) return
   const menuW = 152
-  const menuH = 110
-  let x = event.clientX
-  let y = event.clientY
+  const menuH = 140
+  let x = clientX
+  let y = clientY
   if (x + menuW > window.innerWidth - 4) x = Math.max(4, window.innerWidth - menuW - 4)
   if (y + menuH > window.innerHeight - 4) y = Math.max(4, window.innerHeight - menuH - 4)
   imageMenu.value = { visible: true, x, y, index }
+}
+
+const startImageLongPress = (event: TouchEvent, index: number) => {
+  cancelImageLongPress()
+  const touch = event.touches[0]
+  if (!touch) return
+  const { clientX, clientY } = touch
+  imageLongPressTimer = setTimeout(() => {
+    imageLongPressTimer = null
+    suppressImageClick = true
+    openImageMenuAt(clientX, clientY, index)
+    if (suppressImageClickTimer) clearTimeout(suppressImageClickTimer)
+    suppressImageClickTimer = setTimeout(() => {
+      suppressImageClick = false
+      suppressImageClickTimer = null
+    }, 1000)
+  }, 500)
+}
+
+const cancelImageLongPress = () => {
+  if (imageLongPressTimer) {
+    clearTimeout(imageLongPressTimer)
+    imageLongPressTimer = null
+  }
+}
+
+const handleImageClick = () => {
+  showToolbar.value = false
+  if (suppressImageClick) {
+    suppressImageClick = false
+    if (suppressImageClickTimer) {
+      clearTimeout(suppressImageClickTimer)
+      suppressImageClickTimer = null
+    }
+    return
+  }
+  hideImageMenu()
+}
+
+const goHome = () => {
+  router.push('/dashboard')
 }
 
 const openImageInNewWindow = () => {
@@ -562,6 +626,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown)
+  cancelImageLongPress()
+  if (suppressImageClickTimer) clearTimeout(suppressImageClickTimer)
   document.title = '图片预览'
 })
 
@@ -767,9 +833,36 @@ onBeforeUnmount(() => {
   overflow: auto;
 }
 
+.home-button {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid #dfe7ee;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #486581;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(4px);
+}
+
+.home-button:hover {
+  border-color: #0f9f9a;
+  color: #0f9f9a;
+}
+
 .image-context-menu {
   position: fixed;
-  z-index: 100;
+  z-index: 120;
   min-width: 132px;
   padding: 4px;
   background: #fff;
@@ -1109,6 +1202,7 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.15s, box-shadow 0.15s;
   background: #f8fbfb;
+  -webkit-touch-callout: none;
 }
 .thumb-card {
   position: relative;
@@ -1254,6 +1348,7 @@ onBeforeUnmount(() => {
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+  -webkit-touch-callout: none;
   border-radius: 4px;
   flex-shrink: 0;
   /* 以图片中心为缩放基准，保证缩放时图片始终居中 */
