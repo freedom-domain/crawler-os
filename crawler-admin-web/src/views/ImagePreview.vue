@@ -1,8 +1,22 @@
 <template>
   <div ref="pageRoot" class="image-preview-page" @click="hideImageMenu">
-    <button type="button" class="home-button" @click="goHome">
+    <button
+      type="button"
+      class="home-button"
+      title="返回首页"
+      aria-label="返回首页"
+      @click="goHome"
+    >
       <el-icon><House /></el-icon>
-      <span>返回首页</span>
+    </button>
+    <button
+      type="button"
+      class="home-button fullscreen-button"
+      :title="isFullscreen ? '退出全屏' : '进入全屏'"
+      :aria-label="isFullscreen ? '退出全屏' : '进入全屏'"
+      @click="toggleFullscreen"
+    >
+      <el-icon><Close v-if="isFullscreen" /><FullScreen v-else /></el-icon>
     </button>
 
     <!-- 工具栏触发按钮 -->
@@ -187,7 +201,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, Close, House, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Close, FullScreen, House, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { dictChildren, recordImagePreview, searchDeleteImage, searchDetail } from '@/api'
@@ -224,6 +238,7 @@ const page = ref(1)
 const stageRef = ref<HTMLElement | null>(null)
 const imgRef = ref<HTMLImageElement | null>(null)
 const showToolbar = ref(false)
+const isFullscreen = ref(false)
 let imageLongPressTimer: ReturnType<typeof setTimeout> | null = null
 let suppressImageClick = false
 let suppressImageClickTimer: ReturnType<typeof setTimeout> | null = null
@@ -554,6 +569,27 @@ const goHome = () => {
   router.push('/dashboard')
 }
 
+const syncFullscreenState = () => {
+  isFullscreen.value = document.fullscreenElement === pageRoot.value
+}
+
+const toggleFullscreen = async () => {
+  if (!pageRoot.value || !document.fullscreenEnabled) {
+    ElMessage.warning('当前浏览器不支持全屏')
+    return
+  }
+
+  try {
+    if (document.fullscreenElement === pageRoot.value) {
+      await document.exitFullscreen()
+    } else {
+      await pageRoot.value.requestFullscreen()
+    }
+  } catch {
+    ElMessage.error('切换全屏失败，请检查浏览器权限')
+  }
+}
+
 const openImageInNewWindow = () => {
   imageMenu.value.visible = false
   const index = imageMenu.value.index
@@ -622,10 +658,12 @@ onMounted(() => {
   loadImages()
   // 绑定键盘事件
   document.addEventListener('keydown', onKeydown)
+  document.addEventListener('fullscreenchange', syncFullscreenState)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('fullscreenchange', syncFullscreenState)
   cancelImageLongPress()
   if (suppressImageClickTimer) clearTimeout(suppressImageClickTimer)
   document.title = '图片预览'
@@ -857,6 +895,11 @@ onBeforeUnmount(() => {
 .home-button:hover {
   border-color: #0f9f9a;
   color: #0f9f9a;
+}
+
+.fullscreen-button {
+  left: auto;
+  right: 16px;
 }
 
 .image-context-menu {
@@ -1441,6 +1484,7 @@ onBeforeUnmount(() => {
 
 /* 响应式 */
 @media (max-width: 640px) {
+  .fullscreen-button { display: none; }
   .grid { gap: 10px; }
   /* 移动端工具栏：竖向排列，固定宽度 */
   .toolbar-header {
