@@ -139,9 +139,13 @@
 
       <!-- 分页控件：本页图片加载完成且多页时显示 -->
       <div v-if="currentPageLoaded && totalPages > 1" class="pagination">
-        <button type="button" class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
+        <button type="button" class="page-btn" :disabled="page <= 1" aria-label="上一页" title="上一页" @click="changePage(page - 1)">
+          <el-icon><ArrowLeft /></el-icon>
+        </button>
         <span class="page-info">第 {{ page }} / {{ totalPages }} 页</span>
-        <button type="button" class="page-btn" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
+        <button type="button" class="page-btn" :disabled="page >= totalPages" aria-label="下一页" title="下一页" @click="changePage(page + 1)">
+          <el-icon><ArrowRight /></el-icon>
+        </button>
       </div>
     </div>
 
@@ -1304,14 +1308,18 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.16);
 }
 .page-btn {
-  padding: 5px 14px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.7);
   color: #5e6c84;
-  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
+}
+.page-btn .el-icon {
+  font-size: 18px;
 }
 .page-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.72);
@@ -1534,8 +1542,8 @@ onBeforeUnmount(() => {
     border-radius: 24px;
   }
   .page-btn {
-    padding: 7px 10px;
-    font-size: 13px;
+    width: 36px;
+    height: 36px;
     border-radius: 16px;
   }
   .page-info {

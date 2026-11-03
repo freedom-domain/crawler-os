@@ -12,9 +12,23 @@
     <!-- 游标式分页（PIT + search_after）：仅支持上一页/下一页 -->
     <div v-if="total > 0 && cursorMode" class="results-pagination cursor-pagination">
       <span class="cursor-total">共 {{ total }} 条</span>
-      <el-button :disabled="loading || currentPage <= 1" @click="$emit('prev')">上一页</el-button>
+      <el-button
+        circle
+        :icon="ArrowLeft"
+        :disabled="loading || currentPage <= 1"
+        aria-label="上一页"
+        title="上一页"
+        @click="$emit('prev')"
+      />
       <span class="cursor-page">第 {{ currentPage }} / 共 {{ totalPages }} 页</span>
-      <el-button :disabled="loading || !hasMore" @click="$emit('next')">下一页</el-button>
+      <el-button
+        circle
+        :icon="ArrowRight"
+        :disabled="loading || !hasMore"
+        aria-label="下一页"
+        title="下一页"
+        @click="$emit('next')"
+      />
       <el-select
         :model-value="pageSize"
         class="cursor-size"
@@ -41,6 +55,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 const props = defineProps<{
   loading: boolean
