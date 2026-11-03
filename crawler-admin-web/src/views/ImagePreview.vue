@@ -7,7 +7,7 @@
       aria-label="返回入口"
       @click="goBackToEntry"
     >
-      <el-icon><House /></el-icon>
+      <el-icon><ArrowLeft /></el-icon>
     </button>
     <button
       type="button"
@@ -205,7 +205,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowRight, Close, FullScreen, House, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Close, FullScreen, Minus, Plus, Setting, Promotion, Edit, Delete, TopRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { dictChildren, recordImagePreview, searchDeleteImage, searchDetail } from '@/api'
