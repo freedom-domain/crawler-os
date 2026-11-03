@@ -2,10 +2,10 @@
   <div ref="pageRoot" class="image-preview-page" @click="hideImageMenu">
     <button
       type="button"
-      class="home-button"
-      title="返回首页"
-      aria-label="返回首页"
-      @click="goHome"
+      class="home-button back-button"
+      title="返回入口"
+      aria-label="返回入口"
+      @click="goBackToEntry"
     >
       <el-icon><House /></el-icon>
     </button>
@@ -569,7 +569,17 @@ const handleImageClick = () => {
   hideImageMenu()
 }
 
-const goHome = () => {
+const goBackToEntry = () => {
+  if (window.opener && !window.opener.closed) {
+    window.close()
+    return
+  }
+
+  if (window.history.state?.back) {
+    router.back()
+    return
+  }
+
   router.push('/dashboard')
 }
 
@@ -1492,6 +1502,7 @@ onBeforeUnmount(() => {
 
 /* 响应式 */
 @media (max-width: 640px) {
+  .back-button { display: inline-flex; }
   .fullscreen-button { display: none; }
   .grid { gap: 10px; }
   /* 移动端工具栏：竖向排列，固定宽度 */
