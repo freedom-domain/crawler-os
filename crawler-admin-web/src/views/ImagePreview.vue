@@ -142,7 +142,7 @@
         <button type="button" class="page-btn" :disabled="page <= 1" aria-label="上一页" title="上一页" @click="changePage(page - 1)">
           <el-icon><ArrowLeft /></el-icon>
         </button>
-        <span class="page-info">第 {{ page }} / {{ totalPages }} 页</span>
+        <span class="page-info">{{ page }} / {{ totalPages }}</span>
         <button type="button" class="page-btn" :disabled="page >= totalPages" aria-label="下一页" title="下一页" @click="changePage(page + 1)">
           <el-icon><ArrowRight /></el-icon>
         </button>

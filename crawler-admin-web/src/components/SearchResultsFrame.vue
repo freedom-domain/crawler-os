@@ -20,7 +20,7 @@
         title="上一页"
         @click="$emit('prev')"
       />
-      <span class="cursor-page">第 {{ currentPage }} / 共 {{ totalPages }} 页</span>
+      <span class="cursor-page">{{ currentPage }} / {{ totalPages }}</span>
       <el-button
         circle
         :icon="ArrowRight"
