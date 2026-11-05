@@ -5,8 +5,11 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $api_upstream ${API_UPSTREAM};
+
     location /api/ {
-        proxy_pass ${API_UPSTREAM};
+        proxy_pass $api_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -15,7 +18,7 @@ server {
     }
 
     location /api/cf-ip/ {
-        proxy_pass ${API_UPSTREAM};
+        proxy_pass $api_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
