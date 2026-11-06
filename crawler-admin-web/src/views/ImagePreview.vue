@@ -105,7 +105,7 @@
             @error="setImageLoadState(img, 'error')"
             @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
             @touchstart="startImageLongPress($event, pageStart + idx)"
-            @touchmove="cancelImageLongPress"
+            @touchmove="handleImageTouchMove"
             @touchend="cancelImageLongPress"
             @touchcancel="cancelImageLongPress"
             @click.stop="handleImageClick"
@@ -166,7 +166,7 @@
             :style="{ transform: `scale(${viewerScale})` }"
             @contextmenu.prevent="openImageMenu($event, viewerIndex)"
             @touchstart="startImageLongPress($event, viewerIndex)"
-            @touchmove="cancelImageLongPress"
+            @touchmove="handleImageTouchMove"
             @touchend="cancelImageLongPress"
             @touchcancel="cancelImageLongPress"
             @click.stop="handleImageClick"
@@ -244,6 +244,7 @@ const imgRef = ref<HTMLImageElement | null>(null)
 const showToolbar = ref(false)
 const isFullscreen = ref(false)
 let imageLongPressTimer: ReturnType<typeof setTimeout> | null = null
+let imageLongPressStart: { x: number; y: number } | null = null
 let suppressImageClick = false
 let suppressImageClickTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -534,9 +535,11 @@ const openImageMenuAt = (clientX: number, clientY: number, index: number) => {
 
 const startImageLongPress = (event: TouchEvent, index: number) => {
   cancelImageLongPress()
+  if (event.touches.length !== 1) return
   const touch = event.touches[0]
   if (!touch) return
   const { clientX, clientY } = touch
+  imageLongPressStart = { x: clientX, y: clientY }
   imageLongPressTimer = setTimeout(() => {
     imageLongPressTimer = null
     suppressImageClick = true
@@ -549,11 +552,23 @@ const startImageLongPress = (event: TouchEvent, index: number) => {
   }, 500)
 }
 
+const handleImageTouchMove = (event: TouchEvent) => {
+  const touch = event.touches[0]
+  if (!touch || event.touches.length !== 1 || !imageLongPressStart) {
+    cancelImageLongPress()
+    return
+  }
+  if (Math.hypot(touch.clientX - imageLongPressStart.x, touch.clientY - imageLongPressStart.y) > 12) {
+    cancelImageLongPress()
+  }
+}
+
 const cancelImageLongPress = () => {
   if (imageLongPressTimer) {
     clearTimeout(imageLongPressTimer)
     imageLongPressTimer = null
   }
+  imageLongPressStart = null
 }
 
 const handleImageClick = () => {
