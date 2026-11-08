@@ -25,6 +25,7 @@ public class CfIpCandidateService {
     private static final int MAX_IMPORT_COUNT = 1_000;
     private static final int MAX_PROBE_COUNT = 100;
     private static final int MAX_PUBLIC_IP_COUNT = 100;
+    private static final int MIN_AVAILABLE_SPEED_MBPS = 80;
     private final CfIpCandidateMapper mapper;
     private final CfIpProbeService probeService;
 
@@ -91,7 +92,7 @@ public class CfIpCandidateService {
     }
 
     public List<String> availableCandidateIpAddresses() {
-        return mapper.selectAvailableCandidateIpAddresses();
+        return mapper.selectAvailableCandidateIpAddresses(MIN_AVAILABLE_SPEED_MBPS);
     }
 
     private String normalizeStatus(String status) {
@@ -112,7 +113,7 @@ public class CfIpCandidateService {
         if (count < 1 || count > MAX_PUBLIC_IP_COUNT) {
             throw new BizException("数量必须在 1 到 " + MAX_PUBLIC_IP_COUNT + " 之间");
         }
-        return mapper.selectRandomAvailableCandidates(count).stream()
+        return mapper.selectRandomAvailableCandidates(MIN_AVAILABLE_SPEED_MBPS, count).stream()
                 .map(candidate -> String.format("%s#%s 自选官方优选 %sMB/s",
                         candidate.getIpAddress(),
                         candidate.getRegion() == null || candidate.getRegion().isBlank()

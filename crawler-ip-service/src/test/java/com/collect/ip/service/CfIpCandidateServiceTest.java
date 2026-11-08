@@ -30,11 +30,19 @@ class CfIpCandidateServiceTest {
         candidate.setIpAddress("141.101.121.200");
         candidate.setRegion("US");
         candidate.setSpeedMbps(new BigDecimal("157.84"));
-        when(mapper.selectRandomAvailableCandidates(10)).thenReturn(List.of(candidate));
+        when(mapper.selectRandomAvailableCandidates(80, 10)).thenReturn(List.of(candidate));
 
         assertEquals(List.of("141.101.121.200#US 自选官方优选 19.73MB/s"),
                 service.randomAvailableIpAddresses(10));
-        verify(mapper).selectRandomAvailableCandidates(10);
+        verify(mapper).selectRandomAvailableCandidates(80, 10);
+    }
+
+    @Test
+    void filtersAvailableIpAddressesByMinimumSpeed() {
+        when(mapper.selectAvailableCandidateIpAddresses(80)).thenReturn(List.of("141.101.121.200"));
+
+        assertEquals(List.of("141.101.121.200"), service.availableCandidateIpAddresses());
+        verify(mapper).selectAvailableCandidateIpAddresses(80);
     }
 
     @Test

@@ -113,8 +113,9 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
     @Select("SELECT id FROM cf_ip_candidate WHERE status = #{status} ORDER BY id")
     List<Long> selectCandidateIdsByStatus(@Param("status") String status);
 
-    @Select("SELECT ip_address FROM cf_ip_candidate WHERE status = 'AVAILABLE' AND latency_ms IS NOT NULL ORDER BY id")
-    List<String> selectAvailableCandidateIpAddresses();
+    @Select("SELECT ip_address FROM cf_ip_candidate " +
+            "WHERE status = 'AVAILABLE' AND latency_ms IS NOT NULL AND speed_mbps > #{minSpeedMbps} ORDER BY id")
+    List<String> selectAvailableCandidateIpAddresses(@Param("minSpeedMbps") int minSpeedMbps);
 
     @Select("SELECT ip_address FROM cf_ip_candidate")
     List<String> selectAllIpAddresses();
@@ -131,9 +132,10 @@ public interface CfIpCandidateMapper extends BaseMapper<CfIpCandidate> {
     int insertIgnoreBatch(@Param("candidates") List<CfIpCandidate> candidates);
 
     @Select("SELECT * FROM cf_ip_candidate " +
-            "WHERE status = 'AVAILABLE' AND speed_mbps IS NOT NULL " +
+            "WHERE status = 'AVAILABLE' AND speed_mbps > #{minSpeedMbps} " +
             "ORDER BY RAND() LIMIT #{count}")
-    List<CfIpCandidate> selectRandomAvailableCandidates(@Param("count") int count);
+    List<CfIpCandidate> selectRandomAvailableCandidates(@Param("minSpeedMbps") int minSpeedMbps,
+                                                        @Param("count") int count);
 
     @Select("SELECT * FROM cf_ip_candidate WHERE ip_address = #{ipAddress} LIMIT 1")
     CfIpCandidate selectByIpAddress(@Param("ipAddress") String ipAddress);
