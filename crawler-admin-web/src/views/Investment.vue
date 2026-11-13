@@ -385,11 +385,15 @@
               <template #default="{ row }">¥{{ money(row.commission) }}</template>
             </el-table-column>
             <el-table-column prop="cumulativeShares" label="累计份额" min-width="110" align="right" />
+            <el-table-column label="本期盈亏" min-width="110" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.periodProfit)">{{ signedMoney(row.periodProfit) }}</span></template>
+            </el-table-column>
             <el-table-column label="累计盈亏" min-width="115" align="right">
               <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
             </el-table-column>
           </el-table>
         </div>
+        <p class="fee-note">本期盈亏按期末收盘价估算，只计算本次买入的份额并扣除本次佣金；结转现金的盈亏仍反映在累计盈亏中。</p>
       </template>
       <el-empty v-else-if="!dcaLoading" description="设置基金、定投金额和时间段后运行回测" :image-size="64" />
     </el-card>
@@ -646,11 +650,15 @@
             <el-table-column label="累计份额" min-width="110" align="right">
               <template #default="{ row }">{{ money(row.cumulativeShares) }}</template>
             </el-table-column>
+            <el-table-column label="本期盈亏" min-width="110" align="right">
+              <template #default="{ row }"><span :class="profitTone(row.periodProfit)">{{ signedMoney(row.periodProfit) }}</span></template>
+            </el-table-column>
             <el-table-column label="累计盈亏" min-width="115" align="right">
               <template #default="{ row }"><span :class="profitTone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
             </el-table-column>
           </el-table>
         </div>
+        <p class="fee-note">本期盈亏按期末单位净值估算，包含本期申购费并按份额分摊期末赎回费。</p>
       </template>
       <el-empty v-else-if="!offExchangeDcaLoading" description="设置场外基金、定投金额、费率和时间段后运行回测" :image-size="64" />
     </el-card>

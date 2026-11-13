@@ -108,6 +108,8 @@ public class FundInvestmentBacktestService {
         if (scheduleDates.isEmpty()) {
             throw new BizException("所选时间段没有可执行定投的交易日");
         }
+        FundHistoryPoint lastPoint = tradingDays.floorEntry(range.endDate()).getValue();
+        BigDecimal finalPrice = lastPoint.getClose();
 
         BigDecimal cash = BigDecimal.ZERO;
         BigDecimal totalContribution = BigDecimal.ZERO;
@@ -152,12 +154,12 @@ public class FundInvestmentBacktestService {
             entry.setCumulativeShares(totalShares);
             entry.setCumulativeContribution(totalContribution);
             entry.setMarketValue(marketValue);
+            entry.setPeriodProfit(finalPrice.multiply(BigDecimal.valueOf(boughtShares))
+                    .subtract(gross).subtract(fee).setScale(2, RoundingMode.HALF_UP));
             entry.setProfit(marketValue.add(cash).subtract(totalContribution).setScale(2, RoundingMode.HALF_UP));
             schedule.add(entry);
         }
 
-        FundHistoryPoint lastPoint = tradingDays.floorEntry(range.endDate()).getValue();
-        BigDecimal finalPrice = lastPoint.getClose();
         BigDecimal marketValue = finalPrice.multiply(BigDecimal.valueOf(totalShares))
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal totalAssets = marketValue.add(cash).setScale(2, RoundingMode.HALF_UP);

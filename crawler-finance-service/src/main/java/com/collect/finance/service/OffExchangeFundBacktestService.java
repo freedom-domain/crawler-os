@@ -120,6 +120,14 @@ public class OffExchangeFundBacktestService {
                 .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
         BigDecimal profit = netLiquidationValue.subtract(totalContribution)
                 .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+        for (OffExchangeFundDcaEntry entry : entries) {
+            BigDecimal periodMarketValue = entry.getShares().multiply(lastNav.getUnitNav())
+                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+            BigDecimal periodRedemptionFee = totalShares.signum() == 0 ? BigDecimal.ZERO
+                    : redemptionFee.multiply(entry.getShares()).divide(totalShares, AMOUNT_SCALE, RoundingMode.HALF_UP);
+            entry.setPeriodProfit(periodMarketValue.subtract(periodRedemptionFee).subtract(entry.getContribution())
+                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP));
+        }
 
         OffExchangeFundDcaResponse result = new OffExchangeFundDcaResponse();
         result.setCode(history.getCode());

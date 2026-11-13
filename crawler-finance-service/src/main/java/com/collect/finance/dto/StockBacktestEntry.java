@@ -17,5 +17,6 @@ public class StockBacktestEntry {
     private Long cumulativeShares;
     private BigDecimal cumulativeContribution;
     private BigDecimal marketValue;
+    private BigDecimal periodProfit;
     private BigDecimal profit;
 }

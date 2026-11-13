@@ -17,5 +17,6 @@ public class FundDcaEntry {
     private Integer cumulativeShares;
     private BigDecimal cumulativeContribution;
     private BigDecimal marketValue;
+    private BigDecimal periodProfit;
     private BigDecimal profit;
 }

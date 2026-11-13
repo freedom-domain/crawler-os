@@ -228,11 +228,15 @@
             <el-table-column label="累计持股" min-width="105" align="right">
               <template #default="{ row }">{{ Number(row.cumulativeShares).toLocaleString() }}</template>
             </el-table-column>
+            <el-table-column label="本期盈亏" min-width="110" align="right">
+              <template #default="{ row }"><span :class="tone(row.periodProfit)">{{ signedMoney(row.periodProfit) }}</span></template>
+            </el-table-column>
             <el-table-column label="累计盈亏" min-width="110" align="right">
               <template #default="{ row }"><span :class="tone(row.profit)">{{ signedMoney(row.profit) }}</span></template>
             </el-table-column>
           </el-table>
         </div>
+        <p class="fee-note">本期盈亏按期末收盘价估算，只计算本次买入的股数并扣除本次佣金；结转现金的盈亏仍反映在累计盈亏中。</p>
         <p class="fee-note">回测采用前复权日线收盘价、每笔佣金 0.03%（最低 ¥5）和 100 股整手买入；仅测算买入并按期末行情估值，不含卖出及印花税。历史表现不代表未来收益，不构成投资建议。</p>
       </template>
       <el-empty v-else-if="!backtestLoading" description="选择日期、定投日和金额后运行回测" :image-size="64" />
@@ -270,6 +274,7 @@ interface StockBacktestEntry {
   contribution: number
   shares: number
   cumulativeShares: number
+  periodProfit: number
   profit: number
 }
 

@@ -15,5 +15,6 @@ public class OffExchangeFundDcaEntry {
     private BigDecimal shares;
     private BigDecimal cumulativeShares;
     private BigDecimal marketValue;
+    private BigDecimal periodProfit;
     private BigDecimal profit;
 }
