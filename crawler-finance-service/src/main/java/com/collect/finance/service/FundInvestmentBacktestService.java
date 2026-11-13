@@ -116,14 +116,24 @@ public class FundInvestmentBacktestService {
         BigDecimal investedAmount = BigDecimal.ZERO;
         BigDecimal totalCommission = BigDecimal.ZERO;
         int totalShares = 0;
+        BigDecimal previousCumulativeProfit = BigDecimal.ZERO.setScale(2);
         List<FundDcaEntry> schedule = new ArrayList<>();
-
+        TreeMap<LocalDate, ScheduleDate> scheduledByTradeDate = new TreeMap<>();
         for (ScheduleDate scheduled : scheduleDates) {
-            BigDecimal contribution = request.getAmount().setScale(2, RoundingMode.HALF_UP);
+            scheduledByTradeDate.put(scheduled.tradeDate(), scheduled);
+        }
+
+        for (Map.Entry<LocalDate, FundHistoryPoint> tradingDay
+                : tradingDays.subMap(range.startDate(), true, range.endDate(), true).entrySet()) {
+            LocalDate tradeDate = tradingDay.getKey();
+            ScheduleDate scheduled = scheduledByTradeDate.get(tradeDate);
+            BigDecimal contribution = scheduled == null ? BigDecimal.ZERO.setScale(2)
+                    : request.getAmount().setScale(2, RoundingMode.HALF_UP);
             cash = cash.add(contribution);
             totalContribution = totalContribution.add(contribution);
-            BigDecimal price = scheduled.point().getClose();
-            int lots = cash.divide(price.multiply(BigDecimal.valueOf(LOT_SIZE)), 0, RoundingMode.DOWN).intValue();
+            BigDecimal price = tradingDay.getValue().getClose();
+            int lots = scheduled == null ? 0
+                    : cash.divide(price.multiply(BigDecimal.valueOf(LOT_SIZE)), 0, RoundingMode.DOWN).intValue();
             while (lots > 0) {
                 BigDecimal gross = price.multiply(BigDecimal.valueOf((long) lots * LOT_SIZE))
                         .setScale(2, RoundingMode.HALF_UP);
@@ -144,8 +154,10 @@ public class FundInvestmentBacktestService {
 
             BigDecimal marketValue = price.multiply(BigDecimal.valueOf(totalShares)).setScale(2, RoundingMode.HALF_UP);
             FundDcaEntry entry = new FundDcaEntry();
-            entry.setScheduledDate(scheduled.scheduledDate().toString());
-            entry.setTradeDate(scheduled.tradeDate().toString());
+            if (scheduled != null) {
+                entry.setScheduledDate(scheduled.scheduledDate().toString());
+            }
+            entry.setTradeDate(tradeDate.toString());
             entry.setPrice(price);
             entry.setContribution(contribution);
             entry.setShares(boughtShares);
@@ -154,9 +166,12 @@ public class FundInvestmentBacktestService {
             entry.setCumulativeShares(totalShares);
             entry.setCumulativeContribution(totalContribution);
             entry.setMarketValue(marketValue);
-            entry.setPeriodProfit(marketValue.subtract(investedAmount).subtract(totalCommission)
+            BigDecimal cumulativeProfit = marketValue.add(cash).subtract(totalContribution)
+                    .setScale(2, RoundingMode.HALF_UP);
+            entry.setPeriodProfit(cumulativeProfit.subtract(previousCumulativeProfit)
                     .setScale(2, RoundingMode.HALF_UP));
-            entry.setProfit(marketValue.add(cash).subtract(totalContribution).setScale(2, RoundingMode.HALF_UP));
+            entry.setProfit(cumulativeProfit);
+            previousCumulativeProfit = cumulativeProfit;
             schedule.add(entry);
         }
 
@@ -172,8 +187,9 @@ public class FundInvestmentBacktestService {
         response.setEndDate(range.endDate().toString());
         response.setWeekday(request.getWeekday());
         response.setAmountPerPeriod(request.getAmount().setScale(2, RoundingMode.HALF_UP));
-        response.setExecutedPeriods(schedule.size());
-        response.setSkippedPeriods(countWeekdays(range.startDate(), range.endDate(), request.getWeekday()) - schedule.size());
+        response.setExecutedPeriods(scheduleDates.size());
+        response.setSkippedPeriods(countWeekdays(range.startDate(), range.endDate(), request.getWeekday())
+                - scheduleDates.size());
         response.setTotalContribution(totalContribution);
         response.setInvestedAmount(investedAmount.setScale(2, RoundingMode.HALF_UP));
         response.setTotalCommission(totalCommission.setScale(2, RoundingMode.HALF_UP));

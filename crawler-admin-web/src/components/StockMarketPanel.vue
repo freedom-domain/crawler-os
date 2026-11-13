@@ -213,9 +213,9 @@
         </div>
         <h4>定投明细</h4>
         <div class="table-scroll-wrapper">
-          <el-table :data="recentSchedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="360">
+          <el-table :data="dailySchedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="360">
             <el-table-column prop="scheduledDate" label="计划日期" min-width="115" />
-            <el-table-column prop="tradeDate" label="成交日期" min-width="115" />
+            <el-table-column prop="tradeDate" label="交易日期" min-width="115" />
             <el-table-column label="成交价" min-width="95" align="right">
               <template #default="{ row }">¥{{ money(row.price) }}</template>
             </el-table-column>
@@ -228,7 +228,7 @@
             <el-table-column label="累计持股" min-width="105" align="right">
               <template #default="{ row }">{{ Number(row.cumulativeShares).toLocaleString() }}</template>
             </el-table-column>
-            <el-table-column label="本期盈亏" min-width="110" align="right">
+            <el-table-column label="当天盈亏" min-width="110" align="right">
               <template #default="{ row }"><span :class="tone(row.periodProfit)">{{ signedMoney(row.periodProfit) }}</span></template>
             </el-table-column>
             <el-table-column label="累计盈亏" min-width="110" align="right">
@@ -236,7 +236,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <p class="fee-note">本期盈亏按本次成交日收盘价估算，计算本次买入后累计持有股数的盈亏，并扣除累计佣金；结转现金的盈亏仍反映在累计盈亏中。</p>
+        <p class="fee-note">当天盈亏为当日累计盈亏减去前一交易日累计盈亏；仅计划定投日投入资金并买入，买入佣金计入当天盈亏。</p>
         <p class="fee-note">回测采用前复权日线收盘价、每笔佣金 0.03%（最低 ¥5）和 100 股整手买入；仅测算买入并按期末行情估值，不含卖出及印花税。历史表现不代表未来收益，不构成投资建议。</p>
       </template>
       <el-empty v-else-if="!backtestLoading" description="选择日期、定投日和金额后运行回测" :image-size="64" />
@@ -268,7 +268,7 @@ interface ChartCoordinate {
 }
 
 interface StockBacktestEntry {
-  scheduledDate: string
+  scheduledDate?: string
   tradeDate: string
   price: number
   contribution: number
@@ -536,7 +536,7 @@ const comparisonRows = computed(() => {
   if (!result) return []
   const rows = [{
     strategy: '每周定投',
-    investmentDate: result.schedule?.[0]?.tradeDate || result.startDate,
+    investmentDate: result.schedule?.find(entry => entry.contribution > 0)?.tradeDate || result.startDate,
     totalContribution: result.totalContribution,
     finalValue: result.totalAssets,
     profit: result.profit,
@@ -556,7 +556,7 @@ const comparisonRows = computed(() => {
   }
   return rows
 })
-const recentSchedule = computed(() => [...(backtestResult.value?.schedule || [])].reverse())
+const dailySchedule = computed(() => [...(backtestResult.value?.schedule || [])].reverse())
 
 onMounted(async () => {
   try {

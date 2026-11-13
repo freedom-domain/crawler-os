@@ -82,28 +82,49 @@ public class OffExchangeFundBacktestService {
         BigDecimal totalSubscriptionFee = BigDecimal.ZERO.setScale(AMOUNT_SCALE);
         BigDecimal totalShares = BigDecimal.ZERO.setScale(SHARE_SCALE);
         var entries = new ArrayList<OffExchangeFundDcaEntry>();
-
+        TreeMap<LocalDate, ScheduleDate> scheduledByTradeDate = new TreeMap<>();
         for (ScheduleDate scheduled : scheduleDates) {
-            BigDecimal subscriptionFee = contributionPerPeriod.multiply(subscriptionRate)
+            scheduledByTradeDate.put(scheduled.tradeDate(), scheduled);
+        }
+
+        BigDecimal cumulativeContribution = BigDecimal.ZERO.setScale(AMOUNT_SCALE);
+        BigDecimal previousCumulativeProfit = BigDecimal.ZERO.setScale(AMOUNT_SCALE);
+        for (Map.Entry<LocalDate, OffExchangeFundNavPoint> navEntry
+                : navs.subMap(range.startDate(), true, range.endDate(), true).entrySet()) {
+            LocalDate tradeDate = navEntry.getKey();
+            ScheduleDate scheduled = scheduledByTradeDate.get(tradeDate);
+            BigDecimal contribution = scheduled == null ? BigDecimal.ZERO.setScale(AMOUNT_SCALE)
+                    : contributionPerPeriod;
+            BigDecimal subscriptionFee = contribution.multiply(subscriptionRate)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-            BigDecimal investableAmount = contributionPerPeriod.subtract(subscriptionFee);
-            BigDecimal shares = investableAmount.divide(scheduled.point().getUnitNav(), SHARE_SCALE, RoundingMode.DOWN);
-            totalContribution = totalContribution.add(contributionPerPeriod);
+            BigDecimal shares = contribution.subtract(subscriptionFee)
+                    .divide(navEntry.getValue().getUnitNav(), SHARE_SCALE, RoundingMode.DOWN);
+            totalContribution = totalContribution.add(contribution);
+            cumulativeContribution = cumulativeContribution.add(contribution);
             totalSubscriptionFee = totalSubscriptionFee.add(subscriptionFee);
             totalShares = totalShares.add(shares);
 
-            BigDecimal marketValue = scheduled.point().getUnitNav().multiply(totalShares)
+            BigDecimal marketValue = navEntry.getValue().getUnitNav().multiply(totalShares)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
             OffExchangeFundDcaEntry entry = new OffExchangeFundDcaEntry();
-            entry.setScheduledDate(scheduled.scheduledDate().toString());
-            entry.setTradeDate(scheduled.tradeDate().toString());
-            entry.setNav(scheduled.point().getUnitNav());
-            entry.setContribution(contributionPerPeriod);
+            if (scheduled != null) {
+                entry.setScheduledDate(scheduled.scheduledDate().toString());
+            }
+            entry.setTradeDate(tradeDate.toString());
+            entry.setNav(navEntry.getValue().getUnitNav());
+            entry.setContribution(contribution);
             entry.setSubscriptionFee(subscriptionFee);
             entry.setShares(shares);
             entry.setCumulativeShares(totalShares);
             entry.setMarketValue(marketValue);
-            entry.setProfit(marketValue.subtract(totalContribution).setScale(AMOUNT_SCALE, RoundingMode.HALF_UP));
+            BigDecimal dailyRedemptionFee = marketValue.multiply(redemptionRate)
+                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+            BigDecimal dailyProfit = marketValue.subtract(dailyRedemptionFee).subtract(cumulativeContribution)
+                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
+            entry.setPeriodProfit(dailyProfit.subtract(previousCumulativeProfit)
+                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP));
+            entry.setProfit(dailyProfit);
+            previousCumulativeProfit = dailyProfit;
             entries.add(entry);
         }
 
@@ -120,15 +141,6 @@ public class OffExchangeFundBacktestService {
                 .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
         BigDecimal profit = netLiquidationValue.subtract(totalContribution)
                 .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-        BigDecimal cumulativeContribution = BigDecimal.ZERO.setScale(AMOUNT_SCALE);
-        for (OffExchangeFundDcaEntry entry : entries) {
-            cumulativeContribution = cumulativeContribution.add(entry.getContribution());
-            BigDecimal periodRedemptionFee = entry.getMarketValue().multiply(redemptionRate)
-                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-            entry.setPeriodProfit(entry.getMarketValue().subtract(periodRedemptionFee).subtract(cumulativeContribution)
-                    .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP));
-        }
-
         OffExchangeFundDcaResponse result = new OffExchangeFundDcaResponse();
         result.setCode(history.getCode());
         result.setName(history.getName());
@@ -138,8 +150,9 @@ public class OffExchangeFundBacktestService {
         result.setAmountPerPeriod(contributionPerPeriod);
         result.setSubscriptionFeeRate(request.getSubscriptionFeeRate());
         result.setRedemptionFeeRate(request.getRedemptionFeeRate());
-        result.setExecutedPeriods(entries.size());
-        result.setSkippedPeriods(countScheduledWeeks(range.startDate(), range.endDate(), request.getWeekday()) - entries.size());
+        result.setExecutedPeriods(scheduleDates.size());
+        result.setSkippedPeriods(countScheduledWeeks(range.startDate(), range.endDate(), request.getWeekday())
+                - scheduleDates.size());
         result.setTotalContribution(totalContribution);
         result.setTotalSubscriptionFee(totalSubscriptionFee);
         result.setTotalShares(totalShares);

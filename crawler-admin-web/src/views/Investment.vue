@@ -370,7 +370,7 @@
         <div class="table-scroll-wrapper">
           <el-table :data="dcaResult.schedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="460">
             <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
-            <el-table-column prop="tradeDate" label="实际交易日" min-width="120" />
+            <el-table-column prop="tradeDate" label="交易日期" min-width="120" />
             <el-table-column label="收盘价" min-width="100" align="right">
               <template #default="{ row }">¥{{ money(row.price) }}</template>
             </el-table-column>
@@ -385,7 +385,7 @@
               <template #default="{ row }">¥{{ money(row.commission) }}</template>
             </el-table-column>
             <el-table-column prop="cumulativeShares" label="累计份额" min-width="110" align="right" />
-            <el-table-column label="本期盈亏" min-width="110" align="right">
+            <el-table-column label="当天盈亏" min-width="110" align="right">
               <template #default="{ row }"><span :class="profitTone(row.periodProfit)">{{ signedMoney(row.periodProfit) }}</span></template>
             </el-table-column>
             <el-table-column label="累计盈亏" min-width="115" align="right">
@@ -393,7 +393,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <p class="fee-note">本期盈亏按本次成交日收盘价估算，计算本次买入后累计持有份额的盈亏，并扣除累计佣金；结转现金的盈亏仍反映在累计盈亏中。</p>
+        <p class="fee-note">当天盈亏为当日累计盈亏减去前一交易日累计盈亏；仅计划定投日投入资金并买入，买入佣金计入当天盈亏。</p>
       </template>
       <el-empty v-else-if="!dcaLoading" description="设置基金、定投金额和时间段后运行回测" :image-size="64" />
     </el-card>
@@ -650,7 +650,7 @@
             <el-table-column label="累计份额" min-width="110" align="right">
               <template #default="{ row }">{{ money(row.cumulativeShares) }}</template>
             </el-table-column>
-            <el-table-column label="本期盈亏" min-width="110" align="right">
+            <el-table-column label="当天盈亏" min-width="110" align="right">
               <template #default="{ row }"><span :class="profitTone(row.periodProfit)">{{ signedMoney(row.periodProfit) }}</span></template>
             </el-table-column>
             <el-table-column label="累计盈亏" min-width="115" align="right">
@@ -658,7 +658,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <p class="fee-note">本期盈亏按本次成交日单位净值估算，计算本次买入后累计持有份额的盈亏，并估算扣除对应赎回费。</p>
+        <p class="fee-note">当天盈亏为当日累计盈亏减去前一净值日累计盈亏；仅计划定投日申购，并按当日估值变化计入对应赎回费。</p>
       </template>
       <el-empty v-else-if="!offExchangeDcaLoading" description="设置场外基金、定投金额、费率和时间段后运行回测" :image-size="64" />
     </el-card>
@@ -949,7 +949,7 @@ const dcaComparisonRows = computed(() => {
   if (!result) return []
   const rows = [{
     strategy: '每周定投',
-    investmentDate: result.schedule?.[0]?.tradeDate || result.startDate,
+    investmentDate: result.schedule?.find((entry: any) => Number(entry.contribution) > 0)?.tradeDate || result.startDate,
     totalContribution: result.totalContribution,
     finalValue: result.totalAssets,
     profit: result.profit,
@@ -974,7 +974,7 @@ const offExchangeDcaComparisonRows = computed(() => {
   if (!result) return []
   const rows = [{
     strategy: '每周定投',
-    investmentDate: result.schedule?.[0]?.tradeDate || result.startDate,
+    investmentDate: result.schedule?.find((entry: any) => Number(entry.contribution) > 0)?.tradeDate || result.startDate,
     totalContribution: result.totalContribution,
     finalValue: result.netLiquidationValue,
     profit: result.profit,
