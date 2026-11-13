@@ -154,8 +154,8 @@ public class FundInvestmentBacktestService {
             entry.setCumulativeShares(totalShares);
             entry.setCumulativeContribution(totalContribution);
             entry.setMarketValue(marketValue);
-            entry.setPeriodProfit(finalPrice.multiply(BigDecimal.valueOf(boughtShares))
-                    .subtract(gross).subtract(fee).setScale(2, RoundingMode.HALF_UP));
+            entry.setPeriodProfit(finalPrice.multiply(BigDecimal.valueOf(totalShares))
+                    .subtract(investedAmount).subtract(totalCommission).setScale(2, RoundingMode.HALF_UP));
             entry.setProfit(marketValue.add(cash).subtract(totalContribution).setScale(2, RoundingMode.HALF_UP));
             schedule.add(entry);
         }
