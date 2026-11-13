@@ -123,12 +123,9 @@ public class OffExchangeFundBacktestService {
         BigDecimal cumulativeContribution = BigDecimal.ZERO.setScale(AMOUNT_SCALE);
         for (OffExchangeFundDcaEntry entry : entries) {
             cumulativeContribution = cumulativeContribution.add(entry.getContribution());
-            BigDecimal periodMarketValue = entry.getCumulativeShares().multiply(lastNav.getUnitNav())
+            BigDecimal periodRedemptionFee = entry.getMarketValue().multiply(redemptionRate)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP);
-            BigDecimal periodRedemptionFee = totalShares.signum() == 0 ? BigDecimal.ZERO
-                    : redemptionFee.multiply(entry.getCumulativeShares()).divide(totalShares, AMOUNT_SCALE,
-                            RoundingMode.HALF_UP);
-            entry.setPeriodProfit(periodMarketValue.subtract(periodRedemptionFee).subtract(cumulativeContribution)
+            entry.setPeriodProfit(entry.getMarketValue().subtract(periodRedemptionFee).subtract(cumulativeContribution)
                     .setScale(AMOUNT_SCALE, RoundingMode.HALF_UP));
         }
 

@@ -393,7 +393,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <p class="fee-note">本期盈亏按期末收盘价估算，计算本次买入后累计持有份额的盈亏，并扣除累计佣金；结转现金的盈亏仍反映在累计盈亏中。</p>
+        <p class="fee-note">本期盈亏按本次成交日收盘价估算，计算本次买入后累计持有份额的盈亏，并扣除累计佣金；结转现金的盈亏仍反映在累计盈亏中。</p>
       </template>
       <el-empty v-else-if="!dcaLoading" description="设置基金、定投金额和时间段后运行回测" :image-size="64" />
     </el-card>
@@ -658,7 +658,7 @@
             </el-table-column>
           </el-table>
         </div>
-        <p class="fee-note">本期盈亏按期末单位净值估算，计算本次买入后累计持有份额的盈亏，包含累计申购费并按累计份额分摊期末赎回费。</p>
+        <p class="fee-note">本期盈亏按本次成交日单位净值估算，计算本次买入后累计持有份额的盈亏，并估算扣除对应赎回费。</p>
       </template>
       <el-empty v-else-if="!offExchangeDcaLoading" description="设置场外基金、定投金额、费率和时间段后运行回测" :image-size="64" />
     </el-card>
