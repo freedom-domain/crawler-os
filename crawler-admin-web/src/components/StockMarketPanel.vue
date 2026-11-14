@@ -212,6 +212,7 @@
           </el-table>
         </div>
         <h4>定投明细</h4>
+        <DcaPerformanceChart :entries="backtestChartEntries" value-label="收盘价" />
         <div class="table-scroll-wrapper">
           <el-table :data="dailySchedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="360">
             <el-table-column prop="scheduledDate" label="计划日期" min-width="115" />
@@ -247,6 +248,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import DcaPerformanceChart from '@/components/DcaPerformanceChart.vue'
 import { historySyncConcurrencyGet, simulateStockBacktest, stockHistory } from '@/api'
 
 type Mode = 'history' | 'backtest'
@@ -557,6 +559,12 @@ const comparisonRows = computed(() => {
   return rows
 })
 const dailySchedule = computed(() => [...(backtestResult.value?.schedule || [])].reverse())
+const backtestChartEntries = computed(() => (backtestResult.value?.schedule || []).map(entry => ({
+  date: entry.tradeDate,
+  value: entry.price,
+  dailyProfit: entry.periodProfit,
+  cumulativeProfit: entry.profit
+})))
 
 onMounted(async () => {
   try {

@@ -367,6 +367,7 @@
           · 期末估值日期 {{ dcaResult.finalQuoteDate }}（收盘价 ¥{{ money(dcaResult.finalPrice) }}）。
           按 100 份为一手买入，佣金 0.03%（每笔最低 ¥5），不含其他交易费用。
         </p>
+        <DcaPerformanceChart :entries="dcaChartEntries" value-label="收盘价" />
         <div class="table-scroll-wrapper">
           <el-table :data="dcaResult.schedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="460">
             <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
@@ -631,6 +632,7 @@
           · 期末估值日期 {{ offExchangeDcaResult.finalNavDate }}（单位净值 ¥{{ money(offExchangeDcaResult.finalNav) }}）。
           每期申购费按输入费率从投入金额中扣除；期末赎回费按赎回费率估算。实际申购确认、折扣及持有期限费率以基金公告为准。
         </p>
+        <DcaPerformanceChart :entries="offExchangeDcaChartEntries" value-label="单位净值" />
         <div class="table-scroll-wrapper">
           <el-table :data="offExchangeDcaResult.schedule" class="investment-data-table dca-detail-table" stripe border resizable max-height="460">
             <el-table-column prop="scheduledDate" label="计划定投日" min-width="120" />
@@ -788,6 +790,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
+import DcaPerformanceChart from '@/components/DcaPerformanceChart.vue'
 import FundCodeSelect from '@/components/FundCodeSelect.vue'
 import {
   fundHistory,
@@ -944,6 +947,18 @@ const recentOffExchangeMonthlyReturns = computed(() =>
   [...(offExchangeHistoryResult.value?.analysis?.monthlyReturns || [])].slice(-12).reverse())
 const recentOffExchangeRollingReturns = computed(() =>
   [...(offExchangeHistoryResult.value?.analysis?.rollingOneYearReturns || [])].slice(-12).reverse())
+const dcaChartEntries = computed(() => (dcaResult.value?.schedule || []).map((entry: any) => ({
+  date: entry.tradeDate,
+  value: Number(entry.price),
+  dailyProfit: Number(entry.periodProfit),
+  cumulativeProfit: Number(entry.profit)
+})))
+const offExchangeDcaChartEntries = computed(() => (offExchangeDcaResult.value?.schedule || []).map((entry: any) => ({
+  date: entry.tradeDate,
+  value: Number(entry.nav),
+  dailyProfit: Number(entry.periodProfit),
+  cumulativeProfit: Number(entry.profit)
+})))
 const dcaComparisonRows = computed(() => {
   const result = dcaResult.value
   if (!result) return []
