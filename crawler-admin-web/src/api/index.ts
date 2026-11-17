@@ -39,6 +39,8 @@ export const spiderStart = (id: number) => request.put(`/spider/${id}/start`)
 export const spiderStop = (id: number) => request.put(`/spider/${id}/stop`)
 export const spiderRun = (id: number) => request.post(`/spider/${id}/run`)
 export const spiderRerun = (id: number, url: string) => request.post(`/spider/${id}/rerun`, { url })
+export const spiderRunAllScheduled = () => request.post('/spider/run-scheduled-all')
+export const spiderScheduledCount = () => request.get('/spider/scheduled-count')
 export const spiderExport = () => request.get('/spider/export', { responseType: 'blob' })
 export const spiderImport = (file: File) => {
   const data = new FormData()

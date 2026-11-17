@@ -8,6 +8,7 @@ import com.collect.common.security.LoginUtils;
 import com.collect.common.mq.TaskMessage;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderImportResult;
+import com.collect.spider.dto.SpiderRunAllResponse;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.dto.TaskConcurrencyResponse;
 import com.collect.spider.dto.TaskStatsResponse;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -53,6 +55,7 @@ public class SpiderService {
     private final com.collect.spider.mapper.SpiderTaskMapper taskMapper;
     private final com.collect.spider.mapper.SpiderTaskLogMapper logMapper;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final TransactionTemplate transactionTemplate;
 
     @SuppressWarnings("null")
     public Spider create(SpiderCreateReq req) {
@@ -284,6 +287,55 @@ public class SpiderService {
             throw new BizException("爬虫不存在");
         }
         return createTask(spider, JSON.parseArray(spider.getStartUrls(), String.class), null, false);
+    }
+
+    /**
+     * 一键运行所有已开启的定时任务（status=1 且已配置调度表达式）。
+     * 每个爬虫在独立事务中执行，单个失败/跳过不影响其他爬虫。
+     */
+    public SpiderRunAllResponse runAllScheduled() {
+        List<Spider> spiders = spiderMapper.selectList(
+                new LambdaQueryWrapper<Spider>()
+                        .eq(Spider::getStatus, 1)
+                        .isNotNull(Spider::getSchedule)
+                        .ne(Spider::getSchedule, ""));
+
+        SpiderRunAllResponse resp = new SpiderRunAllResponse();
+        resp.setTotal(spiders.size());
+        for (Spider spider : spiders) {
+            try {
+                SpiderTask task = transactionTemplate.execute(status ->
+                        createTask(spider, JSON.parseArray(spider.getStartUrls(), String.class), null, false));
+                if (task != null) {
+                    resp.setRunCount(resp.getRunCount() + 1);
+                    log.info("一键运行定时任务: spider={}, taskId={}", spider.getName(), task.getTaskId());
+                }
+            } catch (BizException e) {
+                log.warn("一键运行定时任务跳过: spider={}, reason={}", spider.getName(), e.getMessage());
+                resp.getSkipped().add(buildSkippedTask(spider, e.getMessage()));
+            } catch (Exception e) {
+                log.error("一键运行定时任务失败跳过: spider={}", spider.getName(), e);
+                resp.getSkipped().add(buildSkippedTask(spider, e.getMessage()));
+            }
+        }
+        return resp;
+    }
+
+    private SpiderRunAllResponse.SkippedTask buildSkippedTask(Spider spider, String reason) {
+        SpiderRunAllResponse.SkippedTask s = new SpiderRunAllResponse.SkippedTask();
+        s.setSpiderId(spider.getId());
+        s.setSpiderName(spider.getName());
+        s.setReason(reason);
+        return s;
+    }
+
+    /** 已开启的定时任务数量（status=1 且已配置调度表达式） */
+    public long scheduledCount() {
+        Long count = spiderMapper.selectCount(new LambdaQueryWrapper<Spider>()
+                .eq(Spider::getStatus, 1)
+                .isNotNull(Spider::getSchedule)
+                .ne(Spider::getSchedule, ""));
+        return count == null ? 0L : count;
     }
 
     @Transactional(rollbackFor = Exception.class)

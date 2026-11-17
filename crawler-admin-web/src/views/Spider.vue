@@ -41,6 +41,16 @@
       <el-form-item class="toolbar-actions">
         <div class="spider-actions">
           <el-button
+            type="primary"
+            plain
+            :icon="VideoPlay"
+            :disabled="scheduledCount === 0 || runAllLoading"
+            :loading="runAllLoading"
+            @click="handleRunAllScheduled"
+          >
+            运行全部定时任务 ({{ scheduledCount }})
+          </el-button>
+          <el-button
             type="danger"
             plain
             :icon="Delete"
@@ -453,7 +463,7 @@ import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElNotification } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderClearContentBatch, spiderClearEs, spiderRun, spiderExport, spiderImport, dictTree } from '@/api'
+import { spiderPage, spiderCreate, spiderDetail, spiderUpdate, spiderStart, spiderStop, spiderDelete, spiderClearContent, spiderClearContentBatch, spiderClearEs, spiderRun, spiderRunAllScheduled, spiderScheduledCount, spiderExport, spiderImport, dictTree } from '@/api'
 import { Plus, Search, VideoPlay, EditPen, Delete, FolderOpened, ArrowDown, Download, Upload, List, MoreFilled } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -471,6 +481,8 @@ const keyword = ref('')
 const urlFilter = ref('')
 const groupFilter = ref('')
 const publicFilter = ref<number | null>(null)
+const scheduledCount = ref(0)
+const runAllLoading = ref(false)
 const highlightSpiderId = ref<number | null>(null)
 const groupOptions = ref<string[]>([])
 const createVisible = ref(false)
@@ -696,6 +708,16 @@ const loadData = async () => {
     focusSpiderRow()
   } finally {
     loading.value = false
+    loadScheduledCount()
+  }
+}
+
+const loadScheduledCount = async () => {
+  try {
+    const res: any = await spiderScheduledCount()
+    scheduledCount.value = Number(res.data) || 0
+  } catch {
+    scheduledCount.value = 0
   }
 }
 
@@ -1009,6 +1031,39 @@ const handleRun = async (row: any) => {
   }
 }
 
+const handleRunAllScheduled = async () => {
+  try {
+    if (!await confirm('确定立即运行所有已开启的定时任务吗？每个任务将按当前并发策略派发或排队执行。', { title: '运行全部定时任务', confirmText: '确认运行' })) return
+  } catch {
+    return
+  }
+  runAllLoading.value = true
+  try {
+    const res: any = await spiderRunAllScheduled()
+    const data = res.data || {}
+    const skipped: any[] = data.skipped || []
+    if (!data.total) {
+      ElMessage.info('没有已开启的定时任务')
+      return
+    }
+    const reasons = Array.from(new Set(skipped.map((s: any) => s.reason)))
+    const reasonText = reasons.length === 1 ? `（${reasons[0]}）` : ''
+    ElNotification({
+      title: `已触发 ${data.runCount} 个定时任务`,
+      message: skipped.length
+        ? `跳过 ${skipped.length} 个${reasonText}：${skipped.map((s: any) => s.spiderName).join('、')}`
+        : '全部任务已派发执行',
+      type: data.runCount > 0 ? 'success' : 'warning',
+      duration: 6000
+    })
+  } catch {
+    // The request interceptor already displays the backend error message.
+  } finally {
+    runAllLoading.value = false
+    loadScheduledCount()
+  }
+}
+
 const handleDelete = async (row: any) => {
   try {
     if (!await confirm(`确定删除爬虫「${row.name}」吗？`, { title: '删除确认', danger: true })) return
@@ -1184,6 +1239,7 @@ watch(
 
 onMounted(() => {
   loadGroupOptions()
+  loadScheduledCount()
 })
 
 onUnmounted(cancelScheduledFilterSearch)

@@ -7,6 +7,7 @@ import com.collect.common.security.LoginUtils;
 import com.collect.spider.dto.SpiderCreateReq;
 import com.collect.spider.dto.SpiderImportResult;
 import com.collect.spider.dto.SpiderRerunReq;
+import com.collect.spider.dto.SpiderRunAllResponse;
 import com.collect.spider.dto.SpiderUpdateReq;
 import com.collect.spider.dto.TaskConcurrencyResponse;
 import com.collect.spider.dto.TaskStatsResponse;
@@ -123,6 +124,19 @@ public class SpiderController {
     public R<SpiderTask> run(@PathVariable("id") Long id) {
         requirePermission("spider:run");
         return R.ok(spiderService.run(id));
+    }
+
+    @Operation(summary = "一键运行所有已开启的定时任务")
+    @PostMapping("/run-scheduled-all")
+    public R<SpiderRunAllResponse> runScheduledAll() {
+        requirePermission("spider:run");
+        return R.ok(spiderService.runAllScheduled());
+    }
+
+    @Operation(summary = "已开启的定时任务数量")
+    @GetMapping("/scheduled-count")
+    public R<Long> scheduledCount() {
+        return R.ok(spiderService.scheduledCount());
     }
 
     @Operation(summary = "重新爬取单条记录")
