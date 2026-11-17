@@ -239,7 +239,7 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.permission-tree-node { display: inline-flex; align-items: center; gap: 8px; color: #243b53; }
-.tree-icon { color: #16a6a3; font-size: 16px; }
+.permission-tree-node { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-900); }
+.tree-icon { color: var(--teal-bright); font-size: 16px; }
 .tree-toolbar { margin-bottom: 12px; display: flex; gap: 8px; }
 </style>

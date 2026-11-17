@@ -240,15 +240,15 @@ const signedMoney = (value: number) => `${value > 0 ? '+' : ''}¥${formatAxis(va
 }
 
 .legend-price {
-  background: #409eff;
+  background: var(--chart-price);
 }
 
 .legend-daily {
-  background: #e6a23c;
+  background: var(--chart-daily);
 }
 
 .legend-cumulative {
-  background: #67c23a;
+  background: var(--chart-positive);
 }
 
 .dca-chart-body {
@@ -306,27 +306,27 @@ const signedMoney = (value: number) => `${value > 0 ? '+' : ''}¥${formatAxis(va
 }
 
 .dca-chart-value-dot {
-  fill: #409eff;
+  fill: var(--chart-price);
 }
 
 .dca-chart-daily-dot {
-  fill: #e6a23c;
+  fill: var(--chart-daily);
 }
 
 .dca-chart-cumulative-dot {
-  fill: #67c23a;
+  fill: var(--chart-positive);
 }
 
 .dca-chart-value {
-  stroke: #409eff;
+  stroke: var(--chart-price);
 }
 
 .dca-chart-daily {
-  stroke: #e6a23c;
+  stroke: var(--chart-daily);
 }
 
 .dca-chart-cumulative {
-  stroke: #67c23a;
+  stroke: var(--chart-positive);
 }
 
 .dca-chart-right-axis {
@@ -350,15 +350,15 @@ const signedMoney = (value: number) => `${value > 0 ? '+' : ''}¥${formatAxis(va
 }
 
 .tooltip-value {
-  color: #409eff;
+  color: var(--teal);
 }
 
 .tooltip-daily {
-  color: #b88230;
+  color: var(--chart-daily-ink);
 }
 
 .tooltip-cumulative {
-  color: #529b2e;
+  color: var(--chart-cumulative-ink);
 }
 
 .dca-chart-axis-labels {

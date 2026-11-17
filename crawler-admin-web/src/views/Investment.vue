@@ -1315,7 +1315,7 @@ onMounted(() => {
 }
 .page-heading h1 {
   margin: 0;
-  color: #243345;
+  color: var(--ink-950);
   font-size: 22px;
 }
 .page-heading p,
@@ -1324,7 +1324,7 @@ onMounted(() => {
 .quote-meta,
 .fee-note,
 .trade-dialog-summary span {
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 13px;
 }
 .page-heading p {
@@ -1342,16 +1342,16 @@ onMounted(() => {
   justify-content: center;
   gap: 8px;
   padding: 18px 20px;
-  border: 1px solid #e8edf2;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
 }
 .asset-card > span {
-  color: #788496;
+  color: var(--ink-500);
   font-size: 13px;
 }
 .asset-card strong {
-  color: #253448;
+  color: var(--ink-950);
   font-size: 24px;
   font-variant-numeric: tabular-nums;
 }
@@ -1371,7 +1371,7 @@ onMounted(() => {
   gap: 4px;
 }
 .section-heading strong {
-  color: #29384a;
+  color: var(--ink-950);
   font-size: 15px;
 }
 .quote-form {
@@ -1414,7 +1414,7 @@ onMounted(() => {
 .analysis-tables h4,
 .dca-comparison h4 {
   margin: 0 0 10px;
-  color: #29384a;
+  color: var(--ink-950);
   font-size: 14px;
 }
 .dca-comparison {
@@ -1429,10 +1429,10 @@ onMounted(() => {
 }
 .history-caption {
   margin-bottom: 12px;
-  color: #29384a;
+  color: var(--ink-950);
 }
 .history-caption span {
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 13px;
 }
 .history-chart {
@@ -1452,7 +1452,7 @@ onMounted(() => {
   touch-action: pan-y;
 }
 .chart-crosshair {
-  stroke: #64748b;
+  stroke: var(--chart-crosshair);
   stroke-dasharray: 4 4;
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
@@ -1460,7 +1460,7 @@ onMounted(() => {
 }
 .chart-hover-dot {
   fill: #fff;
-  stroke: #0f9f9a;
+  stroke: var(--teal);
   stroke-width: 2.5;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
@@ -1476,25 +1476,25 @@ onMounted(() => {
   gap: 4px 12px;
   max-width: calc(100% - 100px);
   padding: 6px 9px;
-  border: 1px solid #e8edf2;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 2px 8px rgb(35 52 72 / 8%);
-  color: #586579;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink-700);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .chart-hover-label strong {
-  color: #29384a;
+  color: var(--ink-950);
 }
 .chart-grid {
-  stroke: #e8edf2;
+  stroke: var(--chart-grid);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 .chart-line {
   fill: none;
-  stroke: #0f9f9a;
+  stroke: var(--teal);
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -1503,7 +1503,7 @@ onMounted(() => {
 .chart-value {
   position: absolute;
   left: 0;
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 12px;
 }
 .chart-top {
@@ -1514,7 +1514,7 @@ onMounted(() => {
 }
 .chart-dates {
   margin: 0 0 0 38px;
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 12px;
 }
 .dca-summary {
@@ -1531,28 +1531,28 @@ onMounted(() => {
   gap: 6px;
   padding: 12px 14px;
   border-radius: 8px;
-  background: #f7f9fb;
+  background: var(--surface-soft);
 }
 .dca-summary article span,
 .dca-summary article small {
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 12px;
 }
 .dca-summary article strong {
-  color: #29384a;
+  color: var(--ink-900);
   font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 .dca-summary article.is-profit strong {
-  color: #e35d6a;
+  color: var(--profit-ink);
 }
 .dca-summary article.is-loss strong {
-  color: #16a085;
+  color: var(--market-down);
 }
 .quote-result {
   padding: 16px;
   border-radius: 8px;
-  background: #f7f9fb;
+  background: var(--surface-soft);
 }
 .quote-summary > div:first-child {
   display: flex;
@@ -1561,11 +1561,11 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 .quote-summary strong {
-  color: #27384c;
+  color: var(--ink-950);
   font-size: 17px;
 }
 .quote-code {
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 13px;
 }
 .quote-price {
@@ -1594,10 +1594,10 @@ onMounted(() => {
   line-height: 1.6;
 }
 .is-profit {
-  color: #e35d6a !important;
+  color: var(--profit-ink) !important;
 }
 .is-loss {
-  color: #16a085 !important;
+  color: var(--market-down) !important;
 }
 .trade-dialog-summary {
   display: flex;
@@ -1606,14 +1606,14 @@ onMounted(() => {
   margin-bottom: 22px;
   padding: 14px;
   border-radius: 8px;
-  background: #f7f9fb;
+  background: var(--surface-soft);
 }
 .trade-dialog-summary strong {
-  color: #29384a;
+  color: var(--ink-900);
 }
 .quantity-unit {
   margin-left: 10px;
-  color: #8792a2;
+  color: var(--ink-500);
 }
 @media (max-width: 900px) {
   .asset-grid {

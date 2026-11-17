@@ -1,10 +1,182 @@
 /*
- * Element Plus 主题色覆盖
+ * 全局主题变量（白天 / 黑夜 双主题）
+ * - :root                 白天主题（默认值）
+ * - html[data-theme="dark"] 黑夜主题（深蓝）
+ * - html[data-theme="black"] 纯黑主题（AMOLED，配色全部跟随白天，仅底色/表面覆写为纯黑）
+ * - “默认”模式跟随系统 prefers-color-scheme，由 JS 写 data-theme
+ *   （见 src/utils/theme.ts 与 index.html 内联引导脚本，首帧前完成，避免闪烁）
+ *
  * 此文件必须在 element-plus/dist/index.css 之后加载，
  * 用 !important 确保覆盖 EP 内置的 :root 变量。
  */
+
 :root {
-  /* 主色：品牌青 */
+  /* ===== 品牌色（白天/黑夜共用；纯黑同样跟随白天取值，仅底色为纯黑）===== */
+  --teal: #0f9f9a;
+  --teal-dark: #087b78;
+  --coral: #ed765f;
+
+  /* ===== 基色族扩展槽位（原主题无关硬编码 token 化；白天取原值，黑夜有暗色版）===== */
+  --neon: #72e0c8;                 /* 亮青强调（登录品牌字/头像等） */
+  --neon-rgb: 114, 224, 200;       /* 亮青 tint/线条 rgb 分量 */
+  --teal-bright: #16a6a3;          /* 欢迎语/权限图标 */
+  --teal-hover: #0c8a85;           /* 表格「更多」按钮 hover */
+  --teal-deep: #066b67;            /* 搜索按钮按压态 */
+  --teal-ink-light: #087f70;       /* 浅底深青字（焦点描边） */
+  --teal-ink: #075e55;             /* 浅底深青字（hover） */
+  --teal-ink-strong: #064f47;      /* 浅底深青字（选中） */
+  --teal-grad-light: #12ab9e;      /* 品牌渐变浅端 */
+  --on-teal: #ffffff;              /* 实心基色底上的文字 */
+  --count-badge-bg: linear-gradient(180deg, #0a8577 0%, #087f70 100%); /* 图片计数徽章 */
+  --menu-popup-active-bg: #167d7b; /* 折叠菜单弹出层选中底 */
+  --focus-ring: rgba(22, 166, 163, .12); /* 输入框聚焦光环 */
+  --success-ink: #198b60;          /* 成功弹窗文字 */
+  --success-ink-deep: #16845b;     /* 同步面板成功计数 */
+  --market-down: #16a085;          /* K线跌色/基金亏损 */
+  --market-down-ink: #12936f;      /* 行情面板亏损文字 */
+  --chart-positive: #67c23a;       /* 定投图累计正收益线 */
+
+  /* ===== 槽位 token（白天取原硬编码值，黑夜有暗色版；纯黑跟随白天）===== */
+  --detail-title-ink: #102a43;     /* 详情弹窗标题 */
+  --detail-url-ink: #087f7d;       /* 详情弹窗 URL 链接 */
+  --detail-meta-ink: #627d98;      /* 公开搜索详情头 meta */
+  --detail-line: #edf0f3;          /* 详情分隔线 */
+  --thumb-line: #e3e8ee;           /* 缩略图/详情图描边 */
+  --preview-ink: #486581;          /* 内容预览正文 */
+  --preview-line: #e4e7ed;         /* 内容预览容器描边 */
+  --preview-bg: #ffffff;           /* 内容预览容器底 */
+  --mobile-card-bg: #ffffff;       /* 窄屏搜索卡片实底 */
+  --gray-line: #c8d6dd;            /* 历史下拉滚动条/空态图标/搜索框展开描边 */
+  --search-box-line-hover: #c8d9d8;/* 公开搜索框 hover 描边 */
+  --history-hover-bg: #d9f5ef;     /* 历史条目 hover 图标底 */
+  --login-aside-copy: #b7c9d9;     /* 登录页侧栏文案 */
+  --login-aside-foot: #829ab1;     /* 登录页侧栏脚注 */
+  --permission-parent-ink: #1f4f5a;/* 权限父行文字 */
+  --permission-child-ink: #526779;/* 权限子行文字 */
+  --icon-empty-ink: #9fb3c8;       /* 权限空图标占位 */
+  --fund-asof-ink: #78889a;        /* 基金估值日期 */
+  --public-muted-ink: #6b7c8d;     /* 公开搜索用户菜单图标 */
+  --public-link-ink: #0a8074;      /* 公开搜索管理入口 hover */
+  --public-error-ink: #d14b4b;     /* 公开搜索退出 hover */
+  --sync-error-ink: #c45656;       /* 同步面板失败计数/消息 */
+  --fav-ink: #e53935;              /* 收藏激活心形 */
+  --fav-ink-hover: #c62828;        /* 收藏激活 hover */
+  --action-danger-ink: #e05c5c;    /* 表格操作/用户菜单危险项 */
+  --ctx-danger-ink: #d65b50;       /* 图片预览右键删除 */
+  --ctx-danger-icon: #ed8b80;      /* 删除图标 */
+  --ctx-danger-bg: #fce9e6;        /* 删除 hover 底 */
+  --msg-info-ink: #5279b7;         /* 消息弹窗 info */
+  --msg-error-ink: #c9574d;        /* 消息弹窗 error */
+  --msg-warning-ink: #c48619;      /* 消息弹窗 warning */
+  --msg-danger-bg: #d65b50;        /* 消息弹窗危险按钮底 */
+  --msg-danger-bg-hover: #c44c42;
+  --spider-task-ink: #2475c5;      /* 爬虫操作菜单·任务 */
+  --spider-task-hover: #1b5fa3;
+  --spider-resource-ink: #7954a8;  /* 爬虫操作菜单·资源 */
+  --spider-resource-hover: #63408e;
+  --spider-danger-ink: #d9363e;    /* 爬虫操作菜单危险项 */
+  --spider-heading-ink: #8b95a1;   /* 菜单分组标题 */
+  --spider-highlight-bg: #fff1cc;  /* 爬虫高亮行 */
+  --chart-price: #409eff;          /* 定投图价格线 */
+  --chart-daily: #e6a23c;          /* 定投图每日线 */
+  --chart-daily-ink: #b88230;      /* 定投 tooltip 每日文字 */
+  --chart-cumulative-ink: #529b2e; /* 定投 tooltip 累计文字 */
+  --market-up: #d9534f;            /* K线涨色 */
+  --market-up-ink: #d84a4a;        /* 回测盈利文字 */
+  --profit-ink: #e35d6a;           /* 定投盈利文字 */
+  --chart-crosshair: #64748b;      /* 图表十字线 */
+  --chart-grid: #e8edf2;           /* 图表网格 */
+  --chart-tooltip-bg: rgb(255 255 255 / 94%); /* 行情悬浮标签底 */
+  --chart-tooltip-shadow: 0 2px 8px rgb(35 52 72 / 8%);
+  --chart-scroll-thumb: #8aa6ad;   /* 行情缩放滚动条 */
+  --chart-scroll-thumb-hover: #607f88;
+  --thumb-overlay-bg: rgba(8, 127, 112, .42); /* 缩略图 hover 蒙层 */
+  --avatar-bg: rgba(255, 255, 255, .8);       /* 公开搜索头像底 */
+  --viewer-toolbar-line: rgba(226, 232, 240, .5); /* 图片查看器工具栏描边 */
+  --viewer-line-strong: #8993a4;   /* 查看器 hover 描边 */
+  --viewer-line: #dfe7ee;          /* 查看器按钮 hover 描边 */
+  --layout-mask: rgba(4, 10, 18, .62); /* 移动端抽屉遮罩 */
+  --teal-shadow-rgb: 15, 129, 124;      /* 青调阴影 rgb 分量 */
+  --teal-shadow-deep-rgb: 8, 127, 112;
+  --teal-shadow-soft-rgb: 32, 86, 84;
+  --teal-shadow-ink-rgb: 7, 94, 85;
+  --blue-shadow-rgb: 37, 99, 235;       /* 蓝调阴影 rgb 分量 */
+  --blue-shadow-strong-rgb: 59, 130, 246;
+  --status-running-rgb: 64, 158, 255;   /* 任务状态点光环 */
+  --status-paused: #e6a23c;             /* 任务暂停点底色 */
+  --status-paused-rgb: 230, 162, 60;
+  --status-success-rgb: 103, 194, 58;
+  --status-failed-rgb: 245, 108, 108;
+  --available-ink: #16835f;        /* CF IP 可用计数 */
+  --dict-shadow-rgb: 16, 110, 102; /* 字典子行 hover 阴影 */
+  --drag-handle-ink: #a8bcc4;      /* 字典拖拽手柄 */
+  --profile-accent: #109f9a;       /* 个人中心图标 */
+
+  /* ===== 白天主题 ===== */
+  --ink-950: #172b4d;
+  --ink-900: #243b53;
+  --ink-700: #5e6c84;
+  --ink-500: #8993a4;
+  --line: #dfe7ee;
+  --line-strong: #c7d8de;
+  --canvas: #f3f7f8;
+  --surface: #ffffff;
+  --surface-soft: #f8fbfb;
+  --tint: #e8f7f5;
+  --tint-strong: #d9f5ef;
+  --shadow: 0 8px 24px rgba(23, 43, 77, .06);
+  --shadow-soft: 0 2px 8px rgba(23, 43, 77, .04);
+  --bg-glow: rgba(15, 159, 154, .09);
+  --scroll-thumb: #c8d8dc;
+  --scroll-thumb-hover: #9fbcc0;
+  --scroll-track: #e8edf2;
+  --scroll-thumb-2: #8aa6ad;
+  --scroll-thumb-2-hover: #607f88;
+  --loading-mask: rgba(255, 255, 255, .72);
+  --chrome-popup-bg: #ffffff;
+  --login-bg: radial-gradient(circle at 15% 20%, rgba(15, 159, 154, .1), transparent 22rem), linear-gradient(135deg, #eef4f6 0%, #e2edf0 100%);
+
+  /* ===== 窗口 chrome（侧边栏 / 顶栏 / 标签页）===== */
+  --chrome-bg: linear-gradient(180deg, #ffffff 0%, #fbfdfd 100%);
+  --chrome-bg-soft: rgba(23, 43, 77, .03);
+  --chrome-text: #5e6c84;
+  --chrome-text-strong: #172b4d;
+  --chrome-muted: #8993a4;
+  --chrome-icon: #0f9f9a;
+  --chrome-line: #e3ecf0;
+  --chrome-hover: rgba(15, 159, 154, .08);
+  --chrome-shadow: 4px 0 18px rgba(23, 43, 77, .06);
+  --header-bg: rgba(255, 255, 255, .94);
+  --header-shadow: 0 1px 12px rgba(23, 43, 77, .05);
+  --tab-active-color: #0f9f9a;
+  --tab-active-bg: rgba(15, 159, 154, .1);
+  --tab-active-border: rgba(15, 159, 154, .35);
+  --tab-active-glow: rgba(15, 159, 154, .12);
+
+  /* ===== 搜索结果行：teal tint 胶囊 / 浅灰 chip（搜索页等复用）===== */
+  --line-faint: #f1f5f5;
+  --teal-tint-bg: linear-gradient(135deg, #f2fcfa 0%, #e4f5f2 100%);
+  --teal-tint-bg-strong: linear-gradient(135deg, #d9f3ed 0%, #c9ece5 100%);
+  --teal-tint-border: #b7e7dc;
+  --teal-tint-border-strong: #8ed6c8;
+  --teal-tint-text: #087f70;
+  --teal-tint-text-strong: #075e55;
+  --teal-tint-chip: rgba(255, 255, 255, .65);
+  --teal-tint-sweep: rgba(255, 255, 255, .55);
+  --chip-bg: #eef2f5;
+  --chip-bg-soft: #e9f6f5;
+  --chip-bg-soft-strong: #c9ece5;
+  --chip-bg-hover: #eef7f6;
+  --chip-bg-active: #e2f2ef;
+  --chip-line-soft: #d7eae7;
+  --chip-line: #c6e4df;
+  --danger-tint: #fdecec;
+  --danger-strong: #c8342e;
+  --profile-card-bg: linear-gradient(135deg, #132b47 0%, #1b4965 100%);
+  --profile-card-shadow: 0 14px 34px rgba(16, 36, 61, .18);
+  --viewer-overlay-bg: rgba(15, 23, 42, .94);
+
+  /* ===== Element Plus：品牌主色（双主题共用）===== */
   --el-color-primary: #0f9f9a !important;
   --el-color-primary-light-3: #47bdb8 !important;
   --el-color-primary-light-5: #72d4cf !important;
@@ -13,4 +185,285 @@
   --el-color-primary-light-9: #d9f5ef !important;
   --el-color-primary-dark-2: #087b78 !important;
   --el-color-primary-rgb: 15, 159, 154 !important;
+
+  /* ===== Element Plus 菜单（跟随主题）=====
+     !important 必需：dev 模式下按需注入的 el-menu 样式晚于本文件加载，
+     EP 会在 :root 覆写 --el-menu-*（active 色默认 = 主色 teal → 选中项青字青底不可见） */
+  --el-menu-text-color: #5e6c84 !important;
+  --el-menu-active-color: #ffffff !important;
+}
+
+html[data-theme="dark"] {
+  /* ===== 黑夜主题（深蓝底）===== */
+  --ink-950: #e8f4f2;
+  --ink-900: #cfe0e6;
+  --ink-700: #9db4c0;
+  --ink-500: #5f7688;
+  --line: rgba(114, 224, 200, .14);
+  --line-strong: rgba(114, 224, 200, .28);
+  --canvas: #070d17;
+  --surface: #0e1c2e;
+  --surface-soft: rgba(114, 224, 200, .05);
+  --tint: rgba(114, 224, 200, .08);
+  --tint-strong: rgba(114, 224, 200, .14);
+  --shadow: 0 10px 30px rgba(2, 8, 16, .45);
+  --shadow-soft: 0 2px 10px rgba(2, 8, 16, .35);
+  --bg-glow: rgba(114, 224, 200, .12);
+  --scroll-thumb: rgba(114, 224, 200, .35);
+  --scroll-thumb-hover: rgba(114, 224, 200, .55);
+  --scroll-track: rgba(114, 224, 200, .06);
+  --scroll-thumb-2: rgba(114, 224, 200, .4);
+  --scroll-thumb-2-hover: rgba(114, 224, 200, .6);
+  --loading-mask: rgba(7, 13, 23, .62);
+  --chrome-popup-bg: #163b59;
+  --login-bg: radial-gradient(circle at 15% 20%, rgba(114, 224, 200, .14), transparent 22rem), linear-gradient(135deg, #102644 0%, #193b5c 100%);
+
+  --chrome-bg: linear-gradient(180deg, #0b1626 0%, #0e2033 100%);
+  --chrome-bg-soft: rgba(5, 12, 22, .5);
+  --chrome-text: #b7c9d9;
+  --chrome-text-strong: #e2eef2;
+  --chrome-muted: #7fa8b8;
+  --chrome-icon: #72e0c8;
+  --chrome-line: rgba(114, 224, 200, .12);
+  --chrome-hover: rgba(114, 224, 200, .09);
+  --chrome-shadow: 5px 0 18px rgba(2, 8, 16, .3);
+  --header-bg: rgba(9, 17, 30, .94);
+  --header-shadow: 0 1px 18px rgba(2, 8, 16, .35);
+  --tab-active-color: #72e0c8;
+  --tab-active-bg: linear-gradient(135deg, rgba(15, 159, 154, .24), rgba(15, 159, 154, .1));
+  --tab-active-border: rgba(114, 224, 200, .4);
+  --tab-active-glow: rgba(15, 159, 154, .18);
+
+  /* ===== 搜索结果行：teal tint 胶囊 / 浅灰 chip → 暗色半透明 ===== */
+  --line-faint: rgba(114, 224, 200, .08);
+  --teal-tint-bg: linear-gradient(135deg, rgba(114, 224, 200, .12) 0%, rgba(114, 224, 200, .05) 100%);
+  --teal-tint-bg-strong: linear-gradient(135deg, rgba(114, 224, 200, .2) 0%, rgba(114, 224, 200, .1) 100%);
+  --teal-tint-border: rgba(114, 224, 200, .24);
+  --teal-tint-border-strong: rgba(114, 224, 200, .4);
+  --teal-tint-text: #72e0c8;
+  --teal-tint-text-strong: #9ff2e2;
+  --teal-tint-chip: rgba(114, 224, 200, .16);
+  --teal-tint-sweep: rgba(255, 255, 255, .16);
+  --chip-bg: rgba(114, 224, 200, .07);
+  --chip-bg-soft: rgba(114, 224, 200, .1);
+  --chip-bg-soft-strong: rgba(114, 224, 200, .2);
+  --chip-bg-hover: rgba(114, 224, 200, .08);
+  --chip-bg-active: rgba(114, 224, 200, .12);
+  --chip-line-soft: rgba(114, 224, 200, .18);
+  --chip-line: rgba(114, 224, 200, .26);
+  --danger-tint: rgba(245, 108, 108, .15);
+  --danger-strong: #ff9d95;
+  --profile-card-bg: linear-gradient(135deg, #0a1826 0%, #0f3038 100%);
+  --profile-card-shadow: 0 14px 34px rgba(2, 8, 16, .5);
+  --viewer-overlay-bg: rgba(7, 13, 23, .94);
+
+  /* ===== Element Plus 菜单（跟随主题）===== */
+  --el-menu-text-color: #b7c9d9 !important;
+
+  /* ===== Element Plus 黑夜基础变量（表格/弹窗/输入框/下拉等）===== */
+  --el-bg-color: #0e1c2e !important;
+  --el-bg-color-page: #070d17 !important;
+  --el-bg-color-overlay: #12233a !important;
+  --el-text-color-primary: #e8f4f2 !important;
+  --el-text-color-regular: #cfe0e6 !important;
+  --el-text-color-secondary: #9db4c0 !important;
+  --el-text-color-placeholder: #5f7688 !important;
+  --el-border-color: rgba(114, 224, 200, .16) !important;
+  --el-border-color-light: rgba(114, 224, 200, .12) !important;
+  --el-border-color-lighter: rgba(114, 224, 200, .08) !important;
+  --el-fill-color: rgba(114, 224, 200, .08) !important;
+  --el-fill-color-light: rgba(114, 224, 200, .05) !important;
+  --el-fill-color-lighter: rgba(114, 224, 200, .04) !important;
+  --el-fill-color-blank: #0e1c2e !important;
+  --el-mask-color: rgba(7, 13, 23, .62) !important;
+  --el-box-shadow: 0 10px 30px rgba(2, 8, 16, .5) !important;
+  --el-box-shadow-light: 0 4px 14px rgba(2, 8, 16, .4) !important;
+
+  /* ===== 语义色亮色档位 → 暗色半透明（plain 按钮 / 标签 / toast 底色）===== */
+  --el-color-primary-light-8: rgba(15, 159, 154, .22) !important;
+  --el-color-primary-light-9: rgba(15, 159, 154, .13) !important;
+  --el-color-success: #67c23a !important;
+  --el-color-success-light-8: rgba(103, 194, 58, .24) !important;
+  --el-color-success-light-9: rgba(103, 194, 58, .14) !important;
+  --el-color-warning: #e6a23c !important;
+  --el-color-warning-light-8: rgba(230, 162, 60, .24) !important;
+  --el-color-warning-light-9: rgba(230, 162, 60, .14) !important;
+  --el-color-danger: #f56c6c !important;
+  --el-color-error: #f56c6c !important;
+  --el-color-danger-light-8: rgba(245, 108, 108, .24) !important;
+  --el-color-danger-light-9: rgba(245, 108, 108, .14) !important;
+  --el-color-error-light-8: rgba(245, 108, 108, .24) !important;
+  --el-color-error-light-9: rgba(245, 108, 108, .14) !important;
+  --el-color-info: #909399 !important;
+  --el-color-info-light-8: rgba(144, 147, 153, .24) !important;
+  --el-color-info-light-9: rgba(144, 147, 153, .14) !important;
+
+  /* ===== 纯黑单色槽位：黑夜取值（文字类给可读亮色，修复原硬编码深色漏网）===== */
+  --detail-title-ink: #e8f4f2;
+  --detail-url-ink: #72e0c8;
+  --detail-meta-ink: #9db4c0;
+  --detail-line: rgba(114, 224, 200, .12);
+  --thumb-line: rgba(114, 224, 200, .16);
+  --preview-ink: #cfe0e6;
+  --preview-line: rgba(114, 224, 200, .16);
+  --preview-bg: #0e1c2e;
+  --mobile-card-bg: #0e1c2e;
+  --gray-line: rgba(114, 224, 200, .35);
+  --search-box-line-hover: rgba(114, 224, 200, .28);
+  --history-hover-bg: rgba(114, 224, 200, .14);
+  --permission-parent-ink: #e8f4f2;
+  --permission-child-ink: #cfe0e6;
+  --icon-empty-ink: #5f7688;
+  --fund-asof-ink: #9db4c0;
+  --public-muted-ink: #9db4c0;
+  --public-link-ink: #72e0c8;
+  --public-error-ink: #ff9d95;
+  --sync-error-ink: #ff9d95;
+  --fav-ink: #ff8a80;
+  --fav-ink-hover: #ff6b6b;
+  --action-danger-ink: #ff9d95;
+  --ctx-danger-ink: #ff9d95;
+  --ctx-danger-icon: #ff9d95;
+  --ctx-danger-bg: rgba(245, 108, 108, .15);
+  --msg-info-ink: #8fb3e8;
+  --msg-error-ink: #ff9d95;
+  --msg-warning-ink: #e6a23c;
+  --spider-task-ink: #7cc4ff;
+  --spider-task-hover: #a3d4ff;
+  --spider-resource-ink: #c4a3f0;
+  --spider-resource-hover: #d4baff;
+  --spider-danger-ink: #ff9d95;
+  --spider-heading-ink: #7fa8b8;
+  --spider-highlight-bg: rgba(230, 162, 60, .16);
+  --chart-daily-ink: #e6a23c;
+  --chart-cumulative-ink: #67c23a;
+  --chart-grid: rgba(114, 224, 200, .1);
+  --chart-tooltip-bg: rgba(14, 28, 46, .94);
+  --chart-tooltip-shadow: 0 2px 8px rgba(2, 8, 16, .4);
+  --chart-scroll-thumb: rgba(114, 224, 200, .4);
+  --chart-scroll-thumb-hover: rgba(114, 224, 200, .6);
+  --available-ink: #5fd39a;
+  --drag-handle-ink: #5f7688;
+  --profile-accent: #72e0c8;
+}
+
+/* ===== 纯黑主题（AMOLED）=====
+   只改底色为纯黑；其他颜色全部参照白天（品牌青 / 语义色 / 基色族 / 槽位 token
+   均直接沿用 :root 白天值，黑夜块已不再作用于 black）。
+   ① 表面族覆写为纯黑系：画布 #000，卡片 #0a0a0a，弹层 #101010；
+   ② 文字保留亮灰阶（黑底可读，主文字白 / 副文字灰）；
+   ③ 个别白天取值在黑底上过暗的文字槽位，提亮为同色相亮色。 */
+html[data-theme="black"] {
+  /* ===== 底色（表面族）→ 纯黑 ===== */
+  --canvas: #000000;
+  --surface: #0a0a0a;
+  --surface-soft: rgba(255, 255, 255, .05);
+  --shadow: 0 10px 30px rgba(0, 0, 0, .65);
+  --shadow-soft: 0 2px 10px rgba(0, 0, 0, .5);
+  --loading-mask: rgba(0, 0, 0, .72);
+  --chrome-popup-bg: #101010;
+  --login-bg: radial-gradient(circle at 15% 20%, rgba(15, 159, 154, .16), transparent 22rem), linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
+  --chrome-bg: linear-gradient(180deg, #000000 0%, #050505 100%);
+  --chrome-bg-soft: rgba(255, 255, 255, .03);
+  --chrome-shadow: 5px 0 18px rgba(0, 0, 0, .55);
+  --header-bg: rgba(0, 0, 0, .94);
+  --header-shadow: 0 1px 18px rgba(0, 0, 0, .6);
+  --viewer-overlay-bg: rgba(0, 0, 0, .94);
+  --layout-mask: rgba(0, 0, 0, .72);
+  --mobile-card-bg: #0a0a0a;
+
+  /* EP 基础表面变量 → 纯黑（文字/语义/线条等 EP 变量回落到白天/EP 默认浅色体系） */
+  --el-bg-color: #0a0a0a !important;
+  --el-bg-color-page: #000000 !important;
+  --el-bg-color-overlay: #101010 !important;
+  --el-fill-color-blank: #0a0a0a !important;
+  --el-mask-color: rgba(0, 0, 0, .72) !important;
+  --el-box-shadow: 0 10px 30px rgba(0, 0, 0, .7) !important;
+  --el-box-shadow-light: 0 4px 14px rgba(0, 0, 0, .55) !important;
+
+  /* ===== 中性线条/边框 → 黑底暗线（白天为浅灰线；黑底上改暗灰保持同一视觉层级，
+       与顶部 tab / 侧边栏的暗色 chrome 协调）===== */
+  --line: rgba(255, 255, 255, .14);
+  --line-strong: rgba(255, 255, 255, .28);
+  --line-faint: rgba(255, 255, 255, .08);
+  --chrome-line: rgba(255, 255, 255, .12);
+  --thumb-line: rgba(255, 255, 255, .16);
+  --detail-line: rgba(255, 255, 255, .12);
+  --preview-line: rgba(255, 255, 255, .16);
+  --gray-line: rgba(255, 255, 255, .32);
+  --search-box-line-hover: rgba(255, 255, 255, .28);
+  --el-border-color: rgba(255, 255, 255, .18) !important;
+  --el-border-color-light: rgba(255, 255, 255, .13) !important;
+  --el-border-color-lighter: rgba(255, 255, 255, .09) !important;
+
+  /* ===== 中性填充 / chip → 深色半透明（白天为浅灰实底；黑底上改深底，色相不变）===== */
+  --chip-bg: rgba(255, 255, 255, .07);
+  --chip-bg-soft: rgba(255, 255, 255, .1);
+  --chip-bg-soft-strong: rgba(255, 255, 255, .16);
+  --chip-bg-hover: rgba(255, 255, 255, .09);
+  --chip-bg-active: rgba(255, 255, 255, .13);
+  --chip-line-soft: rgba(255, 255, 255, .14);
+  --chip-line: rgba(255, 255, 255, .22);
+  --tint: rgba(255, 255, 255, .05);
+  --tint-strong: rgba(255, 255, 255, .09);
+  --el-fill-color: rgba(255, 255, 255, .07) !important;
+  --el-fill-color-light: rgba(255, 255, 255, .05) !important;
+  --el-fill-color-lighter: rgba(255, 255, 255, .03) !important;
+
+  /* ===== 品牌 tint 胶囊 → 暗青底（白天为浅薄荷实底；文字改亮青，保持白天色相）===== */
+  --teal-tint-bg: linear-gradient(135deg, rgba(15, 159, 154, .14) 0%, rgba(15, 159, 154, .06) 100%);
+  --teal-tint-bg-strong: linear-gradient(135deg, rgba(15, 159, 154, .22) 0%, rgba(15, 159, 154, .12) 100%);
+  --teal-tint-border: rgba(15, 159, 154, .28);
+  --teal-tint-border-strong: rgba(15, 159, 154, .45);
+  --teal-tint-text: #4dd0c4;
+  --teal-tint-text-strong: #72e0c8;
+  --teal-tint-chip: rgba(255, 255, 255, .08);
+  --teal-tint-sweep: rgba(255, 255, 255, .08);
+
+  /* ===== 语义浅色阶 → 白天色相的半透明深底（EP 标签/浅按钮/toast 底色，
+       文字仍取白天语义色）===== */
+  --el-color-primary-light-8: rgba(15, 159, 154, .18) !important;
+  --el-color-primary-light-9: rgba(15, 159, 154, .1) !important;
+  --el-color-success-light-8: rgba(103, 194, 58, .18) !important;
+  --el-color-success-light-9: rgba(103, 194, 58, .1) !important;
+  --el-color-warning-light-8: rgba(230, 162, 60, .18) !important;
+  --el-color-warning-light-9: rgba(230, 162, 60, .1) !important;
+  --el-color-danger-light-8: rgba(245, 108, 108, .18) !important;
+  --el-color-danger-light-9: rgba(245, 108, 108, .1) !important;
+  --el-color-error-light-8: rgba(245, 108, 108, .18) !important;
+  --el-color-error-light-9: rgba(245, 108, 108, .1) !important;
+  --el-color-info-light-8: rgba(144, 147, 153, .18) !important;
+  --el-color-info-light-9: rgba(144, 147, 153, .1) !important;
+  --danger-tint: rgba(245, 108, 108, .15);
+  --history-hover-bg: rgba(15, 159, 154, .12);
+  --spider-highlight-bg: rgba(230, 162, 60, .14);
+  --ctx-danger-bg: rgba(245, 108, 108, .14);
+
+  /* ===== 滚动条 → 暗灰（白天为浅色滚动条）===== */
+  --scroll-thumb: rgba(255, 255, 255, .32);
+  --scroll-thumb-hover: rgba(255, 255, 255, .5);
+  --scroll-track: rgba(255, 255, 255, .05);
+  --scroll-thumb-2: rgba(255, 255, 255, .38);
+  --scroll-thumb-2-hover: rgba(255, 255, 255, .58);
+
+  /* ===== 文字 → 亮灰阶（黑底可读：主文字白 / 副文字灰）===== */
+  --ink-950: #fafafa;
+  --ink-900: #d4d4d4;
+  --ink-700: #a3a3a3;
+  --ink-500: #737373;
+  --chrome-text: #d4d4d4;
+  --chrome-text-strong: #fafafa;
+  --chrome-muted: #a3a3a3;
+  --el-text-color-primary: #fafafa !important;
+  --el-text-color-regular: #d4d4d4 !important;
+  --el-text-color-secondary: #a3a3a3 !important;
+  --el-text-color-placeholder: #737373 !important;
+  --el-menu-text-color: #d4d4d4 !important;
+
+  /* ===== 白天取值在黑底上过暗的文字槽位 → 同色相提亮（白天/黑夜不受影响）===== */
+  --detail-title-ink: #e8f4f2;
+  --detail-url-ink: #72e0c8;
+  --detail-meta-ink: #9db4c0;
+  --permission-parent-ink: #e8f4f2;
+  --permission-child-ink: #cfe0e6;
 }

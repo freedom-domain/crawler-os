@@ -13,8 +13,6 @@
           :unique-opened="true"
           router
           background-color="transparent"
-          text-color="#b7c9d9"
-          active-text-color="#ffffff"
         >
           <MenuNode :item="{ path: '/dashboard', name: 'Dashboard', icon: 'odometer' }" />
 
@@ -58,6 +56,19 @@
             </template>
           </el-tab-pane>
         </el-tabs>
+        <el-dropdown trigger="click" class="theme-switch" @command="onThemeCommand">
+          <button type="button" class="theme-btn" :title="themeModeTitle">
+            <el-icon :size="18"><component :is="themeIcon" /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="default"><el-icon class="theme-item-icon"><Monitor /></el-icon>默认 · 跟随系统<span v-if="themeStore.mode === 'default'" class="theme-item-on">✓</span></el-dropdown-item>
+              <el-dropdown-item command="light"><el-icon class="theme-item-icon"><Sunny /></el-icon>白天<span v-if="themeStore.mode === 'light'" class="theme-item-on">✓</span></el-dropdown-item>
+              <el-dropdown-item command="dark"><el-icon class="theme-item-icon"><Moon /></el-icon>黑夜<span v-if="themeStore.mode === 'dark'" class="theme-item-on">✓</span></el-dropdown-item>
+              <el-dropdown-item command="black"><el-icon class="theme-item-icon"><MoonNight /></el-icon>纯黑<span v-if="themeStore.mode === 'black'" class="theme-item-on">✓</span></el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <div class="user-info">
           <el-dropdown @command="handleCommand">
             <span class="user-name">
@@ -103,15 +114,26 @@
 import { ref, computed, onMounted, onBeforeUnmount, defineComponent, h, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { useThemeStore } from '@/stores/theme'
+import type { ThemeMode } from '@/utils/theme'
 import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon, Monitor, Sunny, Moon, MoonNight } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const themeStore = useThemeStore()
+// 主题切换：默认（跟随系统）/ 白天 / 黑夜 / 纯黑
+const themeIcon = computed(() => (themeStore.mode === 'default' ? Monitor : themeStore.mode === 'light' ? Sunny : themeStore.mode === 'black' ? MoonNight : Moon))
+const themeModeTitle = computed(() =>
+  themeStore.mode === 'default'
+    ? `主题：默认（当前跟随系统 · ${themeStore.theme === 'dark' ? '黑夜' : '白天'}）`
+    : themeStore.mode === 'light' ? '主题：白天' : themeStore.mode === 'black' ? '主题：纯黑' : '主题：黑夜'
+)
+const onThemeCommand = (mode: ThemeMode) => themeStore.choose(mode)
 const collapsed = ref(false)
 const menuList = ref<any[]>([])
 const pwdDialogVisible = ref(false)
@@ -284,7 +306,9 @@ const MenuNode = defineComponent({
           default: () => item.children.map((c: any) => h(MenuNode, { item: c, key: c.id }))
         })
       }
-      return h(ElMenuItem, { index: item.path }, {
+      // 菜单路径无对应前端路由时禁用，避免"点了没反应"
+      const resolvable = typeof item.path === 'string' && item.path.length > 0 && router.resolve(item.path).matched.length > 0
+      return h(ElMenuItem, { index: item.path, disabled: !resolvable }, {
         default: () => [icon, h('span', item.name)]
       })
     }
@@ -384,16 +408,16 @@ const handleCommand = async (cmd: string) => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: linear-gradient(180deg, #142a4c 0%, #193556 100%);
+  background: var(--chrome-bg);
   transition: width 0.25s ease;
   overflow: hidden;
-  box-shadow: 5px 0 18px rgba(23, 43, 77, .08);
+  box-shadow: var(--chrome-shadow);
 }
 .drawer-mask {
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background: rgba(16, 42, 67, .45);
+  background: var(--layout-mask);
 }
 .logo {
   height: 72px;
@@ -401,11 +425,11 @@ const handleCommand = async (cmd: string) => {
   align-items: center;
   gap: 11px;
   padding: 0 22px;
-  color: #fff;
+  color: var(--chrome-text-strong);
   font-size: 19px;
   font-weight: 800;
   letter-spacing: .5px;
-  background: rgba(8, 25, 52, .32);
+  background: var(--chrome-bg-soft);
 }
 .logo-mark {
   width: 30px;
@@ -414,7 +438,7 @@ const handleCommand = async (cmd: string) => {
   flex: none;
   border-radius: 9px;
 }
-.logo-copy span { color: #72e0c8; }
+.logo-copy span { color: var(--chrome-icon); }
 .menu-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -442,11 +466,11 @@ const handleCommand = async (cmd: string) => {
   margin: 0;
   flex-shrink: 0;
 }
-:deep(.el-menu-item:hover), :deep(.el-sub-menu__title:hover) { background: rgba(114, 224, 200, .09); }
-:deep(.el-menu-item.is-active) { background: #0f9f9a; box-shadow: none; }
-:deep(.el-sub-menu.is-active > .el-sub-menu__title) { color: #fff; background: rgba(15, 159, 154, .32); }
-:deep(.el-menu--collapse .el-sub-menu.is-active > .el-sub-menu__title) { background: #0f9f9a; box-shadow: none; }
-:deep(.el-menu-item .el-icon), :deep(.el-sub-menu .el-icon) { color: #72e0c8; }
+:deep(.el-menu-item:hover), :deep(.el-sub-menu__title:hover) { background: var(--chrome-hover); }
+:deep(.el-menu-item.is-active) { background: var(--teal); box-shadow: 0 4px 14px rgba(var(--el-color-primary-rgb), .3); }
+:deep(.el-sub-menu.is-active > .el-sub-menu__title) { color: #fff; background: rgba(var(--el-color-primary-rgb), .32); }
+:deep(.el-menu--collapse .el-sub-menu.is-active > .el-sub-menu__title) { background: var(--teal); box-shadow: none; }
+:deep(.el-menu-item .el-icon), :deep(.el-sub-menu .el-icon) { color: var(--chrome-icon); }
 .el-menu--collapse { padding: 14px 10px; }
 .aside.is-collapsed :deep(.el-menu) { width: 72px; }
 .aside.is-collapsed .logo { justify-content: center; padding: 0; }
@@ -455,37 +479,56 @@ const handleCommand = async (cmd: string) => {
 :deep(.app-tabs .el-tabs__nav-wrap) { overflow-x: auto; overflow-y: hidden; }
 :deep(.app-tabs .el-tabs__nav-wrap::after) { display: none; }
 :deep(.app-tabs .el-tabs__nav) { gap: 7px; border: 0; min-width: max-content; }
-:deep(.app-tabs .el-tabs__item) { position: relative; height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: #718096; background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
-:deep(.app-tabs .el-tabs__item.is-active) { color: #087f7d; border-color: #d5efeb; background: linear-gradient(135deg, #f0fbf8, #e5f7f3); box-shadow: 0 2px 7px rgba(15, 129, 126, .08); font-weight: 700; }
-:deep(.app-tabs .el-tabs__item:hover) { color: #0f817e; background: #f1f7f7; }
+:deep(.app-tabs .el-tabs__item) { position: relative; height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
+:deep(.app-tabs .el-tabs__item.is-active) { color: var(--tab-active-color); border-color: var(--tab-active-border); background: var(--tab-active-bg); box-shadow: 0 0 14px var(--tab-active-glow); font-weight: 700; }
+:deep(.app-tabs .el-tabs__item:hover) { color: var(--chrome-text-strong); background: var(--chrome-hover); }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-closable:hover) { padding-left: 14px; padding-right: 14px; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-active.is-closable) { padding-left: 14px; padding-right: 14px; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item) { transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
 :deep(.app-tabs .el-tabs__active-bar) { display: none; }
 .tab-label { display: inline-flex; align-items: center; gap: 7px; cursor: grab; user-select: none; }
 .tab-label:active { cursor: grabbing; }
-.tab-close { width: 17px; height: 17px; padding: 0; border: 0; border-radius: 50%; color: #9aabb8; background: transparent; font: inherit; font-size: 15px; line-height: 15px; cursor: pointer; transition: color .18s ease, background .18s ease; }
+.tab-close { width: 17px; height: 17px; padding: 0; border: 0; border-radius: 50%; color: var(--chrome-muted); background: transparent; font: inherit; font-size: 15px; line-height: 15px; cursor: pointer; transition: color .18s ease, background .18s ease; }
 .tab-close:hover { color: #fff; background: #e87968; }
-.tab-context-menu { position: fixed; z-index: 3000; display: flex; flex-direction: column; min-width: 118px; padding: 5px; border: 1px solid #dfe7ee; border-radius: 8px; background: #fff; box-shadow: 0 10px 24px rgba(23, 43, 77, .16); }
-.tab-context-menu button { padding: 8px 12px; border: 0; border-radius: 5px; color: #486581; background: transparent; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
-.tab-context-menu button:hover { color: #0f817e; background: #eaf7f5; }
+.tab-context-menu { position: fixed; z-index: 3000; display: flex; flex-direction: column; min-width: 118px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); }
+.tab-context-menu button { padding: 8px 12px; border: 0; border-radius: 5px; color: var(--ink-700); background: transparent; text-align: left; font: inherit; font-size: 12px; cursor: pointer; }
+.tab-context-menu button:hover { color: var(--teal-dark); background: var(--tint); }
 .header {
   height: 72px;
-  background: rgba(255, 255, 255, .94);
+  background: var(--header-bg);
   display: flex;
   align-items: center;
-  border-bottom: 1px solid #e6e9ef;
-  box-shadow: 0 1px 14px rgba(23, 43, 77, .06);
+  border-bottom: 1px solid var(--chrome-line);
+  box-shadow: var(--header-shadow);
   backdrop-filter: blur(12px);
 }
-.collapse-btn { flex: 0 0 auto; font-size: 20px; cursor: pointer; margin: 0 22px; color: #486581; }
+.collapse-btn { flex: 0 0 auto; font-size: 20px; cursor: pointer; margin: 0 22px; color: var(--chrome-muted); transition: color .18s ease; }
+.collapse-btn:hover { color: var(--chrome-icon); }
+.theme-switch { flex: 0 0 auto; margin-right: 16px; }
+.theme-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 10px;
+  color: var(--chrome-icon);
+  background: var(--chrome-hover);
+  cursor: pointer;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.theme-btn:hover { border-color: var(--chrome-icon); box-shadow: 0 0 10px var(--tab-active-glow); }
+.theme-item-icon { margin-right: 6px; vertical-align: -2px; }
+.theme-item-on { margin-left: 10px; font-weight: 700; color: var(--teal); }
 .user-info { flex: 0 0 auto; margin-left: 0; margin-right: 24px; }
-.user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: #486581; }
+.user-name { cursor: pointer; display: flex; align-items: center; gap: 9px; color: var(--chrome-text); }
 :deep(.user-info .el-tooltip__trigger:hover) { outline: none; border-color: transparent; box-shadow: none; }
-:deep(.user-info .el-tooltip__trigger:focus-visible) { outline: 2px solid #0f9f9a; outline-offset: 3px; }
-.user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: #087f7d; background: #d9f5ef; }
-.user-label { color: #243b53; font-size: 14px; font-weight: 600; }
+:deep(.user-info .el-tooltip__trigger:focus-visible) { outline: 2px solid var(--teal); outline-offset: 3px; }
+.user-avatar { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--chrome-icon); background: var(--chrome-hover); box-shadow: 0 0 12px var(--tab-active-glow); }
+.user-label { color: var(--chrome-text-strong); font-size: 14px; font-weight: 600; }
 :deep(.el-main) { flex: 1 1 auto; min-height: 0; padding: 32px; background: transparent; overflow: auto; }
+:deep(.el-main)::-webkit-scrollbar-thumb { background: var(--scroll-thumb); background-clip: padding-box; }
+:deep(.el-main)::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: padding-box; }
 @media (max-width: 1100px) {
   .layout { min-width: 0; }
   :deep(.el-main) { padding: 20px; }

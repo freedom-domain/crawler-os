@@ -102,7 +102,7 @@ defineEmits<{
   flex-wrap: wrap;
   gap: 14px;
   padding: 10px 0 4px;
-  border-top: 1px solid #eef3f4;
+  border-top: 1px solid var(--line-faint);
 }
 
 .cursor-total {
@@ -144,7 +144,7 @@ defineEmits<{
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: #eef5f4;
-  border: 1px solid #e2ecec;
+  background: var(--chip-bg-hover);
+  border: 1px solid var(--chip-line-soft);
 }
 </style>

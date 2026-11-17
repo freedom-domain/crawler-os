@@ -350,9 +350,9 @@ onMounted(loadData)
 .category-panel {
   width: 100%;
   height: 100%;
-  background: #fff;
+  background: var(--surface);
   border-radius: 14px;
-  border: 1px solid #dfe9eb;
+  border: 1px solid var(--line);
   box-shadow: 0 8px 24px rgba(23, 43, 77, .06);
   display: flex;
   flex-direction: column;
@@ -378,8 +378,8 @@ onMounted(loadData)
   align-items: center;
   min-height: 58px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e5eef0;
-  background: linear-gradient(135deg, #f7fbfb, #f2f8f8);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
 }
 
 .panel-title {
@@ -396,7 +396,7 @@ onMounted(loadData)
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid #edf2f4;
+  border-bottom: 1px solid var(--line);
 }
 
 .search-box :deep(.el-input) {
@@ -440,8 +440,8 @@ onMounted(loadData)
   min-height: 42px;
   padding: 0 12px;
   color: var(--ink-500);
-  background: #fff;
-  border-bottom: 1px solid #e9eff1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
   font-size: 12px;
   font-weight: 600;
 }
@@ -454,7 +454,7 @@ onMounted(loadData)
 }
 
 .child-table-header > :last-child {
-  background: #fff;
+  background: var(--surface);
   text-align: center;
 }
 
@@ -471,7 +471,7 @@ onMounted(loadData)
 }
 
 .child-row:hover > :last-child {
-  background: #f2f9f7;
+  background: var(--tint);
 }
 
 .child-row {
@@ -479,20 +479,20 @@ onMounted(loadData)
   padding: 8px 12px;
   margin-top: 8px;
   background: var(--surface-soft);
-  border: 1px solid #edf2f4;
+  border: 1px solid var(--line);
   border-radius: 10px;
   transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
 
 .child-row:hover {
-  background: #f2f9f7;
-  border-color: #bfe5de;
-  box-shadow: 0 2px 8px rgba(16, 110, 102, .05);
+  background: var(--tint);
+  border-color: var(--line-strong);
+  box-shadow: 0 2px 8px rgba(var(--dict-shadow-rgb), .05);
 }
 
 .drag-handle {
   cursor: grab;
-  color: #a8bcc4;
+  color: var(--drag-handle-ink);
   font-size: 16px;
   text-align: center;
   user-select: none;
@@ -507,7 +507,7 @@ onMounted(loadData)
   height: 24px;
   line-height: 24px;
   text-align: center;
-  background: #e8f0f2;
+  background: var(--line);
   border-radius: 4px;
   font-size: 12px;
   color: var(--ink-700);

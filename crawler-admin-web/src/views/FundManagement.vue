@@ -839,14 +839,14 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 }
 .page-heading h1 {
   margin: 0;
-  color: #243345;
+  color: var(--ink-950);
   font-size: 22px;
 }
 .page-heading p,
 .catalog-summary,
 .dialog-description,
 .history-summary {
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 13px;
 }
 .page-heading p {
@@ -870,17 +870,17 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 }
 .action-more-btn {
   font-weight: 700;
-  color: #0f9f9a;
+  color: var(--teal);
 }
 .action-more-btn:hover {
-  color: #0c8a85;
+  color: var(--teal-hover);
 }
 .refresh-schedule-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 4px 0 16px;
-  color: #526174;
+  color: var(--ink-700);
   font-size: 13px;
 }
 .refresh-schedule-select {
@@ -900,7 +900,7 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 }
 .watchlist-count {
   margin-left: auto;
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 13px;
   white-space: nowrap;
 }
@@ -912,13 +912,13 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
   margin: 18px 0 0;
   padding: 10px 12px;
   border-radius: 6px;
-  background: #f4f7fa;
-  color: #8792a2;
+  background: var(--surface-soft);
+  color: var(--ink-500);
   font-size: 12px;
   line-height: 1.7;
 }
 .detail-as-of {
-  color: #78889a;
+  color: var(--fund-asof-ink);
   font-size: 12px;
 }
 @media (max-width: 650px) {
@@ -970,10 +970,10 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 }
 .fund-detail-dialog .el-dialog__header {
   padding-bottom: 14px;
-  border-bottom: 1px solid #e8edf2;
+  border-bottom: 1px solid var(--line);
 }
 .fund-detail-dialog .el-dialog__title {
-  color: #203247;
+  color: var(--ink-950);
   font-size: 19px;
   font-weight: 700;
 }
@@ -985,15 +985,15 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 }
 .fund-detail-dialog .fund-detail-descriptions .el-descriptions__label {
   min-width: 105px;
-  background: #f1f5f8 !important;
-  color: #526579 !important;
+  background: var(--surface-soft) !important;
+  color: var(--ink-700) !important;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
 .fund-detail-dialog .fund-detail-descriptions .el-descriptions__content {
-  background: #fff !important;
-  color: #26384b !important;
+  background: var(--surface) !important;
+  color: var(--ink-900) !important;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.65;
@@ -1004,7 +1004,7 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
   white-space: nowrap;
 }
 .fund-detail-dialog .fund-detail-narrative .el-descriptions__content {
-  color: #34495e !important;
+  color: var(--ink-900) !important;
   line-height: 1.85;
 }
 @media (max-width: 650px) {

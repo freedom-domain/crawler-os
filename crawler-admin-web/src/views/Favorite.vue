@@ -318,12 +318,12 @@ onMounted(() => {
 
 <style scoped>
 .pagination { margin-top: 18px; display: flex; justify-content: center; }
-.action-more-btn { font-weight: 700; color: #0f9f9a; }
-.action-more-btn:hover { color: #0c8a85; }
+.action-more-btn { font-weight: 700; color: var(--teal); }
+.action-more-btn:hover { color: var(--teal-hover); }
 .title-link { color: var(--teal); text-decoration: none; }
 .title-link:hover { color: var(--teal-dark); text-decoration: underline; }
 .source-url { color: var(--teal); text-decoration: none; }
 .source-url:hover { color: var(--teal-dark); text-decoration: underline; }
 .tag { margin-right: 6px; margin-bottom: 4px; cursor: pointer; }
-.tag-empty { color: #0f9f9a; cursor: pointer; }
+.tag-empty { color: var(--teal); cursor: pointer; }
 </style>

@@ -1116,7 +1116,7 @@ onMounted(() => {
 .summary-row :deep(.el-card__body) { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
 .summary-row span { color: var(--ink-700); font-size: 13px; }
 .summary-row strong { color: var(--ink-950); font-size: 21px; }
-.summary-row .available-count { color: #16835f; }
+.summary-row .available-count { color: var(--available-ink); }
 .available-counts { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .available-counts > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
 .available-counts span { font-size: 12px; }

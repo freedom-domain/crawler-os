@@ -85,7 +85,7 @@ defineEmits<{
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: #172b4d;
+  color: var(--ink-950);
   font-size: 20px;
   font-weight: 600;
 }
@@ -128,7 +128,7 @@ defineEmits<{
   margin-right: 28px;
 }
 .preview-content-controls :deep(.el-switch) {
-  --el-switch-on-color: #0f9f9a;
+  --el-switch-on-color: var(--teal);
   --el-switch-off-color: #c0c4cc;
   height: 20px;
   font-size: 11px;
@@ -149,10 +149,10 @@ defineEmits<{
 .preview-container {
   max-height: 70vh;
   overflow-y: auto;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--preview-line);
   border-radius: 4px;
   padding: 16px;
-  background: #fff;
+  background: var(--preview-bg);
 }
 .preview-html {
   display: block;
@@ -160,7 +160,7 @@ defineEmits<{
   height: 70vh;
   padding: 0;
   line-height: 1.8;
-  color: #486581;
+  color: var(--preview-ink);
   word-break: break-word;
 }
 .preview-html img { max-width: 100%; height: auto; }
@@ -173,7 +173,7 @@ defineEmits<{
 }
 .detail-text {
   line-height: 1.8;
-  color: #486581;
+  color: var(--preview-ink);
 }
 
 /* 720 断点：开关平铺右对齐，关闭 × 留右上角 */

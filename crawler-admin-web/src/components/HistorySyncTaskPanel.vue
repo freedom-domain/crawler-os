@@ -496,18 +496,18 @@ defineExpose({
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 16px;
-  color: #68778a;
+  color: var(--ink-700);
   font-size: 13px;
 }
 .success-count {
-  color: #16845b;
+  color: var(--success-ink-deep);
 }
 .failed-count {
-  color: #c45656;
+  color: var(--sync-error-ink);
 }
 .task-message {
   margin: 0;
-  color: #c45656;
+  color: var(--sync-error-ink);
   font-size: 13px;
 }
 .task-pagination {

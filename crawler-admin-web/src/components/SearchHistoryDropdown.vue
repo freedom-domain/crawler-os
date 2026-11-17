@@ -179,7 +179,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   border: 1px solid var(--teal-dark);
   border-top: 0;
   border-radius: 0 0 24px 24px;
-  background: #fff;
+  background: var(--chrome-popup-bg);
   box-shadow: 0 12px 32px rgba(23, 43, 77, 0.14), 0 2px 6px rgba(23, 43, 77, 0.06);
   transform-origin: top center;
   overflow: hidden;
@@ -207,7 +207,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px 9px;
-  border-bottom: 1px solid #f1f5f5;
+  border-bottom: 1px solid var(--line-faint);
 }
 
 .history-title {
@@ -241,7 +241,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-clear:hover {
-  background: #f1f5f5;
+  background: var(--chip-bg);
   color: var(--coral);
 }
 
@@ -258,7 +258,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-list::-webkit-scrollbar-thumb {
-  background: #c8d6dd;
+  background: var(--gray-line);
   border-radius: 3px;
 }
 
@@ -304,7 +304,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-remove:hover {
-  background: #f1f5f5;
+  background: var(--chip-bg);
   color: var(--coral);
 }
 
@@ -316,7 +316,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #f1f5f5;
+  background: var(--chip-bg);
   color: var(--ink-700);
   transition: background .15s ease, color .15s ease, transform .15s ease;
 }
@@ -342,11 +342,11 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-item:hover {
-  background: #f3faf9;
+  background: var(--tint);
 }
 
 .history-item:hover .history-icon {
-  background: #d9f5ef;
+  background: var(--history-hover-bg);
   color: var(--teal-dark);
 }
 
@@ -365,6 +365,6 @@ onUnmounted(() => document.removeEventListener('pointerdown', handleDocumentPoin
 }
 
 .history-empty-icon {
-  color: #c8d6dd;
+  color: var(--gray-line);
 }
 </style>

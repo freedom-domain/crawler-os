@@ -445,7 +445,7 @@ onUnmounted(() => {
 .pagination :deep(.el-pagination) { margin-top: 0; }
 .preview-body { min-height: 240px; display: flex; align-items: center; justify-content: center; }
 .preview-image { display: block; width: 100%; height: min(62vh, 620px); }
-.preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #edf0f4; color: #5e6c84; font-size: 13px; }
+.preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-700); font-size: 13px; }
 
 /* 预览弹窗样式已抽到 ContentPreviewDialog 组件 */
 </style>

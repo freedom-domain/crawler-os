@@ -60,7 +60,7 @@ defineEmits<{
 <style scoped>
 .result-item {
   padding: 22px 0;
-  border-bottom: 1px solid #f1f5f5;
+  border-bottom: 1px solid var(--line-faint);
   transition: opacity .24s ease, transform .24s ease,
     padding .28s ease, max-height .28s ease, border-bottom-width .2s ease;
 }
@@ -121,10 +121,10 @@ defineEmits<{
   font-family: inherit;
   margin-left: 10px;
   padding: 3px 8px 3px 6px;
-  border: 1px solid #b7e7dc;
+  border: 1px solid var(--teal-tint-border);
   border-radius: 999px;
-  background: linear-gradient(135deg, #f2fcfa 0%, #e4f5f2 100%);
-  color: #087f70;
+  background: var(--teal-tint-bg);
+  color: var(--teal-tint-text);
   font-size: 12px;
   font-weight: 600;
   line-height: inherit;
@@ -147,7 +147,7 @@ defineEmits<{
   background: linear-gradient(
     110deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.55) 50%,
+    var(--teal-tint-sweep) 50%,
     transparent 100%
   );
   transform: skewX(-20deg);
@@ -156,11 +156,11 @@ defineEmits<{
 }
 
 .result-image-count:hover {
-  background: linear-gradient(135deg, #d9f3ed 0%, #c9ece5 100%);
-  border-color: #8ed6c8;
-  box-shadow: 0 4px 12px rgba(15, 129, 124, .2), 0 1px 2px rgba(15, 129, 124, .08);
+  background: var(--teal-tint-bg-strong);
+  border-color: var(--teal-tint-border-strong);
+  box-shadow: 0 4px 12px rgba(var(--teal-shadow-rgb), .2), 0 1px 2px rgba(var(--teal-shadow-rgb), .08);
   transform: translateY(-1px);
-  color: #075e55;
+  color: var(--teal-tint-text-strong);
 }
 
 .result-image-count:hover::after {
@@ -169,11 +169,11 @@ defineEmits<{
 
 .result-image-count:active {
   transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(15, 129, 124, .18);
+  box-shadow: 0 2px 6px rgba(var(--teal-shadow-rgb), .18);
 }
 
 .result-image-count:focus-visible {
-  outline: 2px solid #087f70;
+  outline: 2px solid var(--teal-tint-text);
   outline-offset: 2px;
 }
 
@@ -184,9 +184,9 @@ defineEmits<{
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .65);
-  box-shadow: inset 0 0 0 1px rgba(8, 127, 112, .12);
-  color: #0a8074;
+  background: var(--teal-tint-chip);
+  box-shadow: inset 0 0 0 1px rgba(var(--teal-shadow-deep-rgb), .12);
+  color: var(--teal-tint-text);
   flex-shrink: 0;
 }
 
@@ -198,18 +198,18 @@ defineEmits<{
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: linear-gradient(180deg, #0a8577 0%, #087f70 100%);
-  color: #fff;
+  background: var(--count-badge-bg);
+  color: var(--on-teal);
   font-size: 11.5px;
   font-weight: 800;
   letter-spacing: .3px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 1px 2px rgba(7, 94, 85, .22);
+  box-shadow: 0 1px 2px rgba(var(--teal-shadow-ink-rgb), .22);
 }
 
 .result-image-count__label {
-  color: #0a6a60;
+  color: var(--teal-tint-text);
   font-weight: 600;
   letter-spacing: .2px;
 }
@@ -217,7 +217,7 @@ defineEmits<{
 .result-image-count__chevron {
   display: inline-flex;
   align-items: center;
-  color: #0a8074;
+  color: var(--teal-tint-text);
   opacity: .55;
   margin-left: -2px;
   transition: transform .2s ease, opacity .2s ease;
@@ -230,7 +230,7 @@ defineEmits<{
 
 .result-title:hover {
   color: var(--teal-dark);
-  text-shadow: 0 1px 0 rgba(15, 159, 154, 0.08);
+  text-shadow: 0 1px 0 rgba(var(--el-color-primary-rgb), 0.08);
 }
 
 .result-title:active {
@@ -251,7 +251,7 @@ defineEmits<{
 }
 
 .result-content {
-  color: #5e6c84;
+  color: var(--ink-700);
   font-size: 14px;
   line-height: 1.7;
   margin: 0;
@@ -292,9 +292,9 @@ defineEmits<{
   width: 72px;
   height: 72px;
   object-fit: contain;
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
-  border: 1px solid #e3e8ee;
+  border: 1px solid var(--line);
   cursor: pointer;
   display: block;
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
@@ -303,7 +303,7 @@ defineEmits<{
 .result-thumb:hover {
   transform: translateY(-2px);
   border-color: var(--teal);
-  box-shadow: 0 6px 14px rgba(15, 159, 154, .14);
+  box-shadow: 0 6px 14px rgba(var(--el-color-primary-rgb), .14);
 }
 
 .result-tags {
@@ -327,7 +327,7 @@ defineEmits<{
 }
 
 .meta-tag {
-  background: #eef2f5;
+  background: var(--chip-bg);
   padding: 3px 10px;
   border-radius: 999px;
   color: var(--ink-700);
@@ -340,8 +340,8 @@ defineEmits<{
 }
 
 .group-tag {
-  background: #d9f5ef;
-  color: var(--teal-dark);
+  background: var(--tint-strong);
+  color: var(--teal-tint-text);
 }
 
 .update-time {

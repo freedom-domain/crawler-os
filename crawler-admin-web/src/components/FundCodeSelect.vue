@@ -149,12 +149,12 @@ onMounted(async () => {
 .fund-category {
   float: right;
   margin-left: 12px;
-  color: #8792a2;
+  color: var(--ink-500);
 }
 .empty-message {
   display: block;
   padding: 8px 0;
-  color: #8792a2;
+  color: var(--ink-500);
   text-align: center;
 }
 </style>

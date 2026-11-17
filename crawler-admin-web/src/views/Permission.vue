@@ -333,15 +333,15 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.permission-icon { color: #16a6a3; font-size: 18px; vertical-align: middle; }
-.icon-empty { color: #9fb3c8; font-size: 12px; }
+.permission-icon { color: var(--teal-bright); font-size: 18px; vertical-align: middle; }
+.icon-empty { color: var(--icon-empty-ink); font-size: 12px; }
 .icon-option { display: flex; align-items: center; gap: 8px; }
 :deep(.permission-parent-row td:first-child .cell) {
-  border-left: 3px solid #16a6a3;
-  color: #1f4f5a;
+  border-left: 3px solid var(--teal-bright);
+  color: var(--permission-parent-ink);
   font-weight: 700;
 }
 :deep(.permission-child-row td:first-child .cell) {
-  color: #526779;
+  color: var(--permission-child-ink);
 }
 </style>

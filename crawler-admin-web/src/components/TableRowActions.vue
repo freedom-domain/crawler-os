@@ -49,6 +49,6 @@ const emit = defineEmits<{
 
 <style scoped>
 .table-action-item { display: inline-flex; align-items: center; gap: 8px; }
-.action-more-btn { font-weight: 700; color: #0f9f9a; }
-.action-more-btn:hover { color: #0c8a85; }
+.action-more-btn { font-weight: 700; color: var(--teal); }
+.action-more-btn:hover { color: var(--teal-hover); }
 </style>

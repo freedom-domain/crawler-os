@@ -770,8 +770,8 @@ onUnmounted(() => {
 :deep(.log-fullscreen-dialog .el-dialog__body) { height: calc(100vh - 72px); overflow: auto; }
 .concurrency-settings { min-height: 88px; }
 .concurrency-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.concurrency-setting-row > span { color: #5e6c84; font-weight: 600; }
-.concurrency-hint { margin-top: 14px; color: #8993a4; font-size: 13px; line-height: 1.6; }
+.concurrency-setting-row > span { color: var(--ink-700); font-weight: 600; }
+.concurrency-hint { margin-top: 14px; color: var(--ink-500); font-size: 13px; line-height: 1.6; }
 .refresh-toolbar {
   display: flex;
   align-items: center;
@@ -788,12 +788,12 @@ onUnmounted(() => {
 }
 .auto-refresh-indicator.active {
   background: var(--teal);
-  box-shadow: 0 0 0 3px rgba(15, 159, 154, .2);
+  box-shadow: 0 0 0 3px rgba(var(--el-color-primary-rgb), .2);
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 @keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(15, 159, 154, .2); }
-  50% { box-shadow: 0 0 0 6px rgba(15, 159, 154, .08); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(var(--el-color-primary-rgb), .2); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--el-color-primary-rgb), .08); }
 }
 .refresh-toolbar :deep(.el-switch),
 .refresh-toolbar :deep(.el-switch__label) {
@@ -806,14 +806,14 @@ onUnmounted(() => {
 .task-status-tag { border: 0; font-weight: 600; }
 .task-status-content { display: inline-flex; align-items: center; gap: 7px; }
 .task-status-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
-.task-status-running .task-status-dot { box-shadow: 0 0 0 3px rgb(64 158 255 / 16%); }
-.task-status-running .task-status-dot[data-paused] { background: #e6a23c; animation: paused-pulse 1.6s ease-in-out infinite; }
+.task-status-running .task-status-dot { box-shadow: 0 0 0 3px rgba(var(--status-running-rgb), .16); }
+.task-status-running .task-status-dot[data-paused] { background: var(--status-paused); animation: paused-pulse 1.6s ease-in-out infinite; }
 @keyframes paused-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgb(230 162 60 / 30%); }
-  50% { box-shadow: 0 0 0 6px rgb(230 162 60 / 12%); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(var(--status-paused-rgb), .3); }
+  50% { box-shadow: 0 0 0 6px rgba(var(--status-paused-rgb), .12); }
 }
-.task-status-success .task-status-dot { box-shadow: 0 0 0 3px rgb(103 194 58 / 16%); }
-.task-status-failed .task-status-dot { box-shadow: 0 0 0 3px rgb(245 108 108 / 16%); }
+.task-status-success .task-status-dot { box-shadow: 0 0 0 3px rgba(var(--status-success-rgb), .16); }
+.task-status-failed .task-status-dot { box-shadow: 0 0 0 3px rgba(var(--status-failed-rgb), .16); }
 
 .log-filter {
   display: flex;

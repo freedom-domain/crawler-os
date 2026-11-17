@@ -654,7 +654,7 @@ const runBacktest = async () => {
 .panel-description,
 .fee-note {
   margin: 0;
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -666,12 +666,12 @@ const runBacktest = async () => {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 12px;
 }
 .history-caption {
   margin-bottom: 12px;
-  color: #34495e;
+  color: var(--ink-900);
 }
 .chart-type-tabs {
   height: 38px;
@@ -687,9 +687,9 @@ const runBacktest = async () => {
   height: 266px;
   margin-bottom: 20px;
   padding: 8px 36px 22px 48px;
-  border: 1px solid #e8edf2;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: linear-gradient(180deg, #fbfdfd, #fff);
+  background: linear-gradient(180deg, var(--surface-soft), var(--surface));
 }
 .history-chart svg {
   width: 100%;
@@ -709,12 +709,12 @@ const runBacktest = async () => {
   padding: 5px 8px;
 }
 .chart-grid {
-  stroke: #e8edf2;
+  stroke: var(--chart-grid);
   stroke-dasharray: 4 5;
 }
 .chart-line {
   fill: none;
-  stroke: #0f9f9a;
+  stroke: var(--teal);
   stroke-width: 2.5;
   vector-effect: non-scaling-stroke;
 }
@@ -727,12 +727,12 @@ const runBacktest = async () => {
   vector-effect: non-scaling-stroke;
 }
 .candle-up {
-  fill: #d9534f;
-  stroke: #d9534f;
+  fill: var(--market-up);
+  stroke: var(--market-up);
 }
 .candle-down {
-  fill: #16a085;
-  stroke: #16a085;
+  fill: var(--market-down);
+  stroke: var(--market-down);
 }
 .chart-interaction-area {
   fill: transparent;
@@ -740,7 +740,7 @@ const runBacktest = async () => {
   touch-action: pan-y;
 }
 .chart-crosshair {
-  stroke: #64748b;
+  stroke: var(--chart-crosshair);
   stroke-dasharray: 4 4;
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
@@ -748,7 +748,7 @@ const runBacktest = async () => {
 }
 .chart-hover-dot {
   fill: #fff;
-  stroke: #0f9f9a;
+  stroke: var(--teal);
   stroke-width: 2.5;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
@@ -764,21 +764,21 @@ const runBacktest = async () => {
   gap: 4px 12px;
   max-width: calc(100% - 100px);
   padding: 6px 9px;
-  border: 1px solid #e8edf2;
+  border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 2px 8px rgb(35 52 72 / 8%);
-  color: #586579;
+  background: var(--chart-tooltip-bg);
+  box-shadow: var(--chart-tooltip-shadow);
+  color: var(--ink-700);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .chart-hover-label strong {
-  color: #29384a;
+  color: var(--ink-950);
 }
 .chart-value {
   position: absolute;
   left: 8px;
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 11px;
 }
 .chart-top {
@@ -800,7 +800,7 @@ const runBacktest = async () => {
   left: 48px;
   height: 10px;
   border-radius: 5px;
-  background: #e8edf2;
+  background: var(--chip-bg);
   cursor: grab;
   touch-action: none;
 }
@@ -813,11 +813,11 @@ const runBacktest = async () => {
   height: 100%;
   min-width: 12px;
   border-radius: inherit;
-  background: #8aa6ad;
+  background: var(--chart-scroll-thumb);
 }
 .chart-scrollbar-thumb:hover,
 .chart-scrollbar:active .chart-scrollbar-thumb {
-  background: #607f88;
+  background: var(--chart-scroll-thumb-hover);
 }
 .backtest-summary {
   display: grid;
@@ -831,29 +831,29 @@ const runBacktest = async () => {
   flex-direction: column;
   gap: 6px;
   padding: 12px;
-  border: 1px solid #e8edf2;
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
 .backtest-summary article span,
 .backtest-summary article small {
-  color: #8792a2;
+  color: var(--ink-500);
   font-size: 12px;
 }
 .backtest-summary article strong {
-  color: #26384b;
+  color: var(--ink-950);
   font-size: 16px;
 }
 .backtest-summary article.is-profit strong,
 .is-profit {
-  color: #d84a4a;
+  color: var(--market-up-ink);
 }
 .backtest-summary article.is-loss strong,
 .is-loss {
-  color: #12936f;
+  color: var(--market-down-ink);
 }
 h4 {
   margin: 18px 0 10px;
-  color: #26384b;
+  color: var(--ink-950);
 }
 @media (max-width: 750px) {
   .backtest-summary {

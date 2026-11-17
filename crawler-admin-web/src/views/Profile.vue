@@ -178,11 +178,11 @@ const permGroups = computed(() => {
 
 /* 用户卡片 */
 .profile-card {
-  background: linear-gradient(135deg, #132b47 0%, #1b4965 100%);
+  background: var(--profile-card-bg);
   border-radius: 16px;
   padding: 32px;
   color: #fff;
-  box-shadow: 0 14px 34px rgba(16, 36, 61, 0.18);
+  box-shadow: var(--profile-card-shadow);
 }
 
 .avatar-section {
@@ -195,11 +195,11 @@ const permGroups = computed(() => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(114, 224, 200, 0.15);
-  border: 2px solid rgba(114, 224, 200, 0.3);
+  background: rgba(var(--neon-rgb), 0.15);
+  border: 2px solid rgba(var(--neon-rgb), 0.3);
   display: grid;
   place-items: center;
-  color: #72e0c8;
+  color: var(--neon);
 }
 
 .user-meta {
@@ -231,7 +231,7 @@ const permGroups = computed(() => {
 .card-title {
   font-size: 16px;
   font-weight: 600;
-  color: #102a43;
+  color: var(--detail-title-ink);
 }
 
 .info-grid {
@@ -245,9 +245,9 @@ const permGroups = computed(() => {
   flex-direction: column;
   gap: 8px;
   padding: 14px;
-  border: 1px solid #e7eff0;
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #f8fbfb;
+  background: var(--surface-soft);
 }
 
 .info-label {
@@ -259,7 +259,7 @@ const permGroups = computed(() => {
 }
 
 .info-label .el-icon {
-  color: #109f9a;
+  color: var(--profile-accent);
 }
 
 .info-value {
@@ -287,11 +287,11 @@ const permGroups = computed(() => {
   gap: 8px;
   padding: 10px 16px;
   background: var(--surface-soft);
-  border-bottom: 1px solid #edf2f4;
+  border-bottom: 1px solid var(--line);
 }
 
 .perm-group-header .el-icon {
-  color: #109f9a;
+  color: var(--profile-accent);
 }
 
 .perm-group-name {
