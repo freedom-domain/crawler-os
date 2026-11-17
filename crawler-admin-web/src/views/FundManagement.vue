@@ -144,56 +144,87 @@
         <el-button :icon="Refresh" @click="resetWatchlistFilters">清除筛选</el-button>
         <span class="watchlist-count">共 {{ filteredWatchFunds.length.toLocaleString() }} 项</span>
       </div>
-      <div class="table-scroll-wrapper">
-      <el-table :data="pagedWatchFunds" v-loading="watchlistLoading" stripe resizable border max-height="55vh">
-        <el-table-column label="类型" width="85" resizable>
-          <template #default="{ row }">{{ row.fundType === 'ONSHORE' ? '场内' : '场外' }}</template>
-        </el-table-column>
-        <el-table-column prop="code" label="代码" width="95" resizable />
-        <el-table-column prop="name" label="基金名称" min-width="175" show-overflow-tooltip resizable />
-        <el-table-column label="周期" width="85" resizable>
-          <template #default="{ row }">{{ frequencyLabel(row.frequency) }}</template>
-        </el-table-column>
-        <el-table-column label="缓存点数" width="95" align="right" resizable>
-          <template #default="{ row }">{{ row.cachedPoints || 0 }}</template>
-        </el-table-column>
-        <el-table-column prop="latestDate" label="最新行情日期" width="125" resizable>
-          <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
-        </el-table-column>
-        <el-table-column label="关注状态" width="95" resizable>
-          <template #default="{ row }">
-            <el-tag type="success">已关注</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
-          <template #default="{ row }">
-            <el-dropdown trigger="click" @command="(command: string) => handleWatchlistCommand(command, row)">
-              <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="refresh" :icon="Refresh" :disabled="busyKey === rowKey(row)">立即更新</el-dropdown-item>
-                  <el-dropdown-item
-                    v-if="row.watched"
-                    command="remove"
-                    :icon="Star"
-                    :disabled="busyKey === rowKey(row)"
-                  >取消关注</el-dropdown-item>
-                  <el-dropdown-item
-                    command="clear"
-                    :icon="Delete"
-                    :disabled="!row.cachedPoints || busyKey === rowKey(row)"
-                    divided
-                    class="is-danger"
-                  >清除缓存</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <el-empty :description="hasWatchedFunds ? '没有符合条件的基金' : '关注清单为空，可在基金目录中添加关注'" />
-        </template>
-      </el-table>
+      <div v-loading="watchlistLoading" class="watchlist-cards">
+        <article v-for="row in pagedWatchFunds" :key="rowKey(row)" class="watchlist-card">
+          <div class="watchlist-card-heading">
+            <div class="watchlist-card-title" :title="row.name">{{ row.name || row.code }}</div>
+            <div class="watchlist-card-tags">
+              <el-tag size="small" effect="plain">{{ row.fundType === 'ONSHORE' ? '场内' : '场外' }} · {{ frequencyLabel(row.frequency) }}</el-tag>
+              <el-dropdown trigger="click" @command="(command: string) => handleWatchlistCommand(command, row)">
+                <el-button link size="small" class="action-more-btn" aria-label="关注基金操作"><el-icon><MoreFilled /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="refresh" :icon="Refresh" :disabled="busyKey === rowKey(row)">立即更新</el-dropdown-item>
+                    <el-dropdown-item
+                      v-if="row.watched"
+                      command="remove"
+                      :icon="Star"
+                      :disabled="busyKey === rowKey(row)"
+                    >取消关注</el-dropdown-item>
+                    <el-dropdown-item
+                      command="clear"
+                      :icon="Delete"
+                      :disabled="!row.cachedPoints || busyKey === rowKey(row)"
+                      divided
+                      class="is-danger"
+                    >清除缓存</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+          <div class="watchlist-quote">
+            <span class="watchlist-code">{{ row.code }} · {{ row.fundType === 'ONSHORE' ? '最新收盘价' : '最新单位净值' }}</span>
+            <strong v-if="row.latestValue != null">{{ formatPrice(row.latestValue) }}</strong>
+            <strong v-else class="watchlist-no-value">暂无净值</strong>
+            <span
+              v-if="row.latestChangePercent != null"
+              class="watchlist-change"
+              :class="row.latestChangePercent > 0 ? 'is-positive' : row.latestChangePercent < 0 ? 'is-negative' : ''"
+            >{{ formatSignedPercent(row.latestChangePercent) }}</span>
+          </div>
+          <div v-if="row.historyLoading" class="watchlist-chart chart-message">读取数据库历史行情...</div>
+          <div v-else-if="row.historyError" class="watchlist-chart chart-message chart-error" role="alert">{{ row.historyError }}</div>
+          <svg
+            v-else-if="row.historyPoints.length"
+            class="watchlist-chart"
+            viewBox="0 0 1000 110"
+            preserveAspectRatio="none"
+            role="img"
+            :aria-label="`${row.name}从${row.historyPoints[0].date}至${row.historyPoints[row.historyPoints.length - 1].date}的历史走势`"
+          >
+            <line x1="0" y1="12" x2="1000" y2="12" class="watchlist-chart-grid" />
+            <line x1="0" y1="55" x2="1000" y2="55" class="watchlist-chart-grid" />
+            <line x1="0" y1="98" x2="1000" y2="98" class="watchlist-chart-grid" />
+            <polyline :points="watchlistTrendPoints(row)" class="watchlist-chart-line" />
+            <circle :cx="watchlistLastCoordinate(row)?.x" :cy="watchlistLastCoordinate(row)?.y" r="5" class="watchlist-chart-endpoint" />
+          </svg>
+          <div v-else class="watchlist-chart chart-message chart-error">
+            {{ row.cachedPoints ? '数据库暂无可绘制的历史行情' : '暂无已缓存行情，请立即更新' }}
+          </div>
+          <div class="watchlist-card-footer">
+            <div v-if="row.historyPoints.length" class="watchlist-dates">
+              <span>{{ row.historyPoints[0].date }}</span>
+              <span>{{ row.historyPoints[row.historyPoints.length - 1].date }}</span>
+            </div>
+            <div v-else class="watchlist-cache-meta">
+              <span>{{ row.cachedPoints || 0 }} 个缓存点</span>
+              <span>最新日期 {{ row.latestDate || '暂无' }}</span>
+            </div>
+            <el-button
+              link
+              type="primary"
+              size="small"
+              :loading="busyKey === rowKey(row)"
+              @click="refreshFund(row)"
+            >立即更新</el-button>
+          </div>
+        </article>
+        <el-empty
+          v-if="!watchlistLoading && pagedWatchFunds.length === 0"
+          class="watchlist-empty"
+          :description="hasWatchedFunds ? '没有符合条件的基金' : '关注清单为空，可在基金目录中添加关注'"
+        />
       </div>
       <el-pagination
         v-if="filteredWatchFunds.length > 0"
@@ -377,9 +408,11 @@ import {
   fundCatalogDetail,
   fundCatalogPage,
   fundCatalogProfileRefresh,
+  fundHistory,
   fundHistoryCacheClear,
   fundHistoryRefresh,
   fundManagementList,
+  offExchangeFundHistory,
   fundRefreshScheduleGet,
   fundRefreshScheduleUpdate,
   fundWatchlistAdd,
@@ -450,6 +483,11 @@ interface FundManagementItem extends FundCatalogItem {
   cachedPoints: number
   latestDate: string | null
   addedAt: string | null
+  latestValue: number | null
+  latestChangePercent: number | null
+  historyPoints: { date: string; value: number }[]
+  historyLoading: boolean
+  historyError: string
 }
 
 const catalog = ref<FundCatalogItem[]>([])
@@ -500,6 +538,26 @@ const pagedWatchFunds = computed(() => {
   const start = (watchlistPage.value - 1) * watchlistPageSize.value
   return filteredWatchFunds.value.slice(start, start + watchlistPageSize.value)
 })
+const watchlistTrendCoordinates = (row: FundManagementItem) => {
+  const values = row.historyPoints.map(point => point.value)
+  if (!values.length) return []
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const padding = max === min ? Math.max(Math.abs(max) * 0.03, 0.01) : (max - min) * 0.12
+  const rangeMin = min - padding
+  const range = max - min + padding * 2
+  return values.map((value, index) => ({
+    x: values.length === 1 ? 500 : index / (values.length - 1) * 1000,
+    y: 98 - (value - rangeMin) / range * 86
+  }))
+}
+const watchlistTrendPoints = (row: FundManagementItem) => watchlistTrendCoordinates(row)
+  .map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+  .join(' ')
+const watchlistLastCoordinate = (row: FundManagementItem) => {
+  const coordinates = watchlistTrendCoordinates(row)
+  return coordinates[coordinates.length - 1]
+}
 const lastSyncedAt = ref('')
 
 const frequencyLabel = (frequency: string) => ({ day: '日线', week: '周线', month: '月线' }[frequency] || frequency)
@@ -514,6 +572,7 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const formatDateTime = (value: string | null | undefined) => value ? value.replace('T', ' ').slice(0, 16) : '暂无'
 const formatPrice = (value: number | null | undefined) => value == null ? '暂无' : `¥${Number(value).toFixed(4)}`
 const formatPercent = (value: number | null | undefined) => value == null ? '暂无' : `${Number(value).toFixed(2)}%`
+const formatSignedPercent = (value: number) => `${value > 0 ? '+' : ''}${Number(value).toFixed(2)}%`
 const cachedPeriodReturn = (item: FundCatalogItem) => {
   const latestValue = item.fundType === 'ONSHORE' ? item.latestClose : item.latestUnitNav
   if (item.firstMarketValue == null || latestValue == null || item.firstMarketValue === 0) return '暂无'
@@ -565,13 +624,77 @@ const loadWatchlist = async () => {
   watchlistLoading.value = true
   try {
     const response: any = await fundManagementList()
-    watchedFunds.value = response.data || []
+    if (!Array.isArray(response?.data)) throw new Error('关注清单数据格式无效')
+    watchedFunds.value = response.data.map((row: FundManagementItem) => ({
+      ...row,
+      latestValue: null,
+      latestChangePercent: null,
+      historyPoints: [],
+      historyLoading: false,
+      historyError: ''
+    }))
   } catch (error) {
     ElMessage.error(errorMessage(error))
   } finally {
     watchlistLoading.value = false
   }
 }
+
+const oneYearBefore = (date: string) => {
+  const [year, month, day] = date.split('-').map(Number)
+  const start = new Date(Date.UTC(year, month - 1, day))
+  start.setUTCDate(start.getUTCDate() - 365)
+  return start.toISOString().slice(0, 10)
+}
+
+const loadWatchlistHistory = async (row: FundManagementItem) => {
+  if (!row.cachedPoints || !row.latestDate) {
+    row.historyError = '数据库暂无已缓存的历史行情'
+    return
+  }
+  row.historyLoading = true
+  row.historyError = ''
+  try {
+    const params = {
+      code: row.code,
+      startDate: oneYearBefore(row.latestDate),
+      endDate: row.latestDate,
+      source: 'database' as const
+    }
+    const response: any = row.fundType === 'ONSHORE'
+      ? await fundHistory({ ...params, frequency: row.frequency })
+      : await offExchangeFundHistory(params)
+    if (!Array.isArray(response?.data?.points)) throw new Error('历史行情数据格式无效')
+    const points = response.data.points
+      .map((point: any) => {
+        const rawValue = row.fundType === 'ONSHORE' ? point.close : point.unitNav
+        return {
+          date: String(point.date || ''),
+          value: rawValue == null ? Number.NaN : Number(rawValue),
+          changePercent: point.changePercent == null ? null : Number(point.changePercent)
+        }
+      })
+      .filter((point: any) => point.date && Number.isFinite(point.value))
+    if (!points.length) throw new Error('数据库暂无可绘制的历史行情')
+    row.historyPoints = points.map((point: { date: string; value: number }) => ({
+      date: point.date,
+      value: point.value
+    }))
+    const latestPoint = points[points.length - 1]
+    row.latestDate = latestPoint.date
+    row.latestValue = latestPoint.value
+    row.latestChangePercent = latestPoint.changePercent
+  } catch (error) {
+    console.error(error)
+    row.historyError = errorMessage(error)
+  } finally {
+    row.historyLoading = false
+  }
+}
+
+watch(pagedWatchFunds, rows => {
+  if (watchlistVisible.value) void Promise.all(rows.map(loadWatchlistHistory))
+})
 
 const loadRefreshSchedule = async () => {
   try {
@@ -904,6 +1027,144 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
   font-size: 13px;
   white-space: nowrap;
 }
+.watchlist-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  max-height: 55vh;
+  overflow: auto;
+  padding: 1px;
+}
+.watchlist-card {
+  min-width: 0;
+  padding: 15px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.watchlist-card-heading,
+.watchlist-card-tags,
+.watchlist-card-footer,
+.watchlist-cache-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.watchlist-card-title {
+  overflow: hidden;
+  color: var(--ink-900);
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watchlist-card-tags {
+  flex: none;
+  gap: 6px;
+}
+.watchlist-card-tags :deep(.el-tag) {
+  border-color: var(--line);
+  color: var(--ink-700);
+  background: var(--surface-soft);
+}
+.watchlist-quote {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 3px 8px;
+  margin-top: 15px;
+}
+.watchlist-code {
+  overflow: hidden;
+  color: var(--ink-500);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watchlist-quote strong {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  color: var(--ink-950);
+  font-family: var(--font-mono, monospace);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.watchlist-quote .watchlist-no-value {
+  color: var(--ink-500);
+  font-family: inherit;
+  font-size: 14px;
+}
+.watchlist-change {
+  color: var(--ink-500);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+.watchlist-change.is-positive {
+  color: var(--market-up);
+}
+.watchlist-change.is-negative {
+  color: var(--market-down);
+}
+.watchlist-chart {
+  display: block;
+  width: 100%;
+  height: 92px;
+  margin-top: 9px;
+}
+.chart-message {
+  display: grid;
+  place-items: center;
+  color: var(--ink-500);
+  font-size: 11px;
+  text-align: center;
+}
+.chart-error {
+  color: var(--msg-warning-ink);
+}
+.watchlist-chart-grid {
+  stroke: var(--line);
+  stroke-dasharray: 4 7;
+  stroke-width: 1;
+}
+.watchlist-chart-line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+.watchlist-chart-endpoint {
+  fill: var(--teal);
+  stroke: var(--surface);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.watchlist-card-footer {
+  margin-top: 4px;
+}
+.watchlist-dates,
+.watchlist-cache-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink-500);
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+}
+.watchlist-cache-meta {
+  flex: 1;
+  flex-wrap: wrap;
+  font-family: inherit;
+  font-size: 10px;
+}
+.watchlist-empty {
+  grid-column: 1 / -1;
+  min-height: 160px;
+}
 .watchlist-pagination {
   justify-content: flex-end;
   margin-top: 14px;
@@ -948,6 +1209,10 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
   .watchlist-search,
   .watchlist-type-filter {
     width: 100%;
+  }
+  .watchlist-cards {
+    grid-template-columns: 1fr;
+    max-height: 58vh;
   }
   .watchlist-count {
     margin-left: 0;

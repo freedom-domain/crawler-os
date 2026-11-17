@@ -57,6 +57,68 @@
       </article>
     </section>
 
+    <section class="fund-watchlist-panel panel">
+      <div class="panel-heading">
+        <div><p class="panel-kicker">FUND WATCHLIST</p><h2>关注基金</h2></div>
+        <div class="panel-actions">
+          <span class="fund-source-label">最新缓存净值 · 数据库历史</span>
+          <el-button circle size="small" class="refresh-btn" :loading="fundListLoading" aria-label="刷新关注基金" @click="loadFavoriteFunds">
+            <el-icon v-if="!fundListLoading"><Refresh /></el-icon>
+          </el-button>
+          <el-button link type="primary" size="small" class="panel-link-btn" @click="router.push({ name: 'FundManagement' })">基金管理 →</el-button>
+        </div>
+      </div>
+
+      <div v-if="fundListError" class="fund-watchlist-message fund-watchlist-error" role="alert">
+        <span>{{ fundListError }}</span>
+        <el-button link type="primary" @click="loadFavoriteFunds">重试</el-button>
+      </div>
+      <div v-else-if="!favoriteFunds.length" class="fund-watchlist-message">
+        <span>{{ fundListLoading ? '加载关注基金...' : '尚未关注基金。' }}</span>
+        <el-button v-if="!fundListLoading" link type="primary" @click="router.push({ name: 'FundManagement' })">前往基金管理</el-button>
+      </div>
+      <div v-else class="fund-watchlist-grid" v-loading="fundListLoading" element-loading-text="加载关注基金...">
+        <article v-for="fund in favoriteFunds" :key="`${fund.fundType}-${fund.code}`" class="fund-watch-card">
+          <div class="fund-watch-heading">
+            <div class="fund-watch-name" :title="fund.name">{{ fund.name || fund.code }}</div>
+            <el-tag size="small" effect="plain">{{ fund.fundType === 'ONSHORE' ? '场内' : '场外' }} · {{ frequencyLabel(fund.frequency) }}</el-tag>
+          </div>
+          <div class="fund-watch-quote">
+            <span class="fund-watch-code">{{ fund.code }} · {{ fund.fundType === 'ONSHORE' ? '最新收盘价' : '最新单位净值' }}</span>
+            <strong v-if="fund.latestValue != null">¥{{ formatFundValue(fund.latestValue) }}</strong>
+            <strong v-else class="fund-watch-no-value">暂无净值</strong>
+            <span
+              v-if="fund.latestChangePercent != null"
+              class="fund-watch-change"
+              :class="fund.latestChangePercent > 0 ? 'is-positive' : fund.latestChangePercent < 0 ? 'is-negative' : ''"
+            >{{ formatFundChange(fund.latestChangePercent) }}</span>
+          </div>
+          <div v-if="fund.historyLoading" class="fund-watch-chart fund-watch-chart-loading">读取数据库历史行情...</div>
+          <div v-else-if="fund.historyError" class="fund-watch-chart fund-watch-chart-error" role="alert">{{ fund.historyError }}</div>
+          <svg
+            v-else-if="fund.points.length"
+            class="fund-watch-chart"
+            viewBox="0 0 1000 110"
+            preserveAspectRatio="none"
+            role="img"
+            :aria-label="`${fund.name}从${fund.points[0].date}至${fund.points[fund.points.length - 1].date}的历史净值走势`"
+          >
+            <line x1="0" y1="12" x2="1000" y2="12" class="fund-chart-grid" />
+            <line x1="0" y1="55" x2="1000" y2="55" class="fund-chart-grid" />
+            <line x1="0" y1="98" x2="1000" y2="98" class="fund-chart-grid" />
+            <polyline :points="fundTrendPoints(fund)" class="fund-chart-line" />
+            <circle :cx="fundLastCoordinate(fund)?.x" :cy="fundLastCoordinate(fund)?.y" r="5" class="fund-chart-endpoint" />
+          </svg>
+          <div v-else class="fund-watch-chart fund-watch-chart-error">数据库暂无可绘制的历史行情</div>
+          <div v-if="fund.points.length" class="fund-watch-dates">
+            <span>{{ fund.points[0].date }}</span>
+            <span>{{ fund.points[fund.points.length - 1].date }}</span>
+          </div>
+          <div v-else-if="fund.latestDate" class="fund-watch-dates"><span>最新缓存日期 {{ fund.latestDate }}</span></div>
+        </article>
+      </div>
+    </section>
+
     <section class="dashboard-grid">
       <div v-loading="recentTaskLoading" element-loading-text="加载中..." class="panel task-panel">
         <div class="panel-heading">
@@ -191,6 +253,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onActivated, onDeactivated, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { fundManagementList, fundHistory, offExchangeFundHistory } from '@/api'
 import { spiderPage, taskStats, taskPage, taskActiveCount, searchContent, getMenu } from '@/api'
 import { useUserStore } from '@/stores/user'
 import {
@@ -319,6 +382,169 @@ const spiderLoading = ref(false)
 const taskLoading = ref(false)
 const recentTaskLoading = ref(false)
 const dataLoading = ref(false)
+
+interface FundTrendPoint {
+  date: string
+  value: number
+  changePercent: number | null
+}
+
+interface DashboardFund {
+  fundType: 'ONSHORE' | 'OFFSHORE'
+  code: string
+  frequency: string
+  name: string
+  cachedPoints: number
+  latestDate: string | null
+  latestValue: number | null
+  latestChangePercent: number | null
+  points: FundTrendPoint[]
+  historyLoading: boolean
+  historyError: string
+}
+
+const favoriteFunds = ref<DashboardFund[]>([])
+const fundListLoading = ref(false)
+const fundListError = ref('')
+const frequencyRank: Record<string, number> = { day: 0, week: 1, month: 2 }
+
+const selectPreferredFrequencies = (items: any[]) => {
+  const grouped = new Map<string, any[]>()
+  items.forEach(item => {
+    if (item.fundType !== 'ONSHORE' && item.fundType !== 'OFFSHORE') return
+    const key = `${item.fundType}-${item.code}`
+    grouped.set(key, [...(grouped.get(key) || []), item])
+  })
+
+  return [...grouped.values()].flatMap(fundItems => {
+    const watched = fundItems.filter(item => item.watched === true || item.watched === 1)
+    if (!watched.length) return []
+    const watchedWithHistory = watched.filter(item => Number(item.cachedPoints) > 0)
+    const cached = fundItems.filter(item => Number(item.cachedPoints) > 0)
+    const candidates = watchedWithHistory.length ? watchedWithHistory : cached.length ? cached : watched
+    const item = [...candidates].sort((left, right) =>
+      (frequencyRank[String(left.frequency).toLowerCase()] ?? 3)
+      - (frequencyRank[String(right.frequency).toLowerCase()] ?? 3)
+    )[0]
+    return [{
+      fundType: item.fundType,
+      code: String(item.code),
+      frequency: String(item.frequency || 'day').toLowerCase(),
+      name: String(item.name || item.code),
+      cachedPoints: Number(item.cachedPoints) || 0,
+      latestDate: item.latestDate || null,
+      latestValue: null,
+      latestChangePercent: null,
+      points: [],
+      historyLoading: false,
+      historyError: ''
+    } satisfies DashboardFund]
+  })
+}
+
+const oneYearBefore = (date: string) => {
+  const [year, month, day] = date.split('-').map(Number)
+  const start = new Date(Date.UTC(year, month - 1, day))
+  start.setUTCDate(start.getUTCDate() - 365)
+  return start.toISOString().slice(0, 10)
+}
+
+const loadFundHistory = async (fund: DashboardFund) => {
+  if (!fund.cachedPoints || !fund.latestDate) {
+    fund.historyError = '数据库暂无已缓存的历史行情'
+    return
+  }
+  fund.historyLoading = true
+  fund.historyError = ''
+  try {
+    const params = {
+      code: fund.code,
+      startDate: oneYearBefore(fund.latestDate),
+      endDate: fund.latestDate,
+      source: 'database' as const
+    }
+    const response: any = fund.fundType === 'ONSHORE'
+      ? await fundHistory({ ...params, frequency: fund.frequency })
+      : await offExchangeFundHistory(params)
+    const rawPoints = response?.data?.points
+    if (!Array.isArray(rawPoints)) throw new Error('历史行情数据格式无效')
+    const points = rawPoints
+      .map((point: any): FundTrendPoint => {
+        const rawValue = fund.fundType === 'ONSHORE' ? point.close : point.unitNav
+        return {
+          date: String(point.date || ''),
+          value: rawValue == null ? Number.NaN : Number(rawValue),
+          changePercent: point.changePercent == null ? null : Number(point.changePercent)
+        }
+      })
+      .filter((point: FundTrendPoint) => point.date && Number.isFinite(point.value))
+    if (!points.length) throw new Error('数据库暂无可绘制的历史行情')
+    fund.points = points
+    const latestPoint = points[points.length - 1]
+    fund.latestDate = latestPoint.date
+    fund.latestValue = latestPoint.value
+    fund.latestChangePercent = latestPoint.changePercent
+  } catch (error) {
+    console.error(error)
+    fund.historyError = error instanceof Error ? error.message : '读取数据库历史行情失败'
+  } finally {
+    fund.historyLoading = false
+  }
+}
+
+const loadFavoriteFunds = async () => {
+  fundListLoading.value = true
+  fundListError.value = ''
+  try {
+    const response: any = await fundManagementList()
+    if (!Array.isArray(response?.data)) throw new Error('关注基金列表数据格式无效')
+    const funds = selectPreferredFrequencies(response.data)
+    favoriteFunds.value = funds
+    await Promise.all(funds.map(loadFundHistory))
+  } catch (error) {
+    console.error(error)
+    fundListError.value = error instanceof Error ? error.message : '读取关注基金失败'
+  } finally {
+    fundListLoading.value = false
+  }
+}
+
+const frequencyLabel = (frequency: string) => ({
+  day: '日线',
+  week: '周线',
+  month: '月线'
+}[frequency] || frequency)
+
+const formatFundValue = (value: number) => value.toLocaleString('zh-CN', {
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 4
+})
+
+const formatFundChange = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+
+const fundChartCoordinates = (fund: DashboardFund) => {
+  const values = fund.points.map(point => point.value)
+  if (!values.length) return []
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const padding = max === min ? Math.max(Math.abs(max) * 0.03, 0.01) : (max - min) * 0.12
+  const rangeMin = min - padding
+  const range = max - min + padding * 2
+  return values.map((value, index) => ({
+    x: values.length === 1 ? 500 : index / (values.length - 1) * 1000,
+    y: 98 - (value - rangeMin) / range * 86
+  }))
+}
+
+const fundTrendPoints = (fund: DashboardFund) => fundChartCoordinates(fund)
+  .map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+  .join(' ')
+
+const fundLastCoordinate = (fund: DashboardFund) => {
+  const coordinates = fundChartCoordinates(fund)
+  return coordinates[coordinates.length - 1]
+}
+
 
 // ===== 指标数字滚动动画 =====
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -479,7 +705,7 @@ let lastLoadedAt = 0
 const loadDashboard = (force = false) => {
   if (!force && Date.now() - lastLoadedAt < 10_000) return
   lastLoadedAt = Date.now()
-  void Promise.all([loadSpiderStats(), loadTaskStats(), loadRecentTasks(), loadDataStats()]).then(stampSync)
+  void Promise.all([loadSpiderStats(), loadTaskStats(), loadRecentTasks(), loadDataStats(), loadFavoriteFunds()]).then(stampSync)
 }
 
 const refreshDashboard = () => loadDashboard(true)
@@ -890,6 +1116,44 @@ html[data-theme="black"] .dashboard-page {
 .refresh-btn:hover { border-color: var(--dc-neon); color: var(--dc-neon-hover); background: var(--dc-neon-glow); }
 .panel-success-chip { padding: 3px 10px; border: 1px solid var(--dc-line-strong); border-radius: 999px; color: var(--dc-neon-text); background: var(--dc-neon-soft); font-size: 11px; white-space: nowrap; }
 .panel-success-chip b { color: var(--dc-neon); font-weight: 700; margin-left: 5px; font-family: var(--font-mono); }
+
+/* ===== 关注基金净值与数据库历史走势 ===== */
+.fund-watchlist-panel { margin-bottom: 20px; }
+.fund-source-label { color: var(--dc-text-mute); font-size: 11px; white-space: nowrap; }
+.fund-watchlist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.fund-watch-card {
+  min-width: 0;
+  padding: 15px 16px 12px;
+  border: 1px solid var(--dc-line-soft);
+  border-radius: 12px;
+  background: var(--dc-card-bg);
+}
+.fund-watch-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fund-watch-name { overflow: hidden; color: var(--dc-text); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.fund-watch-heading :deep(.el-tag) { flex: none; border-color: var(--dc-line-strong); color: var(--dc-text-dim); background: var(--dc-neon-faint); }
+.fund-watch-quote { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 3px 8px; margin-top: 15px; }
+.fund-watch-code { overflow: hidden; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.fund-watch-quote strong { grid-column: 2; grid-row: 1 / span 2; color: var(--dc-text-bright); font-family: var(--font-mono); font-size: 21px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fund-watch-quote .fund-watch-no-value { color: var(--dc-text-mute); font-family: inherit; font-size: 14px; }
+.fund-watch-change { color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; }
+.fund-watch-change.is-positive { color: var(--st-success); }
+.fund-watch-change.is-negative { color: var(--st-danger); }
+.fund-watch-chart { display: block; width: 100%; height: 92px; margin-top: 9px; }
+.fund-watch-chart-loading, .fund-watch-chart-error {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  color: var(--dc-text-mute);
+  font-size: 11px;
+  text-align: center;
+}
+.fund-watch-chart-error { color: var(--dc-amber); }
+.fund-chart-grid { stroke: var(--dc-line-soft); stroke-dasharray: 4 7; stroke-width: 1; }
+.fund-chart-line { fill: none; stroke: var(--dc-neon); stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.fund-chart-endpoint { fill: var(--dc-neon); stroke: var(--dc-panel); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.fund-watch-dates { display: flex; justify-content: space-between; gap: 8px; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 9px; }
+.fund-watchlist-message { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 100px; color: var(--dc-text-mute); font-size: 12px; text-align: center; }
+.fund-watchlist-error { color: var(--dc-coral); }
 
 /* ===== 最近任务表格（暗色覆盖）===== */
 .task-panel { min-width: 0; display: flex; flex-direction: column; }
