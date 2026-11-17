@@ -84,7 +84,10 @@
             <el-tag size="small" effect="plain">{{ fund.fundType === 'ONSHORE' ? '场内' : '场外' }} · {{ frequencyLabel(fund.frequency) }}</el-tag>
           </div>
           <div class="fund-watch-quote">
-            <span class="fund-watch-code">{{ fund.code }} · {{ fund.fundType === 'ONSHORE' ? '最新收盘价' : '最新单位净值' }}</span>
+            <div class="fund-watch-quote-meta">
+              <span class="fund-watch-code">{{ fund.code }} · {{ fund.fundType === 'ONSHORE' ? '最新收盘价' : '最新单位净值' }}</span>
+              <span class="fund-watch-date">净值日期 {{ fund.latestDate || '暂无' }}</span>
+            </div>
             <strong v-if="fund.latestValue != null">¥{{ formatFundValue(fund.latestValue) }}</strong>
             <strong v-else class="fund-watch-no-value">暂无净值</strong>
             <span
@@ -110,11 +113,21 @@
             <circle :cx="fundLastCoordinate(fund)?.x" :cy="fundLastCoordinate(fund)?.y" r="5" class="fund-chart-endpoint" />
           </svg>
           <div v-else class="fund-watch-chart fund-watch-chart-error">数据库暂无可绘制的历史行情</div>
+          <div class="fund-watch-card-footer">
           <div v-if="fund.points.length" class="fund-watch-dates">
             <span>{{ fund.points[0].date }}</span>
             <span>{{ fund.points[fund.points.length - 1].date }}</span>
           </div>
           <div v-else-if="fund.latestDate" class="fund-watch-dates"><span>最新缓存日期 {{ fund.latestDate }}</span></div>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            :loading="fund.refreshing"
+            :disabled="fund.refreshing || fund.historyLoading"
+            @click="refreshFavoriteFund(fund)"
+          >立即更新</el-button>
+          </div>
         </article>
       </div>
     </section>
@@ -227,9 +240,10 @@ import { ref, computed, watch, onActivated, onDeactivated, onUnmounted } from 'v
 import { useRouter } from 'vue-router'
 import {
   spiderPage, taskStats, taskPage, taskActiveCount, searchContent,
-  fundManagementList, fundHistory, offExchangeFundHistory
+  fundManagementList, fundHistory, offExchangeFundHistory, fundHistoryRefresh
 } from '@/api'
 import { useUserStore } from '@/stores/user'
+import { ElMessage } from 'element-plus'
 import {
   Connection, List, CircleCheck, DataBoard,
   Refresh, Loading, DocumentRemove
@@ -318,6 +332,7 @@ interface DashboardFund {
   points: FundTrendPoint[]
   historyLoading: boolean
   historyError: string
+  refreshing: boolean
 }
 
 const favoriteFunds = ref<DashboardFund[]>([])
@@ -354,7 +369,8 @@ const selectPreferredFrequencies = (items: any[]) => {
       latestChangePercent: null,
       points: [],
       historyLoading: false,
-      historyError: ''
+      historyError: '',
+      refreshing: false
     } satisfies DashboardFund]
   })
 }
@@ -423,6 +439,39 @@ const loadFavoriteFunds = async () => {
     fundListError.value = error instanceof Error ? error.message : '读取关注基金失败'
   } finally {
     fundListLoading.value = false
+  }
+}
+
+const refreshFavoriteFund = async (fund: DashboardFund) => {
+  if (fund.refreshing) return
+  fund.refreshing = true
+  fund.historyError = ''
+  try {
+    await fundHistoryRefresh({
+      fundType: fund.fundType,
+      code: fund.code,
+      frequency: fund.frequency
+    })
+    const response: any = await fundManagementList()
+    if (!Array.isArray(response?.data)) throw new Error('关注基金列表数据格式无效')
+    const updated = response.data.find((item: any) =>
+      item.fundType === fund.fundType
+      && String(item.code) === fund.code
+      && String(item.frequency).toLowerCase() === fund.frequency
+      && (item.watched === true || item.watched === 1)
+    )
+    if (!updated) throw new Error('基金已不在关注清单中，请刷新首页')
+    fund.cachedPoints = Number(updated.cachedPoints) || 0
+    fund.latestDate = updated.latestDate || null
+    await loadFundHistory(fund)
+    if (fund.historyError) throw new Error(fund.historyError)
+    ElMessage.success(`${fund.name} 行情已更新`)
+  } catch (error) {
+    console.error(error)
+    fund.historyError = error instanceof Error ? error.message : '更新基金行情失败'
+    ElMessage.error(fund.historyError)
+  } finally {
+    fund.refreshing = false
   }
 }
 
@@ -1046,11 +1095,13 @@ html[data-theme="black"] .dashboard-page {
 .fund-watch-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .fund-watch-name { overflow: hidden; color: var(--dc-text); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 .fund-watch-heading :deep(.el-tag) { flex: none; border-color: var(--dc-line-strong); color: var(--dc-text-dim); background: var(--dc-neon-faint); }
-.fund-watch-quote { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 3px 8px; margin-top: 15px; }
+.fund-watch-quote { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 8px; margin-top: 15px; }
+.fund-watch-quote-meta { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .fund-watch-code { overflow: hidden; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.fund-watch-quote strong { grid-column: 2; grid-row: 1 / span 2; color: var(--dc-text-bright); font-family: var(--font-mono); font-size: 21px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fund-watch-date { color: var(--dc-text-mute); font-size: 10px; }
+.fund-watch-quote strong { grid-column: 2; grid-row: 1; color: var(--dc-text-bright); font-family: var(--font-mono); font-size: 21px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fund-watch-quote .fund-watch-no-value { color: var(--dc-text-mute); font-family: inherit; font-size: 14px; }
-.fund-watch-change { color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; }
+.fund-watch-change { grid-column: 2; grid-row: 2; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-align: right; }
 .fund-watch-change.is-positive { color: var(--st-success); }
 .fund-watch-change.is-negative { color: var(--st-danger); }
 .fund-watch-chart { display: block; width: 100%; height: 92px; margin-top: 9px; }
@@ -1067,6 +1118,7 @@ html[data-theme="black"] .dashboard-page {
 .fund-chart-line { fill: none; stroke: var(--dc-neon); stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; vector-effect: non-scaling-stroke; }
 .fund-chart-endpoint { fill: var(--dc-neon); stroke: var(--dc-panel); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .fund-watch-dates { display: flex; justify-content: space-between; gap: 8px; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 9px; }
+.fund-watch-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
 .fund-watchlist-message { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 100px; color: var(--dc-text-mute); font-size: 12px; text-align: center; }
 .fund-watchlist-error { color: var(--dc-coral); }
 

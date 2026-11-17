@@ -174,7 +174,10 @@
             </div>
           </div>
           <div class="watchlist-quote">
-            <span class="watchlist-code">{{ row.code }} · {{ row.fundType === 'ONSHORE' ? '最新收盘价' : '最新单位净值' }}</span>
+            <div class="watchlist-quote-meta">
+              <span class="watchlist-code">{{ row.code }} · {{ row.fundType === 'ONSHORE' ? '最新收盘价' : '最新单位净值' }}</span>
+              <span class="watchlist-date">净值日期 {{ row.latestDate || '暂无' }}</span>
+            </div>
             <strong v-if="row.latestValue != null">{{ formatPrice(row.latestValue) }}</strong>
             <strong v-else class="watchlist-no-value">暂无净值</strong>
             <span
@@ -1070,10 +1073,18 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 }
 .watchlist-quote {
   display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 3px 8px;
   margin-top: 15px;
+}
+.watchlist-quote-meta {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 .watchlist-code {
   overflow: hidden;
@@ -1083,9 +1094,13 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.watchlist-date {
+  color: var(--ink-500);
+  font-size: 10px;
+}
 .watchlist-quote strong {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 1;
   color: var(--ink-950);
   font-family: var(--font-mono, monospace);
   font-size: 20px;
@@ -1098,9 +1113,12 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
   font-size: 14px;
 }
 .watchlist-change {
+  grid-column: 2;
+  grid-row: 2;
   color: var(--ink-500);
   font-family: var(--font-mono, monospace);
   font-size: 10px;
+  text-align: right;
 }
 .watchlist-change.is-positive {
   color: var(--market-up);

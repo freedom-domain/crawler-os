@@ -479,8 +479,10 @@ const handleCommand = async (cmd: string) => {
 :deep(.app-tabs .el-tabs__nav-wrap) { overflow-x: auto; overflow-y: hidden; }
 :deep(.app-tabs .el-tabs__nav-wrap::after) { display: none; }
 :deep(.app-tabs .el-tabs__nav) { gap: 7px; border: 0; min-width: max-content; }
-:deep(.app-tabs .el-tabs__item) { position: relative; height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
+:deep(.app-tabs .el-tabs__item) { position: relative; height: 38px; margin-top: 0; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
+:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item:first-child) { border-left: 1px solid transparent; }
 :deep(.app-tabs .el-tabs__item.is-active) { color: var(--tab-active-color); border-color: var(--tab-active-border); background: var(--tab-active-bg); box-shadow: 0 0 14px var(--tab-active-glow); font-weight: 700; }
+:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item:first-child.is-active) { border-left-color: var(--tab-active-border); }
 :deep(.app-tabs .el-tabs__item:hover) { color: var(--chrome-text-strong); background: var(--chrome-hover); }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-closable:hover) { padding-left: 14px; padding-right: 14px; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-active.is-closable) { padding-left: 14px; padding-right: 14px; }
