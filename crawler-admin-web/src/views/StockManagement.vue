@@ -121,10 +121,22 @@
       <div class="refresh-schedule-toolbar">
         <span>自动同步频率</span>
         <el-select v-model="refreshFrequency" class="refresh-schedule-select">
-          <el-option label="每小时（整点）" value="HOURLY" />
-          <el-option label="每个工作日（18:35）" value="DAILY" />
-          <el-option label="每周一（18:35）" value="WEEKLY" />
+          <el-option label="每小时" value="HOURLY" />
+          <el-option label="每个工作日" value="DAILY" />
+          <el-option label="每周一" value="WEEKLY" />
         </el-select>
+        <template v-if="refreshFrequency !== 'HOURLY'">
+          <span>执行时间</span>
+          <el-time-picker
+            v-model="refreshTriggerTime"
+            class="refresh-schedule-time"
+            format="HH:mm"
+            value-format="HH:mm"
+            placeholder="选择时间"
+            :clearable="false"
+          />
+        </template>
+        <span v-else class="refresh-schedule-hint">整点执行（上海时间）</span>
         <el-button type="primary" :loading="refreshScheduleSaving" @click="saveRefreshSchedule">保存</el-button>
       </div>
       <div class="watchlist-toolbar">
@@ -139,37 +151,54 @@
         />
         <span class="watchlist-count">共 {{ filteredWatchlist.length.toLocaleString() }} 只</span>
       </div>
-      <div class="table-scroll-wrapper">
-      <el-table :data="pagedWatchlist" v-loading="watchlistLoading" stripe resizable border max-height="55vh">
-        <el-table-column prop="code" label="股票代码" width="110" resizable />
-        <el-table-column prop="name" label="股票名称" min-width="180" show-overflow-tooltip resizable />
-        <el-table-column prop="market" label="市场" width="90" resizable />
-        <el-table-column prop="industry" label="所属行业" min-width="140" show-overflow-tooltip resizable>
-          <template #default="{ row }">{{ row.industry || '暂无' }}</template>
-        </el-table-column>
-        <el-table-column label="历史行情点数" width="125" align="right" resizable>
-          <template #default="{ row }">{{ row.cachedPoints || 0 }}</template>
-        </el-table-column>
-        <el-table-column label="最新行情日期" width="125" resizable>
-          <template #default="{ row }">{{ row.latestDate || '暂无' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="60" fixed="right" align="center" resizable>
-          <template #default="{ row }">
-            <el-dropdown trigger="click" @command="(command: string) => handleWatchlistCommand(command, row)">
-              <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="refresh" :icon="Refresh" :disabled="watchBusyCode === row.code">立即更新</el-dropdown-item>
-                  <el-dropdown-item command="remove" :icon="Star" :disabled="watchBusyCode === row.code">取消关注</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <el-empty :description="watchlist.length ? '没有符合条件的股票' : '关注清单为空，可在股票目录中开启关注'" />
-        </template>
-      </el-table>
+      <div v-loading="watchlistLoading" class="watchlist-cards">
+        <article v-for="stock in pagedWatchlist" :key="stock.code" class="watchlist-card">
+          <div class="watchlist-card-heading">
+            <div class="watchlist-card-name" :title="stock.name">{{ stock.name || stock.code }}</div>
+            <el-tag size="small" effect="plain">{{ stock.market || '股票' }}</el-tag>
+          </div>
+          <div class="watchlist-quote">
+            <div class="watchlist-quote-meta">
+              <span>{{ stock.code }} · 最新收盘价</span>
+              <span>行情日期 {{ stock.latestDate || '暂无' }}</span>
+            </div>
+            <strong v-if="stock.latestValue != null">{{ formatPrice(stock.latestValue) }}</strong>
+            <strong v-else class="watchlist-no-value">暂无行情</strong>
+            <span
+              v-if="stock.latestChangePercent != null"
+              class="watchlist-change"
+              :class="stock.latestChangePercent > 0 ? 'is-positive' : stock.latestChangePercent < 0 ? 'is-negative' : ''"
+            >{{ formatPercent(stock.latestChangePercent) }}</span>
+          </div>
+          <div v-if="stock.historyLoading" class="watchlist-chart chart-message">读取数据库历史行情...</div>
+          <div v-else-if="stock.historyError" class="watchlist-chart chart-message chart-error" role="alert">{{ stock.historyError }}</div>
+          <svg
+            v-else-if="stock.historyPoints.length"
+            class="watchlist-chart"
+            viewBox="0 0 1000 110"
+            preserveAspectRatio="none"
+            role="img"
+            :aria-label="`${stock.name}从${stock.historyPoints[0].date}至${stock.historyPoints[stock.historyPoints.length - 1].date}的历史走势`"
+          >
+            <line x1="0" y1="12" x2="1000" y2="12" class="watchlist-chart-grid" />
+            <line x1="0" y1="55" x2="1000" y2="55" class="watchlist-chart-grid" />
+            <line x1="0" y1="98" x2="1000" y2="98" class="watchlist-chart-grid" />
+            <polyline :points="stockTrendPoints(stock)" class="watchlist-chart-line" />
+          </svg>
+          <div v-else class="watchlist-chart chart-message chart-error">数据库暂无可绘制的历史行情</div>
+          <div class="watchlist-card-footer">
+            <div v-if="stock.historyPoints.length" class="watchlist-dates">
+              <span>{{ stock.historyPoints[0].date }}</span>
+              <span>{{ stock.historyPoints[stock.historyPoints.length - 1].date }}</span>
+            </div>
+            <span v-else class="watchlist-dates">历史数据 {{ stock.cachedPoints }} 点</span>
+            <div class="watchlist-card-actions">
+              <el-button link type="primary" size="small" :loading="watchBusyCode === stock.code" @click="refreshWatchedStock(stock)">立即更新</el-button>
+              <el-button link size="small" :disabled="watchBusyCode === stock.code" @click="removeWatchedStock(stock)">取消关注</el-button>
+            </div>
+          </div>
+        </article>
+        <el-empty v-if="!watchlistLoading && !pagedWatchlist.length" :description="watchlist.length ? '没有符合条件的股票' : '关注清单为空，可在股票目录中开启关注'" />
       </div>
       <el-pagination
         v-if="filteredWatchlist.length > 0"
@@ -313,6 +342,7 @@ import {
   stockWatchlistList,
   stockWatchlistRefresh,
   stockWatchlistRemove,
+  stockHistory,
   stockRefreshScheduleGet,
   stockRefreshScheduleUpdate
 } from '@/api'
@@ -352,6 +382,12 @@ interface StockWatchlistRow {
   industry: string | null
   cachedPoints: number
   latestDate: string | null
+  latestValue: number | null
+  latestChangePercent: number | null
+  historyPoints: Array<{ date: string; close: number; changePercent: number | null }>
+  historyLoading: boolean
+  historyLoaded: boolean
+  historyError: string
 }
 
 const stocks = ref<StockItem[]>([])
@@ -379,6 +415,7 @@ const watchlistVisible = ref(false)
 const watchlistLoading = ref(false)
 const watchlist = ref<StockWatchlistRow[]>([])
 const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
+const refreshTriggerTime = ref('18:35')
 const refreshScheduleSaving = ref(false)
 const watchlistKeyword = ref('')
 const watchlistPage = ref(1)
@@ -403,6 +440,59 @@ const formatPercent = (value: number | null | undefined) => {
   if (value == null) return '暂无'
   const percent = Number(value)
   return `${percent > 0 ? '+' : ''}${percent.toFixed(2)}%`
+}
+const dateOneYearBefore = (date: string) => {
+  const [year, month, day] = date.split('-').map(Number)
+  const start = new Date(Date.UTC(year, month - 1, day))
+  start.setUTCDate(start.getUTCDate() - 365)
+  return start.toISOString().slice(0, 10)
+}
+const stockTrendPoints = (stock: StockWatchlistRow) => {
+  const values = stock.historyPoints.map(point => point.close)
+  if (!values.length) return ''
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const padding = max === min ? Math.max(Math.abs(max) * 0.03, 0.01) : (max - min) * 0.12
+  const rangeMin = min - padding
+  const range = max - min + padding * 2
+  return values.map((value, index) => {
+    const x = values.length === 1 ? 500 : index / (values.length - 1) * 1000
+    const y = 98 - (value - rangeMin) / range * 86
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+const loadStockWatchlistHistory = async (stock: StockWatchlistRow, force = false) => {
+  if (stock.historyLoading || (stock.historyLoaded && !force)) return
+  if (!stock.cachedPoints || !stock.latestDate) {
+    stock.historyError = '数据库暂无已缓存的历史行情'
+    stock.historyLoaded = true
+    return
+  }
+  stock.historyLoading = true
+  stock.historyError = ''
+  try {
+    const response: any = await stockHistory({
+      code: stock.code,
+      startDate: dateOneYearBefore(stock.latestDate),
+      endDate: stock.latestDate,
+      source: 'database'
+    })
+    if (!Array.isArray(response?.data?.points)) throw new Error('历史行情数据格式无效')
+    stock.historyPoints = response.data.points
+      .map((point: any) => ({ date: String(point.date || ''), close: Number(point.close), changePercent: point.changePercent == null ? null : Number(point.changePercent) }))
+      .filter((point: any) => point.date && Number.isFinite(point.close))
+    if (!stock.historyPoints.length) throw new Error('数据库暂无可绘制的历史行情')
+    const latest = stock.historyPoints[stock.historyPoints.length - 1]
+    stock.latestDate = latest.date
+    stock.latestValue = latest.close
+    stock.latestChangePercent = latest.changePercent
+  } catch (error) {
+    stock.historyError = errorMessage(error)
+  } finally {
+    stock.historyLoading = false
+    stock.historyLoaded = true
+  }
 }
 
 const loadCatalog = async () => {
@@ -430,7 +520,17 @@ const loadWatchlist = async () => {
   watchlistLoading.value = true
   try {
     const response: any = await stockWatchlistList()
-    watchlist.value = response.data || []
+    watchlist.value = (response.data || []).map((stock: StockWatchlistRow) => ({
+      ...stock,
+      cachedPoints: Number(stock.cachedPoints) || 0,
+      latestValue: null,
+      latestChangePercent: null,
+      historyPoints: [],
+      historyLoading: false,
+      historyLoaded: false,
+      historyError: ''
+    }))
+    if (watchlistVisible.value) void Promise.all(pagedWatchlist.value.map(stock => loadStockWatchlistHistory(stock)))
   } catch (error) {
     ElMessage.error(errorMessage(error))
   } finally {
@@ -442,6 +542,7 @@ const loadRefreshSchedule = async () => {
   try {
     const response: any = await stockRefreshScheduleGet()
     refreshFrequency.value = response.data.frequency
+    refreshTriggerTime.value = response.data.triggerTime || '18:35'
   } catch (error) {
     ElMessage.error(errorMessage(error))
   }
@@ -450,8 +551,9 @@ const loadRefreshSchedule = async () => {
 const saveRefreshSchedule = async () => {
   refreshScheduleSaving.value = true
   try {
-    const response: any = await stockRefreshScheduleUpdate(refreshFrequency.value)
+    const response: any = await stockRefreshScheduleUpdate(refreshFrequency.value, refreshTriggerTime.value)
     refreshFrequency.value = response.data.frequency
+    refreshTriggerTime.value = response.data.triggerTime || '18:35'
     ElMessage.success('股票自动同步频率已保存')
   } catch (error) {
     ElMessage.error(errorMessage(error))
@@ -463,6 +565,10 @@ const saveRefreshSchedule = async () => {
 watch(() => filteredWatchlist.value.length, count => {
   const lastPage = Math.max(1, Math.ceil(count / watchlistPageSize.value))
   if (watchlistPage.value > lastPage) watchlistPage.value = lastPage
+})
+
+watch(pagedWatchlist, stocks => {
+  if (watchlistVisible.value) void Promise.all(stocks.map(stock => loadStockWatchlistHistory(stock)))
 })
 
 const openWatchlist = () => {
@@ -533,8 +639,8 @@ const refreshWatchedStock = async (stock: StockWatchlistRow) => {
   watchBusyCode.value = stock.code
   try {
     await stockWatchlistRefresh(stock.code)
-    ElMessage.success(`${stock.name} 历史行情已更新`)
     await loadWatchlist()
+    ElMessage.success(`${stock.name} 历史行情已更新`)
   } catch (error) {
     ElMessage.error(errorMessage(error))
   } finally {
@@ -677,6 +783,119 @@ onBeforeUnmount(() => window.removeEventListener('stock-catalog-synced', onStock
 .watchlist-search {
   width: 280px;
 }
+.watchlist-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
+  max-height: 58vh;
+  overflow: auto;
+  padding: 2px;
+}
+.watchlist-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.watchlist-card-heading,
+.watchlist-card-footer,
+.watchlist-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.watchlist-card-name {
+  overflow: hidden;
+  color: var(--ink-950);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watchlist-quote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 8px;
+  margin-top: 14px;
+}
+.watchlist-quote-meta {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--ink-500);
+  font-size: 11px;
+}
+.watchlist-quote-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.watchlist-quote strong {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--ink-950);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.watchlist-quote .watchlist-no-value {
+  color: var(--ink-500);
+  font-size: 14px;
+}
+.watchlist-change {
+  grid-column: 2;
+  grid-row: 2;
+  color: var(--ink-500);
+  font-size: 11px;
+  text-align: right;
+}
+.watchlist-change.is-positive { color: var(--el-color-danger); }
+.watchlist-change.is-negative { color: var(--el-color-success); }
+.watchlist-chart {
+  display: block;
+  width: 100%;
+  height: 85px;
+  margin: 8px 0;
+}
+.chart-message {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  color: var(--ink-500);
+  font-size: 12px;
+  text-align: center;
+}
+.chart-error { color: var(--sync-error-ink); }
+.watchlist-chart-grid {
+  stroke: var(--line);
+  stroke-dasharray: 4 7;
+  stroke-width: 1;
+}
+.watchlist-chart-line {
+  fill: none;
+  stroke: var(--teal);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+.watchlist-dates {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--ink-500);
+  font-size: 10px;
+}
+.watchlist-card-actions {
+  flex: none;
+  justify-content: flex-end;
+}
 .watchlist-count {
   margin-left: auto;
   color: var(--ink-500);
@@ -697,6 +916,12 @@ onBeforeUnmount(() => window.removeEventListener('stock-catalog-synced', onStock
 }
 .refresh-schedule-select {
   width: 210px;
+}
+.refresh-schedule-time {
+  width: 130px;
+}
+.refresh-schedule-hint {
+  color: var(--ink-500);
 }
 .detail-note {
   margin: 18px 0 0;
@@ -727,8 +952,15 @@ onBeforeUnmount(() => window.removeEventListener('stock-catalog-synced', onStock
   .refresh-schedule-select {
     width: 100%;
   }
+  .refresh-schedule-time {
+    width: 100%;
+  }
   .watchlist-search {
     width: 100%;
+  }
+  .watchlist-cards {
+    grid-template-columns: 1fr;
+    max-height: 58vh;
   }
   .watchlist-count {
     margin-left: 0;

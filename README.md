@@ -157,7 +157,7 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 股票管理需在已有数据库执行 `docker/mysql/migration/025_stock_management.sql`。股票目录默认从新浪财经公开接口同步 A 股代码和名称（不需要 API Key；该接口不提供行业字段），并按代码识别市场；可通过 Finance 服务配置项 `investment.stock-list-url` 覆盖目录接口地址。股票详情通过东方财富补充并保存上市公司档案，另提供腾讯财经日线历史行情查询与缓存、每周定投回测（并与相同投入的一次性买入对比）；使用已有数据库时还需执行 `docker/mysql/migration/026_stock_history_cache.sql`。历史行情可选 API 查询并缓存或读取数据库已有缓存；回测按前复权收盘价、100 股整手和佣金 0.03%（最低 ¥5）估算，不含卖出及印花税。目录中的“模拟投资”操作会打开预填股票代码的模拟交易窗口。请确认部署 Finance 服务的主机能够通过 HTTPS 访问所配置的数据源。
 
-股票关注清单需在已有数据库执行 `docker/mysql/migration/028_stock_watchlist.sql` 和 `docker/mysql/migration/030_stock_refresh_schedule.sql`。股票管理页面可从目录关注/取消股票，在关注清单中查看缓存状态、手动更新行情，并设置自动同步频率：每小时整点、每个工作日 18:35 或每周一 18:35（上海时区，默认为每个工作日 18:35）；Finance 服务会自动刷新关注股票最近 30 天的日线行情。
+股票关注清单需在已有数据库执行 `docker/mysql/migration/028_stock_watchlist.sql`、`docker/mysql/migration/030_stock_refresh_schedule.sql` 和 `docker/mysql/migration/051_stock_refresh_trigger_time.sql`。股票管理页面可从目录关注/取消股票，在首页和关注清单中查看最新缓存收盘价及数据库历史走势，并可手动更新行情；自动同步支持每小时整点、每个工作日或每周一运行，后两种可自定义执行时间（上海时区，默认为每个工作日 18:35）。Finance 服务会自动刷新关注股票最近 30 天的日线行情。
 
 Cloudflare IP 优选由独立的 `crawler-ip-service`（8086）提供，已有数据库需依次执行 `docker/mysql/migration/036_cf_ip_management.sql`、`docker/mysql/migration/037_remove_vless_fields.sql`、`docker/mysql/migration/038_cf_ip_candidate_colo.sql`、`docker/mysql/migration/039_cf_ip_range_colo.sql`、`docker/mysql/migration/041_cf_ip_range_enabled.sql` 和 `docker/mysql/migration/042_cf_ip_management_incremental.sql`。管理员可从 Cloudflare 官方接口初始化 IPv4/IPv6 CIDR 清单，并为全球任播网段维护自定义地区标签；每个网段可单独启用或停用，优选抽样仅使用已启用网段；每个网段默认抽测一个地址，最多每段 5 个且单次总量限制为 200 个，IPv6 网段不会展开；抽样会跳过候选列表中已有的 IP，重复执行时继续抽取尚未添加的地址。常规探测记录从 IP 服务主机 TCP 连接候选 IP:443 的耗时、针对指定 SNI 且校验证书的 TLS 握手耗时，以及经 `speed.cloudflare.com` 获取约 30 MB 的 HTTPS 下载速度（Mbps），每次仅并发测试一个 IP；若测速响应包含 `CF-Ray`，会提取其 PoP 代码并作为该次探测到达的数据中心保存，代表 IP 服务主机当时的网络路由结果，不是该 IP 的固定地理位置。CIDR 的机房代码按其关联候选 IP 当前观测到的 colo 多数票自动归类，票数相同时以最近一次有效观测为准；未能取得新的 `CF-Ray` 时保留先前观测。SNI 仅随常规 TLS 本次测试结果返回，不存入数据库，前端刷新后不会保留。也可手工添加公网 IP，批量常规测试最多 100 个样本；可导出当前页面会话内使用当前 SNI 测试通过的 IP、端口、SNI 和测试指标 CSV，供配置 v2rayN 节点时使用（该 CSV 不是可直接导入的完整节点配置）。公开接口 `GET /api/cf-ip/available?count=10` 无需鉴权，从已测试、测速值有效、状态为“可连接”且速度严格大于 10 MB/s（80 Mbps）的候选 IP 中随机返回 `text/plain` 文本，每个 IP 一行，格式为 `IP#地区 自选官方优选 速度MB/s`；速度由 Mbps 除以 8 换算并保留两位小数，单次数量范围为 1–100。管理用的可用 IP 接口 `GET /api/cf-ip/available/ips` 同样只返回速度严格大于 10 MB/s（80 Mbps）的 IP。相关接口仅读取测试结果，不执行网络探测。
 
@@ -183,6 +183,10 @@ npm run build      # 生产构建到 dist/
 默认账号（密码均为 `admin123`）：
 - 管理员: `admin`
 - 普通用户: `user`
+
+## 基金关注清单自动同步
+
+关注清单支持每小时整点、每个工作日或每周一自动同步；工作日和每周同步时间可在关注清单中自定义（上海时区，默认工作日 18:30）。已有数据库需执行 `docker/mysql/migration/050_fund_refresh_trigger_time.sql`；新建数据库已包含该配置。
 
 ## 核心流程
 

@@ -121,10 +121,22 @@
       <div class="refresh-schedule-toolbar">
         <span>自动同步频率</span>
         <el-select v-model="refreshFrequency" class="refresh-schedule-select">
-          <el-option label="每小时（整点）" value="HOURLY" />
-          <el-option label="每个工作日（18:30）" value="DAILY" />
-          <el-option label="每周一（18:30）" value="WEEKLY" />
+          <el-option label="每小时" value="HOURLY" />
+          <el-option label="每个工作日" value="DAILY" />
+          <el-option label="每周一" value="WEEKLY" />
         </el-select>
+        <template v-if="refreshFrequency !== 'HOURLY'">
+          <span>执行时间</span>
+          <el-time-picker
+            v-model="refreshTriggerTime"
+            class="refresh-schedule-time"
+            format="HH:mm"
+            value-format="HH:mm"
+            placeholder="选择时间"
+            :clearable="false"
+          />
+        </template>
+        <span v-else class="refresh-schedule-hint">整点执行（上海时间）</span>
         <el-button type="primary" :loading="refreshScheduleSaving" @click="saveRefreshSchedule">保存</el-button>
       </div>
       <div class="watchlist-toolbar">
@@ -510,6 +522,7 @@ const watchlistFundType = ref<FundType | ''>('')
 const watchlistPage = ref(1)
 const watchlistPageSize = ref(10)
 const refreshFrequency = ref<'HOURLY' | 'DAILY' | 'WEEKLY'>('DAILY')
+const refreshTriggerTime = ref('18:30')
 const refreshScheduleSaving = ref(false)
 const fundPageVisible = ref(false)
 const fundPageType = ref<'onshore-fund' | 'offshore-fund'>('onshore-fund')
@@ -703,6 +716,7 @@ const loadRefreshSchedule = async () => {
   try {
     const response: any = await fundRefreshScheduleGet()
     refreshFrequency.value = response.data.frequency
+    refreshTriggerTime.value = response.data.triggerTime || '18:30'
   } catch (error) {
     ElMessage.error(errorMessage(error))
   }
@@ -711,8 +725,9 @@ const loadRefreshSchedule = async () => {
 const saveRefreshSchedule = async () => {
   refreshScheduleSaving.value = true
   try {
-    const response: any = await fundRefreshScheduleUpdate(refreshFrequency.value)
+    const response: any = await fundRefreshScheduleUpdate(refreshFrequency.value, refreshTriggerTime.value)
     refreshFrequency.value = response.data.frequency
+    refreshTriggerTime.value = response.data.triggerTime || '18:30'
     ElMessage.success('基金自动同步频率已保存')
   } catch (error) {
     ElMessage.error(errorMessage(error))
@@ -1012,6 +1027,12 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
 .refresh-schedule-select {
   width: 210px;
 }
+.refresh-schedule-time {
+  width: 130px;
+}
+.refresh-schedule-hint {
+  color: var(--ink-500);
+}
 .watchlist-toolbar {
   display: flex;
   align-items: center;
@@ -1222,6 +1243,9 @@ onBeforeUnmount(() => window.removeEventListener('fund-catalog-synced', onFundCa
     flex-wrap: wrap;
   }
   .refresh-schedule-select {
+    width: 100%;
+  }
+  .refresh-schedule-time {
     width: 100%;
   }
   .watchlist-search,

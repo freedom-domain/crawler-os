@@ -121,8 +121,8 @@ export const simulateOffExchangeFundDca = (data: {
 }) => request.post('/investment/off-exchange-fund/dca', data)
 export const fundManagementList = () => request.get('/investment/fund-management')
 export const fundRefreshScheduleGet = () => request.get('/investment/fund-management/refresh-schedule')
-export const fundRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY') =>
-  request.put('/investment/fund-management/refresh-schedule', { frequency })
+export const fundRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY', triggerTime: string) =>
+  request.put('/investment/fund-management/refresh-schedule', { frequency, triggerTime })
 export const fundCatalogPage = (params: {
   keyword?: string
   fundType?: 'ONSHORE' | 'OFFSHORE'
@@ -155,8 +155,8 @@ export const stockWatchlistRemove = (code: string) =>
 export const stockWatchlistRefresh = (code: string) =>
   request.post('/investment/stock-management/watchlist/refresh', null, { params: { code } })
 export const stockRefreshScheduleGet = () => request.get('/investment/stock-management/refresh-schedule')
-export const stockRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY') =>
-  request.put('/investment/stock-management/refresh-schedule', { frequency })
+export const stockRefreshScheduleUpdate = (frequency: 'HOURLY' | 'DAILY' | 'WEEKLY', triggerTime: string) =>
+  request.put('/investment/stock-management/refresh-schedule', { frequency, triggerTime })
 export const historySyncTaskStart = (instrumentType: 'FUND' | 'STOCK') =>
   request.post('/investment/history-sync', null, { params: { instrumentType } })
 export const historySyncTaskLatest = (instrumentType: 'FUND' | 'STOCK', page = 1, pageSize = 10) =>

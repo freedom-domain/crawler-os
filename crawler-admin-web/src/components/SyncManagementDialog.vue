@@ -127,9 +127,9 @@ defineExpose({ open })
   justify-content: space-between;
   gap: 20px;
   padding: 16px;
-  border: 1px solid var(--el-border-color-lighter);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--el-fill-color-extra-light);
+  background: var(--surface-soft);
 }
 .action-copy {
   min-width: 0;

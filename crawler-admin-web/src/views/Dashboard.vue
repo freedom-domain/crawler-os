@@ -57,7 +57,7 @@
       </article>
     </section>
 
-    <section class="fund-watchlist-panel panel">
+    <section class="fund-watchlist-panel panel dashboard-fund-watchlist">
       <div class="panel-heading">
         <div><p class="panel-kicker">FUND WATCHLIST</p><h2>关注基金</h2></div>
         <div class="panel-actions">
@@ -132,7 +132,122 @@
       </div>
     </section>
 
-    <section class="dashboard-grid">
+    <section class="fund-watchlist-panel panel dashboard-stock-watchlist">
+      <div class="panel-heading">
+        <div><p class="panel-kicker">STOCK WATCHLIST</p><h2>关注股票</h2></div>
+        <div class="panel-actions">
+          <span class="fund-source-label">最新收盘价 · 数据库历史</span>
+          <el-button circle size="small" class="refresh-btn" :loading="stockListLoading" aria-label="刷新关注股票" @click="loadFavoriteStocks">
+            <el-icon v-if="!stockListLoading"><Refresh /></el-icon>
+          </el-button>
+          <el-button link type="primary" size="small" class="panel-link-btn" @click="router.push({ name: 'StockManagement' })">股票管理 →</el-button>
+        </div>
+      </div>
+
+      <div v-if="stockListError" class="fund-watchlist-message fund-watchlist-error" role="alert">
+        <span>{{ stockListError }}</span>
+        <el-button link type="primary" @click="loadFavoriteStocks">重试</el-button>
+      </div>
+      <div v-else-if="!favoriteStocks.length" class="fund-watchlist-message">
+        <span>{{ stockListLoading ? '加载关注股票...' : '尚未关注股票。' }}</span>
+        <el-button v-if="!stockListLoading" link type="primary" @click="router.push({ name: 'StockManagement' })">前往股票管理</el-button>
+      </div>
+      <div v-else class="fund-watchlist-grid" v-loading="stockListLoading" element-loading-text="加载关注股票...">
+        <article v-for="stock in favoriteStocks" :key="stock.code" class="fund-watch-card">
+          <div class="fund-watch-heading">
+            <div class="fund-watch-name" :title="stock.name">{{ stock.name || stock.code }}</div>
+            <el-tag size="small" effect="plain">{{ stock.market || '股票' }}</el-tag>
+          </div>
+          <div class="fund-watch-quote">
+            <div class="fund-watch-quote-meta">
+              <span class="fund-watch-code">{{ stock.code }} · 最新收盘价</span>
+              <span class="fund-watch-date">行情日期 {{ stock.latestDate || '暂无' }}</span>
+            </div>
+            <strong v-if="stock.latestValue != null">¥{{ formatStockValue(stock.latestValue) }}</strong>
+            <strong v-else class="fund-watch-no-value">暂无行情</strong>
+            <span
+              v-if="stock.latestChangePercent != null"
+              class="stock-watch-change"
+              :class="stock.latestChangePercent > 0 ? 'is-positive' : stock.latestChangePercent < 0 ? 'is-negative' : ''"
+            >{{ formatFundChange(stock.latestChangePercent) }}</span>
+          </div>
+          <div v-if="stock.historyLoading" class="fund-watch-chart fund-watch-chart-loading">读取数据库历史行情...</div>
+          <div v-else-if="stock.historyError" class="fund-watch-chart fund-watch-chart-error" role="alert">{{ stock.historyError }}</div>
+          <svg
+            v-else-if="stock.points.length"
+            class="fund-watch-chart"
+            viewBox="0 0 1000 110"
+            preserveAspectRatio="none"
+            role="img"
+            :aria-label="`${stock.name}从${stock.points[0].date}至${stock.points[stock.points.length - 1].date}的历史走势`"
+          >
+            <line x1="0" y1="12" x2="1000" y2="12" class="fund-chart-grid" />
+            <line x1="0" y1="55" x2="1000" y2="55" class="fund-chart-grid" />
+            <line x1="0" y1="98" x2="1000" y2="98" class="fund-chart-grid" />
+            <polyline :points="stockTrendPoints(stock)" class="fund-chart-line" />
+            <circle :cx="stockLastCoordinate(stock)?.x" :cy="stockLastCoordinate(stock)?.y" r="5" class="fund-chart-endpoint" />
+          </svg>
+          <div v-else class="fund-watch-chart fund-watch-chart-error">数据库暂无可绘制的历史行情</div>
+          <div class="fund-watch-card-footer">
+            <div v-if="stock.points.length" class="fund-watch-dates">
+              <span>{{ stock.points[0].date }}</span>
+              <span>{{ stock.points[stock.points.length - 1].date }}</span>
+            </div>
+            <div v-else-if="stock.latestDate" class="fund-watch-dates"><span>最新缓存日期 {{ stock.latestDate }}</span></div>
+            <el-button
+              link
+              type="primary"
+              size="small"
+              :loading="stock.refreshing"
+              :disabled="stock.refreshing || stock.historyLoading"
+              @click="refreshFavoriteStock(stock)"
+            >立即更新</el-button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="fund-watchlist-panel panel dashboard-ip-panel">
+      <div class="panel-heading">
+        <div><p class="panel-kicker">CLOUDFLARE IP</p><h2>IP 优选</h2></div>
+        <div class="panel-actions">
+          <span class="fund-source-label">已测试候选与可用地址</span>
+          <el-button circle size="small" class="refresh-btn" :loading="ipInfoLoading" aria-label="刷新 IP 信息" @click="loadIpInfo">
+            <el-icon v-if="!ipInfoLoading"><Refresh /></el-icon>
+          </el-button>
+          <el-button link type="primary" size="small" class="panel-link-btn" @click="router.push({ name: 'CfIpManagement' })">IP 管理 →</el-button>
+        </div>
+      </div>
+      <div v-if="ipInfoError" class="fund-watchlist-message fund-watchlist-error" role="alert">
+        <span>{{ ipInfoError }}</span>
+        <el-button link type="primary" @click="loadIpInfo">重试</el-button>
+      </div>
+      <div v-else class="ip-info-content" v-loading="ipInfoLoading">
+        <div class="ip-summary-grid">
+          <div class="ip-summary-item"><span>候选 IP</span><strong>{{ ipSummary.total }}</strong></div>
+          <div class="ip-summary-item"><span>可连接</span><strong class="ip-available">{{ ipSummary.availableCount }}</strong></div>
+          <div class="ip-summary-item"><span>可用地址</span><strong class="ip-available">{{ ipSummary.availableAddressCount }}</strong></div>
+          <div class="ip-summary-item"><span>待测试</span><strong>{{ ipSummary.pendingCount }}</strong></div>
+          <div class="ip-summary-item"><span>连接失败</span><strong class="ip-failed">{{ ipSummary.failedCount }}</strong></div>
+          <div class="ip-summary-item"><span>最快 TLS</span><strong>{{ ipSummary.fastestTlsMs == null ? '暂无' : `${Number(ipSummary.fastestTlsMs).toFixed(3)} ms` }}</strong></div>
+        </div>
+        <div class="ip-best-list">
+          <div class="ip-best-heading">
+            <span>高速可用 IP</span>
+            <span>测速至少 80 Mbps</span>
+          </div>
+          <div v-if="!bestIps.length" class="ip-best-empty">暂无满足速度条件的可用 IP</div>
+          <div v-for="candidate in bestIps" :key="candidate.id" class="ip-best-row">
+            <code>{{ candidate.ipAddress }}</code>
+            <span>{{ candidate.region || '未知地区' }}<template v-if="candidate.colo"> · {{ candidate.colo }}</template></span>
+            <strong>{{ candidate.speedMbps == null ? '暂无' : `${(Number(candidate.speedMbps) / 8).toFixed(2)} MB/s` }}</strong>
+            <small>TLS {{ candidate.tlsMs == null ? '暂无' : `${Number(candidate.tlsMs).toFixed(3)} ms` }}</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="dashboard-grid dashboard-recent-tasks">
       <div v-loading="recentTaskLoading" element-loading-text="加载中..." class="panel task-panel">
         <div class="panel-heading">
           <div><p class="panel-kicker">ACTIVITY STREAM</p><h2>最近任务</h2></div>
@@ -240,7 +355,8 @@ import { ref, computed, watch, onActivated, onDeactivated, onUnmounted } from 'v
 import { useRouter } from 'vue-router'
 import {
   spiderPage, taskStats, taskPage, taskActiveCount, searchContent,
-  fundManagementList, fundHistory, offExchangeFundHistory, fundHistoryRefresh
+  fundManagementList, fundHistory, offExchangeFundHistory, fundHistoryRefresh,
+  stockWatchlistList, stockHistory, stockWatchlistRefresh, cfIpSummary, cfIpPage
 } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
@@ -277,6 +393,70 @@ const tickClock = () => {
   clock.value = [now.getHours(), now.getMinutes(), now.getSeconds()]
     .map(part => String(part).padStart(2, '0')).join(':')
 }
+
+const loadIpInfo = async () => {
+  ipInfoLoading.value = true
+  ipInfoError.value = ''
+  try {
+    const [summaryResponse, candidatesResponse]: any[] = await Promise.all([
+      cfIpSummary(),
+      cfIpPage({
+        current: 1,
+        size: 5,
+        status: 'AVAILABLE',
+        minSpeedMbps: 81,
+        sortBy: 'speedMbps',
+        sortOrder: 'descending'
+      })
+    ])
+    const summary = summaryResponse?.data
+    const records = candidatesResponse?.data?.records
+    if (!summary || !Array.isArray(records)) throw new Error('IP 优选数据格式无效')
+    ipSummary.value = {
+      total: Number(summary.total) || 0,
+      availableCount: Number(summary.availableCount) || 0,
+      availableAddressCount: Number(summary.availableAddressCount) || 0,
+      pendingCount: Number(summary.pendingCount) || 0,
+      failedCount: Number(summary.failedCount) || 0,
+      fastestTlsMs: summary.fastestTlsMs == null ? null : Number(summary.fastestTlsMs)
+    }
+    bestIps.value = records.map((candidate: any): DashboardIpCandidate => ({
+      id: Number(candidate.id),
+      ipAddress: String(candidate.ipAddress || ''),
+      region: String(candidate.region || ''),
+      colo: candidate.colo || null,
+      speedMbps: candidate.speedMbps == null ? null : Number(candidate.speedMbps),
+      tlsMs: candidate.tlsMs == null ? null : Number(candidate.tlsMs)
+    }))
+  } catch (error) {
+    console.error(error)
+    ipInfoError.value = error instanceof Error ? error.message : '读取 IP 优选信息失败'
+  } finally {
+    ipInfoLoading.value = false
+  }
+}
+
+const stockTrendCoordinates = (stock: DashboardStock) => {
+  const values = stock.points.map(point => point.value)
+  if (!values.length) return []
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const padding = max === min ? Math.max(Math.abs(max) * 0.03, 0.01) : (max - min) * 0.12
+  const rangeMin = min - padding
+  const range = max - min + padding * 2
+  return values.map((value, index) => ({
+    x: values.length === 1 ? 500 : index / (values.length - 1) * 1000,
+    y: 98 - (value - rangeMin) / range * 86
+  }))
+}
+
+const stockTrendPoints = (stock: DashboardStock) => stockTrendCoordinates(stock)
+  .map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
+  .join(' ')
+const stockLastCoordinate = (stock: DashboardStock) => {
+  const coordinates = stockTrendCoordinates(stock)
+  return coordinates[coordinates.length - 1]
+}
 const startClock = () => {
   stopClock()
   tickClock()
@@ -284,6 +464,96 @@ const startClock = () => {
 }
 const stopClock = () => {
   if (clockTimer) { clearInterval(clockTimer); clockTimer = null }
+}
+
+const loadStockHistory = async (stock: DashboardStock) => {
+  if (!stock.cachedPoints || !stock.latestDate) {
+    stock.historyError = '数据库暂无已缓存的历史行情'
+    return
+  }
+  stock.historyLoading = true
+  stock.historyError = ''
+  try {
+    const response: any = await stockHistory({
+      code: stock.code,
+      startDate: oneYearBefore(stock.latestDate),
+      endDate: stock.latestDate,
+      source: 'database'
+    })
+    if (!Array.isArray(response?.data?.points)) throw new Error('历史行情数据格式无效')
+    const points = response.data.points
+      .map((point: any): FundTrendPoint => ({
+        date: String(point.date || ''),
+        value: point.close == null ? Number.NaN : Number(point.close),
+        changePercent: point.changePercent == null ? null : Number(point.changePercent)
+      }))
+      .filter((point: FundTrendPoint) => point.date && Number.isFinite(point.value))
+    if (!points.length) throw new Error('数据库暂无可绘制的历史行情')
+    stock.points = points
+    const latestPoint = points[points.length - 1]
+    stock.latestDate = latestPoint.date
+    stock.latestValue = latestPoint.value
+    stock.latestChangePercent = latestPoint.changePercent
+  } catch (error) {
+    console.error(error)
+    stock.historyError = error instanceof Error ? error.message : '读取数据库历史行情失败'
+  } finally {
+    stock.historyLoading = false
+  }
+}
+
+const loadFavoriteStocks = async () => {
+  stockListLoading.value = true
+  stockListError.value = ''
+  try {
+    const response: any = await stockWatchlistList()
+    if (!Array.isArray(response?.data)) throw new Error('关注股票列表数据格式无效')
+    const stocks = response.data.map((item: any): DashboardStock => ({
+      code: String(item.code),
+      name: String(item.name || item.code),
+      market: item.market || null,
+      cachedPoints: Number(item.cachedPoints) || 0,
+      latestDate: item.latestDate || null,
+      latestValue: null,
+      latestChangePercent: null,
+      points: [],
+      historyLoading: false,
+      historyError: '',
+      refreshing: false
+    }))
+    favoriteStocks.value = stocks
+    await Promise.all(stocks.map(loadStockHistory))
+  } catch (error) {
+    console.error(error)
+    stockListError.value = error instanceof Error ? error.message : '读取关注股票失败'
+  } finally {
+    stockListLoading.value = false
+  }
+}
+
+const refreshFavoriteStock = async (stock: DashboardStock) => {
+  if (stock.refreshing) return
+  stock.refreshing = true
+  stock.historyError = ''
+  try {
+    await stockWatchlistRefresh(stock.code)
+    const response: any = await stockWatchlistList()
+    if (!Array.isArray(response?.data)) throw new Error('关注股票列表数据格式无效')
+    const updated = response.data.find((item: any) => String(item.code) === stock.code)
+    if (!updated) throw new Error('股票已不在关注清单中，请刷新首页')
+    stock.cachedPoints = Number(updated.cachedPoints) || 0
+    stock.latestDate = updated.latestDate || null
+    stock.points = []
+    await loadStockHistory(stock)
+    if (stock.historyError) throw new Error(stock.historyError)
+    ElMessage.success(`${stock.name} 行情已更新`)
+  } catch (error) {
+    console.error(error)
+    stock.historyError = error instanceof Error ? error.message : '更新股票行情失败'
+    ElMessage.error(stock.historyError)
+  } finally {
+    stock.refreshing = false
+  }
 }
 
 
@@ -335,9 +605,55 @@ interface DashboardFund {
   refreshing: boolean
 }
 
+interface DashboardIpSummary {
+  total: number
+  availableCount: number
+  availableAddressCount: number
+  pendingCount: number
+  failedCount: number
+  fastestTlsMs: number | null
+}
+
+interface DashboardIpCandidate {
+  id: number
+  ipAddress: string
+  region: string
+  colo: string | null
+  speedMbps: number | null
+  tlsMs: number | null
+}
+
+interface DashboardStock {
+  code: string
+  name: string
+  market: string | null
+  cachedPoints: number
+  latestDate: string | null
+  latestValue: number | null
+  latestChangePercent: number | null
+  points: FundTrendPoint[]
+  historyLoading: boolean
+  historyError: string
+  refreshing: boolean
+}
+
 const favoriteFunds = ref<DashboardFund[]>([])
 const fundListLoading = ref(false)
 const fundListError = ref('')
+const favoriteStocks = ref<DashboardStock[]>([])
+const stockListLoading = ref(false)
+const stockListError = ref('')
+const ipInfoLoading = ref(false)
+const ipInfoError = ref('')
+const ipSummary = ref<DashboardIpSummary>({
+  total: 0,
+  availableCount: 0,
+  availableAddressCount: 0,
+  pendingCount: 0,
+  failedCount: 0,
+  fastestTlsMs: null
+})
+const bestIps = ref<DashboardIpCandidate[]>([])
 const frequencyRank: Record<string, number> = { day: 0, week: 1, month: 2 }
 
 const selectPreferredFrequencies = (items: any[]) => {
@@ -487,6 +803,10 @@ const formatFundValue = (value: number) => value.toLocaleString('zh-CN', {
 })
 
 const formatFundChange = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+const formatStockValue = (value: number) => value.toLocaleString('zh-CN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+})
 
 const fundChartCoordinates = (fund: DashboardFund) => {
   const values = fund.points.map(point => point.value)
@@ -670,7 +990,7 @@ let lastLoadedAt = 0
 const loadDashboard = (force = false) => {
   if (!force && Date.now() - lastLoadedAt < 10_000) return
   lastLoadedAt = Date.now()
-  void Promise.all([loadSpiderStats(), loadTaskStats(), loadRecentTasks(), loadDataStats(), loadFavoriteFunds()]).then(stampSync)
+  void Promise.all([loadSpiderStats(), loadTaskStats(), loadRecentTasks(), loadDataStats(), loadFavoriteFunds(), loadFavoriteStocks(), loadIpInfo()]).then(stampSync)
 }
 
 const refreshDashboard = () => loadDashboard(true)
@@ -707,6 +1027,8 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard-page {
+  display: flex;
+  flex-direction: column;
   /* ===== 白天（默认）===== */
   --dc-bg: #eaf1f3;
   --dc-panel: linear-gradient(180deg, #ffffff 0%, #fbfdfd 100%);
@@ -841,6 +1163,10 @@ html[data-theme="black"] .dashboard-page {
   pointer-events: none;
 }
 .dashboard-page > section { position: relative; z-index: 1; }
+.dashboard-recent-tasks { order: 3; }
+.dashboard-fund-watchlist { order: 4; }
+.dashboard-stock-watchlist { order: 5; }
+.dashboard-ip-panel { order: 6; }
 
 /* ===== 指挥台头部 ===== */
 .dashboard-hero {
@@ -1104,6 +1430,25 @@ html[data-theme="black"] .dashboard-page {
 .fund-watch-change { grid-column: 2; grid-row: 2; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-align: right; }
 .fund-watch-change.is-positive { color: var(--st-success); }
 .fund-watch-change.is-negative { color: var(--st-danger); }
+.stock-watch-change { grid-column: 2; grid-row: 2; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-align: right; }
+.stock-watch-change.is-positive { color: var(--st-danger); }
+.stock-watch-change.is-negative { color: var(--st-success); }
+.ip-info-content { display: flex; flex-direction: column; gap: 16px; }
+.ip-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.ip-summary-item { display: flex; min-height: 72px; flex-direction: column; justify-content: center; gap: 6px; padding: 10px 14px; border: 1px solid var(--dc-line-soft); border-radius: 10px; background: var(--dc-card-bg); }
+.ip-summary-item span { color: var(--dc-text-mute); font-size: 11px; }
+.ip-summary-item strong { color: var(--dc-text-bright); font-family: var(--font-mono); font-size: 19px; font-variant-numeric: tabular-nums; }
+.ip-summary-item .ip-available { color: var(--st-success); }
+.ip-summary-item .ip-failed { color: var(--dc-coral); }
+.ip-best-list { overflow: hidden; border: 1px solid var(--dc-line-soft); border-radius: 10px; background: var(--dc-card-bg); }
+.ip-best-heading, .ip-best-row { display: grid; grid-template-columns: minmax(140px, 1.2fr) minmax(110px, 1fr) minmax(90px, .7fr) minmax(100px, .8fr); align-items: center; gap: 12px; padding: 10px 14px; }
+.ip-best-heading { color: var(--dc-text-mute); background: var(--dc-neon-faint); font-size: 11px; }
+.ip-best-heading span:last-child { grid-column: 2 / -1; text-align: right; }
+.ip-best-row { border-top: 1px solid var(--dc-line-soft); color: var(--dc-text-dim); font-size: 11px; }
+.ip-best-row code { overflow: hidden; color: var(--dc-text); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.ip-best-row strong { color: var(--dc-neon-text); font-family: var(--font-mono); font-size: 12px; text-align: right; white-space: nowrap; }
+.ip-best-row small { color: var(--dc-text-mute); font-size: 10px; text-align: right; white-space: nowrap; }
+.ip-best-empty { padding: 16px; color: var(--dc-text-mute); font-size: 12px; text-align: center; }
 .fund-watch-chart { display: block; width: 100%; height: 92px; margin-top: 9px; }
 .fund-watch-chart-loading, .fund-watch-chart-error {
   display: grid;
@@ -1238,6 +1583,9 @@ html[data-theme="black"] .dashboard-page {
   .panel-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .fund-source-label { white-space: normal; }
   .panel-updated { display: none; }
+  .ip-best-heading, .ip-best-row { grid-template-columns: minmax(100px, 1fr) minmax(70px, .8fr) minmax(75px, auto); gap: 8px; padding: 9px; }
+  .ip-best-heading span:last-child { grid-column: 2 / -1; }
+  .ip-best-row small { grid-column: 2 / -1; text-align: right; }
   .output-block { min-height: 88px; padding: 12px; }
   .output-total { width: 52px; font-size: 11px; }
   /* 小屏：el-table 原生横向滚动，不裁剪不隐藏 */

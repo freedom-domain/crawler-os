@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -30,15 +31,17 @@ public class FundHistoryRefreshScheduler {
         String frequency;
         String slot;
         try {
-            frequency = settingService.getSchedule().getFrequency();
+            var schedule = settingService.getSchedule();
+            frequency = schedule.getFrequency();
+            LocalTime triggerTime = LocalTime.parse(schedule.getTriggerTime(), DateTimeFormatter.ofPattern("HH:mm"));
             if ("HOURLY".equals(frequency) && now.getMinute() == 0) {
                 slot = "H:" + now.format(DateTimeFormatter.ofPattern("yyyyMMddHH"));
             } else if ("DAILY".equals(frequency)
                     && now.getDayOfWeek().getValue() <= DayOfWeek.FRIDAY.getValue()
-                    && now.getHour() == 18 && now.getMinute() == 30) {
+                    && now.getHour() == triggerTime.getHour() && now.getMinute() == triggerTime.getMinute()) {
                 slot = "D:" + now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             } else if ("WEEKLY".equals(frequency) && now.getDayOfWeek() == DayOfWeek.MONDAY
-                    && now.getHour() == 18 && now.getMinute() == 30) {
+                    && now.getHour() == triggerTime.getHour() && now.getMinute() == triggerTime.getMinute()) {
                 slot = "W:" + now.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             } else {
                 return;
