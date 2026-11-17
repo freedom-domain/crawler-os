@@ -6,8 +6,8 @@
       <div class="brand-lockup"><img class="brand-mark" src="/crawleros-icon.svg" alt="" /><span>Crawler<span>OS</span></span></div>
       <div class="aside-copy">
         <p class="eyebrow">INTELLIGENT CRAWL OPERATIONS</p>
-        <h1>让数据采集<br /><em>更有秩序。</em></h1>
-        <p>统一管理爬虫、任务与内容资产，<br />让每一次采集都清晰可追踪。</p>
+        <h1>汇聚数据力量<br /><em>驱动业务向前。</em></h1>
+        <p>统一管理任务与内容资产，<br />让信息触手可及，让协作更加高效。</p>
       </div>
       <div class="aside-foot">CrawlerOS · Admin Console</div>
     </div>
