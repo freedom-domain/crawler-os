@@ -6,7 +6,7 @@
         <h1>{{ greeting }}，{{ displayName }}</h1>
         <p class="intro-copy">任务进度 · 内容资产 · 全站模块，一屏掌控。</p>
         <div class="hero-meta">
-          <span class="hero-status" :class="{ 'hero-status-bad': !syncOk }" :title="syncOk ? '' : '点击重试'" @click="!syncOk && refreshDashboard()"><span class="status-pulse"></span>{{ syncOk ? '系统运行正常' : '数据连接异常' }} <b>·</b> {{ syncOk ? '实时同步中' : '点击重试' }}</span>
+          <span class="hero-status" :class="{ 'hero-status-bad': !syncOk }" :title="syncOk ? '' : '点击重试'" @click="!syncOk && refreshDashboard()"><span class="status-pulse"></span>{{ syncOk ? '系统运行正常' : '数据连接异常' }} <b>·</b> {{ syncOk ? '手动刷新' : '点击重试' }}</span>
           <span v-if="activeCount > 0" class="hero-active"><el-icon :size="13"><Loading /></el-icon>{{ activeCount }} 个任务进行中</span>
           <span class="hero-date">{{ todayLabel }}</span>
         </div>
@@ -998,31 +998,14 @@ const loadDashboard = (force = false) => {
 
 const refreshDashboard = () => loadDashboard(true)
 
-// 页面可见时每 30s 静默刷新任务动态；离开页面（keep-alive 失活）时停止
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-const startAutoRefresh = () => {
-  stopAutoRefresh()
-  refreshTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      void Promise.all([loadTaskStats(), loadRecentTasks()]).then(stampSync)
-    }
-  }, 30_000)
-}
-const stopAutoRefresh = () => {
-  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
-}
-
 onActivated(() => {
   loadDashboard()
-  startAutoRefresh()
   startClock()
 })
 onDeactivated(() => {
-  stopAutoRefresh()
   stopClock()
 })
 onUnmounted(() => {
-  stopAutoRefresh()
   stopClock()
   Object.values(tweenHandles).forEach(handle => cancelAnimationFrame(handle))
 })
