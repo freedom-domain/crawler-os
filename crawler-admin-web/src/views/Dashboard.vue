@@ -48,9 +48,38 @@
           <span class="metric-icon"><el-icon :size="18"><component :is="stat.icon" /></el-icon></span>
           <span class="metric-index">0{{ index + 1 }}</span>
         </div>
-        <div class="stat-label">{{ stat.label }}</div>
-        <div class="stat-value">{{ stat.value }}</div>
-        <div v-if="stat.detail" class="stat-detail">{{ stat.detail }}</div>
+        <template v-if="stat.kind === 'tasks'">
+          <div class="stat-label">{{ stat.label }}</div>
+          <div class="task-counts">
+            <div class="task-count">
+              <strong>{{ stat.taskCount }}</strong>
+              <span>今日任务</span>
+            </div>
+            <span class="task-count-divider" aria-hidden="true">/</span>
+            <div class="task-count">
+              <strong>{{ stat.spiderCount }}</strong>
+              <span>爬虫</span>
+            </div>
+          </div>
+          <div class="task-breakdown">
+            <div class="task-breakdown-item task-breakdown-success">
+              <strong>{{ stat.successCount }}</strong>
+              <span>成功</span>
+            </div>
+            <div class="task-breakdown-item task-breakdown-failed">
+              <strong>{{ stat.failedCount }}</strong>
+              <span>失败</span>
+            </div>
+            <div class="task-breakdown-item task-breakdown-rate">
+              <strong>{{ stat.successRate }}%</strong>
+              <span>成功率</span>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="stat-label">{{ stat.label }}</div>
+          <div class="stat-value">{{ stat.value }}</div>
+        </template>
         <div class="metric-foot">
           <div class="metric-rule"><span :style="{ width: stat.progress }"></span></div>
           <span v-if="stat.route" class="metric-link">查看 →</span>
@@ -859,7 +888,7 @@ watch(() => stats.value.successRate, (to, from) => tween('rate', from ?? 0, to, 
 watch(() => stats.value.dataCount, (to, from) => tween('data', from ?? 0, to, v => { dataDisp.value = v }))
 
 const statCards = computed(() => [
-  { label: '爬虫任务', tone: 'blue', icon: List, route: 'Task', value: `${taskDisp.value} / ${spiderDisp.value}`, detail: `成功 ${stats.value.successCount} · 失败 ${stats.value.failedCount} · 成功率 ${rateDisp.value}%`, progress: `${Math.max(stats.value.successRate, 4)}%` },
+  { kind: 'tasks', label: '爬虫任务', tone: 'blue', icon: List, route: 'Task', value: `${taskDisp.value} / ${spiderDisp.value}`, taskCount: taskDisp.value, spiderCount: spiderDisp.value, successCount: stats.value.successCount, failedCount: stats.value.failedCount, successRate: rateDisp.value, progress: `${Math.max(stats.value.successRate, 4)}%` },
   { label: '数据总量', tone: 'coral', icon: DataBoard, route: 'Search', value: dataDisp.value.toLocaleString('en-US'), progress: stats.value.dataCount > 0 ? '100%' : '12%' }
 ])
 
@@ -1259,7 +1288,9 @@ html[data-theme="black"] .dashboard-page {
 .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .metric-card {
   position: relative;
-  min-height: 154px;
+  display: flex;
+  flex-direction: column;
+  min-height: 218px;
   padding: 19px 21px;
   overflow: hidden;
   border: 1px solid var(--dc-line);
@@ -1319,17 +1350,20 @@ html[data-theme="black"] .dashboard-page {
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 18px var(--metric-glow);
 }
-.stat-detail {
-  margin-top: 8px;
-  color: var(--dc-amber);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-  white-space: normal;
-}
-.metric-foot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
+.task-counts { display: flex; align-items: center; gap: 16px; margin-top: 9px; }
+.task-count { display: flex; flex-direction: column; gap: 5px; }
+.task-count strong { color: var(--dc-text); font-family: var(--font-mono); font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px var(--metric-glow); }
+.task-count span { color: var(--dc-text-mute); font-size: 11px; }
+.task-count-divider { color: var(--dc-text-mute); font-size: 22px; font-weight: 300; }
+.task-breakdown { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--dc-line-soft); }
+.task-breakdown-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.task-breakdown-item + .task-breakdown-item { padding-left: 14px; border-left: 1px solid var(--dc-line-soft); }
+.task-breakdown-item strong { color: var(--dc-text); font-family: var(--font-mono); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.task-breakdown-item span { color: var(--dc-text-mute); font-size: 10px; white-space: nowrap; }
+.task-breakdown-success strong { color: var(--st-success); }
+.task-breakdown-failed strong { color: var(--dc-coral); }
+.task-breakdown-rate strong { color: var(--dc-amber); }
+.metric-foot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 14px; }
 .metric-rule { width: 76px; height: 3px; overflow: hidden; border-radius: 3px; background: var(--dc-line-soft); }
 .metric-rule span { display: block; width: 65%; height: 100%; background: var(--metric-color); box-shadow: 0 0 8px var(--metric-glow); transition: width .6s ease; }
 .metric-link { color: var(--metric-color); font-size: 11px; font-weight: 700; opacity: .78; transition: opacity .18s ease, transform .18s ease; }
@@ -1553,8 +1587,11 @@ html[data-theme="black"] .dashboard-page {
   .dashboard-hero h1 { font-size: 25px; }
   .hero-radar { display: none; }
   .metric-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .metric-card { min-height: 132px; padding: 14px; }
+  .metric-card { min-height: 204px; padding: 16px; }
   .stat-value { font-size: clamp(20px, 6vw, 24px); }
+  .task-counts { gap: 12px; }
+  .task-count strong { font-size: 24px; }
+  .task-breakdown-item + .task-breakdown-item { padding-left: 8px; }
   .panel { padding: 17px 14px; }
   .panel-heading { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 14px; }
   .panel-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
