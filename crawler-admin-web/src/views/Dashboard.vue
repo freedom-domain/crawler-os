@@ -1439,8 +1439,8 @@ html[data-theme="black"] .dashboard-page {
 .fund-watch-quote strong { grid-column: 2; grid-row: 1; color: var(--dc-text-bright); font-family: var(--font-mono); font-size: 21px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .fund-watch-quote .fund-watch-no-value { color: var(--dc-text-mute); font-family: inherit; font-size: 14px; }
 .fund-watch-change { grid-column: 2; grid-row: 2; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-align: right; }
-.fund-watch-change.is-positive { color: var(--st-success); }
-.fund-watch-change.is-negative { color: var(--st-danger); }
+.fund-watch-change.is-positive { color: var(--st-danger); }
+.fund-watch-change.is-negative { color: var(--st-success); }
 .stock-watch-change { grid-column: 2; grid-row: 2; color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 10px; text-align: right; }
 .stock-watch-change.is-positive { color: var(--st-danger); }
 .stock-watch-change.is-negative { color: var(--st-success); }

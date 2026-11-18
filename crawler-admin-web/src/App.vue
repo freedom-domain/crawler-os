@@ -208,11 +208,36 @@ html[data-theme="black"] .el-empty__image {
 .el-button:not(.is-text):not(.is-link):hover { transform: translateY(-1px); }
 .el-input__wrapper, .el-select__wrapper { border-radius: 8px; background: var(--surface-soft); box-shadow: 0 0 0 1px var(--line) inset; }
 .el-input__wrapper.is-focus, .el-select__wrapper.is-focused { box-shadow: 0 0 0 1px var(--teal) inset, 0 0 0 3px var(--focus-ring); }
-.el-table { --el-table-header-bg-color: var(--surface-soft); --el-table-row-hover-bg-color: var(--tint); color: var(--ink-900); border-radius: 8px; overflow: hidden; }
+.el-table {
+  --el-table-bg-color: var(--surface);
+  --el-table-tr-bg-color: var(--surface);
+  --el-table-header-bg-color: var(--surface-soft);
+  --el-table-row-hover-bg-color: var(--tint);
+  --el-table-current-row-bg-color: var(--tint-strong);
+  --el-fill-color-lighter: var(--table-row-stripe-bg);
+  color: var(--ink-900);
+  border-radius: 8px;
+  overflow: hidden;
+}
 .el-table th.el-table__cell { color: var(--ink-700); font-weight: 700; }
 .el-table td.el-table__cell, .el-table th.el-table__cell { border-bottom-color: var(--line); }
 .el-table .cell { line-height: 22px; padding-top: 2px; padding-bottom: 2px; }
-.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell { background: var(--surface-soft); }
+.el-table .el-table__body tr > td.el-table__cell {
+  background-color: var(--el-table-tr-bg-color) !important;
+  transition: background-color .18s ease;
+}
+.el-table.el-table--striped .el-table__body tr.el-table__row--striped > td.el-table__cell {
+  background-color: var(--table-row-stripe-bg) !important;
+}
+.el-table .el-table__body tr.hover-row > td.el-table__cell,
+.el-table .el-table__body tr:hover > td.el-table__cell,
+.el-table .el-table__body tr > td.hover-cell {
+  background-color: var(--el-table-row-hover-bg-color) !important;
+}
+.el-table .el-table__body tr.current-row > td.el-table__cell,
+.el-table.el-table--striped .el-table__body tr.current-row > td.el-table__cell {
+  background-color: var(--el-table-current-row-bg-color) !important;
+}
 .el-tag { border-radius: 6px; font-weight: 600; }
 /* 统一链接色：跟随主题青色，替代 Element 默认蓝 */
 .el-link--primary, .el-link--primary:hover, a { color: var(--teal); }

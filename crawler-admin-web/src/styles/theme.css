@@ -118,6 +118,7 @@
   --line-strong: #c7d8de;
   --dialog-border: #b8cbd3;
   --dialog-shadow: 0 18px 48px rgba(23, 43, 77, .16), 0 3px 12px rgba(23, 43, 77, .08);
+  --table-row-stripe-bg: #f8fbfb;
   --canvas: #f3f7f8;
   --surface: #ffffff;
   --surface-soft: #f8fbfb;
@@ -202,6 +203,7 @@ html[data-theme="black"] {
   --line-strong: rgba(114, 224, 200, .28);
   --dialog-border: rgba(114, 224, 200, .48);
   --dialog-shadow: 0 24px 70px rgba(0, 0, 0, .8), 0 0 28px rgba(114, 224, 200, .08);
+  --table-row-stripe-bg: rgba(114, 224, 200, .035);
   --canvas: #000000;
   --surface: #0a0a0a;
   --surface-soft: rgba(114, 224, 200, .05);
@@ -346,4 +348,24 @@ html[data-theme="black"] {
   --available-ink: #5fd39a;
   --drag-handle-ink: #5f7688;
   --profile-accent: #72e0c8;
+}
+
+html[data-theme="black"] .el-table .el-table__body tr > td.el-table__cell {
+  color: #cfe0e6 !important;
+  background-color: #080d0c !important;
+}
+html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.el-table__row--striped > td.el-table__cell {
+  background-color: #101816 !important;
+}
+html[data-theme="black"] .el-table .el-table__body tr.hover-row > td.el-table__cell,
+html[data-theme="black"] .el-table .el-table__body tr:hover > td.el-table__cell,
+html[data-theme="black"] .el-table .el-table__body tr > td.hover-cell {
+  background-color: #122824 !important;
+}
+html[data-theme="black"] .el-table .el-table__body tr.current-row > td.el-table__cell,
+html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.current-row > td.el-table__cell {
+  background-color: #15332d !important;
+}
+html[data-theme="black"] .el-table .el-table__body tr.spider-highlight-row > td.el-table__cell {
+  background-color: var(--spider-highlight-bg) !important;
 }
