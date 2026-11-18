@@ -56,19 +56,9 @@
             </template>
           </el-tab-pane>
         </el-tabs>
-        <el-dropdown trigger="click" class="theme-switch" @command="onThemeCommand">
-          <button type="button" class="theme-btn" :title="themeModeTitle">
-            <el-icon :size="18"><component :is="themeIcon" /></el-icon>
-          </button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="default"><el-icon class="theme-item-icon"><Monitor /></el-icon>默认 · 跟随系统<span v-if="themeStore.mode === 'default'" class="theme-item-on">✓</span></el-dropdown-item>
-              <el-dropdown-item command="light"><el-icon class="theme-item-icon"><Sunny /></el-icon>白天<span v-if="themeStore.mode === 'light'" class="theme-item-on">✓</span></el-dropdown-item>
-              <el-dropdown-item command="dark"><el-icon class="theme-item-icon"><Moon /></el-icon>黑夜<span v-if="themeStore.mode === 'dark'" class="theme-item-on">✓</span></el-dropdown-item>
-              <el-dropdown-item command="black"><el-icon class="theme-item-icon"><MoonNight /></el-icon>纯黑<span v-if="themeStore.mode === 'black'" class="theme-item-on">✓</span></el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <button type="button" class="theme-switch theme-btn" :title="themeModeTitle" @click="toggleTheme">
+          <el-icon :size="18"><component :is="themeIcon" /></el-icon>
+        </button>
         <div class="user-info">
           <el-dropdown @command="handleCommand">
             <span class="user-name">
@@ -115,25 +105,22 @@ import { ref, computed, onMounted, onBeforeUnmount, defineComponent, h, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
-import type { ThemeMode } from '@/utils/theme'
 import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon, Monitor, Sunny, Moon, MoonNight } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon, Sunny, Moon } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const themeStore = useThemeStore()
-// 主题切换：默认（跟随系统）/ 白天 / 黑夜 / 纯黑
-const themeIcon = computed(() => (themeStore.mode === 'default' ? Monitor : themeStore.mode === 'light' ? Sunny : themeStore.mode === 'black' ? MoonNight : Moon))
+// 主题切换：浅色 / 纯黑
+const themeIcon = computed(() => (themeStore.mode === 'light' ? Moon : Sunny))
 const themeModeTitle = computed(() =>
-  themeStore.mode === 'default'
-    ? `主题：默认（当前跟随系统 · ${themeStore.theme === 'dark' ? '黑夜' : '白天'}）`
-    : themeStore.mode === 'light' ? '主题：白天' : themeStore.mode === 'black' ? '主题：纯黑' : '主题：黑夜'
+  themeStore.mode === 'light' ? '浅色，点击切换为纯黑' : '纯黑，点击切换为浅色'
 )
-const onThemeCommand = (mode: ThemeMode) => themeStore.choose(mode)
+const toggleTheme = () => themeStore.choose(themeStore.mode === 'light' ? 'black' : 'light')
 const collapsed = ref(false)
 const menuList = ref<any[]>([])
 const pwdDialogVisible = ref(false)

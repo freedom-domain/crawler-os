@@ -87,7 +87,8 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
                       @Param("status") String status);
 
         @Select("SELECT COUNT(*) AS total, "
-                + "COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) AS success "
+                + "COALESCE(SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END), 0) AS success, "
+                + "COALESCE(SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END), 0) AS failed "
                 + "FROM spider_task WHERE deleted = 0 AND create_time >= CURDATE()")
         TaskStatsResponse selectTodayTaskStats();
 

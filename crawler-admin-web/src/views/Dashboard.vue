@@ -50,6 +50,7 @@
         </div>
         <div class="stat-label">{{ stat.label }}</div>
         <div class="stat-value">{{ stat.value }}</div>
+        <div v-if="stat.detail" class="stat-detail">{{ stat.detail }}</div>
         <div class="metric-foot">
           <div class="metric-rule"><span :style="{ width: stat.progress }"></span></div>
           <span v-if="stat.route" class="metric-link">查看 →</span>
@@ -252,7 +253,7 @@
         <div class="panel-heading">
           <div><p class="panel-kicker">ACTIVITY STREAM</p><h2>最近任务</h2></div>
           <div class="panel-actions">
-            <span v-if="stats.taskCount > 0" class="panel-success-chip">今日成功 <b>{{ todaySuccess }}</b></span>
+            <span v-if="stats.taskCount > 0" class="panel-task-chip">今日成功 <b class="panel-task-success">{{ todaySuccess }}</b><i>·</i>失败 <b class="panel-task-failed">{{ todayFailed }}</b></span>
             <span v-if="lastUpdated" class="panel-updated">{{ lastUpdated }} 更新</span>
             <el-tooltip content="刷新" placement="top">
               <el-button circle size="small" class="refresh-btn" :loading="recentTaskLoading" @click="refreshDashboard">
@@ -361,7 +362,7 @@ import {
 import { useUserStore } from '@/stores/user'
 import { ElMessage } from 'element-plus'
 import {
-  Connection, List, CircleCheck, DataBoard,
+  List, DataBoard,
   Refresh, Loading, DocumentRemove
 } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
@@ -568,7 +569,7 @@ const formatDuration = (ms: number) => {
   return `${s}s`
 }
 
-const stats = ref({ spiderCount: 0, taskCount: 0, successRate: 0, dataCount: 0 })
+const stats = ref({ spiderCount: 0, taskCount: 0, successCount: 0, failedCount: 0, successRate: 0, dataCount: 0 })
 const spiderErr = ref(false)
 const taskErr = ref(false)
 const recentErr = ref(false)
@@ -576,6 +577,7 @@ const dataErr = ref(false)
 // 四个数据源全部失败才判定连接异常，避免单接口抖动误报
 const syncOk = computed(() => !(spiderErr.value && taskErr.value && recentErr.value && dataErr.value))
 const todaySuccess = ref(0)
+const todayFailed = ref(0)
 const activeCount = ref(0)
 const lastUpdated = ref('')
 const recentTasks = ref<any[]>([])
@@ -857,9 +859,7 @@ watch(() => stats.value.successRate, (to, from) => tween('rate', from ?? 0, to, 
 watch(() => stats.value.dataCount, (to, from) => tween('data', from ?? 0, to, v => { dataDisp.value = v }))
 
 const statCards = computed(() => [
-  { label: '总爬虫数', tone: 'teal', icon: Connection, route: 'Spider', value: spiderDisp.value, progress: stats.value.spiderCount > 0 ? '100%' : '12%' },
-  { label: '今日任务', tone: 'blue', icon: List, route: 'Task', value: taskDisp.value, progress: stats.value.taskCount > 0 ? '100%' : '12%' },
-  { label: '成功率', tone: 'amber', icon: CircleCheck, route: '', value: `${rateDisp.value}%`, progress: `${Math.max(stats.value.successRate, 4)}%` },
+  { label: '爬虫任务', tone: 'blue', icon: List, route: 'Task', value: `${taskDisp.value} / ${spiderDisp.value}`, detail: `成功 ${stats.value.successCount} · 失败 ${stats.value.failedCount} · 成功率 ${rateDisp.value}%`, progress: `${Math.max(stats.value.successRate, 4)}%` },
   { label: '数据总量', tone: 'coral', icon: DataBoard, route: 'Search', value: dataDisp.value.toLocaleString('en-US'), progress: stats.value.dataCount > 0 ? '100%' : '12%' }
 ])
 
@@ -912,8 +912,7 @@ const onTaskRowClick = (row: any) => {
 }
 
 const statLoading = (index: number) => {
-  if (index === 0) return spiderLoading.value
-  if (index === 1 || index === 2) return taskLoading.value
+  if (index === 0) return spiderLoading.value || taskLoading.value
   return dataLoading.value
 }
 
@@ -937,8 +936,12 @@ const loadTaskStats = async () => {
     const [response, activeRes]: any[] = await Promise.all([taskStats(), taskActiveCount().catch(() => null)])
     const total = response?.data?.total ?? 0
     const success = response?.data?.success ?? 0
+    const failed = response?.data?.failed ?? Math.max(total - success, 0)
     stats.value.taskCount = total
+    stats.value.successCount = success
+    stats.value.failedCount = failed
     todaySuccess.value = success
+    todayFailed.value = failed
     stats.value.successRate = total > 0 ? Math.round(success / total * 100) : 0
     activeCount.value = Number(activeRes?.data ?? 0)
     taskErr.value = false
@@ -1080,10 +1083,10 @@ onUnmounted(() => {
   padding: 26px 30px 34px;
   background: var(--dc-page-bg);
 }
-/* ===== 黑夜：沿用暗色指挥台原视觉 ===== */
-html[data-theme="dark"] .dashboard-page {
-  --dc-bg: #070d17;
-  --dc-panel: linear-gradient(180deg, rgba(16, 30, 48, .85), rgba(11, 22, 38, .9));
+/* ===== 纯黑指挥台视觉 ===== */
+html[data-theme="black"] .dashboard-page {
+  --dc-bg: #000000;
+  --dc-panel: linear-gradient(180deg, rgba(10, 10, 10, .88), rgba(5, 5, 5, .92));
   --dc-line: rgba(114, 224, 200, .14);
   --dc-line-soft: rgba(114, 224, 200, .08);
   --dc-line-strong: rgba(114, 224, 200, .28);
@@ -1107,48 +1110,24 @@ html[data-theme="dark"] .dashboard-page {
   --dc-page-bg:
     radial-gradient(ellipse 70% 46% at 88% -8%, rgba(15, 159, 154, .16), transparent),
     radial-gradient(ellipse 56% 40% at -8% 108%, rgba(94, 182, 224, .09), transparent),
-    linear-gradient(180deg, #081120 0%, var(--dc-bg) 100%);
+    linear-gradient(180deg, #050505 0%, var(--dc-bg) 100%);
   --dc-grid: rgba(114, 224, 200, .05);
-  --dc-hero-bg: linear-gradient(120deg, #0a1826 0%, #0d2434 55%, #0f3038 100%);
+  --dc-hero-bg: linear-gradient(120deg, #050505 0%, #0f0f0f 55%, #141414 100%);
   --dc-hero-glow:
     radial-gradient(circle at 84% 130%, rgba(114, 224, 200, .14), transparent 46%),
     radial-gradient(circle at 6% -50%, rgba(94, 182, 224, .1), transparent 42%);
   --dc-sweep: linear-gradient(100deg, transparent, rgba(114, 224, 200, .06) 45%, rgba(114, 224, 200, .12) 50%, rgba(114, 224, 200, .06) 55%, transparent);
   --dc-sweep-strong: conic-gradient(from 0deg, rgba(114, 224, 200, .3), rgba(114, 224, 200, .06) 62deg, transparent 90deg);
-  --dc-card-bg: linear-gradient(180deg, rgba(17, 32, 52, .88), rgba(10, 20, 35, .92));
-  --dc-radar-core: radial-gradient(circle at 50% 32%, #0e2233, #08131f 72%);
-  --dc-shadow: 0 18px 40px rgba(2, 8, 16, .5);
-  --dc-shadow-soft: 0 10px 26px rgba(2, 8, 16, .4);
+  --dc-card-bg: linear-gradient(180deg, rgba(12, 12, 12, .88), rgba(6, 6, 6, .92));
+  --dc-radar-core: radial-gradient(circle at 50% 32%, #0f0f0f, #050505 72%);
+  --dc-shadow: 0 18px 40px rgba(0, 0, 0, .65);
+  --dc-shadow-soft: 0 10px 26px rgba(0, 0, 0, .5);
   --st-primary: #72e0c8;
   --st-success: #5fd39a;
   --st-danger: #f08a72;
   --st-warning: #e0b05e;
   --st-info: #8fa3b8;
   --st-zero: #44606e;
-}
-/* ===== 纯黑（AMOLED）：只改底色为纯黑，其他颜色跟随白天（--dc-* 白天值直接沿用）===== */
-html[data-theme="black"] .dashboard-page {
-  --dc-bg: #000000;
-  --dc-line: rgba(255, 255, 255, .14);
-  --dc-line-soft: rgba(255, 255, 255, .08);
-  --dc-line-strong: rgba(255, 255, 255, .28);
-  --dc-panel: linear-gradient(180deg, rgba(10, 10, 10, .85), rgba(5, 5, 5, .9));
-  --dc-text: #fafafa;
-  --dc-text-dim: #a3a3a3;
-  --dc-text-mute: #737373;
-  --dc-text-bright: #ffffff;
-  --dc-page-bg:
-    radial-gradient(ellipse 70% 46% at 88% -8%, rgba(15, 159, 154, .16), transparent),
-    radial-gradient(ellipse 56% 40% at -8% 108%, rgba(47, 127, 184, .09), transparent),
-    linear-gradient(180deg, #050505 0%, var(--dc-bg) 100%);
-  --dc-hero-bg: linear-gradient(120deg, #050505 0%, #0f0f0f 55%, #141414 100%);
-  --dc-hero-glow:
-    radial-gradient(circle at 84% 130%, rgba(15, 159, 154, .14), transparent 46%),
-    radial-gradient(circle at 6% -50%, rgba(47, 127, 184, .1), transparent 42%);
-  --dc-card-bg: linear-gradient(180deg, rgba(12, 12, 12, .88), rgba(6, 6, 6, .92));
-  --dc-radar-core: radial-gradient(circle at 50% 32%, #0f0f0f, #050505 72%);
-  --dc-shadow: 0 18px 40px rgba(0, 0, 0, .65);
-  --dc-shadow-soft: 0 10px 26px rgba(0, 0, 0, .5);
 }
 .dashboard-page::before {
   content: '';
@@ -1294,7 +1273,7 @@ html[data-theme="black"] .dashboard-page {
 .radar-clock-label { color: var(--dc-text-mute); font-family: var(--font-mono); font-size: 7px; letter-spacing: 2px; }
 
 /* ===== 指标卡 ===== */
-.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .metric-card {
   position: relative;
   min-height: 154px;
@@ -1357,6 +1336,16 @@ html[data-theme="black"] .dashboard-page {
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 18px var(--metric-glow);
 }
+.stat-detail {
+  margin-top: 8px;
+  color: var(--dc-amber);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+}
 .metric-foot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; margin-top: 15px; }
 .metric-rule { width: 76px; height: 3px; overflow: hidden; border-radius: 3px; background: var(--dc-line-soft); }
 .metric-rule span { display: block; width: 65%; height: 100%; background: var(--metric-color); box-shadow: 0 0 8px var(--metric-glow); transition: width .6s ease; }
@@ -1406,6 +1395,11 @@ html[data-theme="black"] .dashboard-page {
 .refresh-btn:hover { border-color: var(--dc-neon); color: var(--dc-neon-hover); background: var(--dc-neon-glow); }
 .panel-success-chip { padding: 3px 10px; border: 1px solid var(--dc-line-strong); border-radius: 999px; color: var(--dc-neon-text); background: var(--dc-neon-soft); font-size: 11px; white-space: nowrap; }
 .panel-success-chip b { color: var(--dc-neon); font-weight: 700; margin-left: 5px; font-family: var(--font-mono); }
+.panel-task-chip { padding: 3px 10px; border: 1px solid var(--dc-line-strong); border-radius: 999px; color: var(--dc-text-dim); background: var(--dc-neon-faint); font-size: 11px; white-space: nowrap; }
+.panel-task-chip i { margin: 0 6px; color: var(--dc-text-mute); font-style: normal; }
+.panel-task-chip b { margin-left: 4px; font-family: var(--font-mono); }
+.panel-task-success { color: var(--st-success); }
+.panel-task-failed { color: var(--dc-coral); }
 
 /* ===== 关注基金净值与数据库历史走势 ===== */
 .fund-watchlist-panel { margin-bottom: 20px; }

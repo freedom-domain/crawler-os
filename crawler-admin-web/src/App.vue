@@ -36,8 +36,7 @@ body {
     var(--canvas);
 }
 button, input, textarea, select { font: inherit; }
-/* 暗色主题：EP 默认空状态插图是白色，压暗以免在深色底上刺眼 */
-html[data-theme="dark"] .el-empty__image,
+/* 纯黑主题：EP 默认空状态插图是白色，压暗以免刺眼 */
 html[data-theme="black"] .el-empty__image {
   filter: brightness(.6) saturate(.75);
   opacity: .85;

@@ -11,16 +11,14 @@
   <body>
     <div id="app"></div>
     <script>
-      // 主题引导：首帧前写入 data-theme，避免白天/黑夜/纯黑切换闪烁（与 src/utils/theme.ts 保持同键）
+      // 主题引导：首帧前写入浅色/纯黑，避免切换闪烁（与 src/utils/theme.ts 保持同键）
       (function () {
         try {
           var mode = localStorage.getItem('crawler-theme-mode')
-          var theme = mode === 'light' || mode === 'dark' || mode === 'black'
-            ? mode
-            : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          var theme = mode === 'black' || mode === 'dark' ? 'black' : 'light'
           document.documentElement.dataset.theme = theme
           var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', theme === 'black' ? '#000000' : theme === 'dark' ? '#070d17' : '#f3f7f8')
+          if (meta) meta.setAttribute('content', theme === 'black' ? '#000000' : '#f3f7f8')
         } catch (e) { /* 引导失败时保持默认白天 */ }
       })()
     </script>

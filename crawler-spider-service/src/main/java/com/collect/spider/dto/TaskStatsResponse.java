@@ -9,4 +9,5 @@ public class TaskStatsResponse {
 
     private long total;
     private long success;
+    private long failed;
 }
