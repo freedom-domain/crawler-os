@@ -1272,7 +1272,7 @@ onBeforeUnmount(() => {
   image-rendering: auto;
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.15s, box-shadow 0.15s;
-  background: var(--surface-soft);
+  background: #fff;
   -webkit-touch-callout: none;
 }
 .thumb-card {
@@ -1280,7 +1280,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: var(--line);
+  background: #fff;
 }
 .thumb.thumb-ready {
   opacity: 1;
@@ -1424,6 +1424,7 @@ onBeforeUnmount(() => {
   max-height: calc(100vh - 120px);
   object-fit: contain;
   image-rendering: auto;
+  background: #fff;
   user-select: none;
   -webkit-user-drag: none;
   -webkit-touch-callout: none;

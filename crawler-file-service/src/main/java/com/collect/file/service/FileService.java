@@ -223,7 +223,7 @@ public class FileService {
     /**
      * 获取图片缩略图：
      * 1. 原图不存在则返回 null；
-     * 2. 缩略图（thumbnail/<原图 objectName>）已存在则直接返回其输入流；
+     * 2. 缩略图（thumbnail/v2/<width>/<原图路径>）已存在则直接返回其输入流；
      * 3. 否则从原图生成缩略图，存入缩略图 bucket 的 thumbnail 目录（对象名与原图相同）后返回。
      *
      * @param sourceBucket   原图所在 bucket
@@ -234,12 +234,12 @@ public class FileService {
      */
     public InputStream getThumbnail(String sourceBucket, String objectName,
                                     String thumbnailBucket, int maxWidth) {
-        // 缩略图 key：thumbnail/<width>/<原图去掉 images/ 前缀的路径>
+        // 缩略图 key：thumbnail/v2/<width>/<原图去掉 images/ 前缀的路径>
         // 同一张图不同宽度各存一份，互不覆盖
         String base = objectName.startsWith("images/")
                 ? objectName.substring("images/".length())
                 : objectName;
-        String thumbKey = "thumbnail/" + maxWidth + "/" + base;
+        String thumbKey = "thumbnail/v2/" + maxWidth + "/" + base;
         ensureBucket(thumbnailBucket);
         // 1. 缩略图已存在直接返回
         if (exists(thumbnailBucket, thumbKey)) {
@@ -277,9 +277,8 @@ public class FileService {
     /**
      * 将图片缩放到 maxWidth 以内（保持宽高比）。源图不可解码或宽度已小于 maxWidth 时返回 null。
      *
-     * 输出格式判定：优先按"源图实际格式"，回退到"文件名扩展名"。
-     * - 源图是 PNG → 输出 PNG（保留透明通道）
-     * - 源图是 JPEG/其他 → 输出 JPEG（白底填充，避免透明变黑）
+     * 缩放后的预览统一合成到白色 RGB 背景并输出 JPEG，
+     * 避免 PNG 透明区域透出页面主题色或深色背景。
      *
      * 为规避 16 位 / 高动态范围 / 带色票 PNG 在 ImageIO 解码或 drawImage 时的异常，
      * 先归一化到 8 位 ARGB 再缩放。
@@ -311,50 +310,18 @@ public class FileService {
         g.drawImage(norm, 0, 0, newW, newH, null);
         g.dispose();
 
-        // PNG 不因采样不到透明像素而被降级为 JPEG：格式保留可避免文字和线条被有损压缩。
-        boolean isPng = isPng(original) || "png".equals(objectExt(objectName));
-        boolean hasAlpha = sourceHasTransparency(norm);
-        String format = isPng || hasAlpha ? "png" : "jpg";
-        if (!isPng && !hasAlpha) {
-            BufferedImage rgb = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB);
-            Graphics2D rg = rgb.createGraphics();
-            rg.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
-            rg.setColor(java.awt.Color.WHITE);
-            rg.fillRect(0, 0, newW, newH);
-            rg.drawImage(scaled, 0, 0, null);
-            rg.dispose();
-            scaled = rgb;
-        }
+        // 页面预览统一使用白底，避免 PNG 的透明区域透出深色或主题背景。
+        BufferedImage rgb = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D rg = rgb.createGraphics();
+        rg.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+        rg.setColor(java.awt.Color.WHITE);
+        rg.fillRect(0, 0, newW, newH);
+        rg.drawImage(scaled, 0, 0, null);
+        rg.dispose();
+        scaled = rgb;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ImageIO.write(scaled, format, out);
+        ImageIO.write(scaled, "jpg", out);
         return out.toByteArray();
-    }
-
-    /**
-     * 采样判断归一化后的图是否真的含透明像素（全不透明则按 jpg 输出，避免无谓的 png 体积）。
-     */
-    private boolean sourceHasTransparency(BufferedImage img) {
-        int step = Math.max(1, img.getWidth() / 32);
-        for (int y = 0; y < img.getHeight(); y += step) {
-            for (int x = 0; x < img.getWidth(); x += step) {
-                if ((img.getRGB(x, y) >>> 24) != 0xFF) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean isPng(byte[] data) {
-        return data != null && data.length >= 8
-                && (data[0] & 0xFF) == 0x89
-                && data[1] == 'P'
-                && data[2] == 'N'
-                && data[3] == 'G'
-                && data[4] == 0x0D
-                && data[5] == 0x0A
-                && data[6] == 0x1A
-                && data[7] == 0x0A;
     }
 
     private String objectExt(String objectName) {
