@@ -115,7 +115,25 @@ const handleLogin = async () => {
 .title { color: var(--ink-950); font-size: 25px; letter-spacing: -.4px; }
 .subtitle { margin: 8px 0 32px; color: var(--ink-500); font-size: 14px; }
 :deep(.el-form-item) { margin-bottom: 20px; }
-:deep(.el-input__wrapper) { height: 48px; background: var(--surface-soft); }
+:deep(.el-input__wrapper) {
+  height: 48px;
+  background: var(--login-input-bg);
+  box-shadow: 0 0 0 1px var(--login-input-border) inset;
+}
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--teal) inset, 0 0 0 3px var(--focus-ring);
+}
+:deep(.el-input__inner) { color: var(--login-input-text); }
+:deep(.el-input__inner::placeholder) { color: var(--login-input-placeholder); }
+:deep(.el-input__prefix),
+:deep(.el-input__suffix) { color: var(--login-input-icon); }
+:deep(.el-input__inner:-webkit-autofill),
+:deep(.el-input__inner:-webkit-autofill:hover),
+:deep(.el-input__inner:-webkit-autofill:focus) {
+  -webkit-text-fill-color: var(--login-input-text);
+  caret-color: var(--login-input-text);
+  transition: background-color 9999s ease-out;
+}
 :deep(.el-button) { height: 48px; margin-top: 8px; font-size: 15px; }
 @media (max-width: 800px) {
   .login-container { display: flex; justify-content: center; padding: 24px; }

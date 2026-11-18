@@ -2049,7 +2049,7 @@ onMounted(() => {
     padding-top: 130px;
   }
   .search-row { gap: 8px; }
-  .search-box { min-width: 0; background: rgba(255, 255, 255, .6); }
+  .search-box { min-width: 0; background: var(--surface); }
   .header-search-wrap {
     background: transparent;
     border-radius: 12px;
