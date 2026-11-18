@@ -100,7 +100,7 @@
             :src="img"
             :alt="`图片 ${pageStart + idx + 1}`"
             loading="lazy"
-            decoding="async"
+            decoding="sync"
             @load="setImageLoadState(img, 'loaded')"
             @error="setImageLoadState(img, 'error')"
             @contextmenu.prevent="openImageMenu($event, pageStart + idx)"
@@ -163,6 +163,7 @@
             ref="imgRef"
             :src="images[viewerIndex]"
             :alt="`图片 ${viewerIndex + 1}`"
+            decoding="sync"
             :style="{ transform: `scale(${viewerScale})` }"
             @contextmenu.prevent="openImageMenu($event, viewerIndex)"
             @touchstart="startImageLongPress($event, viewerIndex)"
@@ -1268,6 +1269,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100vh;
   object-fit: contain;
+  image-rendering: auto;
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.15s, box-shadow 0.15s;
   background: var(--surface-soft);
@@ -1421,6 +1423,7 @@ onBeforeUnmount(() => {
   max-width: calc(100vw - 120px);
   max-height: calc(100vh - 120px);
   object-fit: contain;
+  image-rendering: auto;
   user-select: none;
   -webkit-user-drag: none;
   -webkit-touch-callout: none;

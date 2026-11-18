@@ -29,7 +29,6 @@ import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
 import java.awt.image.WritableRaster;
 import java.awt.image.RenderedImage;
-import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -306,16 +305,20 @@ public class FileService {
 
         BufferedImage scaled = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = scaled.createGraphics();
-        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
         g.drawImage(norm, 0, 0, newW, newH, null);
         g.dispose();
 
-        // 判断是否需保留透明：采样像素，含透明则输出 PNG，否则输出 JPEG 白底
+        // PNG 不因采样不到透明像素而被降级为 JPEG：格式保留可避免文字和线条被有损压缩。
+        boolean isPng = isPng(original) || "png".equals(objectExt(objectName));
         boolean hasAlpha = sourceHasTransparency(norm);
-        String format = hasAlpha ? "png" : "jpg";
-        if (!hasAlpha) {
+        String format = isPng || hasAlpha ? "png" : "jpg";
+        if (!isPng && !hasAlpha) {
             BufferedImage rgb = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_RGB);
             Graphics2D rg = rgb.createGraphics();
+            rg.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING, java.awt.RenderingHints.VALUE_RENDER_QUALITY);
             rg.setColor(java.awt.Color.WHITE);
             rg.fillRect(0, 0, newW, newH);
             rg.drawImage(scaled, 0, 0, null);
@@ -340,6 +343,18 @@ public class FileService {
             }
         }
         return false;
+    }
+
+    private boolean isPng(byte[] data) {
+        return data != null && data.length >= 8
+                && (data[0] & 0xFF) == 0x89
+                && data[1] == 'P'
+                && data[2] == 'N'
+                && data[3] == 'G'
+                && data[4] == 0x0D
+                && data[5] == 0x0A
+                && data[6] == 0x1A
+                && data[7] == 0x0A;
     }
 
     private String objectExt(String objectName) {
