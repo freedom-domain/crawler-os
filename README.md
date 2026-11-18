@@ -149,7 +149,7 @@ docker-compose up -d crawler-admin-web
 
 Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关位于同一 Docker 网络的场景。若在 1Panel 中单独部署前端容器，请为其设置 `API_UPSTREAM` 环境变量，值为**从前端容器内部可访问**的网关地址，例如 `http://<网关容器IP或网络别名>:8080`。配置后重建并重新部署前端镜像；浏览器仍通过同域 `/api` 请求，不需要在前端源码中配置 API 地址。
 
-已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。
+已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql` 和 `docker/mysql/migration/052_task_log_cleanup_time.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。任务页“并发策略”可配置已完成任务及日志的每日清理时间（上海时区，默认凌晨 3:00），也可立即清理超过已保存保留期限的终态任务；新建数据库已包含所需配置。
 
 文件管理在大数据量下的列表查询优化，已有数据库需依次执行 `docker/mysql/migration/043_file_metadata_page_indexes.sql`、`docker/mysql/migration/044_file_metadata_title_ngram.sql`、`docker/mysql/migration/045_file_metadata_referrer.sql` 和 `docker/mysql/migration/046_file_metadata_source_unique.sql`；新建数据库会自动创建所需索引和来源地址字段。若 `046` 因重复源地址而执行失败，请先处理重复记录后重试。
 

@@ -69,15 +69,28 @@ html[data-theme="black"] .el-empty__image {
   justify-content: center;
 }
 .el-message-box {
+  position: relative;
   width: min(420px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 1px solid var(--dialog-border);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: var(--dialog-shadow);
 }
+.el-message-box::before,
+.el-dialog::before {
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--chrome-icon), transparent);
+  content: '';
+  pointer-events: none;
+}
+.el-dialog::before { z-index: 1; }
 @supports (height: 100dvh) {
   .el-message-box { max-height: calc(100dvh - 32px); }
 }
@@ -337,10 +350,35 @@ html[data-theme="black"] .el-empty__image {
   background: var(--menu-popup-active-bg) !important;
 }
 .el-menu--popup .el-icon { color: var(--chrome-icon); }
-.el-dialog { border-radius: 12px; overflow: hidden; }
-.el-dialog__header { margin-right: 0; padding: 22px 24px 16px; border-bottom: 1px solid var(--line); }
+.el-dialog {
+  position: relative;
+  border: 1px solid var(--dialog-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--dialog-shadow);
+}
+.el-dialog__header {
+  margin-right: 0;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--line-strong);
+  background: linear-gradient(135deg, var(--surface-soft), var(--surface));
+}
 .el-dialog__title { color: var(--ink-950); font-weight: 700; }
 .el-dialog__body { padding: 24px; }
+.el-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 24px;
+  box-sizing: border-box;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+.el-dialog__footer .el-button + .el-button { margin-left: 0; }
 .el-form-item__label { color: var(--ink-700); font-weight: 600; }
 .el-form-item { margin-bottom: 18px; }
 .el-form--inline .el-form-item { margin-right: 14px; margin-bottom: 10px; }

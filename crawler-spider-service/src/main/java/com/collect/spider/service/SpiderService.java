@@ -28,7 +28,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.scheduling.annotation.Scheduled;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Objects;
 import java.util.ArrayList;
@@ -47,6 +51,7 @@ public class SpiderService {
     private static final int MAX_RETENTION_DAYS = 365;
     /** 默认任务保留天数（DB 列缺失时的兜底） */
     private static final int DEFAULT_RETENTION_DAYS = 30;
+    private static final ZoneId SCHEDULER_ZONE = ZoneId.of("Asia/Shanghai");
 
     @Value("${app.kafka.spider-task-topic}")
     private String spiderTaskTopic;
@@ -659,11 +664,12 @@ public class SpiderService {
         resp.setMaxConcurrency(getMaxConcurrency());
         resp.setUrlConcurrency(getUrlConcurrency());
         resp.setRetentionDays(getRetentionDays());
+        resp.setCleanupTime(getCleanupTime().toString());
         return resp;
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void updateTaskConcurrency(int maxConcurrency, int urlConcurrency, int retentionDays) {
+    public void updateTaskConcurrency(int maxConcurrency, int urlConcurrency, int retentionDays, String cleanupTime) {
         if (maxConcurrency < MIN_TASK_CONCURRENCY || maxConcurrency > MAX_TASK_CONCURRENCY) {
             throw new BizException("任务并发数必须在 1 到 20 之间");
         }
@@ -673,12 +679,21 @@ public class SpiderService {
         if (retentionDays < MIN_RETENTION_DAYS || retentionDays > MAX_RETENTION_DAYS) {
             throw new BizException("任务保留天数必须在 1 到 365 之间");
         }
+        if (cleanupTime == null || !cleanupTime.matches("([01]\\d|2[0-3]):[0-5]\\d")) {
+            throw new BizException("日志清理时间格式无效，请使用 HH:mm 格式");
+        }
+        LocalTime parsedCleanupTime;
+        try {
+            parsedCleanupTime = LocalTime.parse(cleanupTime);
+        } catch (DateTimeParseException e) {
+            throw new BizException("日志清理时间格式无效，请使用 HH:mm 格式");
+        }
         requireTaskCreationGuard();
-        if (taskMapper.updateConcurrency(maxConcurrency, urlConcurrency, retentionDays) != 1) {
+        if (taskMapper.updateConcurrency(maxConcurrency, urlConcurrency, retentionDays, parsedCleanupTime) != 1) {
             throw new BizException("任务并发策略保存失败");
         }
-        log.info("任务策略已更新: maxConcurrency={}, urlConcurrency={}, retentionDays={}",
-                maxConcurrency, urlConcurrency, retentionDays);
+        log.info("任务策略已更新: maxConcurrency={}, urlConcurrency={}, retentionDays={}, cleanupTime={}",
+                maxConcurrency, urlConcurrency, retentionDays, parsedCleanupTime);
     }
 
     private void sendTaskAfterCommit(String payload) {
@@ -730,28 +745,55 @@ public class SpiderService {
         return retentionDays;
     }
 
+    private LocalTime getCleanupTime() {
+        LocalTime cleanupTime = taskMapper.selectCleanupTime();
+        if (cleanupTime == null || cleanupTime.getSecond() != 0 || cleanupTime.getNano() != 0) {
+            throw new BizException("日志清理时间无效，请检查数据库迁移或配置");
+        }
+        return cleanupTime;
+    }
+
     /**
-     * 每日凌晨 3 点清理超过保留天数的已完成任务（含日志）。
+     * 每日按配置时间清理超过保留天数的已完成任务（含日志）。
      * 仅物理删除 create_time 早于 cutoff 且状态为终态（SUCCESS/FAILED/CANCELED）的任务，
-     * 不影响仍在排队或运行中的任务。
+     * 不影响仍在排队或运行中的任务。每分钟检查一次，并通过数据库日期标记避免多实例重复执行。
      */
-    @Scheduled(cron = "${app.spider.cleanup-cron:0 0 3 * * ?}")
+    @Scheduled(cron = "0 * * * * ?", zone = "Asia/Shanghai")
     @Transactional(rollbackFor = Exception.class)
     public void cleanupExpiredTasks() {
+        LocalDateTime now = LocalDateTime.now(SCHEDULER_ZONE).withSecond(0).withNano(0);
+        LocalDate cleanupDate = now.toLocalDate();
+        LocalTime cleanupTime = getCleanupTime();
+        if (now.toLocalTime().isBefore(cleanupTime)
+                || taskMapper.claimDailyCleanup(cleanupDate, cleanupTime) != 1) {
+            return;
+        }
+        deleteExpiredTasks(now);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public int cleanupExpiredTasksNow() {
+        requireTaskCreationGuard();
+        return deleteExpiredTasks(LocalDateTime.now(SCHEDULER_ZONE).withSecond(0).withNano(0));
+    }
+
+    private int deleteExpiredTasks(LocalDateTime now) {
         int retentionDays = getRetentionDays();
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        LocalDateTime cutoff = now.minusDays(retentionDays);
         List<Long> expiredIds = taskMapper.selectExpiredTaskIds(cutoff);
         if (expiredIds == null || expiredIds.isEmpty()) {
-            return;
+            log.info("没有需要清理的过期任务: cutoff={}, retentionDays={}", cutoff, retentionDays);
+            return 0;
         }
         log.info("开始清理过期任务: cutoff={}, retentionDays={}, count={}", cutoff, retentionDays, expiredIds.size());
         int cleaned = 0;
         for (Long id : expiredIds) {
             int deletedLogs = logMapper.physicalDeleteByTaskId(id);
-            taskMapper.physicalDeleteById(id);
-            cleaned++;
+            int deletedTask = taskMapper.physicalDeleteById(id);
+            cleaned += deletedTask;
             log.debug("已清理过期任务: id={}, 日志数={}", id, deletedLogs);
         }
         log.info("过期任务清理完成: cleaned={}", cleaned);
+        return cleaned;
     }
 }

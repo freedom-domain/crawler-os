@@ -200,10 +200,18 @@ public class SpiderController {
     @PutMapping("/task/concurrency")
     public R<Void> updateTaskConcurrency(@RequestParam("maxConcurrency") int maxConcurrency,
                                          @RequestParam("urlConcurrency") int urlConcurrency,
-                                         @RequestParam("retentionDays") int retentionDays) {
+                                         @RequestParam("retentionDays") int retentionDays,
+                                         @RequestParam("cleanupTime") String cleanupTime) {
         requirePermission("spider:run");
-        spiderService.updateTaskConcurrency(maxConcurrency, urlConcurrency, retentionDays);
+        spiderService.updateTaskConcurrency(maxConcurrency, urlConcurrency, retentionDays, cleanupTime);
         return R.ok();
+    }
+
+    @Operation(summary = "立即清理过期任务及日志")
+    @PostMapping("/task/cleanup")
+    public R<Integer> cleanupExpiredTasksNow() {
+        requirePermission("spider:run");
+        return R.ok(spiderService.cleanupExpiredTasksNow());
     }
 
     @Operation(summary = "任务详情")

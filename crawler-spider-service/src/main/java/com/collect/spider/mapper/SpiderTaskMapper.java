@@ -12,6 +12,8 @@ import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 
 @Mapper
@@ -29,8 +31,17 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
     @Select("SELECT retention_days FROM spider_task_creation_guard WHERE id = 1")
     Integer selectRetentionDays();
 
-    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency}, url_concurrency = #{urlConcurrency}, retention_days = #{retentionDays} WHERE id = 1")
-    int updateConcurrency(@Param("maxConcurrency") int maxConcurrency, @Param("urlConcurrency") int urlConcurrency, @Param("retentionDays") int retentionDays);
+    @Select("SELECT cleanup_time FROM spider_task_creation_guard WHERE id = 1")
+    LocalTime selectCleanupTime();
+
+    @Update("UPDATE spider_task_creation_guard SET max_concurrency = #{maxConcurrency}, url_concurrency = #{urlConcurrency}, retention_days = #{retentionDays}, cleanup_time = #{cleanupTime} WHERE id = 1")
+    int updateConcurrency(@Param("maxConcurrency") int maxConcurrency, @Param("urlConcurrency") int urlConcurrency,
+                          @Param("retentionDays") int retentionDays, @Param("cleanupTime") LocalTime cleanupTime);
+
+    @Update("UPDATE spider_task_creation_guard SET cleanup_last_run_date = #{cleanupDate} "
+            + "WHERE id = 1 AND cleanup_time = #{cleanupTime} "
+            + "AND (cleanup_last_run_date IS NULL OR cleanup_last_run_date < #{cleanupDate})")
+    int claimDailyCleanup(@Param("cleanupDate") LocalDate cleanupDate, @Param("cleanupTime") LocalTime cleanupTime);
 
     @Select("SELECT * FROM spider_task WHERE id = #{id} AND deleted = 0 FOR UPDATE")
     SpiderTask selectByIdForUpdate(@Param("id") Long id);
@@ -115,11 +126,11 @@ public interface SpiderTaskMapper extends BaseMapper<SpiderTask> {
         })
     SpiderTask selectTaskById(@Param("id") Long id);
 
-    @Select("SELECT id FROM spider_task WHERE deleted = 0 AND create_time < #{cutoff}")
+    @Select("SELECT id FROM spider_task WHERE deleted = 0 AND status IN ('SUCCESS', 'FAILED', 'CANCELED') AND create_time < #{cutoff}")
     List<Long> selectExpiredTaskIds(@Param("cutoff") java.time.LocalDateTime cutoff);
 
     @Delete("DELETE FROM spider_task WHERE id = #{id}")
-    void physicalDeleteById(@Param("id") Long id);
+    int physicalDeleteById(@Param("id") Long id);
 
     @Update("UPDATE spider_task SET paused_at = NOW(), update_time = NOW() WHERE id = #{id} AND deleted = 0")
     int setPaused(@Param("id") Long id);

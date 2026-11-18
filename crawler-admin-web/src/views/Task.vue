@@ -182,7 +182,30 @@
           />
         </div>
         <p class="concurrency-hint">
-          已完成任务记录（含日志）的保留天数，超期后每日凌晨自动清理。默认 30 天。
+          已完成任务记录（含日志）的保留天数，超期后按下方时间每日自动清理。默认 30 天。
+        </p>
+        <div class="concurrency-setting-row">
+          <span>日志清理时间</span>
+          <el-time-picker
+            v-model="cleanupTime"
+            format="HH:mm"
+            value-format="HH:mm"
+            :clearable="false"
+            :disabled="!concurrencyLoaded || concurrencyLoading || concurrencySaving"
+            aria-label="日志清理时间"
+          />
+          <el-button
+            type="danger"
+            plain
+            :loading="cleanupRunning"
+            :disabled="!concurrencyLoaded || concurrencyLoading || concurrencySaving"
+            @click="runCleanupNow"
+          >
+            立即清理
+          </el-button>
+        </div>
+        <p class="concurrency-hint">
+          每日执行一次，使用上海时区。默认凌晨 3:00。
         </p>
       </div>
       <template #footer>
@@ -190,7 +213,7 @@
         <el-button
           type="primary"
           :loading="concurrencySaving"
-          :disabled="!concurrencyLoaded || concurrencyLoading || (maxConcurrency === savedMaxConcurrency && urlConcurrency === savedUrlConcurrency && retentionDays === savedRetentionDays)"
+          :disabled="!concurrencyLoaded || concurrencyLoading || (maxConcurrency === savedMaxConcurrency && urlConcurrency === savedUrlConcurrency && retentionDays === savedRetentionDays && cleanupTime === savedCleanupTime)"
           @click="saveConcurrency"
         >
           保存策略
@@ -281,7 +304,7 @@ import { ref, computed, onMounted, onUnmounted, onActivated, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { useRoute, useRouter } from 'vue-router'
-import { taskPage, taskLogs, taskCancel, taskForceCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency, taskActiveCount } from '@/api'
+import { taskPage, taskLogs, taskCancel, taskForceCancel, taskPause, taskResume, taskDelete, spiderPage, taskConcurrency, updateTaskConcurrency, taskActiveCount, cleanupExpiredTasksNow } from '@/api'
 import { Refresh, Search, VideoPause, VideoPlay, Document, Delete, Minus, FullScreen, ArrowDown } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -311,8 +334,11 @@ const urlConcurrency = ref(8)
 const savedUrlConcurrency = ref(8)
 const retentionDays = ref(30)
 const savedRetentionDays = ref(30)
+const cleanupTime = ref('03:00')
+const savedCleanupTime = ref('03:00')
 const concurrencyLoading = ref(false)
 const concurrencySaving = ref(false)
+const cleanupRunning = ref(false)
 const concurrencyLoaded = ref(false)
 const concurrencyDialogVisible = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
@@ -536,6 +562,12 @@ const loadConcurrency = async () => {
     const retention = Number(res.data?.retentionDays)
     retentionDays.value = Number.isInteger(retention) && retention >= 1 && retention <= 365 ? retention : 30
     savedRetentionDays.value = retentionDays.value
+    const cleanup = String(res.data?.cleanupTime || '')
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(cleanup)) {
+      throw new Error('服务器返回的日志清理时间无效')
+    }
+    cleanupTime.value = cleanup
+    savedCleanupTime.value = cleanup
     concurrencyLoaded.value = true
   } catch {
     ElMessage.error('读取任务并发策略失败')
@@ -553,6 +585,7 @@ const closeConcurrencyDialog = () => {
   maxConcurrency.value = savedMaxConcurrency.value
   urlConcurrency.value = savedUrlConcurrency.value
   retentionDays.value = savedRetentionDays.value
+  cleanupTime.value = savedCleanupTime.value
   concurrencyDialogVisible.value = false
 }
 
@@ -569,18 +602,46 @@ const saveConcurrency = async () => {
     ElMessage.warning('任务保留天数需设置为 1 到 365 的整数')
     return
   }
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(cleanupTime.value)) {
+    ElMessage.warning('日志清理时间格式无效')
+    return
+  }
   concurrencySaving.value = true
   try {
-    await updateTaskConcurrency(maxConcurrency.value, urlConcurrency.value, retentionDays.value)
+    await updateTaskConcurrency(maxConcurrency.value, urlConcurrency.value, retentionDays.value, cleanupTime.value)
     savedMaxConcurrency.value = maxConcurrency.value
     savedUrlConcurrency.value = urlConcurrency.value
     savedRetentionDays.value = retentionDays.value
+    savedCleanupTime.value = cleanupTime.value
     ElMessage.success('任务策略已更新')
     concurrencyDialogVisible.value = false
   } catch {
     ElMessage.error('更新任务策略失败')
   } finally {
     concurrencySaving.value = false
+  }
+}
+
+const runCleanupNow = async () => {
+  if (!await confirm(`将立即永久删除创建时间早于已保存保留期限（${savedRetentionDays.value} 天）的已完成任务及其日志，正在运行或排队中的任务不会删除。确定继续吗？`, {
+    title: '立即清理过期任务',
+    confirmText: '立即清理',
+    danger: true,
+  })) return
+
+  cleanupRunning.value = true
+  try {
+    const res: any = await cleanupExpiredTasksNow()
+    const cleaned = Number(res.data)
+    if (!Number.isInteger(cleaned) || cleaned < 0) {
+      throw new Error('服务器返回的清理数量无效')
+    }
+    ElMessage.success(`清理完成，共清理 ${cleaned} 条过期任务记录`)
+    await loadData()
+  } catch {
+    ElMessage.error('立即清理过期任务失败')
+  } finally {
+    cleanupRunning.value = false
   }
 }
 
