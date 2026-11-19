@@ -26,6 +26,13 @@ export const permissionUpdate = (id: number, data: any) => request.put(`/permiss
 export const permissionDelete = (id: number) => request.delete(`/permission/${id}`)
 export const getRagConfig = () => request.get('/ai/rag/config')
 export const updateRagConfig = (data: any) => request.put('/ai/rag/config', data)
+export const queryRag = (data: { question: string; topK: number }) => request.post('/ai/rag/query', data)
+export const chatConversationList = () => request.get('/ai/chat/conversations')
+export const chatConversationCreate = () => request.post('/ai/chat/conversations')
+export const chatConversationDelete = (id: number) => request.delete(`/ai/chat/conversations/${id}`)
+export const chatMessages = (id: number) => request.get(`/ai/chat/conversations/${id}/messages`)
+export const sendChatMessage = (id: number, data: { question: string; topK: number }) =>
+  request.post(`/ai/chat/conversations/${id}/messages`, data)
 export const roles = () => request.get('/user/roles')
 export const assignRole = (data: any) => request.put('/user/assign-role', data)
 

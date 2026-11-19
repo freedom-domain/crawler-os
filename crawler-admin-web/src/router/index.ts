@@ -43,6 +43,7 @@ const router = createRouter({
         { path: 'role', name: 'Role', component: () => import('@/views/Role.vue') },
         { path: 'permission', name: 'Permission', component: () => import('@/views/Permission.vue') },
         { path: 'ai-config', name: 'AiConfig', component: () => import('@/views/AiConfig.vue') },
+        { path: 'ai-chat', name: 'AiChat', component: () => import('@/views/AiChat.vue') },
         { path: 'cf-ip-management', name: 'CfIpManagement', component: () => import('@/views/CfIpManagement.vue') },
         { path: 'profile', name: 'Profile', component: () => import('@/views/Profile.vue') }
       ]

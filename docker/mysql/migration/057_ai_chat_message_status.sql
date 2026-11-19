@@ -1,0 +1,2 @@
+ALTER TABLE ai_chat_message
+    ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'SUCCESS' AFTER content;

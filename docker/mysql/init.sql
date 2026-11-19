@@ -139,6 +139,29 @@ INSERT IGNORE INTO ai_rag_config (
      'bge-m3', 1024, 'openai', 'http://localhost:8099/v1', 'Qwen3.8-27B',
      '', 5, 1500, 200, 'spider_content_vector_local', 'embedding');
 
+CREATE TABLE IF NOT EXISTS ai_chat_conversation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_ai_chat_conversation_user_updated (user_id, updated_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_chat_message (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    conversation_id BIGINT NOT NULL,
+    role VARCHAR(16) NOT NULL,
+    content LONGTEXT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'SUCCESS',
+    sources_json LONGTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_ai_chat_message_conversation (conversation_id, id),
+    CONSTRAINT fk_ai_chat_message_conversation
+        FOREIGN KEY (conversation_id) REFERENCES ai_chat_conversation (id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS spider_task (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     spider_id BIGINT NOT NULL,
@@ -563,14 +586,15 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 3),
 (24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2),
 (25, 'CF IP 优选', 'cf-ip:manage', 12, 1, '/cf-ip-management', 'Connection', 4),
-(26, 'AI 配置', 'ai:config', 12, 1, '/ai-config', 'Setting', 5);
+(26, 'AI 配置', 'ai:config', 12, 1, '/ai-config', 'Setting', 5),
+(27, 'AI 助手', 'ai:chat', 0, 1, '/ai-chat', 'ChatDotRound', 9);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
 (1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
-(1, 25),(1, 26),
+(1, 25),(1, 26),(1, 27),
 (2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)
