@@ -138,6 +138,15 @@ BUILD_JOBS=3 ./scripts/build-docker-images/build-all.sh
 
 GitHub Actions 会在 Java 21 环境中编译各服务 JAR，再用小型临时构建上下文制作运行镜像；不会在 Docker 构建阶段重复运行 Maven。前端镜像继续由其多阶段 Dockerfile 构建。
 
+推送格式为 `vX.Y.Z` 的 Git 标签即可发布新版本：Actions 会构建并推送全部服务镜像到 GitHub Container Registry，全部成功后自动创建 GitHub Release 并生成变更说明。例如：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+发布镜像使用 `ghcr.io/<仓库所有者>/<服务名>:<版本号>` 标签；版本镜像会保留，不受未标记镜像清理影响。
+
 前端容器使用 Nginx 提供生产构建文件，并将 `/api` 请求转发到网关：
 
 ```bash
