@@ -24,6 +24,8 @@ export const permissionTree = () => request.get('/permission')
 export const permissionCreate = (data: any) => request.post('/permission', data)
 export const permissionUpdate = (id: number, data: any) => request.put(`/permission/${id}`, data)
 export const permissionDelete = (id: number) => request.delete(`/permission/${id}`)
+export const getRagConfig = () => request.get('/ai/rag/config')
+export const updateRagConfig = (data: any) => request.put('/ai/rag/config', data)
 export const roles = () => request.get('/user/roles')
 export const assignRole = (data: any) => request.put('/user/assign-role', data)
 

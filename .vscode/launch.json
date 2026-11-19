@@ -25,6 +25,13 @@
         },
         {
             "type": "java",
+            "name": "Run Java AiServiceApplication",
+            "request": "launch",
+            "mainClass": "com.collect.ai.AiServiceApplication",
+            "vmArgs": "-Dspring.profiles.active=local"
+        },
+        {
+            "type": "java",
             "name": "Run Java UserServiceApplication",
             "request": "launch",
             "mainClass": "com.collect.user.UserServiceApplication",

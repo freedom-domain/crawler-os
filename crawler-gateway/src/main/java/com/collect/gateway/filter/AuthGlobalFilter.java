@@ -40,6 +40,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/api/user/register",
             "/api/file/",
             "/api/search",
+            "/api/ai/rag/query",
             "/api/dict",
             "/api/spider",
             "/actuator"

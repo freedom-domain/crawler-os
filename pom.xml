@@ -19,6 +19,7 @@
         <module>crawler-spider-service</module>
         <module>crawler-ip-service</module>
         <module>crawler-search-service</module>
+        <module>crawler-ai-service</module>
         <module>crawler-file-service</module>
         <module>crawler-worker</module>
     </modules>

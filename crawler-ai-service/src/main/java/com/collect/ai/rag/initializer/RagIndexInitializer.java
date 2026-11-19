@@ -1,0 +1,139 @@
+package com.collect.ai.rag.initializer;
+
+import com.collect.ai.rag.config.RagProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class RagIndexInitializer {
+
+    private final RagProperties properties;
+    private final ObjectMapper objectMapper;
+
+    @Value("${spring.elasticsearch.uris:http://127.0.0.1:9200}")
+    private String elasticsearchUris;
+
+    @Value("${spring.elasticsearch.username:}")
+    private String elasticsearchUsername;
+
+    @Value("${spring.elasticsearch.password:}")
+    private String elasticsearchPassword;
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void initVectorIndex() {
+        if (!properties.getRag().isEnabled()) {
+            return;
+        }
+        try {
+            ensureVectorIndex();
+        } catch (Exception e) {
+            log.error("初始化 RAG 向量索引失败: {}", e.getMessage(), e);
+        }
+    }
+
+    public void ensureVectorIndex() {
+        String index = properties.resolveVectorIndex();
+        try {
+            HttpResponse<String> existing = elasticsearchRequest("HEAD", "/" + index, null);
+            if (existing.statusCode() == 404) {
+                String vectorField = properties.resolveVectorField();
+                int dimensions = properties.resolveDimensions();
+                String body = """
+                        {"settings":{"number_of_shards":1},"mappings":{"properties":{
+                        "doc_id":{"type":"keyword"},"chunk_id":{"type":"keyword"},"title":{"type":"text"},
+                        "content":{"type":"text"},"url":{"type":"keyword"},"spiderId":{"type":"long"},
+                        "spiderName":{"type":"keyword"},"embedding_model":{"type":"keyword"},"%s":{
+                        "type":"dense_vector","dims":%d}}}}
+                        """.formatted(vectorField, dimensions);
+                HttpResponse<String> created = elasticsearchRequest("PUT", "/" + index, body);
+                if (created.statusCode() >= 200 && created.statusCode() < 300) {
+                    log.info("已创建 RAG 向量索引: {}，模型字段: {}, dimensions: {}",
+                            index, vectorField, dimensions);
+                } else {
+                    throw new IllegalStateException("创建 RAG 向量索引失败: "
+                            + created.statusCode() + " " + created.body());
+                }
+            } else {
+                if (existing.statusCode() < 200 || existing.statusCode() >= 300) {
+                    throw new IllegalStateException("检查 RAG 向量索引失败: "
+                            + existing.statusCode() + " " + existing.body());
+                }
+                validateVectorMapping(index);
+            }
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("初始化 RAG 向量索引失败: " + e.getMessage(), e);
+        }
+    }
+
+    private void validateVectorMapping(String index) throws Exception {
+        String vectorField = properties.resolveVectorField();
+        int dimensions = properties.resolveDimensions();
+        HttpResponse<String> mapping = elasticsearchRequest("GET", "/" + index + "/_mapping", null);
+        if (mapping.statusCode() >= 300) {
+            log.warn("读取 RAG 向量索引 mapping 失败: {} {}", mapping.statusCode(), mapping.body());
+            return;
+        }
+        JsonNode root = objectMapper.readTree(mapping.body());
+        JsonNode indexNode = root.path(index);
+        JsonNode mappingNode = indexNode.isMissingNode()
+                ? root.path("mappings")
+                : indexNode.path("mappings");
+        JsonNode field = mappingNode.path("properties").path(vectorField);
+        if (field.isMissingNode()) {
+            String body = "{\"properties\":{\"%s\":{\"type\":\"dense_vector\",\"dims\":%d}}}"
+                    .formatted(vectorField, dimensions);
+            HttpResponse<String> updated = elasticsearchRequest("PUT",
+                    "/" + index + "/_mapping", body);
+            if (updated.statusCode() >= 200 && updated.statusCode() < 300) {
+                log.info("已为 RAG 向量索引补充字段 {}.{}", index, vectorField);
+            } else {
+                log.warn("补充 RAG 向量字段失败: {} {}", updated.statusCode(), updated.body());
+            }
+            return;
+        }
+        int actualDimensions = field.path("dims").asInt(-1);
+        if (actualDimensions != dimensions) {
+            throw new IllegalStateException("RAG 向量索引维度不匹配: 索引 "
+                    + index + " 字段 " + vectorField + " 为 " + actualDimensions
+                    + "，当前模型要求 " + dimensions);
+        }
+        log.info("RAG 向量索引配置有效: {}.{} = {}维", index, vectorField, actualDimensions);
+    }
+
+    private HttpResponse<String> elasticsearchRequest(String method, String path, String body)
+            throws Exception {
+        String uri = elasticsearchUris.split(",")[0].trim();
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create(uri + path))
+                .timeout(Duration.ofSeconds(30));
+        if (!elasticsearchUsername.isBlank()) {
+            String auth = elasticsearchUsername + ":" + elasticsearchPassword;
+            builder.header("Authorization", "Basic " + Base64.getEncoder()
+                    .encodeToString(auth.getBytes(StandardCharsets.UTF_8)));
+        }
+        builder.header("Content-Type", "application/json");
+        HttpRequest request = (body == null
+                ? builder.method(method, HttpRequest.BodyPublishers.noBody())
+                : builder.method(method, HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)))
+                .build();
+        return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+                .send(request, HttpResponse.BodyHandlers.ofString());
+    }
+}

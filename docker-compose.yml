@@ -31,7 +31,7 @@ services:
       - crawler-net
 
   elasticsearch:
-    image: elasticsearch:7.17.9
+    image: elasticsearch:9.2.1
     container_name: crawler-elasticsearch
     restart: always
     environment:
@@ -48,7 +48,7 @@ services:
       - crawler-net
 
   kibana:
-    image: kibana:7.17.9
+    image: kibana:9.2.1
     container_name: crawler-kibana
     restart: always
     environment:
@@ -195,6 +195,26 @@ services:
   crawler-search-service:
     image: crawler-search-service:${IMAGE_TAG:-latest}
     container_name: crawler-search-service
+    restart: always
+    environment:
+      NACOS_ADDR: nacos:8848
+      NACOS_NAMESPACE: crawler-default
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:-root123}"
+      ES_URLS: http://elasticsearch:9200
+      ES_USER: ""
+      ES_PASSWORD: ""
+    depends_on:
+      - nacos
+      - mysql
+      - elasticsearch
+    networks:
+      - crawler-net
+
+  crawler-ai-service:
+    image: crawler-ai-service:${IMAGE_TAG:-latest}
+    container_name: crawler-ai-service
     restart: always
     environment:
       NACOS_ADDR: nacos:8848

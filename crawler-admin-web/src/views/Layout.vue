@@ -326,6 +326,7 @@ const iconMap: Record<string, any> = {
   Coin,
   DataLine,
   system: Setting,
+  'ai:config': Setting,
   Setting
 }
 

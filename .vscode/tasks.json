@@ -1,0 +1,20 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Compile crawler-ai-service",
+			"type": "shell",
+			"command": "mvn",
+			"args": [
+				"-pl",
+				"crawler-ai-service",
+				"-am",
+				"-DskipTests",
+				"compile"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

@@ -46,6 +46,7 @@ build_scripts=(
   crawler-spider-service
   crawler-ip-service
   crawler-search-service
+  crawler-ai-service
   crawler-file-service
   crawler-worker
   crawler-admin-web
