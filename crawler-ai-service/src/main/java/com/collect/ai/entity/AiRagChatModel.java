@@ -1,5 +1,6 @@
 package com.collect.ai.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -10,7 +11,7 @@ import java.time.LocalDateTime;
 @TableName("ai_rag_chat_model")
 public class AiRagChatModel {
 
-    @TableId
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     private String name;
