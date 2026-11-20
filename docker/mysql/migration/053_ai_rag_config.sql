@@ -25,9 +25,9 @@ INSERT IGNORE INTO ai_rag_config (
     embedding_model, dimensions, chat_provider, chat_base_url, chat_model,
     api_key, top_k, chunk_size, chunk_overlap, vector_index_prefix, vector_field_prefix
 ) VALUES
-    ('default', 0, 'spider_content', 'ollama', 'http://localhost:11434',
-     'bge-m3', 1024, 'openai', 'http://localhost:8099/v1', 'Qwen3.8-27B',
+    ('default', 0, 'spider_content', 'ollama', 'http://192.168.31.2:11434',
+     'bge-m3', 1024, 'openai', 'http://192.168.31.2:8099/v1', 'Qwen3.8-27B',
      '', 5, 1500, 200, 'spider_content_vector', 'embedding'),
-    ('local', 0, 'spider_content_local', 'ollama', 'http://localhost:11434',
-     'bge-m3', 1024, 'openai', 'http://localhost:8099/v1', 'Qwen3.8-27B',
+    ('local', 0, 'spider_content_local', 'ollama', 'http://192.168.31.2:11434',
+     'bge-m3', 1024, 'openai', 'http://192.168.31.2:8099/v1', 'Qwen3.8-27B',
      '', 5, 1500, 200, 'spider_content_vector_local', 'embedding');

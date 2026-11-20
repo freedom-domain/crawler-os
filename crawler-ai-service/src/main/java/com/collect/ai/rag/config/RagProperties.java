@@ -20,9 +20,9 @@ public class RagProperties {
         private boolean enabled;
         private String sourceIndex = "spider_content";
         private String embeddingProvider = "ollama";
-        private String embeddingBaseUrl = "http://localhost:11434";
+        private String embeddingBaseUrl = "http://192.168.31.2:11434";
         private String chatProvider = "openai";
-        private String chatBaseUrl = "http://localhost:8099/v1";
+        private String chatBaseUrl = "http://192.168.31.2:8099/v1";
         private String apiKey = "";
         private String embeddingModel = "bge-m3";
         private String chatModel = "Qwen3.8-27B";
