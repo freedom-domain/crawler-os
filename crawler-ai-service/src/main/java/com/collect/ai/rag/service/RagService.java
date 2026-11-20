@@ -447,9 +447,10 @@ public class RagService {
                         .uri(uri)
                         .timeout(Duration.ofSeconds(120))
                         .header("Content-Type", "application/json");
-                boolean hasApiKey = rag.getApiKey() != null && !rag.getApiKey().isBlank();
+                String apiKey = rag.getApiKey();
+                boolean hasApiKey = apiKey != null && !apiKey.isBlank();
                 if (hasApiKey) {
-                    builder.header("Authorization", "Bearer " + rag.getApiKey());
+                    builder.header("Authorization", "Bearer " + apiKey);
                 }
                 HttpRequest request = builder.POST(HttpRequest.BodyPublishers
                         .ofString(requestBody, StandardCharsets.UTF_8)).build();
@@ -524,9 +525,7 @@ public class RagService {
         RagProperties.Rag rag = properties.getRag();
         String baseUrl;
         if (path.equals("/api/embeddings")) {
-            baseUrl = rag.getEmbeddingProvider().equalsIgnoreCase("ollama")
-                    ? rag.getEmbeddingBaseUrl().replaceAll("/$", "")
-                    : rag.getEmbeddingBaseUrl().replaceAll("/$", "");
+            baseUrl = rag.getEmbeddingBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "");
         } else if (path.equals("/api/chat")) {
             baseUrl = rag.getChatProvider().equalsIgnoreCase("ollama")
                     ? rag.getChatBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "")
@@ -543,9 +542,11 @@ public class RagService {
                 .uri(requestUri)
                 .timeout(Duration.ofSeconds(120))
                 .header("Content-Type", "application/json");
-        boolean hasApiKey = rag.getApiKey() != null && !rag.getApiKey().isBlank();
+        boolean embeddingRequest = path.equals("/api/embeddings") || path.equals("/embeddings");
+        String apiKey = embeddingRequest ? rag.getEmbeddingApiKey() : rag.getApiKey();
+        boolean hasApiKey = apiKey != null && !apiKey.isBlank();
         if (hasApiKey) {
-            builder.header("Authorization", "Bearer " + rag.getApiKey());
+            builder.header("Authorization", "Bearer " + apiKey);
         }
         String requestBody = objectMapper.writeValueAsString(body);
         HttpRequest request = builder.POST(HttpRequest.BodyPublishers

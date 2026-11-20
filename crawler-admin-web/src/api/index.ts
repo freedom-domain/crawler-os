@@ -28,10 +28,22 @@ export const permissionDelete = (id: number) => request.delete(`/permission/${id
 export const getRagConfig = () => request.get('/ai/rag/config')
 export const updateRagConfig = (data: any) => request.put('/ai/rag/config', data)
 export const getVectorModels = () => request.get('/ai/rag/vector-models')
+export const discoverVectorModels = (data: {
+  modelId: number | null
+  provider: string
+  baseUrl: string
+  apiKey: string
+}) => request.post('/ai/rag/vector-models/discover', data)
 export const createVectorModel = (data: any) => request.post('/ai/rag/vector-models', data)
 export const updateVectorModel = (id: number, data: any) => request.put(`/ai/rag/vector-models/${id}`, data)
 export const deleteVectorModel = (id: number) => request.delete(`/ai/rag/vector-models/${id}`)
 export const getChatModels = () => request.get('/ai/rag/chat-models')
+export const discoverChatModels = (data: {
+  modelId: number | null
+  provider: string
+  baseUrl: string
+  apiKey: string
+}) => request.post('/ai/rag/chat-models/discover', data)
 export const getChatModelApiKey = (id: number) => request.get(`/ai/rag/chat-models/${id}/api-key`)
 export const updateChatModelApiKey = (id: number, apiKey: string) =>
   request.put(`/ai/rag/chat-models/${id}/api-key`, { apiKey })

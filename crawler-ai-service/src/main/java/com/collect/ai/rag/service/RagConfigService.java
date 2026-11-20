@@ -219,6 +219,7 @@ public class RagConfigService {
         rag.setEmbeddingProvider(config.getEmbeddingProvider());
         rag.setEmbeddingBaseUrl(config.getEmbeddingBaseUrl());
         rag.setEmbeddingModel(config.getEmbeddingModel());
+        rag.setEmbeddingApiKey(model.getApiKey());
         rag.setDimensions(config.getDimensions());
         rag.setChatProvider(config.getChatProvider());
         rag.setChatBaseUrl(config.getChatBaseUrl());

@@ -8,6 +8,8 @@ public class VectorModelRequest {
     private String embeddingProvider;
     private String embeddingBaseUrl;
     private String embeddingModel;
+    private String apiKey;
+    private Boolean clearApiKey;
     private Integer dimensions;
     private Integer topK;
     private Integer chunkSize;

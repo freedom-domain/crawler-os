@@ -24,7 +24,7 @@
             {{ providerLabel(row.chatProvider) }}
           </template>
         </el-table-column>
-        <el-table-column prop="chatModel" label="模型名称" min-width="150" />
+        <el-table-column prop="chatModel" label="模型名称" min-width="220" show-overflow-tooltip />
         <el-table-column label="上下文长度" width="130">
           <template #default="{ row }">{{ row.contextLength.toLocaleString() }} Token</template>
         </el-table-column>
@@ -62,17 +62,22 @@
             <el-input v-model="form.name" maxlength="128" />
           </el-form-item>
           <el-form-item label="服务提供方" prop="chatProvider">
-            <el-select v-model="form.chatProvider">
+            <el-select v-model="form.chatProvider" @change="clearDiscoveredModels">
               <el-option label="OpenAI 兼容 API" value="openai" />
               <el-option label="vLLM（OpenAI 兼容 API）" value="vllm" />
               <el-option label="Ollama 原生 API" value="ollama" />
             </el-select>
           </el-form-item>
           <el-form-item label="服务地址" prop="chatBaseUrl">
-            <el-input v-model="form.chatBaseUrl" placeholder="http://host:port/v1" />
+            <el-input v-model="form.chatBaseUrl" placeholder="http://host:port/v1" @change="clearDiscoveredModels" />
           </el-form-item>
           <el-form-item label="模型名称" prop="chatModel">
-            <el-input v-model="form.chatModel" maxlength="128" />
+            <div class="model-picker">
+              <el-select v-model="form.chatModel" filterable placeholder="请先拉取模型列表">
+                <el-option v-for="name in modelOptions" :key="name" :label="name" :value="name" />
+              </el-select>
+              <el-button :loading="discovering" @click="discoverModels">拉取模型</el-button>
+            </div>
           </el-form-item>
           <el-form-item label="上下文长度（Token）" prop="contextLength">
             <el-input-number
@@ -127,10 +132,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  createChatModel, deleteChatModel, getChatModelApiKey, getChatModels, updateChatModel,
+  createChatModel, deleteChatModel, discoverChatModels, getChatModelApiKey, getChatModels, updateChatModel,
   updateChatModelApiKey
 } from '@/api'
 
@@ -168,6 +173,13 @@ const apiKeyDialogVisible = ref(false)
 const apiKeyValue = ref('')
 const apiKeySaving = ref(false)
 const editingApiKeyModel = ref<ChatModel | null>(null)
+const discovering = ref(false)
+const availableModels = ref<string[]>([])
+const modelOptions = computed(() => {
+  const options = [...availableModels.value]
+  if (form.chatModel && !options.includes(form.chatModel)) options.unshift(form.chatModel)
+  return options
+})
 
 const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   try {
@@ -207,6 +219,7 @@ const loadModels = async () => {
 const openCreate = () => {
   editingId.value = null
   apiKeyConfigured.value = false
+  availableModels.value = []
   Object.assign(form, emptyModel())
   dialogVisible.value = true
 }
@@ -214,14 +227,45 @@ const openCreate = () => {
 const openEdit = (model: ChatModel) => {
   editingId.value = model.id
   apiKeyConfigured.value = model.apiKeyConfigured
+  availableModels.value = []
   Object.assign(form, { ...model, apiKey: '', clearApiKey: false })
   dialogVisible.value = true
+}
+
+const clearDiscoveredModels = () => {
+  availableModels.value = []
+}
+
+const discoverModels = async () => {
+  if (!await formRef.value?.validateField(['chatProvider', 'chatBaseUrl']).then(() => true).catch(() => false)) return
+  discovering.value = true
+  try {
+    const response: any = await discoverChatModels({
+      modelId: editingId.value,
+      provider: form.chatProvider,
+      baseUrl: form.chatBaseUrl,
+      apiKey: form.apiKey
+    })
+    if (!response) return
+    availableModels.value = response.data || []
+    if (!availableModels.value.includes(form.chatModel)) form.chatModel = ''
+    if (availableModels.value.length) {
+      ElMessage.success(`已拉取 ${availableModels.value.length} 个聊天模型`)
+    } else {
+      ElMessage.info('服务未返回可用的聊天模型')
+    }
+  } catch {
+    ElMessage.error('拉取聊天模型失败，请检查服务地址和 API Key')
+  } finally {
+    discovering.value = false
+  }
 }
 
 const resetForm = () => {
   formRef.value?.clearValidate()
   Object.assign(form, emptyModel())
   apiKeyConfigured.value = false
+  availableModels.value = []
 }
 
 const saveModel = async () => {
@@ -301,6 +345,8 @@ onMounted(loadModels)
 .header-actions { display: flex; align-items: center; gap: 16px; }
 .is-clickable { cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.model-picker { display: flex; width: 100%; gap: 8px; }
+.model-picker :deep(.el-select) { width: auto; min-width: 0; flex: 1; }
 .form-grid :deep(.el-select) { width: 100%; }
 .form-grid :deep(.el-input-number) { width: 100%; }
 .field-hint { display: block; margin-top: 5px; color: var(--ink-500); font-size: 12px; line-height: 1.5; }

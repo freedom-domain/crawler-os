@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS ai_rag_vector_model (
     embedding_provider VARCHAR(32) NOT NULL,
     embedding_base_url VARCHAR(512) NOT NULL,
     embedding_model VARCHAR(128) NOT NULL,
+    api_key VARCHAR(1024) NOT NULL DEFAULT '',
     dimensions INT NOT NULL,
     top_k INT NOT NULL,
     chunk_size INT NOT NULL,

@@ -5,9 +5,11 @@ import com.collect.ai.rag.dto.RagConfigRequest;
 import com.collect.ai.rag.dto.RagConfigResponse;
 import com.collect.ai.rag.dto.ChatModelRequest;
 import com.collect.ai.rag.dto.ChatModelResponse;
+import com.collect.ai.rag.dto.ModelDiscoveryRequest;
 import com.collect.ai.rag.dto.VectorModelRequest;
 import com.collect.ai.rag.dto.VectorModelResponse;
 import com.collect.ai.rag.service.ChatModelService;
+import com.collect.ai.rag.service.ModelDiscoveryService;
 import com.collect.ai.rag.service.RagConfigService;
 import com.collect.ai.rag.service.RagService;
 import com.collect.ai.rag.service.VectorModelService;
@@ -37,6 +39,7 @@ public class RagController {
     private final RagConfigService ragConfigService;
     private final VectorModelService vectorModelService;
     private final ChatModelService chatModelService;
+    private final ModelDiscoveryService modelDiscoveryService;
 
     @Operation(summary = "读取当前环境的 RAG 配置")
     @GetMapping("/config")
@@ -66,6 +69,13 @@ public class RagController {
         return R.ok(vectorModelService.create(request));
     }
 
+    @Operation(summary = "自动拉取向量模型列表")
+    @PostMapping("/vector-models/discover")
+    public R<java.util.List<String>> discoverVectorModels(@RequestBody ModelDiscoveryRequest request) {
+        requireAdmin();
+        return R.ok(modelDiscoveryService.discoverVectorModels(request));
+    }
+
     @Operation(summary = "更新向量模型")
     @PutMapping("/vector-models/{id}")
     public R<VectorModelResponse> updateVectorModel(@PathVariable Long id,
@@ -87,6 +97,13 @@ public class RagController {
     public R<java.util.List<ChatModelResponse>> chatModels() {
         requireAdmin();
         return R.ok(chatModelService.list());
+    }
+
+    @Operation(summary = "自动拉取聊天模型列表")
+    @PostMapping("/chat-models/discover")
+    public R<java.util.List<String>> discoverChatModels(@RequestBody ModelDiscoveryRequest request) {
+        requireAdmin();
+        return R.ok(modelDiscoveryService.discoverChatModels(request));
     }
 
     @Operation(summary = "读取聊天模型 API Key")

@@ -24,7 +24,14 @@
             {{ row.embeddingProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
           </template>
         </el-table-column>
-        <el-table-column prop="embeddingModel" label="模型名称" min-width="150" />
+        <el-table-column prop="embeddingModel" label="模型名称" min-width="220" show-overflow-tooltip />
+        <el-table-column label="API Key" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.apiKeyConfigured ? 'success' : 'info'" effect="light">
+              {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="dimensions" label="维度" width="90" />
         <el-table-column prop="topK" label="Top K" width="90" />
         <el-table-column label="分块（长度 / 重叠）" width="170">
@@ -53,16 +60,38 @@
             <el-input v-model="form.name" maxlength="128" />
           </el-form-item>
           <el-form-item label="服务提供方" prop="embeddingProvider">
-            <el-select v-model="form.embeddingProvider">
+            <el-select v-model="form.embeddingProvider" @change="clearDiscoveredModels">
               <el-option label="Ollama 原生 API" value="ollama" />
               <el-option label="OpenAI 兼容 API" value="openai" />
             </el-select>
           </el-form-item>
           <el-form-item label="服务地址" prop="embeddingBaseUrl">
-            <el-input v-model="form.embeddingBaseUrl" placeholder="http://host:11434" />
+            <el-input
+              v-model="form.embeddingBaseUrl"
+              :placeholder="form.embeddingProvider === 'ollama' ? 'http://host:11434' : 'http://host:port/v1'"
+              @change="clearDiscoveredModels"
+            />
           </el-form-item>
           <el-form-item label="模型名称" prop="embeddingModel">
-            <el-input v-model="form.embeddingModel" maxlength="128" />
+            <div class="model-picker">
+              <el-select v-model="form.embeddingModel" filterable placeholder="请先拉取模型列表">
+                <el-option v-for="name in modelOptions" :key="name" :label="name" :value="name" />
+              </el-select>
+              <el-button :loading="discovering" @click="discoverModels">拉取模型</el-button>
+            </div>
+          </el-form-item>
+          <el-form-item label="API Key">
+            <el-input
+              v-model="form.apiKey"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              :placeholder="editingId !== null && apiKeyConfigured ? '已保存密钥；留空保持不变' : '可选；无密钥时留空'"
+              :disabled="form.clearApiKey"
+            />
+            <el-checkbox v-model="form.clearApiKey" :disabled="!apiKeyConfigured">
+              清除已保存的 API Key
+            </el-checkbox>
           </el-form-item>
           <el-form-item label="向量维度" prop="dimensions">
             <el-input-number v-model="form.dimensions" :min="1" :max="65536" controls-position="right" />
@@ -89,9 +118,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createVectorModel, deleteVectorModel, getVectorModels, updateVectorModel } from '@/api'
+import {
+  createVectorModel, deleteVectorModel, discoverVectorModels, getVectorModels, updateVectorModel
+} from '@/api'
 
 defineProps<{ embedded?: boolean }>()
 
@@ -101,6 +132,7 @@ interface VectorModel {
   embeddingProvider: string
   embeddingBaseUrl: string
   embeddingModel: string
+  apiKeyConfigured: boolean
   dimensions: number
   topK: number
   chunkSize: number
@@ -112,6 +144,8 @@ const emptyModel = () => ({
   embeddingProvider: 'ollama',
   embeddingBaseUrl: '',
   embeddingModel: '',
+  apiKey: '',
+  clearApiKey: false,
   dimensions: 1024,
   topK: 5,
   chunkSize: 1500,
@@ -125,6 +159,14 @@ const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
+const apiKeyConfigured = ref(false)
+const discovering = ref(false)
+const availableModels = ref<string[]>([])
+const modelOptions = computed(() => {
+  const options = [...availableModels.value]
+  if (form.embeddingModel && !options.includes(form.embeddingModel)) options.unshift(form.embeddingModel)
+  return options
+})
 
 const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   try {
@@ -169,19 +211,65 @@ const loadModels = async () => {
 
 const openCreate = () => {
   editingId.value = null
+  apiKeyConfigured.value = false
+  availableModels.value = []
   Object.assign(form, emptyModel())
   dialogVisible.value = true
 }
 
 const openEdit = (model: VectorModel) => {
   editingId.value = model.id
-  Object.assign(form, model)
+  apiKeyConfigured.value = model.apiKeyConfigured
+  availableModels.value = []
+  Object.assign(form, {
+    name: model.name,
+    embeddingProvider: model.embeddingProvider,
+    embeddingBaseUrl: model.embeddingBaseUrl,
+    embeddingModel: model.embeddingModel,
+    apiKey: '',
+    clearApiKey: false,
+    dimensions: model.dimensions,
+    topK: model.topK,
+    chunkSize: model.chunkSize,
+    chunkOverlap: model.chunkOverlap
+  })
   dialogVisible.value = true
+}
+
+const clearDiscoveredModels = () => {
+  availableModels.value = []
+}
+
+const discoverModels = async () => {
+  if (!await formRef.value?.validateField(['embeddingProvider', 'embeddingBaseUrl']).then(() => true).catch(() => false)) return
+  discovering.value = true
+  try {
+    const response: any = await discoverVectorModels({
+      modelId: editingId.value,
+      provider: form.embeddingProvider,
+      baseUrl: form.embeddingBaseUrl,
+      apiKey: form.apiKey
+    })
+    if (!response) return
+    availableModels.value = response.data || []
+    if (!availableModels.value.includes(form.embeddingModel)) form.embeddingModel = ''
+    if (availableModels.value.length) {
+      ElMessage.success(`已拉取 ${availableModels.value.length} 个向量模型`)
+    } else {
+      ElMessage.info('服务未返回可用的向量模型')
+    }
+  } catch {
+    ElMessage.error('拉取向量模型失败，请检查服务地址和 API Key')
+  } finally {
+    discovering.value = false
+  }
 }
 
 const resetForm = () => {
   formRef.value?.clearValidate()
   Object.assign(form, emptyModel())
+  apiKeyConfigured.value = false
+  availableModels.value = []
 }
 
 const saveModel = async () => {
@@ -232,6 +320,9 @@ onMounted(loadModels)
 .header-actions { display: flex; align-items: center; gap: 16px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-input-number) { width: 100%; }
+.model-picker { display: flex; width: 100%; gap: 8px; }
+.model-picker :deep(.el-select) { width: auto; min-width: 0; flex: 1; }
+.form-grid :deep(.el-checkbox) { display: flex; margin-top: 8px; }
 @media (max-width: 680px) {
   .card-header { flex-direction: column; }
   .form-grid { grid-template-columns: 1fr; }

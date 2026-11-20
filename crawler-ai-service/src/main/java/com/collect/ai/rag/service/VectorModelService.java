@@ -41,6 +41,7 @@ public class VectorModelService {
         validate(request);
         ensureUniqueName(request.getName(), null);
         AiRagVectorModel model = fromRequest(request);
+        model.setApiKey(StringUtils.hasText(request.getApiKey()) ? request.getApiKey().trim() : "");
         model.setCreateTime(LocalDateTime.now());
         model.setUpdateTime(model.getCreateTime());
         if (vectorModelMapper.insert(model) != 1) {
@@ -56,6 +57,11 @@ public class VectorModelService {
         ensureUniqueName(request.getName(), id);
         AiRagVectorModel previous = copy(model);
         copyRequest(request, model);
+        if (Boolean.TRUE.equals(request.getClearApiKey())) {
+            model.setApiKey("");
+        } else if (StringUtils.hasText(request.getApiKey())) {
+            model.setApiKey(request.getApiKey().trim());
+        }
         model.setUpdateTime(LocalDateTime.now());
         if (vectorModelMapper.updateById(model) != 1) {
             throw new IllegalStateException("保存向量模型失败");
@@ -139,7 +145,8 @@ public class VectorModelService {
         }
         if (request.getName().trim().length() > 128
                 || request.getEmbeddingModel().trim().length() > 128
-                || request.getEmbeddingBaseUrl().trim().length() > 512) {
+                || request.getEmbeddingBaseUrl().trim().length() > 512
+                || (request.getApiKey() != null && request.getApiKey().length() > 1024)) {
             throw new BizException("向量模型字段长度超出限制");
         }
         if (request.getDimensions() == null || request.getDimensions() < 1
@@ -160,6 +167,7 @@ public class VectorModelService {
         copy.setEmbeddingProvider(source.getEmbeddingProvider());
         copy.setEmbeddingBaseUrl(source.getEmbeddingBaseUrl());
         copy.setEmbeddingModel(source.getEmbeddingModel());
+        copy.setApiKey(source.getApiKey());
         copy.setDimensions(source.getDimensions());
         copy.setTopK(source.getTopK());
         copy.setChunkSize(source.getChunkSize());
@@ -176,6 +184,7 @@ public class VectorModelService {
         response.setEmbeddingProvider(model.getEmbeddingProvider());
         response.setEmbeddingBaseUrl(model.getEmbeddingBaseUrl());
         response.setEmbeddingModel(model.getEmbeddingModel());
+        response.setApiKeyConfigured(StringUtils.hasText(model.getApiKey()));
         response.setDimensions(model.getDimensions());
         response.setTopK(model.getTopK());
         response.setChunkSize(model.getChunkSize());

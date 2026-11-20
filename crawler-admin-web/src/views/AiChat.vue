@@ -95,7 +95,7 @@
         >{{ conversation.title }}</button>
       </div>
 
-      <div ref="messageListRef" class="message-list">
+      <div ref="messageListRef" class="message-list" @scroll="saveScrollPosition">
         <div v-if="loadingConversations || loadingMessages" class="loading-history" role="status">
           <div class="history-loading-indicator">
             <el-icon class="thinking-icon"><Loading /></el-icon>
@@ -229,7 +229,7 @@
               <div
                 v-if="contextWindow > 0"
                 class="context-usage"
-                :title="`分母为 AI 配置中所选聊天模型的上下文长度。按最近 20 条成功消息估算历史上下文；服务端历史消息预算约为上下文的 50%（${formatTokenCount(historyTokenBudget)} Token），且不含系统提示和检索资料。`"
+                :title="`估算当前会话全部成功的历史消息（不含本次问题、系统提示和检索资料）；分母为 AI 配置中所选聊天模型的上下文长度。`"
                 aria-label="对话历史上下文使用估算"
               >
                 <div class="context-usage-copy">
@@ -242,6 +242,9 @@
                   :stroke-width="5"
                   :color="contextUsageColor"
                 />
+                <span v-if="estimatedHistoryTokens > contextWindow" class="context-usage-warning">
+                  历史消息估算已超过模型上下文长度
+                </span>
               </div>
               <span v-else-if="contextWindowError" class="context-usage-error">上下文用量暂不可用</span>
             </div>
@@ -326,9 +329,6 @@ const activeConversation = computed(() =>
 )
 const contextWindow = ref(0)
 const contextWindowError = ref(false)
-const historyTokenBudget = computed(() =>
-  contextWindow.value > 0 ? Math.max(256, Math.floor(contextWindow.value / 2)) : 0
-)
 const estimateTokens = (content: string) => {
   let tokens = 0
   let plainCharacters = 0
@@ -351,25 +351,15 @@ const estimateTokens = (content: string) => {
 const estimatedHistoryTokens = computed(() => {
   const messages = (activeConversation.value?.messages || [])
     .filter(message => message.status === 'SUCCESS' && (message.role === 'user' || message.role === 'assistant'))
-    .slice(-20)
-  let remainingTokens = historyTokenBudget.value
-  let usedTokens = 0
-  for (let index = messages.length - 1; index >= 0; index--) {
-    const messageTokens = estimateTokens(messages[index].text) + 4
-    if (messageTokens > remainingTokens) {
-      if (usedTokens === 0 && remainingTokens > 4) usedTokens = remainingTokens
-      break
-    }
-    usedTokens += messageTokens
-    remainingTokens -= messageTokens
-  }
-  return usedTokens
+  return messages.reduce((total, message) => total + estimateTokens(message.text) + 4, 0)
 })
-const contextUsagePercentage = computed(() => historyTokenBudget.value
+const contextUsagePercentage = computed(() => contextWindow.value
   ? Math.min(100, Math.round(estimatedHistoryTokens.value / contextWindow.value * 100))
   : 0)
 const contextUsageColor = computed(() =>
-  contextUsagePercentage.value >= 90 ? '#e6a23c' : '#0f9b8e'
+  estimatedHistoryTokens.value > contextWindow.value
+    ? '#f56c6c'
+    : contextUsagePercentage.value >= 90 ? '#e6a23c' : '#0f9b8e'
 )
 const formatTokenCount = (value: number) => value.toLocaleString()
 const draft = ref('')
@@ -399,6 +389,9 @@ const showSlashCommands = computed(() =>
   !sending.value && !slashCommandsDismissed.value && visibleSlashCommands.value.length > 0
 )
 const messageListRef = ref<HTMLElement>()
+const conversationScrollPositions = new Map<number, number>()
+const conversationFollowingBottom = new Map<number, boolean>()
+const pendingScrollRestoreId = ref<number | null>(null)
 const creatingConversation = ref(false)
 const loadingConversations = ref(true)
 const loadingMessages = ref(false)
@@ -437,7 +430,7 @@ const loadConversations = async () => {
   } finally {
     loadingConversations.value = false
   }
-  if (selectedConversation?.messagesLoaded) await scrollToBottom()
+  if (selectedConversation?.messagesLoaded) await restoreConversationScroll(selectedConversation)
 }
 
 const loadContextWindow = async () => {
@@ -454,7 +447,7 @@ const loadContextWindow = async () => {
 
 const loadMessages = async (conversation: Conversation) => {
   if (conversation.messagesLoaded) {
-    if (!loadingConversations.value) await scrollToBottom()
+    if (!loadingConversations.value) await restoreConversationScroll(conversation)
     void resumePendingMessages(conversation)
     return
   }
@@ -481,15 +474,20 @@ const loadMessages = async (conversation: Conversation) => {
     loadingMessages.value = false
   }
   if (loaded) {
-    if (!loadingConversations.value) await scrollToBottom()
+    if (!loadingConversations.value) await restoreConversationScroll(conversation)
     void resumePendingMessages(conversation)
   }
 }
 
 const selectConversation = async (id: number) => {
+  saveScrollPosition()
+  pendingScrollRestoreId.value = id
   activeConversationId.value = id
   const conversation = conversations.value.find(item => item.id === id)
-  if (conversation) await loadMessages(conversation)
+  if (conversation) {
+    await loadMessages(conversation)
+    await restoreConversationScroll(conversation)
+  }
 }
 
 const createConversation = async () => {
@@ -506,8 +504,10 @@ const createConversation = async () => {
       messagesLoaded: true
     }
     conversations.value.unshift(conversation)
+    pendingScrollRestoreId.value = conversation.id
     activeConversationId.value = conversation.id
     draft.value = ''
+    await restoreConversationScroll(conversation)
   } catch (error) {
     historyError.value = error instanceof Error ? error.message : '创建对话失败'
   } finally {
@@ -528,10 +528,12 @@ const deleteConversation = async (id: number) => {
   }
   const wasActive = activeConversationId.value === id
   conversations.value.splice(index, 1)
+  conversationScrollPositions.delete(id)
+  conversationFollowingBottom.delete(id)
   if (wasActive) {
     const next = conversations.value[0]
-    activeConversationId.value = next?.id ?? null
-    if (next) await loadMessages(next)
+    if (next) await selectConversation(next.id)
+    else activeConversationId.value = null
   }
 }
 
@@ -667,14 +669,52 @@ const runSlashCommand = async (name: string, argument = '') => {
   }
 }
 
-const scrollToBottom = async () => {
-  await nextTick()
-  if (messageListRef.value) {
-    messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-  }
+const saveScrollPosition = () => {
+  const conversationId = activeConversationId.value
+  const messageList = messageListRef.value
+  if (conversationId === null || !messageList || pendingScrollRestoreId.value === conversationId) return
+  conversationScrollPositions.set(conversationId, messageList.scrollTop)
+  conversationFollowingBottom.set(
+    conversationId,
+    messageList.scrollHeight - messageList.clientHeight - messageList.scrollTop <= 40
+  )
 }
 
-const consumeChatStream = async (response: Response, message: ChatMessage) => {
+const restoreConversationScroll = async (conversation: Conversation) => {
+  if (activeConversationId.value !== conversation.id) return
+  await nextTick()
+  const messageList = messageListRef.value
+  if (!messageList || activeConversationId.value !== conversation.id) return
+  const savedPosition = conversationScrollPositions.get(conversation.id)
+  messageList.scrollTop = savedPosition ?? messageList.scrollHeight
+  await nextTick()
+  if (activeConversationId.value !== conversation.id) return
+  conversationScrollPositions.set(conversation.id, messageList.scrollTop)
+  conversationFollowingBottom.set(
+    conversation.id,
+    messageList.scrollHeight - messageList.clientHeight - messageList.scrollTop <= 40
+  )
+  if (pendingScrollRestoreId.value === conversation.id) pendingScrollRestoreId.value = null
+}
+
+const scrollToBottom = async (
+  conversationId = activeConversationId.value,
+  force = true
+) => {
+  await nextTick()
+  const messageList = messageListRef.value
+  if (
+    !messageList
+    || conversationId === null
+    || activeConversationId.value !== conversationId
+    || (!force && conversationFollowingBottom.get(conversationId) === false)
+  ) return
+  messageList.scrollTop = messageList.scrollHeight
+  conversationScrollPositions.set(conversationId, messageList.scrollTop)
+  conversationFollowingBottom.set(conversationId, true)
+}
+
+const consumeChatStream = async (response: Response, message: ChatMessage, conversationId: number) => {
   if (!response.ok || !response.body) {
     const body = await response.text()
     let errorMessage = body || `请求失败（${response.status}）`
@@ -733,7 +773,7 @@ const consumeChatStream = async (response: Response, message: ChatMessage) => {
       buffer = blocks.pop() || ''
       blocks.forEach(handleEvent)
       if (done) break
-      await scrollToBottom()
+      await scrollToBottom(conversationId, false)
     }
     if (buffer.trim()) handleEvent(buffer)
     if (!completed) throw new Error('流式连接中断')
@@ -757,7 +797,7 @@ const resumeMessageStream = async (conversation: Conversation, message: ChatMess
           message.id!,
           message.text.length
         )
-        await consumeChatStream(response, message)
+        await consumeChatStream(response, message, conversation.id)
         if (message.status !== 'STREAMING') return
       } catch {
         retries++
@@ -812,7 +852,7 @@ const sendMessage = async () => {
 
   try {
     const response = await streamChatMessage(conversation.id, { question, topK: topK.value })
-    await consumeChatStream(response, responseMessage)
+    await consumeChatStream(response, responseMessage, conversation.id)
   } catch (error) {
     if (responseMessage.id && responseMessage.status === 'STREAMING') {
       void resumeMessageStream(conversation, responseMessage)
@@ -824,7 +864,7 @@ const sendMessage = async () => {
     }
   } finally {
     sending.value = false
-    await scrollToBottom()
+    await scrollToBottom(conversation.id)
   }
 }
 
@@ -833,7 +873,8 @@ onMounted(() => {
   void loadContextWindow()
 })
 onActivated(() => {
-  void scrollToBottom()
+  const conversation = activeConversation.value
+  if (conversation) void restoreConversationScroll(conversation)
 })
 </script>
 
@@ -1034,6 +1075,7 @@ onActivated(() => {
 .context-usage-copy { display: flex; justify-content: space-between; gap: 8px; color: var(--ink-500); font-size: 10px; }
 .context-usage-copy strong { color: var(--ink-700); font-size: 10px; font-weight: 550; white-space: nowrap; }
 .context-usage :deep(.el-progress-bar__outer) { background: var(--chrome-hover); }
+.context-usage-warning { color: var(--action-danger-ink); font-size: 9px; }
 .context-usage-error { color: var(--action-danger-ink); font-size: 10px; }
 .keyboard-hint { color: var(--ink-500); font-size: 9px; }
 .send-button { height: 32px; padding: 0 12px; border-radius: 8px; font-size: 11px; }

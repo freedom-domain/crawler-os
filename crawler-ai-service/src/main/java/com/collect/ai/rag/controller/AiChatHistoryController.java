@@ -99,7 +99,7 @@ public class AiChatHistoryController {
         query.setQuestion(request.getQuestion().trim());
         query.setTopK(request.getTopK());
         List<RagDtos.ChatHistoryMessage> context =
-                historyService.getRecentContext(userId, conversationId);
+                historyService.getSuccessfulContext(userId, conversationId);
         historyService.saveUserQuestion(userId, conversationId, query.getQuestion());
         RagDtos.QueryResponse answer;
         try {
@@ -127,7 +127,7 @@ public class AiChatHistoryController {
         query.setQuestion(request.getQuestion().trim());
         query.setTopK(request.getTopK());
         List<RagDtos.ChatHistoryMessage> context =
-                historyService.getRecentContext(userId, conversationId);
+                historyService.getSuccessfulContext(userId, conversationId);
         historyService.saveUserQuestion(userId, conversationId, query.getQuestion());
         AiChatDtos.MessageResponse message =
                 historyService.beginAssistantStream(userId, conversationId);

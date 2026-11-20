@@ -21,6 +21,7 @@ public class RagProperties {
         private String sourceIndex = "spider_content";
         private String embeddingProvider = "ollama";
         private String embeddingBaseUrl = "http://192.168.31.2:11434";
+        private String embeddingApiKey = "";
         private String chatProvider = "openai";
         private String chatBaseUrl = "http://192.168.31.2:8900/v1";
         private String apiKey = "";

@@ -26,10 +26,9 @@ public interface AiChatMessageMapper extends BaseMapper<AiChatMessage> {
             WHERE conversation_id = #{conversationId}
               AND status = 'SUCCESS'
               AND role IN ('user', 'assistant')
-            ORDER BY id DESC
-            LIMIT 20
+            ORDER BY id ASC
             """)
-    List<AiChatMessage> selectRecentContextByConversationId(
+    List<AiChatMessage> selectSuccessfulContextByConversationId(
             @Param("conversationId") Long conversationId);
 
     @Update("""

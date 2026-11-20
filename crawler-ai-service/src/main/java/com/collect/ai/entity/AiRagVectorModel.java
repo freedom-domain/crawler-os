@@ -18,6 +18,7 @@ public class AiRagVectorModel {
     private String embeddingProvider;
     private String embeddingBaseUrl;
     private String embeddingModel;
+    private String apiKey;
     private Integer dimensions;
     private Integer topK;
     private Integer chunkSize;

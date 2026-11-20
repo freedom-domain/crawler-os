@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.collect.common.exception.BizException;
 import com.collect.user.dto.RoleAssignPermReq;
 import com.collect.user.dto.RoleSaveReq;
+import com.collect.user.entity.SysPermission;
 import com.collect.user.entity.SysRole;
 import com.collect.user.entity.SysRolePermission;
+import com.collect.user.mapper.SysPermissionMapper;
 import com.collect.user.mapper.SysRoleMapper;
 import com.collect.user.mapper.SysRolePermissionMapper;
 import com.collect.user.mapper.SysUserMapper;
@@ -13,7 +15,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +27,7 @@ public class RoleService {
     private final SysRoleMapper roleMapper;
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserMapper userMapper;
+    private final SysPermissionMapper permissionMapper;
 
     public List<SysRole> list() {
         return roleMapper.selectList(
@@ -99,10 +104,34 @@ public class RoleService {
         if (req.getRoleId() == null) {
             throw new BizException("角色ID不能为空");
         }
+        Set<Long> permissionIds = req.getPermissionIds() == null
+                ? new LinkedHashSet<>()
+                : new LinkedHashSet<>(req.getPermissionIds());
+        List<SysPermission> aiPermissions = permissionMapper.selectList(
+                new LambdaQueryWrapper<SysPermission>()
+                        .in(SysPermission::getCode, List.of("ai:chat", "ai:config"))
+                        .eq(SysPermission::getDeleted, 0));
+        Long chatPermissionId = aiPermissions.stream()
+                .filter(permission -> "ai:chat".equals(permission.getCode()))
+                .map(SysPermission::getId)
+                .findFirst()
+                .orElse(null);
+        Long configPermissionId = aiPermissions.stream()
+                .filter(permission -> "ai:config".equals(permission.getCode()))
+                .map(SysPermission::getId)
+                .findFirst()
+                .orElse(null);
+        if (chatPermissionId != null && configPermissionId != null) {
+            if (permissionIds.contains(chatPermissionId)) {
+                permissionIds.add(configPermissionId);
+            } else {
+                permissionIds.remove(configPermissionId);
+            }
+        }
         rolePermissionMapper.delete(
                 new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, req.getRoleId()));
-        if (req.getPermissionIds() != null && !req.getPermissionIds().isEmpty()) {
-            for (Long permId : req.getPermissionIds()) {
+        if (!permissionIds.isEmpty()) {
+            for (Long permId : permissionIds) {
                 SysRolePermission rp = new SysRolePermission();
                 rp.setRoleId(req.getRoleId());
                 rp.setPermissionId(permId);

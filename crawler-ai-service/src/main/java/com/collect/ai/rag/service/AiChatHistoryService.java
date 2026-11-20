@@ -17,7 +17,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -59,29 +58,16 @@ public class AiChatHistoryService {
                 .toList();
     }
 
-    public List<RagDtos.ChatHistoryMessage> getRecentContext(Long userId, Long conversationId) {
+    public List<RagDtos.ChatHistoryMessage> getSuccessfulContext(Long userId, Long conversationId) {
         requireOwnedConversation(userId, conversationId);
         List<AiChatMessage> messages =
-                messageMapper.selectRecentContextByConversationId(conversationId);
-        int historyTokenBudget = Math.max(256, ragProperties.getRag().getContextLength() / 2);
-        int remainingTokens = historyTokenBudget;
-        List<RagDtos.ChatHistoryMessage> recentContext = new ArrayList<>(messages.size());
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            AiChatMessage message = messages.get(i);
+                messageMapper.selectSuccessfulContextByConversationId(conversationId);
+        List<RagDtos.ChatHistoryMessage> context = new ArrayList<>(messages.size());
+        for (AiChatMessage message : messages) {
             String content = message.getContent() == null ? "" : message.getContent();
-            int messageTokens = estimateTokens(content) + 4;
-            if (messageTokens > remainingTokens) {
-                if (recentContext.isEmpty() && remainingTokens > 4) {
-                    content = truncateToTokenBudget(content, remainingTokens - 4);
-                    addContextMessage(recentContext, message, content);
-                }
-                break;
-            }
-            addContextMessage(recentContext, message, content);
-            remainingTokens -= messageTokens;
+            addContextMessage(context, message, content);
         }
-        Collections.reverse(recentContext);
-        return recentContext;
+        return context;
     }
 
     private static void addContextMessage(
@@ -90,50 +76,6 @@ public class AiChatHistoryService {
         item.setRole(message.getRole());
         item.setContent(content);
         context.add(item);
-    }
-
-    private static String truncateToTokenBudget(String content, int tokenBudget) {
-        int low = 0;
-        int high = content.length();
-        while (low < high) {
-            int middle = (low + high + 1) / 2;
-            if (estimateTokens(content.substring(0, middle)) <= tokenBudget) {
-                low = middle;
-            } else {
-                high = middle - 1;
-            }
-        }
-        if (low > 0 && low < content.length()
-                && Character.isHighSurrogate(content.charAt(low - 1))
-                && Character.isLowSurrogate(content.charAt(low))) {
-            low--;
-        }
-        return content.substring(0, low);
-    }
-
-    // Estimate token usage for history budgeting without coupling to a provider tokenizer.
-    private static int estimateTokens(String content) {
-        int tokens = 0;
-        int plainCharacters = 0;
-        for (int offset = 0; offset < content.length();) {
-            int codePoint = content.codePointAt(offset);
-            offset += Character.charCount(codePoint);
-            if (isCjk(codePoint)) {
-                tokens += (plainCharacters + 3) / 4 + 1;
-                plainCharacters = 0;
-            } else {
-                plainCharacters++;
-            }
-        }
-        return tokens + (plainCharacters + 3) / 4;
-    }
-
-    private static boolean isCjk(int codePoint) {
-        return (codePoint >= 0x4E00 && codePoint <= 0x9FFF)
-                || (codePoint >= 0x3400 && codePoint <= 0x4DBF)
-                || (codePoint >= 0xF900 && codePoint <= 0xFAFF)
-                || (codePoint >= 0x3040 && codePoint <= 0x30FF)
-                || (codePoint >= 0xAC00 && codePoint <= 0xD7AF);
     }
 
     public void deleteConversation(Long userId, Long conversationId) {
