@@ -73,11 +73,21 @@ export const streamChatMessage = (id: number, data: { question: string; topK: nu
     body: JSON.stringify(data)
   })
 }
-export const resumeChatMessageStream = (conversationId: number, messageId: number, offset: number) => {
+export const cancelChatMessage = (conversationId: number, messageId: number) =>
+  request.post(`/ai/chat/conversations/${conversationId}/messages/${messageId}/cancel`, undefined, chatRequestConfig)
+export const resumeChatMessageStream = (
+  conversationId: number,
+  messageId: number,
+  offset: number,
+  reasoningOffset: number
+) => {
   const headers: Record<string, string> = { Accept: 'text/event-stream' }
   const token = useUserStore().token
   if (token) headers.Authorization = `Bearer ${token}`
-  const params = new URLSearchParams({ offset: String(offset) })
+  const params = new URLSearchParams({
+    offset: String(offset),
+    reasoningOffset: String(reasoningOffset)
+  })
   return fetch(
     `/api/ai/chat/conversations/${conversationId}/messages/${messageId}/stream?${params}`,
     { headers }

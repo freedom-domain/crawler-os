@@ -136,9 +136,13 @@
             </div>
             <div class="message-content">
               <div v-if="message.role === 'assistant'" class="message-author">CrawlerOS AI</div>
+              <details v-if="message.reasoningText" class="reasoning-block" open>
+                <summary>模型思考过程</summary>
+                <div class="reasoning-content message-markdown" v-html="renderMarkdown(message.reasoningText)" />
+              </details>
               <div
                 v-if="message.role === 'assistant' && message.pending && !message.text"
-                class="message-text is-pending"
+                class="message-text is-pending-indicator"
               >
                 {{ loadingMessageText }}
                 <span class="loading-dots" aria-hidden="true">
@@ -148,7 +152,7 @@
               <div
                 v-else-if="message.role === 'assistant'"
                 class="message-text message-markdown"
-                :class="{ 'is-pending': message.pending, 'is-error': message.error }"
+                :class="{ 'is-error': message.error }"
               >
                 <div v-html="renderMarkdown(displayMessageText(message))" />
                 <span v-if="message.pending" class="loading-dots" aria-hidden="true">
@@ -159,7 +163,20 @@
                 <el-icon v-if="message.pending" class="thinking-icon"><Loading /></el-icon>
                 {{ message.text }}
               </div>
+              <el-button
+                v-if="message.role === 'assistant' && message.pending && message.id"
+                class="stop-generation-button"
+                link
+                type="danger"
+                :loading="cancelingMessageIds.has(message.id)"
+                :disabled="cancelingMessageIds.has(message.id)"
+                @click="activeConversation && stopMessageGeneration(activeConversation.id, message)"
+              >
+                <el-icon><Close /></el-icon>
+                中断生成
+              </el-button>
               <span v-if="message.status === 'FAILED'" class="message-status-failed">回答失败</span>
+              <span v-if="message.status === 'CANCELLED'" class="message-status-cancelled">已中断生成</span>
               <div v-if="message.sources?.length" class="source-list">
                 <div class="source-heading"><el-icon><Link /></el-icon>参考来源 <span>{{ message.sources.length }}</span></div>
                 <a
@@ -276,11 +293,11 @@ import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import {
-  chatContextWindow, chatConversationCreate, chatConversationDelete, chatConversationList, chatMessages,
-  clearChatMessages, resumeChatMessageStream, streamChatMessage
+  cancelChatMessage, chatContextWindow, chatConversationCreate, chatConversationDelete, chatConversationList,
+  chatMessages, clearChatMessages, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowRight, ChatDotRound, Cpu, Delete, Help, Link, Loading, MagicStick, Plus,
+  ArrowRight, ChatDotRound, Close, Cpu, Delete, Help, Link, Loading, MagicStick, Plus,
   Promotion, Refresh, Setting, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
@@ -300,9 +317,10 @@ interface ChatMessage {
   id?: number
   role: 'user' | 'assistant'
   text: string
-  status?: 'SUCCESS' | 'FAILED' | 'STREAMING'
+  status?: 'SUCCESS' | 'FAILED' | 'STREAMING' | 'CANCELLED'
   pending?: boolean
   error?: boolean
+  reasoningText?: string
   sources?: SourceReference[]
 }
 
@@ -366,6 +384,7 @@ const draft = ref('')
 const topK = ref(5)
 const retrievalOptions = computed(() => [...new Set([3, 5, 8, 10, topK.value])].sort((a, b) => a - b))
 const sending = ref(false)
+const cancelingMessageIds = ref(new Set<number>())
 const streamConnections = new Map<number, Promise<void>>()
 const connectedStreamIds = new Set<number>()
 const activeSlashCommandIndex = ref(0)
@@ -461,6 +480,7 @@ const loadMessages = async (conversation: Conversation) => {
       id: item.id,
       role: item.role,
       text: item.content,
+      reasoningText: item.reasoningContent || '',
       status: item.status,
       pending: item.status === 'STREAMING',
       error: item.status === 'FAILED',
@@ -749,9 +769,12 @@ const consumeChatStream = async (response: Response, message: ChatMessage, conve
       connectedStreamIds.add(payload.id)
     } else if (event === 'token') {
       message.text += payload
+    } else if (event === 'reasoning') {
+      message.reasoningText = (message.reasoningText || '') + payload
     } else if (event === 'complete') {
       message.id = payload.id
       message.text = payload.content ?? message.text
+      message.reasoningText = payload.reasoningContent ?? message.reasoningText
       message.status = payload.status
       message.pending = false
       message.error = payload.status === 'FAILED'
@@ -795,7 +818,8 @@ const resumeMessageStream = async (conversation: Conversation, message: ChatMess
         const response = await resumeChatMessageStream(
           conversation.id,
           message.id!,
-          message.text.length
+          message.text.length,
+          message.reasoningText?.length || 0
         )
         await consumeChatStream(response, message, conversation.id)
         if (message.status !== 'STREAMING') return
@@ -821,6 +845,28 @@ const resumePendingMessages = async (conversation: Conversation) => {
   await Promise.all(conversation.messages
     .filter(message => message.role === 'assistant' && message.status === 'STREAMING')
     .map(message => resumeMessageStream(conversation, message)))
+}
+
+const stopMessageGeneration = async (conversationId: number, message: ChatMessage) => {
+  if (!message.id || message.status !== 'STREAMING' || cancelingMessageIds.value.has(message.id)) return
+  const messageId = message.id
+  cancelingMessageIds.value.add(messageId)
+  try {
+    const response: any = await cancelChatMessage(conversationId, messageId)
+    if (response?.data) {
+      message.text = response.data.content ?? message.text
+      message.reasoningText = response.data.reasoningContent ?? message.reasoningText
+      message.status = response.data.status
+      message.pending = response.data.status === 'STREAMING'
+      message.sources = response.data.sources || []
+    }
+    if (message.status === 'CANCELLED') ElMessage.info('已中断生成')
+    else ElMessage.info('回答已结束，无需中断')
+  } catch {
+    ElMessage.error('中断生成失败，请重试')
+  } finally {
+    cancelingMessageIds.value.delete(messageId)
+  }
 }
 
 const sendMessage = async () => {
@@ -852,6 +898,7 @@ const sendMessage = async () => {
 
   try {
     const response = await streamChatMessage(conversation.id, { question, topK: topK.value })
+    responseMessage.id = Number(response.headers.get('X-Chat-Message-Id')) || undefined
     await consumeChatStream(response, responseMessage, conversation.id)
   } catch (error) {
     if (responseMessage.id && responseMessage.status === 'STREAMING') {
@@ -964,6 +1011,10 @@ onActivated(() => {
 .message-avatar { display: grid; flex: 0 0 auto; width: 30px; height: 30px; place-items: center; border: 1px solid var(--chrome-line); border-radius: 10px; background: var(--surface-soft); color: var(--ink-700); font-size: 15px; }
 .message-assistant .message-avatar { border: 0; background: linear-gradient(145deg, #18b9aa, #087e83); color: #fff; }
 .message-content { min-width: 0; flex: 1; padding-top: 2px; }
+.reasoning-block { margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); color: var(--ink-900); }
+.reasoning-block summary { color: var(--ink-700); font-size: 11px; font-weight: 650; cursor: pointer; }
+.reasoning-content { padding-top: 8px; color: var(--ink-900); font-size: 12px; line-height: 1.7; }
+.stop-generation-button { margin-top: 6px; }
 .message-user .message-avatar { order: 2; }
 .message-user .message-content { flex: 0 1 auto; max-width: min(78%, 560px); }
 .message-author { margin-bottom: 7px; color: var(--ink-700); font-size: 11px; font-weight: 650; }
@@ -988,7 +1039,7 @@ onActivated(() => {
 .message-markdown :deep(th), .message-markdown :deep(td) { padding: 6px 10px; border: 1px solid var(--chrome-line); text-align: left; }
 .message-user .message-content { padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: var(--surface-soft); }
 .message-user .message-author { margin-bottom: 3px; text-align: right; }
-.message-text.is-pending { color: var(--ink-500); }
+.message-text.is-pending-indicator { color: var(--ink-500); }
 .loading-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; vertical-align: baseline; }
 .loading-dots i {
   width: 4px;
@@ -1009,6 +1060,7 @@ onActivated(() => {
 }
 .message-text.is-error { color: var(--action-danger-ink); }
 .message-status-failed { display: inline-block; margin-top: 6px; color: var(--action-danger-ink); font-size: 10px; }
+.message-status-cancelled { display: inline-block; margin-top: 6px; color: var(--ink-700); font-size: 10px; }
 .thinking-icon { margin-right: 5px; vertical-align: -2px; animation: spin 1.2s linear infinite; }
 .source-list { display: grid; gap: 7px; max-width: 570px; margin-top: 15px; }
 .source-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; color: var(--ink-700); font-size: 10px; font-weight: 650; }

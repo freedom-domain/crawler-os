@@ -105,31 +105,40 @@ public class RagService {
     }
 
     public RagDtos.QueryResponse query(RagDtos.QueryRequest request) {
-        return query(request, isLoggedIn(), List.of(), null);
+        return query(request, isLoggedIn(), List.of(), null, null);
     }
 
     public RagDtos.QueryResponse queryForLoggedInUser(
             RagDtos.QueryRequest request, List<RagDtos.ChatHistoryMessage> history) {
-        return query(request, true, history, null);
+        return query(request, true, history, null, null);
     }
 
     public RagDtos.QueryResponse queryForLoggedInUser(
             RagDtos.QueryRequest request, Consumer<String> tokenConsumer) {
-        return query(request, true, List.of(), tokenConsumer);
+        return query(request, true, List.of(), tokenConsumer, null);
     }
 
     public RagDtos.QueryResponse queryForLoggedInUser(
             RagDtos.QueryRequest request,
             List<RagDtos.ChatHistoryMessage> history,
             Consumer<String> tokenConsumer) {
-        return query(request, true, history, tokenConsumer);
+        return query(request, true, history, tokenConsumer, null);
+    }
+
+    public RagDtos.QueryResponse queryForLoggedInUser(
+            RagDtos.QueryRequest request,
+            List<RagDtos.ChatHistoryMessage> history,
+            Consumer<String> tokenConsumer,
+            Consumer<String> reasoningConsumer) {
+        return query(request, true, history, tokenConsumer, reasoningConsumer);
     }
 
     private RagDtos.QueryResponse query(
             RagDtos.QueryRequest request,
             boolean loggedIn,
             List<RagDtos.ChatHistoryMessage> history,
-            Consumer<String> tokenConsumer) {
+            Consumer<String> tokenConsumer,
+            Consumer<String> reasoningConsumer) {
         ensureEnabled();
         if (request == null || request.getQuestion() == null
                 || request.getQuestion().isBlank()) {
@@ -239,7 +248,7 @@ public class RagService {
         String answer = tokenConsumer == null
                 ? createChatAnswer(request.getQuestion(), context.toString(), history)
                 : createStreamingChatAnswer(
-                        request.getQuestion(), context.toString(), history, tokenConsumer);
+                        request.getQuestion(), context.toString(), history, tokenConsumer, reasoningConsumer);
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
         response.setSources(sources);
@@ -379,7 +388,8 @@ public class RagService {
             String question,
             String context,
             List<RagDtos.ChatHistoryMessage> history,
-            Consumer<String> tokenConsumer) {
+            Consumer<String> tokenConsumer,
+            Consumer<String> reasoningConsumer) {
         RagProperties.Rag rag = properties.getRag();
         try {
             ObjectNode body = objectMapper.createObjectNode();
@@ -394,9 +404,10 @@ public class RagService {
             if (!"ollama".equalsIgnoreCase(provider)) {
                 body.put("temperature", 0.2);
             } else {
+                body.put("think", true);
                 body.putObject("options").put("num_ctx", rag.getContextLength());
             }
-            streamChatRequest(path, body, tokenConsumer);
+            streamChatRequest(path, body, tokenConsumer, reasoningConsumer);
             return "";
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
@@ -436,7 +447,10 @@ public class RagService {
     }
 
             private void streamChatRequest(
-                    String path, ObjectNode body, Consumer<String> tokenConsumer) throws Exception {
+                    String path,
+                    ObjectNode body,
+                    Consumer<String> tokenConsumer,
+                    Consumer<String> reasoningConsumer) throws Exception {
                 RagProperties.Rag rag = properties.getRag();
                 String baseUrl = path.equals("/api/chat")
                         ? rag.getChatBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "")
@@ -480,13 +494,13 @@ public class RagService {
                         if (path.equals("/api/chat")) {
                             String line;
                             while ((line = reader.readLine()) != null) {
-                                if (!line.isBlank()) emitOllamaToken(line, tokenConsumer);
+                                if (!line.isBlank()) emitOllamaToken(line, tokenConsumer, reasoningConsumer);
                             }
                         } else {
                             String line;
                             while ((line = reader.readLine()) != null) {
                                 if (line.startsWith("data:")) {
-                                    emitOpenAiToken(line.substring(5).trim(), tokenConsumer);
+                                    emitOpenAiToken(line.substring(5).trim(), tokenConsumer, reasoningConsumer);
                                 }
                             }
                         }
@@ -495,6 +509,9 @@ public class RagService {
                             logUri, rag.getChatProvider(), safeLogValue(rag.getChatModel(), 128),
                             Duration.ofNanos(System.nanoTime() - startNanos).toMillis());
                 } catch (Exception e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
                     log.warn("流式聊天请求失败: url={}, provider={}, model={}, exception={}, elapsedMs={}",
                             logUri, rag.getChatProvider(), safeLogValue(rag.getChatModel(), 128),
                             e.getClass().getSimpleName(),
@@ -503,22 +520,38 @@ public class RagService {
                 }
             }
 
-            private void emitOllamaToken(String line, Consumer<String> tokenConsumer) throws Exception {
+            private void emitOllamaToken(
+                    String line, Consumer<String> tokenConsumer, Consumer<String> reasoningConsumer) throws Exception {
                 JsonNode root = objectMapper.readTree(line);
-                String token = root.path("message").path("content").asText("");
+                JsonNode message = root.path("message");
+                String token = message.path("content").asText("");
                 if (!token.isEmpty()) tokenConsumer.accept(token);
+                String reasoning = message.path("thinking").asText("");
+                if (!reasoning.isEmpty() && reasoningConsumer != null) reasoningConsumer.accept(reasoning);
                 if (root.path("error").isTextual()) {
                     throw new IllegalStateException("聊天模型返回错误: " + root.path("error").asText());
                 }
             }
 
-            private void emitOpenAiToken(String data, Consumer<String> tokenConsumer) throws Exception {
+            private void emitOpenAiToken(
+                    String data, Consumer<String> tokenConsumer, Consumer<String> reasoningConsumer) throws Exception {
                 if (data.isEmpty() || "[DONE]".equals(data)) return;
                 JsonNode root = objectMapper.readTree(data);
                 JsonNode choices = root.path("choices");
                 if (!choices.isArray() || choices.isEmpty()) return;
-                String token = choices.get(0).path("delta").path("content").asText("");
+                JsonNode delta = choices.get(0).path("delta");
+                String token = delta.path("content").asText("");
                 if (!token.isEmpty()) tokenConsumer.accept(token);
+                String reasoning = firstText(delta, "reasoning_content", "reasoning", "thinking");
+                if (!reasoning.isEmpty() && reasoningConsumer != null) reasoningConsumer.accept(reasoning);
+            }
+
+            private String firstText(JsonNode node, String... fields) {
+                for (String field : fields) {
+                    String value = node.path(field).asText("");
+                    if (!value.isEmpty()) return value;
+                }
+                return "";
             }
 
     private HttpResponse<String> openAiRequest(String path, ObjectNode body) throws Exception {
@@ -732,7 +765,7 @@ public class RagService {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(tokenConsumer == null
                 ? createChatAnswer(question, "", history)
-                : createStreamingChatAnswer(question, "", history, tokenConsumer));
+                : createStreamingChatAnswer(question, "", history, tokenConsumer, null));
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());

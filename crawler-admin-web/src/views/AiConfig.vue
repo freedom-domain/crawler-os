@@ -343,7 +343,8 @@ const saveConfig = async () => {
     if (!response) return
     applyConfig(response.data)
     ElMessage.success('AI/RAG 配置已保存并生效')
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === '所选聊天模型不存在') return
     ElMessage.error('保存 AI/RAG 配置失败')
   } finally {
     saving.value = false

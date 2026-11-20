@@ -130,6 +130,7 @@ public class AiChatHistoryService {
         message.setConversationId(conversationId);
         message.setRole("assistant");
         message.setContent("");
+        message.setReasoningContent("");
         message.setStatus("STREAMING");
         message.setSourcesJson("[]");
         message.setCreatedAt(LocalDateTime.now());
@@ -142,6 +143,22 @@ public class AiChatHistoryService {
         if (messageMapper.appendStreamingContent(messageId, delta) == 0) {
             throw new IllegalStateException("聊天流已结束或消息已删除");
         }
+    }
+
+    public void appendAssistantReasoning(Long messageId, String delta) {
+        if (delta == null || delta.isEmpty()) return;
+        if (messageMapper.appendStreamingReasoning(messageId, delta) == 0) {
+            throw new IllegalStateException("聊天流已结束或消息已删除");
+        }
+    }
+
+    @Transactional
+    public AiChatDtos.MessageResponse cancelAssistantStream(
+            Long userId, Long conversationId, Long messageId) {
+        findOwnedConversation(userId, conversationId);
+        findAssistantMessage(conversationId, messageId);
+        messageMapper.cancelStreamingMessage(conversationId, messageId);
+        return toMessageResponse(findAssistantMessage(conversationId, messageId));
     }
 
     @Transactional
@@ -257,6 +274,7 @@ public class AiChatHistoryService {
         response.setId(message.getId());
         response.setRole(message.getRole());
         response.setContent(message.getContent());
+        response.setReasoningContent(message.getReasoningContent() == null ? "" : message.getReasoningContent());
         response.setStatus(message.getStatus());
         response.setSources(readSources(message.getSourcesJson()));
         response.setCreatedAt(message.getCreatedAt());

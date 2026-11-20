@@ -27,6 +27,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 
 @Tag(name = "AI chat history")
 @RestController
@@ -38,6 +42,7 @@ public class AiChatHistoryController {
     private final RagService ragService;
     private final ObjectMapper objectMapper;
     private final Executor streamExecutor;
+    private final ConcurrentMap<Long, Future<?>> streamTasks = new ConcurrentHashMap<>();
 
     public AiChatHistoryController(
             AiChatHistoryService historyService,
@@ -132,19 +137,45 @@ public class AiChatHistoryController {
         AiChatDtos.MessageResponse message =
                 historyService.beginAssistantStream(userId, conversationId);
         try {
-            streamExecutor.execute(() ->
-                    generateAssistantStream(userId, conversationId, message.getId(), query, context));
+            Long messageId = message.getId();
+            FutureTask<Void> task = new FutureTask<>(() -> {
+                try {
+                    generateAssistantStream(userId, conversationId, messageId, query, context);
+                } finally {
+                    streamTasks.remove(messageId);
+                }
+                return null;
+            });
+            streamTasks.put(messageId, task);
+            streamExecutor.execute(task);
         } catch (RuntimeException e) {
             log.error("启动 AI 聊天流失败，conversationId={}", conversationId, e);
+            streamTasks.remove(message.getId());
             historyService.failAssistantStream(userId, conversationId, message.getId());
         }
         StreamingResponseBody stream =
-                assistantStream(userId, conversationId, message.getId(), 0);
+                assistantStream(userId, conversationId, message.getId(), 0, 0);
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_EVENT_STREAM)
                 .header("Cache-Control", "no-cache, no-transform")
                 .header("X-Accel-Buffering", "no")
+                .header("X-Chat-Message-Id", message.getId().toString())
                 .body(stream);
+    }
+
+    @PostMapping("/{conversationId}/messages/{messageId}/cancel")
+    public R<AiChatDtos.MessageResponse> cancelMessageStream(
+            @PathVariable Long conversationId,
+            @PathVariable Long messageId) {
+        requireChatPermission();
+        Long userId = LoginUtils.getUserId();
+        AiChatDtos.MessageResponse message =
+                historyService.cancelAssistantStream(userId, conversationId, messageId);
+        if ("CANCELLED".equals(message.getStatus())) {
+            Future<?> task = streamTasks.remove(messageId);
+            if (task != null) task.cancel(true);
+        }
+        return R.ok(message);
     }
 
     @GetMapping(value = "/{conversationId}/messages/{messageId}/stream",
@@ -152,7 +183,8 @@ public class AiChatHistoryController {
     public ResponseEntity<StreamingResponseBody> resumeMessageStream(
             @PathVariable Long conversationId,
             @PathVariable Long messageId,
-            @RequestParam(defaultValue = "0") int offset) {
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "0") int reasoningOffset) {
         requireChatPermission();
         Long userId = LoginUtils.getUserId();
         AiChatDtos.MessageResponse message =
@@ -161,12 +193,17 @@ public class AiChatHistoryController {
         if (offset < 0 || offset > content.length()) {
             throw new IllegalArgumentException("流式恢复位置无效");
         }
+        String reasoning = message.getReasoningContent() == null ? "" : message.getReasoningContent();
+        if (reasoningOffset < 0 || reasoningOffset > reasoning.length()) {
+            throw new IllegalArgumentException("思考内容恢复位置无效");
+        }
         StreamingResponseBody stream =
-                assistantStream(userId, conversationId, messageId, offset);
+                assistantStream(userId, conversationId, messageId, offset, reasoningOffset);
         return ResponseEntity.ok()
                 .contentType(MediaType.TEXT_EVENT_STREAM)
                 .header("Cache-Control", "no-cache, no-transform")
                 .header("X-Accel-Buffering", "no")
+                .header("X-Chat-Message-Id", messageId.toString())
                 .body(stream);
     }
 
@@ -191,10 +228,14 @@ public class AiChatHistoryController {
             List<RagDtos.ChatHistoryMessage> context) {
         StringBuilder answerText = new StringBuilder();
         try {
-            RagDtos.QueryResponse answer = ragService.queryForLoggedInUser(query, context, token -> {
-                answerText.append(token);
-                historyService.appendAssistantStream(messageId, token);
-            });
+            RagDtos.QueryResponse answer = ragService.queryForLoggedInUser(
+                    query,
+                    context,
+                    token -> {
+                        answerText.append(token);
+                        historyService.appendAssistantStream(messageId, token);
+                    },
+                    reasoning -> historyService.appendAssistantReasoning(messageId, reasoning));
             answer.setAnswer(answerText.toString());
             historyService.completeAssistantStream(
                     userId, conversationId, messageId, answer, answerText.toString());
@@ -215,14 +256,22 @@ public class AiChatHistoryController {
             Long userId,
             Long conversationId,
             Long messageId,
-            int initialOffset) throws IOException {
+            int initialOffset,
+            int initialReasoningOffset) throws IOException {
         int offset = initialOffset;
+        int reasoningOffset = initialReasoningOffset;
         long lastHeartbeat = System.nanoTime();
         writeEvent(output, "start",
                 historyService.getAssistantStream(userId, conversationId, messageId));
         while (true) {
             AiChatDtos.MessageResponse message =
                     historyService.getAssistantStream(userId, conversationId, messageId);
+            String reasoning = message.getReasoningContent() == null ? "" : message.getReasoningContent();
+            if (reasoning.length() > reasoningOffset) {
+                writeEvent(output, "reasoning", reasoning.substring(reasoningOffset));
+                reasoningOffset = reasoning.length();
+                lastHeartbeat = System.nanoTime();
+            }
             String content = message.getContent() == null ? "" : message.getContent();
             if (content.length() > offset) {
                 writeEvent(output, "token", content.substring(offset));
@@ -230,7 +279,7 @@ public class AiChatHistoryController {
                 lastHeartbeat = System.nanoTime();
             }
             if (!"STREAMING".equals(message.getStatus())) {
-                if ("SUCCESS".equals(message.getStatus())) {
+                if ("SUCCESS".equals(message.getStatus()) || "CANCELLED".equals(message.getStatus())) {
                     writeEvent(output, "complete", message);
                 } else {
                     writeEvent(output, "error", content);
@@ -252,10 +301,10 @@ public class AiChatHistoryController {
     }
 
     private StreamingResponseBody assistantStream(
-            Long userId, Long conversationId, Long messageId, int offset) {
+            Long userId, Long conversationId, Long messageId, int offset, int reasoningOffset) {
         return output -> {
             try {
-                writeAssistantStream(output, userId, conversationId, messageId, offset);
+                writeAssistantStream(output, userId, conversationId, messageId, offset, reasoningOffset);
             } catch (RuntimeException e) {
                 log.error("读取 AI 聊天流失败，conversationId={}, messageId={}",
                         conversationId, messageId, e);

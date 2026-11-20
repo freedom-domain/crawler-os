@@ -211,6 +211,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_message (
     conversation_id BIGINT NOT NULL,
     role VARCHAR(16) NOT NULL,
     content LONGTEXT NOT NULL,
+    reasoning_content LONGTEXT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'SUCCESS',
     sources_json LONGTEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

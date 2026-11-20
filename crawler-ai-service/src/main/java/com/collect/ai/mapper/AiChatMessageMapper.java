@@ -13,7 +13,7 @@ import java.util.List;
 public interface AiChatMessageMapper extends BaseMapper<AiChatMessage> {
 
     @Select("""
-            SELECT id, conversation_id, role, content, status, sources_json, created_at
+            SELECT id, conversation_id, role, content, reasoning_content, status, sources_json, created_at
             FROM ai_chat_message
             WHERE conversation_id = #{conversationId}
             ORDER BY id ASC
@@ -21,7 +21,7 @@ public interface AiChatMessageMapper extends BaseMapper<AiChatMessage> {
     List<AiChatMessage> selectByConversationId(@Param("conversationId") Long conversationId);
 
     @Select("""
-            SELECT id, conversation_id, role, content, status, sources_json, created_at
+            SELECT id, conversation_id, role, content, reasoning_content, status, sources_json, created_at
             FROM ai_chat_message
             WHERE conversation_id = #{conversationId}
               AND status = 'SUCCESS'
@@ -39,4 +39,23 @@ public interface AiChatMessageMapper extends BaseMapper<AiChatMessage> {
     int appendStreamingContent(
             @Param("messageId") Long messageId,
             @Param("delta") String delta);
+
+    @Update("""
+            UPDATE ai_chat_message
+            SET reasoning_content = CONCAT(COALESCE(reasoning_content, ''), #{delta})
+            WHERE id = #{messageId} AND status = 'STREAMING'
+            """)
+    int appendStreamingReasoning(
+            @Param("messageId") Long messageId,
+            @Param("delta") String delta);
+
+    @Update("""
+            UPDATE ai_chat_message
+            SET status = 'CANCELLED', sources_json = '[]'
+            WHERE id = #{messageId} AND conversation_id = #{conversationId}
+              AND role = 'assistant' AND status = 'STREAMING'
+            """)
+    int cancelStreamingMessage(
+            @Param("conversationId") Long conversationId,
+            @Param("messageId") Long messageId);
 }
