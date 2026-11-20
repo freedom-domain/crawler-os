@@ -163,19 +163,19 @@
                 <el-icon v-if="message.pending" class="thinking-icon"><Loading /></el-icon>
                 {{ message.text }}
               </div>
-              <el-button
-                v-if="message.role === 'assistant' && message.pending && message.id"
-                class="stop-generation-button"
-                link
-                type="danger"
-                :loading="cancelingMessageIds.has(message.id)"
-                :disabled="cancelingMessageIds.has(message.id)"
-                @click="activeConversation && stopMessageGeneration(activeConversation.id, message)"
-              >
-                <el-icon><Close /></el-icon>
-                中断生成
-              </el-button>
-              <span v-if="message.status === 'FAILED'" class="message-status-failed">回答失败</span>
+              <div v-if="message.status === 'FAILED'" class="failed-message-actions">
+                <span class="message-status-failed">回答失败</span>
+                <el-button
+                  class="retry-message-button"
+                  link
+                  type="primary"
+                  :disabled="sending"
+                  @click="retryFailedMessage(message)"
+                >
+                  <el-icon><Refresh /></el-icon>
+                  重发
+                </el-button>
+              </div>
               <span v-if="message.status === 'CANCELLED'" class="message-status-cancelled">已中断生成</span>
               <div v-if="message.sources?.length" class="source-list">
                 <div class="source-heading"><el-icon><Link /></el-icon>参考来源 <span>{{ message.sources.length }}</span></div>
@@ -203,6 +203,16 @@
       </div>
 
       <div class="composer-wrap">
+        <el-button
+          v-if="showScrollToBottom && activeConversation?.messages.length"
+          class="scroll-to-bottom"
+          circle
+          aria-label="回到底部"
+          title="回到底部"
+          @click="scrollToBottom(activeConversationId, true, 'smooth')"
+        >
+          <el-icon><ArrowDown /></el-icon>
+        </el-button>
         <div class="composer">
           <div v-if="showSlashCommands" class="slash-command-menu" role="listbox" aria-label="AI 命令">
             <button
@@ -243,31 +253,45 @@
                   <el-option v-for="count in retrievalOptions" :key="count" :label="`${count} 条`" :value="count" />
                 </el-select>
               </div>
-              <div
-                v-if="contextWindow > 0"
-                class="context-usage"
-                :title="`估算当前会话全部成功的历史消息（不含本次问题、系统提示和检索资料）；分母为 AI 配置中所选聊天模型的上下文长度。`"
-                aria-label="对话历史上下文使用估算"
-              >
-                <div class="context-usage-copy">
-                  <span>上下文使用估算</span>
-                  <strong>约 {{ formatTokenCount(estimatedHistoryTokens) }} / {{ formatTokenCount(contextWindow) }} Token</strong>
-                </div>
-                <el-progress
-                  :percentage="contextUsagePercentage"
-                  :show-text="false"
-                  :stroke-width="5"
-                  :color="contextUsageColor"
-                />
-                <span v-if="estimatedHistoryTokens > contextWindow" class="context-usage-warning">
-                  历史消息估算已超过模型上下文长度
-                </span>
-              </div>
-              <span v-else-if="contextWindowError" class="context-usage-error">上下文用量暂不可用</span>
             </div>
+            <div
+              v-if="contextWindow > 0"
+              class="context-usage"
+              :title="`估算当前会话全部成功的历史消息（不含本次问题、系统提示和检索资料）；分母为 AI 配置中所选聊天模型的上下文长度。`"
+              aria-label="对话历史上下文使用估算"
+            >
+              <div class="context-usage-copy">
+                <span>上下文使用估算</span>
+                <strong>约 {{ formatTokenCount(estimatedHistoryTokens) }} / {{ formatTokenCount(contextWindow) }} Token</strong>
+              </div>
+              <el-progress
+                :percentage="contextUsagePercentage"
+                :show-text="false"
+                :stroke-width="5"
+                :color="contextUsageColor"
+              />
+              <span v-if="estimatedHistoryTokens > contextWindow" class="context-usage-warning">
+                历史消息估算已超过模型上下文长度
+              </span>
+            </div>
+            <span v-else-if="contextWindowError" class="context-usage-error">上下文用量暂不可用</span>
             <div class="send-tools">
               <span class="keyboard-hint">Enter 发送 · Shift + Enter 换行</span>
               <el-button
+                v-if="activeStreamingMessage?.id && activeConversation"
+                class="send-button stop-button"
+                type="danger"
+                link
+                :loading="cancelingMessageIds.has(activeStreamingMessage.id)"
+                :disabled="cancelingMessageIds.has(activeStreamingMessage.id)"
+                aria-label="中断生成"
+                title="中断生成"
+                @click="stopMessageGeneration(activeConversation.id, activeStreamingMessage)"
+              >
+                <span v-if="!cancelingMessageIds.has(activeStreamingMessage.id)" class="stop-square-icon" aria-hidden="true" />
+              </el-button>
+              <el-button
+                v-else
                 class="send-button"
                 type="primary"
                 :disabled="!draft.trim() || sending"
@@ -297,7 +321,7 @@ import {
   chatMessages, clearChatMessages, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowRight, ChatDotRound, Close, Cpu, Delete, Help, Link, Loading, MagicStick, Plus,
+  ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, Help, Link, Loading, MagicStick, Plus,
   Promotion, Refresh, Setting, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
@@ -344,6 +368,12 @@ const userStore = useUserStore()
 const canConfigureAi = computed(() => userStore.permissions.includes('ai:config'))
 const activeConversation = computed(() =>
   conversations.value.find(conversation => conversation.id === activeConversationId.value)
+)
+const activeStreamingMessage = computed(() =>
+  activeConversation.value?.messages
+    .slice()
+    .reverse()
+    .find(message => message.role === 'assistant' && message.status === 'STREAMING' && message.id)
 )
 const contextWindow = ref(0)
 const contextWindowError = ref(false)
@@ -408,6 +438,7 @@ const showSlashCommands = computed(() =>
   !sending.value && !slashCommandsDismissed.value && visibleSlashCommands.value.length > 0
 )
 const messageListRef = ref<HTMLElement>()
+const showScrollToBottom = ref(false)
 const conversationScrollPositions = new Map<number, number>()
 const conversationFollowingBottom = new Map<number, boolean>()
 const pendingScrollRestoreId = ref<number | null>(null)
@@ -538,6 +569,12 @@ const createConversation = async () => {
 const deleteConversation = async (id: number) => {
   const index = conversations.value.findIndex(conversation => conversation.id === id)
   if (index < 0) return
+  const conversation = conversations.value[index]
+  if (!await confirm(`确定删除对话“${conversation.title}”吗？此操作无法撤销。`, {
+    title: '删除对话',
+    confirmText: '删除',
+    danger: true
+  })) return
   historyError.value = ''
   try {
     const response: any = await chatConversationDelete(id)
@@ -693,11 +730,11 @@ const saveScrollPosition = () => {
   const conversationId = activeConversationId.value
   const messageList = messageListRef.value
   if (conversationId === null || !messageList || pendingScrollRestoreId.value === conversationId) return
-  conversationScrollPositions.set(conversationId, messageList.scrollTop)
-  conversationFollowingBottom.set(
-    conversationId,
+  const isFollowingBottom =
     messageList.scrollHeight - messageList.clientHeight - messageList.scrollTop <= 40
-  )
+  conversationScrollPositions.set(conversationId, messageList.scrollTop)
+  conversationFollowingBottom.set(conversationId, isFollowingBottom)
+  showScrollToBottom.value = !isFollowingBottom
 }
 
 const restoreConversationScroll = async (conversation: Conversation) => {
@@ -714,12 +751,14 @@ const restoreConversationScroll = async (conversation: Conversation) => {
     conversation.id,
     messageList.scrollHeight - messageList.clientHeight - messageList.scrollTop <= 40
   )
+  showScrollToBottom.value = !conversationFollowingBottom.get(conversation.id)
   if (pendingScrollRestoreId.value === conversation.id) pendingScrollRestoreId.value = null
 }
 
 const scrollToBottom = async (
   conversationId = activeConversationId.value,
-  force = true
+  force = true,
+  behavior: ScrollBehavior = 'auto'
 ) => {
   await nextTick()
   const messageList = messageListRef.value
@@ -729,9 +768,14 @@ const scrollToBottom = async (
     || activeConversationId.value !== conversationId
     || (!force && conversationFollowingBottom.get(conversationId) === false)
   ) return
-  messageList.scrollTop = messageList.scrollHeight
+  if (behavior === 'smooth') {
+    messageList.scrollTo({ top: messageList.scrollHeight, behavior })
+  } else {
+    messageList.scrollTop = messageList.scrollHeight
+  }
   conversationScrollPositions.set(conversationId, messageList.scrollTop)
   conversationFollowingBottom.set(conversationId, true)
+  showScrollToBottom.value = false
 }
 
 const consumeChatStream = async (response: Response, message: ChatMessage, conversationId: number) => {
@@ -869,8 +913,23 @@ const stopMessageGeneration = async (conversationId: number, message: ChatMessag
   }
 }
 
-const sendMessage = async () => {
-  const question = draft.value.trim()
+const retryFailedMessage = async (message: ChatMessage) => {
+  const conversation = activeConversation.value
+  if (!conversation || sending.value || message.status !== 'FAILED') return
+  const messageIndex = conversation.messages.indexOf(message)
+  const question = conversation.messages
+    .slice(0, messageIndex)
+    .reverse()
+    .find(item => item.role === 'user')?.text
+  if (!question?.trim()) {
+    ElMessage.warning('找不到这条失败回答对应的问题')
+    return
+  }
+  await sendMessage(question)
+}
+
+const sendMessage = async (questionOverride?: string) => {
+  const question = (questionOverride ?? draft.value).trim()
   if (!question || sending.value) return
 
   sending.value = true
@@ -893,7 +952,7 @@ const sendMessage = async () => {
   })
   conversation.messages.push(responseMessage)
   conversation.messagesLoaded = true
-  draft.value = ''
+  if (questionOverride === undefined) draft.value = ''
   await scrollToBottom()
 
   try {
@@ -990,6 +1049,10 @@ onActivated(() => {
 .model-badge { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--chrome-line); border-radius: 20px; color: var(--ink-700); font-size: 10px; }
 .model-badge span { width: 7px; height: 7px; border-radius: 50%; background: #35b98c; box-shadow: 0 0 0 3px rgba(53, 185, 140, .12); }
 .message-list { flex: 1; min-height: 0; overflow: auto; padding: 20px clamp(18px, 7vw, 88px); }
+.composer-wrap { position: relative; }
+.scroll-to-bottom { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 50%; width: 36px; height: 36px; transform: translateX(-50%); border-color: var(--chrome-line); background: var(--surface); color: var(--teal-ink); box-shadow: var(--shadow-soft); }
+.el-button.scroll-to-bottom:not(.is-text):not(.is-link):hover { transform: translateX(-50%); }
+.scroll-to-bottom:hover { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
 .history-loading { display: flex; align-items: center; gap: 6px; padding: 8px; color: var(--ink-500); font-size: 10px; }
 .loading-history { display: flex; min-height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--ink-500); font-size: 12px; }
 .history-loading-indicator { display: grid; width: 48px; height: 48px; margin-bottom: 4px; place-items: center; border: 1px solid var(--chrome-line); border-radius: 15px; background: var(--surface); color: var(--teal); font-size: 21px; box-shadow: var(--shadow-soft); }
@@ -1014,7 +1077,7 @@ onActivated(() => {
 .reasoning-block { margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); color: var(--ink-900); }
 .reasoning-block summary { color: var(--ink-700); font-size: 11px; font-weight: 650; cursor: pointer; }
 .reasoning-content { padding-top: 8px; color: var(--ink-900); font-size: 12px; line-height: 1.7; }
-.stop-generation-button { margin-top: 6px; }
+
 .message-user .message-avatar { order: 2; }
 .message-user .message-content { flex: 0 1 auto; max-width: min(78%, 560px); }
 .message-author { margin-bottom: 7px; color: var(--ink-700); font-size: 11px; font-weight: 650; }
@@ -1059,7 +1122,9 @@ onActivated(() => {
   .loading-dots i { animation: none; opacity: 1; }
 }
 .message-text.is-error { color: var(--action-danger-ink); }
+.failed-message-actions { display: flex; align-items: center; gap: 8px; }
 .message-status-failed { display: inline-block; margin-top: 6px; color: var(--action-danger-ink); font-size: 10px; }
+.retry-message-button { margin-top: 5px; font-size: 10px; }
 .message-status-cancelled { display: inline-block; margin-top: 6px; color: var(--ink-700); font-size: 10px; }
 .thinking-icon { margin-right: 5px; vertical-align: -2px; animation: spin 1.2s linear infinite; }
 .source-list { display: grid; gap: 7px; max-width: 570px; margin-top: 15px; }
@@ -1116,22 +1181,26 @@ onActivated(() => {
 .slash-command-option kbd { flex: 0 0 auto; color: var(--ink-500); font-family: inherit; font-size: 10px; }
 .composer :deep(.el-textarea__inner) { min-height: 35px !important; padding: 4px 5px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ink-900); font-size: 12px; line-height: 1.6; }
 .composer :deep(.el-textarea__inner:focus) { box-shadow: none; }
-.composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 7px; }
-.composer-options { display: flex; min-width: 0; flex: 1; align-items: center; gap: 18px; }
+.composer-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding-top: 7px; }
+.composer-options { display: contents; }
 .retrieval-control, .send-tools { display: flex; align-items: center; gap: 8px; }
 .retrieval-control { color: var(--ink-500); font-size: 10px; }
 .retrieval-control :deep(.el-select) { width: 78px; }
 .retrieval-control :deep(.el-input__wrapper) { padding: 0 7px; box-shadow: none; background: var(--surface-soft); }
 .retrieval-control :deep(.el-input__inner) { height: 25px; font-size: 10px; }
-.context-usage { display: flex; min-width: 150px; flex: 1; flex-direction: column; gap: 5px; }
+.context-usage { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
 .context-usage-copy { display: flex; justify-content: space-between; gap: 8px; color: var(--ink-500); font-size: 10px; }
 .context-usage-copy strong { color: var(--ink-700); font-size: 10px; font-weight: 550; white-space: nowrap; }
 .context-usage :deep(.el-progress-bar__outer) { background: var(--chrome-hover); }
 .context-usage-warning { color: var(--action-danger-ink); font-size: 9px; }
 .context-usage-error { color: var(--action-danger-ink); font-size: 10px; }
 .keyboard-hint { color: var(--ink-500); font-size: 9px; }
-.send-button { height: 32px; padding: 0 12px; border-radius: 8px; font-size: 11px; }
+.send-button { width: 64px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 11px; }
 .send-button .el-icon { margin-right: 5px; }
+.stop-button { padding: 0; background: var(--el-color-danger-light-9); color: var(--el-color-danger); }
+.stop-button:hover { background: var(--el-color-danger-light-8); color: var(--el-color-danger); }
+.stop-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.stop-square-icon { display: block; width: 12px; height: 12px; margin: auto; border-radius: 2px; background: currentColor; }
 .disclaimer { margin: 7px 0 0; color: var(--ink-500); font-size: 9px; text-align: center; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -1156,8 +1225,10 @@ onActivated(() => {
   .mobile-conversations::-webkit-scrollbar { display: none; }
   .mobile-conversation { max-width: 150px; flex: 0 0 auto; overflow: hidden; padding: 6px 10px; border: 1px solid var(--chrome-line); border-radius: 16px; background: var(--surface); color: var(--ink-700); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .mobile-conversation.is-active { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
-  .composer-options { flex-wrap: wrap; gap: 9px 14px; }
-  .context-usage { min-width: 135px; }
+  .composer-toolbar { grid-template-columns: auto minmax(0, 1fr); }
+  .retrieval-control { grid-column: 1; grid-row: 1; }
+  .send-tools { grid-column: 2; grid-row: 1; justify-content: flex-end; }
+  .context-usage, .context-usage-error { grid-column: 1 / -1; grid-row: 2; }
   .message-list { padding: 16px 14px; }
   .suggestion-list { grid-template-columns: 1fr; }
   .suggestion-card { min-height: 44px; }
