@@ -204,13 +204,24 @@ const providerLabel = (provider: string) => {
   return 'OpenAI 兼容'
 }
 
+const exactModelId = (id: unknown) => {
+  if (typeof id === 'string' && /^\d+$/.test(id)) return id
+  if (typeof id === 'number' && Number.isSafeInteger(id) && id > 0) return String(id)
+  throw new Error('聊天模型 ID 精度无效，请更新 AI 服务后刷新页面')
+}
+
 const loadModels = async () => {
   loading.value = true
   try {
     const response: any = await getChatModels()
-    if (response) models.value = response.data
-  } catch {
-    ElMessage.error('加载聊天模型失败')
+    if (response) {
+      models.value = response.data.map((model: ChatModel) => ({
+        ...model,
+        id: exactModelId(model.id)
+      }))
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '加载聊天模型失败')
   } finally {
     loading.value = false
   }
