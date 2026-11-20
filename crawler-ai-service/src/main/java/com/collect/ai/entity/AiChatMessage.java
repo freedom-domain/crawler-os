@@ -18,6 +18,9 @@ public class AiChatMessage {
     private String role;
     private String content;
     private String reasoningContent;
+    private Long durationMs;
+    private Long thinkingDurationMs;
+    private Long generationDurationMs;
     private String status;
     private String sourcesJson;
     private LocalDateTime createdAt;

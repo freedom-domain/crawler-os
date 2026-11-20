@@ -47,5 +47,7 @@ public final class RagDtos {
         private String model;
         private String vectorIndex;
         private String vectorField;
+        private Long thinkingDurationMs;
+        private Long generationDurationMs;
     }
 }

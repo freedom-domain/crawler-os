@@ -107,13 +107,15 @@ public class AiChatHistoryController {
                 historyService.getSuccessfulContext(userId, conversationId);
         historyService.saveUserQuestion(userId, conversationId, query.getQuestion());
         RagDtos.QueryResponse answer;
+        long startNanos = System.nanoTime();
         try {
             answer = ragService.queryForLoggedInUser(query, context);
         } catch (RuntimeException e) {
             log.error("AI 聊天回答失败，conversationId={}", conversationId, e);
             return R.ok(historyService.saveAssistantFailure(userId, conversationId));
         }
-        return R.ok(historyService.saveAssistantAnswer(userId, conversationId, answer));
+        long durationMs = java.time.Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+        return R.ok(historyService.saveAssistantAnswer(userId, conversationId, answer, durationMs));
     }
 
     @PostMapping(value = "/{conversationId}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -238,7 +240,9 @@ public class AiChatHistoryController {
                     reasoning -> historyService.appendAssistantReasoning(messageId, reasoning));
             answer.setAnswer(answerText.toString());
             historyService.completeAssistantStream(
-                    userId, conversationId, messageId, answer, answerText.toString());
+                    userId, conversationId, messageId, answer, answerText.toString(),
+                    answer.getThinkingDurationMs() == null ? 0 : answer.getThinkingDurationMs(),
+                    answer.getGenerationDurationMs() == null ? 0 : answer.getGenerationDurationMs());
         } catch (Exception e) {
             log.error("AI 聊天流式回答失败，conversationId={}, messageId={}",
                     conversationId, messageId, e);

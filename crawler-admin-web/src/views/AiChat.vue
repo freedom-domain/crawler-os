@@ -136,9 +136,32 @@
             </div>
             <div class="message-content">
               <div v-if="message.role === 'assistant'" class="message-author">CrawlerOS AI</div>
-              <details v-if="message.reasoningText" class="reasoning-block" open>
-                <summary>模型思考过程</summary>
-                <div class="reasoning-content message-markdown" v-html="renderMarkdown(message.reasoningText)" />
+              <details
+                v-if="message.role === 'assistant' && (message.reasoningText || message.thinkingDurationMs !== undefined)"
+                class="reasoning-block"
+                open
+              >
+                <summary>
+                  <span class="reasoning-summary-content">
+                    <span>模型思考过程</span>
+                    <span v-if="message.reasoningText" class="reasoning-duration">
+                      {{ formatTokenCount(countCharacters(message.reasoningText)) }} 字
+                    </span>
+                    <span v-if="message.reasoningText" class="reasoning-duration">
+                      约 {{ formatTokenCount(estimateTokens(message.reasoningText)) }} Token
+                    </span>
+                    <span v-if="message.thinkingDurationMs !== undefined" class="reasoning-duration">
+                      {{ formatDuration(message.thinkingDurationMs) }}
+                    </span>
+                    <span
+                      v-if="message.thinkingDurationMs && message.thinkingDurationMs > 0 && message.reasoningText"
+                      class="reasoning-duration"
+                    >
+                      {{ formatTokenRate(message.reasoningText, message.thinkingDurationMs, '思考') }}
+                    </span>
+                  </span>
+                </summary>
+                <div class="reasoning-content message-markdown" v-html="renderMarkdown(message.reasoningText || '')" />
               </details>
               <div
                 v-if="message.role === 'assistant' && message.pending && !message.text"
@@ -162,6 +185,27 @@
               <div v-else class="message-text">
                 <el-icon v-if="message.pending" class="thinking-icon"><Loading /></el-icon>
                 {{ message.text }}
+              </div>
+              <div v-if="message.role === 'assistant' && message.status === 'SUCCESS'" class="message-stats">
+                <span v-if="message.generationDurationMs !== undefined">
+                  生成 {{ formatDuration(message.generationDurationMs) }}
+                </span>
+                <span v-else-if="message.durationMs !== undefined">
+                  总耗时 {{ formatDuration(message.durationMs) }}
+                </span>
+                <span>{{ formatTokenCount(countCharacters(message.text)) }} 字</span>
+                <span>约 {{ formatTokenCount(estimateTokens(message.text)) }} Token</span>
+                <span v-if="message.generationDurationMs && message.generationDurationMs > 0">
+                  {{ formatTokenRate(message.text, message.generationDurationMs, '生成') }}
+                </span>
+                <el-button
+                  class="copy-message-button"
+                  link
+                  aria-label="复制回答"
+                  @click="copyMessage(message.text)"
+                >
+                  <el-icon><DocumentCopy /></el-icon>
+                </el-button>
               </div>
               <div v-if="message.status === 'FAILED'" class="failed-message-actions">
                 <span class="message-status-failed">回答失败</span>
@@ -321,7 +365,7 @@ import {
   chatMessages, clearChatMessages, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, Help, Link, Loading, MagicStick, Plus,
+  ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, Help, Link, Loading, MagicStick, Plus,
   Promotion, Refresh, Setting, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
@@ -346,6 +390,10 @@ interface ChatMessage {
   error?: boolean
   reasoningText?: string
   sources?: SourceReference[]
+  generationStartedAt?: number
+  durationMs?: number
+  thinkingDurationMs?: number
+  generationDurationMs?: number
 }
 
 interface Conversation {
@@ -410,6 +458,19 @@ const contextUsageColor = computed(() =>
     : contextUsagePercentage.value >= 90 ? '#e6a23c' : '#0f9b8e'
 )
 const formatTokenCount = (value: number) => value.toLocaleString()
+const countCharacters = (value: string) => Array.from(value).length
+const formatDuration = (durationMs: number) =>
+  durationMs >= 1000 ? `耗时 ${(durationMs / 1000).toFixed(1)} 秒` : `耗时 ${Math.round(durationMs)} 毫秒`
+const formatTokenRate = (content: string, durationMs: number, phase: '思考' | '生成') =>
+  `${phase}约 ${(estimateTokens(content) * 1000 / durationMs).toFixed(1)} Token/秒`
+const copyMessage = async (content: string) => {
+  try {
+    await navigator.clipboard.writeText(content)
+    ElMessage.success('回答已复制')
+  } catch {
+    ElMessage.error('复制失败，请检查浏览器剪贴板权限')
+  }
+}
 const draft = ref('')
 const topK = ref(5)
 const retrievalOptions = computed(() => [...new Set([3, 5, 8, 10, topK.value])].sort((a, b) => a - b))
@@ -515,7 +576,10 @@ const loadMessages = async (conversation: Conversation) => {
       status: item.status,
       pending: item.status === 'STREAMING',
       error: item.status === 'FAILED',
-      sources: item.sources || []
+      sources: item.sources || [],
+      durationMs: item.durationMs,
+      thinkingDurationMs: item.thinkingDurationMs,
+      generationDurationMs: item.generationDurationMs
     }))
     conversation.messagesLoaded = true
     loaded = true
@@ -823,6 +887,17 @@ const consumeChatStream = async (response: Response, message: ChatMessage, conve
       message.pending = false
       message.error = payload.status === 'FAILED'
       message.sources = payload.sources || []
+      if (payload.status === 'SUCCESS') {
+        message.thinkingDurationMs = payload.thinkingDurationMs
+        message.generationDurationMs = payload.generationDurationMs
+        const elapsedMs = message.generationStartedAt === undefined
+          ? undefined
+          : performance.now() - message.generationStartedAt
+        message.durationMs = typeof payload.durationMs === 'number'
+          ? payload.durationMs
+          : elapsedMs
+        message.generationStartedAt = undefined
+      }
       completed = true
     } else if (event === 'error') {
       message.status = 'FAILED'
@@ -948,7 +1023,8 @@ const sendMessage = async (questionOverride?: string) => {
     role: 'assistant',
     text: '',
     status: 'STREAMING',
-    pending: true
+    pending: true,
+    generationStartedAt: performance.now()
   })
   conversation.messages.push(responseMessage)
   conversation.messagesLoaded = true
@@ -1076,6 +1152,8 @@ onActivated(() => {
 .message-content { min-width: 0; flex: 1; padding-top: 2px; }
 .reasoning-block { margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); color: var(--ink-900); }
 .reasoning-block summary { color: var(--ink-700); font-size: 11px; font-weight: 650; cursor: pointer; }
+.reasoning-summary-content { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.reasoning-duration { color: var(--ink-500); font-size: 10px; font-weight: 400; }
 .reasoning-content { padding-top: 8px; color: var(--ink-900); font-size: 12px; line-height: 1.7; }
 
 .message-user .message-avatar { order: 2; }
@@ -1122,6 +1200,9 @@ onActivated(() => {
   .loading-dots i { animation: none; opacity: 1; }
 }
 .message-text.is-error { color: var(--action-danger-ink); }
+.message-stats { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 7px; color: var(--ink-500); font-size: 10px; }
+.copy-message-button { height: auto; margin: 0; color: var(--ink-500); font-size: 10px; }
+.copy-message-button:hover { color: var(--teal-ink); }
 .failed-message-actions { display: flex; align-items: center; gap: 8px; }
 .message-status-failed { display: inline-block; margin-top: 6px; color: var(--action-danger-ink); font-size: 10px; }
 .retry-message-button { margin-top: 5px; font-size: 10px; }
@@ -1229,6 +1310,9 @@ onActivated(() => {
   .retrieval-control { grid-column: 1; grid-row: 1; }
   .send-tools { grid-column: 2; grid-row: 1; justify-content: flex-end; }
   .context-usage, .context-usage-error { grid-column: 1 / -1; grid-row: 2; }
+  .context-usage { width: 100%; }
+  .context-usage-copy { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .context-usage-copy strong { white-space: normal; overflow-wrap: anywhere; }
   .message-list { padding: 16px 14px; }
   .suggestion-list { grid-template-columns: 1fr; }
   .suggestion-card { min-height: 44px; }

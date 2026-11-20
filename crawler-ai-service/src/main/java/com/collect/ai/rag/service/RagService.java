@@ -25,12 +25,17 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RagService {
+
+    private record StreamingChatResult(
+            String answer, long thinkingDurationMs, long generationDurationMs) {
+    }
 
     private final RagProperties properties;
     private final ObjectMapper objectMapper;
@@ -245,12 +250,18 @@ public class RagService {
                     .append("内容：").append(text).append("\n\n");
         }
 
-        String answer = tokenConsumer == null
-                ? createChatAnswer(request.getQuestion(), context.toString(), history)
+        StreamingChatResult streamingResult = tokenConsumer == null ? null
                 : createStreamingChatAnswer(
                         request.getQuestion(), context.toString(), history, tokenConsumer, reasoningConsumer);
+        String answer = streamingResult == null
+                ? createChatAnswer(request.getQuestion(), context.toString(), history)
+                : streamingResult.answer();
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
+        if (streamingResult != null) {
+            response.setThinkingDurationMs(streamingResult.thinkingDurationMs());
+            response.setGenerationDurationMs(streamingResult.generationDurationMs());
+        }
         response.setSources(sources);
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());
@@ -384,7 +395,7 @@ public class RagService {
         }
     }
 
-    private String createStreamingChatAnswer(
+    private StreamingChatResult createStreamingChatAnswer(
             String question,
             String context,
             List<RagDtos.ChatHistoryMessage> history,
@@ -407,8 +418,20 @@ public class RagService {
                 body.put("think", true);
                 body.putObject("options").put("num_ctx", rag.getContextLength());
             }
-            streamChatRequest(path, body, tokenConsumer, reasoningConsumer);
-            return "";
+            long startNanos = System.nanoTime();
+            AtomicLong firstTokenNanos = new AtomicLong();
+            Consumer<String> timedTokenConsumer = token -> {
+                firstTokenNanos.compareAndSet(0, System.nanoTime());
+                tokenConsumer.accept(token);
+            };
+            streamChatRequest(path, body, timedTokenConsumer, reasoningConsumer);
+            long completedNanos = System.nanoTime();
+            long firstToken = firstTokenNanos.get();
+            long thinkingEnd = firstToken == 0 ? completedNanos : firstToken;
+            long thinkingDurationMs = Duration.ofNanos(thinkingEnd - startNanos).toMillis();
+            long generationDurationMs = firstToken == 0 ? 0
+                    : Duration.ofNanos(completedNanos - firstToken).toMillis();
+            return new StreamingChatResult("", thinkingDurationMs, generationDurationMs);
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("调用聊天模型失败: " + e.getMessage(), e);
@@ -763,9 +786,15 @@ public class RagService {
             List<RagDtos.ChatHistoryMessage> history,
             Consumer<String> tokenConsumer) {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
-        response.setAnswer(tokenConsumer == null
-                ? createChatAnswer(question, "", history)
-                : createStreamingChatAnswer(question, "", history, tokenConsumer, null));
+        if (tokenConsumer == null) {
+            response.setAnswer(createChatAnswer(question, "", history));
+        } else {
+            StreamingChatResult streamingResult =
+                    createStreamingChatAnswer(question, "", history, tokenConsumer, null);
+            response.setAnswer(streamingResult.answer());
+            response.setThinkingDurationMs(streamingResult.thinkingDurationMs());
+            response.setGenerationDurationMs(streamingResult.generationDurationMs());
+        }
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());

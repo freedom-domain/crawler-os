@@ -35,6 +35,9 @@ public final class AiChatDtos {
         private String role;
         private String content;
         private String reasoningContent;
+        private Long durationMs;
+        private Long thinkingDurationMs;
+        private Long generationDurationMs;
         private String status;
         private List<RagDtos.SourceReference> sources;
         private LocalDateTime createdAt;

@@ -167,13 +167,18 @@ public class AiChatHistoryService {
             Long conversationId,
             Long messageId,
             RagDtos.QueryResponse answer,
-            String content) {
+            String content,
+            long thinkingDurationMs,
+            long generationDurationMs) {
         findOwnedConversation(userId, conversationId);
         AiChatMessage message = findAssistantMessage(conversationId, messageId);
         if (!"STREAMING".equals(message.getStatus())) {
             throw new IllegalStateException("聊天流已结束");
         }
         message.setContent(content == null ? "" : content);
+        message.setThinkingDurationMs(thinkingDurationMs);
+        message.setGenerationDurationMs(generationDurationMs);
+        message.setDurationMs(thinkingDurationMs + generationDurationMs);
         message.setStatus("SUCCESS");
         message.setSourcesJson(writeSources(answer.getSources()));
         messageMapper.updateById(message);
@@ -207,7 +212,8 @@ public class AiChatHistoryService {
     public AiChatDtos.MessageResponse saveAssistantAnswer(
             Long userId,
             Long conversationId,
-            RagDtos.QueryResponse answer) {
+            RagDtos.QueryResponse answer,
+            long durationMs) {
         findOwnedConversation(userId, conversationId);
         LocalDateTime now = LocalDateTime.now();
 
@@ -215,6 +221,9 @@ public class AiChatHistoryService {
         assistantMessage.setConversationId(conversationId);
         assistantMessage.setRole("assistant");
         assistantMessage.setContent(answer.getAnswer() == null ? "" : answer.getAnswer());
+        assistantMessage.setDurationMs(durationMs);
+        assistantMessage.setThinkingDurationMs(0L);
+        assistantMessage.setGenerationDurationMs(durationMs);
         assistantMessage.setStatus("SUCCESS");
         assistantMessage.setSourcesJson(writeSources(answer.getSources()));
         assistantMessage.setCreatedAt(now);
@@ -275,6 +284,9 @@ public class AiChatHistoryService {
         response.setRole(message.getRole());
         response.setContent(message.getContent());
         response.setReasoningContent(message.getReasoningContent() == null ? "" : message.getReasoningContent());
+        response.setDurationMs(message.getDurationMs());
+        response.setThinkingDurationMs(message.getThinkingDurationMs());
+        response.setGenerationDurationMs(message.getGenerationDurationMs());
         response.setStatus(message.getStatus());
         response.setSources(readSources(message.getSourcesJson()));
         response.setCreatedAt(message.getCreatedAt());

@@ -13,7 +13,8 @@ import java.util.List;
 public interface AiChatMessageMapper extends BaseMapper<AiChatMessage> {
 
     @Select("""
-            SELECT id, conversation_id, role, content, reasoning_content, status, sources_json, created_at
+            SELECT id, conversation_id, role, content, reasoning_content, duration_ms,
+                   thinking_duration_ms, generation_duration_ms, status, sources_json, created_at
             FROM ai_chat_message
             WHERE conversation_id = #{conversationId}
             ORDER BY id ASC
@@ -21,7 +22,8 @@ public interface AiChatMessageMapper extends BaseMapper<AiChatMessage> {
     List<AiChatMessage> selectByConversationId(@Param("conversationId") Long conversationId);
 
     @Select("""
-            SELECT id, conversation_id, role, content, reasoning_content, status, sources_json, created_at
+            SELECT id, conversation_id, role, content, reasoning_content, duration_ms,
+                   thinking_duration_ms, generation_duration_ms, status, sources_json, created_at
             FROM ai_chat_message
             WHERE conversation_id = #{conversationId}
               AND status = 'SUCCESS'
