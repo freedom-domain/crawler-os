@@ -39,14 +39,18 @@ export const createChatModel = (data: any) => request.post('/ai/rag/chat-models'
 export const updateChatModel = (id: number, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
 export const deleteChatModel = (id: number) => request.delete(`/ai/rag/chat-models/${id}`)
 export const queryRag = (data: { question: string; topK: number }) => request.post('/ai/rag/query', data)
-export const chatConversationList = () => request.get('/ai/chat/conversations')
-export const chatContextWindow = () => request.get('/ai/chat/conversations/context-window')
-export const chatConversationCreate = () => request.post('/ai/chat/conversations')
-export const chatConversationDelete = (id: number) => request.delete(`/ai/chat/conversations/${id}`)
-export const chatMessages = (id: number) => request.get(`/ai/chat/conversations/${id}/messages`)
-export const clearChatMessages = (id: number) => request.delete(`/ai/chat/conversations/${id}/messages`)
+const chatRequestConfig = { timeout: 0 }
+export const chatConversationList = () => request.get('/ai/chat/conversations', chatRequestConfig)
+export const chatContextWindow = () => request.get('/ai/chat/conversations/context-window', chatRequestConfig)
+export const chatConversationCreate = () => request.post('/ai/chat/conversations', undefined, chatRequestConfig)
+export const chatConversationDelete = (id: number) =>
+  request.delete(`/ai/chat/conversations/${id}`, chatRequestConfig)
+export const chatMessages = (id: number) =>
+  request.get(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
+export const clearChatMessages = (id: number) =>
+  request.delete(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
 export const sendChatMessage = (id: number, data: { question: string; topK: number }) =>
-  request.post(`/ai/chat/conversations/${id}/messages`, data)
+  request.post(`/ai/chat/conversations/${id}/messages`, data, chatRequestConfig)
 export const streamChatMessage = (id: number, data: { question: string; topK: number }) => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
   const token = useUserStore().token
