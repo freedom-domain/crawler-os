@@ -142,7 +142,7 @@ import {
 defineProps<{ embedded?: boolean }>()
 
 interface ChatModel {
-  id: number
+  id: string
   name: string
   chatProvider: string
   chatBaseUrl: string
@@ -167,7 +167,7 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
-const editingId = ref<number | null>(null)
+const editingId = ref<string | null>(null)
 const apiKeyConfigured = ref(false)
 const apiKeyDialogVisible = ref(false)
 const apiKeyValue = ref('')

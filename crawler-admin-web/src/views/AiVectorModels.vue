@@ -127,7 +127,7 @@ import {
 defineProps<{ embedded?: boolean }>()
 
 interface VectorModel {
-  id: number
+  id: string
   name: string
   embeddingProvider: string
   embeddingBaseUrl: string
@@ -158,7 +158,7 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
-const editingId = ref<number | null>(null)
+const editingId = ref<string | null>(null)
 const apiKeyConfigured = ref(false)
 const discovering = ref(false)
 const availableModels = ref<string[]>([])

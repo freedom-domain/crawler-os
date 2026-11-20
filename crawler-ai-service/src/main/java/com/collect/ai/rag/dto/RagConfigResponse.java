@@ -1,5 +1,7 @@
 package com.collect.ai.rag.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 @Data
@@ -11,7 +13,9 @@ public class RagConfigResponse {
     private String embeddingBaseUrl;
     private String embeddingModel;
     private Integer dimensions;
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long vectorModelId;
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long chatModelId;
     private String chatProvider;
     private String chatBaseUrl;

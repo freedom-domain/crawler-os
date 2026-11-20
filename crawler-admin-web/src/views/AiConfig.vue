@@ -179,8 +179,8 @@ interface RagConfig {
   embeddingBaseUrl: string
   embeddingModel: string
   dimensions: number
-  vectorModelId: number | null
-  chatModelId: number | null
+  vectorModelId: string | null
+  chatModelId: string | null
   chatProvider: string
   chatBaseUrl: string
   chatModel: string
@@ -220,7 +220,7 @@ const emptyConfig = (): RagConfig => ({
 })
 
 interface VectorModel {
-  id: number
+  id: string
   name: string
   embeddingModel: string
   topK: number
@@ -229,7 +229,7 @@ interface VectorModel {
 }
 
 interface ChatModel {
-  id: number
+  id: string
   name: string
   chatProvider: string
   chatBaseUrl: string
@@ -243,8 +243,8 @@ const chatModels = ref<ChatModel[]>([])
 const form = reactive({
   enabled: false,
   sourceIndex: '',
-  vectorModelId: null,
-  chatModelId: null,
+  vectorModelId: null as string | null,
+  chatModelId: null as string | null,
   vectorIndexSuffix: '',
   vectorIndexPrefix: '',
   vectorFieldPrefix: ''
@@ -263,8 +263,8 @@ const chatManagerVisible = ref(false)
 
 const rules: FormRules = {
   sourceIndex: [{ required: true, message: '请输入 ES 源索引', trigger: 'blur' }, { pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称格式不合法', trigger: 'blur' }],
-  vectorModelId: [{ required: true, type: 'number', message: '请选择向量模型', trigger: 'change' }],
-  chatModelId: [{ required: true, type: 'number', message: '请选择聊天模型', trigger: 'change' }],
+  vectorModelId: [{ required: true, message: '请选择向量模型', trigger: 'change' }],
+  chatModelId: [{ required: true, message: '请选择聊天模型', trigger: 'change' }],
   vectorIndexSuffix: [{ required: true, pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称后缀仅支持小写字母、数字、点、下划线和连字符', trigger: 'blur' }],
   vectorIndexPrefix: [{ required: true, pattern: /^[a-z0-9_-]+$/, message: '仅支持小写字母、数字、下划线和连字符', trigger: 'blur' }],
   vectorFieldPrefix: [{ required: true, pattern: /^[a-zA-Z0-9_-]+$/, message: '仅支持字母、数字、下划线和连字符', trigger: 'blur' }]

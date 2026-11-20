@@ -29,27 +29,27 @@ export const getRagConfig = () => request.get('/ai/rag/config')
 export const updateRagConfig = (data: any) => request.put('/ai/rag/config', data)
 export const getVectorModels = () => request.get('/ai/rag/vector-models')
 export const discoverVectorModels = (data: {
-  modelId: number | null
+  modelId: string | null
   provider: string
   baseUrl: string
   apiKey: string
 }) => request.post('/ai/rag/vector-models/discover', data)
 export const createVectorModel = (data: any) => request.post('/ai/rag/vector-models', data)
-export const updateVectorModel = (id: number, data: any) => request.put(`/ai/rag/vector-models/${id}`, data)
-export const deleteVectorModel = (id: number) => request.delete(`/ai/rag/vector-models/${id}`)
+export const updateVectorModel = (id: string, data: any) => request.put(`/ai/rag/vector-models/${id}`, data)
+export const deleteVectorModel = (id: string) => request.delete(`/ai/rag/vector-models/${id}`)
 export const getChatModels = () => request.get('/ai/rag/chat-models')
 export const discoverChatModels = (data: {
-  modelId: number | null
+  modelId: string | null
   provider: string
   baseUrl: string
   apiKey: string
 }) => request.post('/ai/rag/chat-models/discover', data)
-export const getChatModelApiKey = (id: number) => request.get(`/ai/rag/chat-models/${id}/api-key`)
-export const updateChatModelApiKey = (id: number, apiKey: string) =>
+export const getChatModelApiKey = (id: string) => request.get(`/ai/rag/chat-models/${id}/api-key`)
+export const updateChatModelApiKey = (id: string, apiKey: string) =>
   request.put(`/ai/rag/chat-models/${id}/api-key`, { apiKey })
 export const createChatModel = (data: any) => request.post('/ai/rag/chat-models', data)
-export const updateChatModel = (id: number, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
-export const deleteChatModel = (id: number) => request.delete(`/ai/rag/chat-models/${id}`)
+export const updateChatModel = (id: string, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
+export const deleteChatModel = (id: string) => request.delete(`/ai/rag/chat-models/${id}`)
 export const queryRag = (data: { question: string; topK: number }) => request.post('/ai/rag/query', data)
 const chatRequestConfig = { timeout: 0 }
 export const chatConversationList = () => request.get('/ai/chat/conversations', chatRequestConfig)
