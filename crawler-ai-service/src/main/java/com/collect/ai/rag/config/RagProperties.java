@@ -22,7 +22,7 @@ public class RagProperties {
         private String embeddingProvider = "ollama";
         private String embeddingBaseUrl = "http://192.168.31.2:11434";
         private String chatProvider = "openai";
-        private String chatBaseUrl = "http://192.168.31.2:8099/v1";
+        private String chatBaseUrl = "http://192.168.31.2:8900/v1";
         private String apiKey = "";
         private String embeddingModel = "bge-m3";
         private String chatModel = "Qwen3.8-27B";
@@ -30,12 +30,16 @@ public class RagProperties {
         private int topK = 5;
         private int chunkSize = 1500;
         private int chunkOverlap = 200;
+        private String vectorIndex;
         private String vectorIndexPrefix = "spider_content_vector";
         private String vectorFieldPrefix = "embedding";
     }
 
     public String resolveVectorIndex() {
         Rag current = rag;
+        if (current.vectorIndex != null && !current.vectorIndex.isBlank()) {
+            return current.vectorIndex.trim();
+        }
         return current.vectorIndexPrefix + "_" + sanitize(current.embeddingModel);
     }
 

@@ -1,0 +1,13 @@
+package com.collect.ai.rag.dto;
+
+import lombok.Data;
+
+@Data
+public class ChatModelRequest {
+    private String name;
+    private String chatProvider;
+    private String chatBaseUrl;
+    private String chatModel;
+    private String apiKey;
+    private Boolean clearApiKey;
+}

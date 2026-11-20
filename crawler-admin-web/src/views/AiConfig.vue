@@ -1,6 +1,10 @@
 <template>
   <div class="ai-config-page">
-    <el-card class="config-card">
+    <el-card
+      v-loading="loading"
+      element-loading-text="正在加载 AI/RAG 配置..."
+      class="config-card"
+    >
       <template #header>
         <div class="card-header">
           <div>
@@ -15,7 +19,7 @@
 
       <el-alert
         title="密钥安全"
-        description="API Key 只写入数据库，不会在读取配置时返回。留空表示保留当前密钥；勾选清除后会删除已保存密钥。"
+        description="聊天模型的 API Key 按模型配置单独保存，不会在读取配置时返回。请在聊天模型管理中维护密钥。"
         type="info"
         :closable="false"
         show-icon
@@ -49,24 +53,34 @@
 
         <section class="config-section">
           <div class="section-title">
-            <h3>向量模型（Embedding）</h3>
-            <span>用于生成文档与问题的向量</span>
+            <h3>向量模型</h3>
+            <span>从已保存的模型配置中选择</span>
           </div>
           <div class="form-grid">
-            <el-form-item label="服务提供方" prop="embeddingProvider">
-              <el-select v-model="form.embeddingProvider">
-                <el-option label="Ollama 原生 API" value="ollama" />
-                <el-option label="OpenAI 兼容 API" value="openai" />
+            <el-form-item label="引用向量模型" prop="vectorModelId">
+              <el-select v-model="form.vectorModelId" placeholder="请选择向量模型">
+                <el-option
+                  v-for="model in vectorModels"
+                  :key="model.id"
+                  :label="`${model.name}（${model.embeddingModel}）`"
+                  :value="model.id"
+                />
               </el-select>
+              <router-link to="/ai-vector-models">管理向量模型</router-link>
             </el-form-item>
-            <el-form-item label="服务地址" prop="embeddingBaseUrl">
-              <el-input v-model="form.embeddingBaseUrl" placeholder="http://host:11434" />
+            <el-form-item label="检索与分块参数">
+              <span>Top K {{ selectedVectorModel?.topK ?? config.topK }} · 分块长度 {{ selectedVectorModel?.chunkSize ?? config.chunkSize }} 字符 · 重叠 {{ selectedVectorModel?.chunkOverlap ?? config.chunkOverlap }} 字符</span>
             </el-form-item>
-            <el-form-item label="模型名称" prop="embeddingModel">
-              <el-input v-model="form.embeddingModel" placeholder="bge-m3" />
+            <el-form-item label="向量索引前缀" prop="vectorIndexPrefix">
+              <el-input v-model="form.vectorIndexPrefix" />
             </el-form-item>
-            <el-form-item label="向量维度" prop="dimensions">
-              <el-input-number v-model="form.dimensions" :min="1" :max="65536" controls-position="right" />
+            <el-form-item label="向量索引名称" prop="vectorIndexSuffix">
+              <el-input v-model="form.vectorIndexSuffix" placeholder="例如 bge_m3">
+                <template #prepend>{{ form.vectorIndexPrefix }}_</template>
+              </el-input>
+            </el-form-item>
+            <el-form-item label="向量字段前缀" prop="vectorFieldPrefix">
+              <el-input v-model="form.vectorFieldPrefix" />
             </el-form-item>
           </div>
           <div class="index-preview">
@@ -83,59 +97,29 @@
             <span>用于基于检索资料生成最终回答</span>
           </div>
           <div class="form-grid">
-            <el-form-item label="服务提供方" prop="chatProvider">
-              <el-select v-model="form.chatProvider">
-                <el-option label="OpenAI 兼容 API" value="openai" />
-                <el-option label="Ollama 原生 API" value="ollama" />
+            <el-form-item label="引用聊天模型" prop="chatModelId">
+              <el-select v-model="form.chatModelId" placeholder="请选择聊天模型">
+                <el-option
+                  v-for="model in chatModels"
+                  :key="model.id"
+                  :label="`${model.name}（${model.chatModel}）`"
+                  :value="model.id"
+                />
               </el-select>
+              <router-link to="/ai-chat-models">管理聊天模型</router-link>
             </el-form-item>
-            <el-form-item label="服务地址" prop="chatBaseUrl">
-              <el-input v-model="form.chatBaseUrl" placeholder="http://host:port/v1" />
-            </el-form-item>
-            <el-form-item label="模型名称" prop="chatModel">
-              <el-input v-model="form.chatModel" placeholder="Qwen3.8-27B" />
-            </el-form-item>
-            <el-form-item label="API Key">
-              <el-input
-                v-model="form.apiKey"
-                type="password"
-                show-password
-                autocomplete="new-password"
-                :placeholder="config.apiKeyConfigured ? '已保存密钥；留空保持不变' : '可选；无密钥时留空'"
-                :disabled="form.clearApiKey"
-              />
-              <el-checkbox v-model="form.clearApiKey" :disabled="!config.apiKeyConfigured">
-                清除已保存的 API Key
-              </el-checkbox>
+            <el-form-item label="当前模型配置">
+              <span v-if="selectedChatModel">
+                {{ selectedChatModel.chatProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }} ·
+                {{ selectedChatModel.chatBaseUrl }} ·
+                API Key {{ selectedChatModel.apiKeyConfigured ? '已配置' : '未配置' }}
+              </span>
+              <span v-else>请选择聊天模型配置</span>
             </el-form-item>
           </div>
         </section>
 
         <el-divider />
-
-        <section class="config-section">
-          <div class="section-title">
-            <h3>检索与分块</h3>
-            <span>控制召回数量和文本切分参数</span>
-          </div>
-          <div class="form-grid">
-            <el-form-item label="Top K" prop="topK">
-              <el-input-number v-model="form.topK" :min="1" :max="20" controls-position="right" />
-            </el-form-item>
-            <el-form-item label="分块长度（字符）" prop="chunkSize">
-              <el-input-number v-model="form.chunkSize" :min="200" :max="20000" :step="100" controls-position="right" />
-            </el-form-item>
-            <el-form-item label="分块重叠（字符）" prop="chunkOverlap">
-              <el-input-number v-model="form.chunkOverlap" :min="0" :max="19999" :step="50" controls-position="right" />
-            </el-form-item>
-            <el-form-item label="向量索引前缀" prop="vectorIndexPrefix">
-              <el-input v-model="form.vectorIndexPrefix" />
-            </el-form-item>
-            <el-form-item label="向量字段前缀" prop="vectorFieldPrefix">
-              <el-input v-model="form.vectorFieldPrefix" />
-            </el-form-item>
-          </div>
-        </section>
 
         <div class="form-actions">
           <el-button :disabled="loading || saving" @click="loadConfig">重新加载</el-button>
@@ -149,9 +133,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { getRagConfig, updateRagConfig } from '@/api'
+import { getChatModels, getRagConfig, getVectorModels, updateRagConfig } from '@/api'
 
 interface RagConfig {
   environment: string
@@ -161,6 +145,8 @@ interface RagConfig {
   embeddingBaseUrl: string
   embeddingModel: string
   dimensions: number
+  vectorModelId: number | null
+  chatModelId: number | null
   chatProvider: string
   chatBaseUrl: string
   chatModel: string
@@ -168,6 +154,7 @@ interface RagConfig {
   topK: number
   chunkSize: number
   chunkOverlap: number
+  vectorIndexName: string
   vectorIndexPrefix: string
   vectorFieldPrefix: string
   vectorIndex: string
@@ -182,6 +169,8 @@ const emptyConfig = (): RagConfig => ({
   embeddingBaseUrl: '',
   embeddingModel: '',
   dimensions: 1024,
+  vectorModelId: null,
+  chatModelId: null,
   chatProvider: 'openai',
   chatBaseUrl: '',
   chatModel: '',
@@ -189,87 +178,77 @@ const emptyConfig = (): RagConfig => ({
   topK: 5,
   chunkSize: 1500,
   chunkOverlap: 200,
+  vectorIndexName: '',
   vectorIndexPrefix: '',
   vectorFieldPrefix: '',
   vectorIndex: '',
   vectorField: ''
 })
 
+interface VectorModel {
+  id: number
+  name: string
+  embeddingModel: string
+  topK: number
+  chunkSize: number
+  chunkOverlap: number
+}
+
+interface ChatModel {
+  id: number
+  name: string
+  chatProvider: string
+  chatBaseUrl: string
+  chatModel: string
+  apiKeyConfigured: boolean
+}
+
 const config = reactive<RagConfig>(emptyConfig())
+const vectorModels = ref<VectorModel[]>([])
+const chatModels = ref<ChatModel[]>([])
 const form = reactive({
   enabled: false,
   sourceIndex: '',
-  embeddingProvider: 'ollama',
-  embeddingBaseUrl: '',
-  embeddingModel: '',
-  dimensions: 1024,
-  chatProvider: 'openai',
-  chatBaseUrl: '',
-  chatModel: '',
-  apiKey: '',
-  clearApiKey: false,
-  topK: 5,
-  chunkSize: 1500,
-  chunkOverlap: 200,
+  vectorModelId: null,
+  chatModelId: null,
+  vectorIndexSuffix: '',
   vectorIndexPrefix: '',
   vectorFieldPrefix: ''
 })
+const selectedVectorModel = computed(() =>
+  vectorModels.value.find(model => model.id === form.vectorModelId)
+)
+const selectedChatModel = computed(() =>
+  chatModels.value.find(model => model.id === form.chatModelId)
+)
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const saving = ref(false)
 
-const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
-  try {
-    const url = new URL(value)
-    if (url.protocol === 'http:' || url.protocol === 'https:') return callback()
-  } catch {
-    // Validation below reports malformed URLs.
-  }
-  callback(new Error('请输入有效的 HTTP 或 HTTPS 地址'))
-}
-
 const rules: FormRules = {
   sourceIndex: [{ required: true, message: '请输入 ES 源索引', trigger: 'blur' }, { pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称格式不合法', trigger: 'blur' }],
-  embeddingProvider: [{ required: true, message: '请选择向量模型提供方', trigger: 'change' }],
-  embeddingBaseUrl: [{ required: true, validator: validUrl, trigger: 'blur' }],
-  embeddingModel: [{ required: true, message: '请输入向量模型名称', trigger: 'blur' }],
-  dimensions: [{ required: true, type: 'number', min: 1, message: '向量维度必须大于 0', trigger: 'change' }],
-  chatProvider: [{ required: true, message: '请选择聊天模型提供方', trigger: 'change' }],
-  chatBaseUrl: [{ required: true, validator: validUrl, trigger: 'blur' }],
-  chatModel: [{ required: true, message: '请输入聊天模型名称', trigger: 'blur' }],
-  topK: [{ required: true, type: 'number', min: 1, max: 20, message: 'Top K 范围为 1–20', trigger: 'change' }],
-  chunkSize: [{ required: true, type: 'number', min: 200, message: '分块长度至少为 200', trigger: 'change' }],
-  chunkOverlap: [{
-    required: true,
-    type: 'number',
-    validator: (_rule, value, callback) => {
-      if (value >= 0 && value < form.chunkSize) callback()
-      else callback(new Error('重叠长度必须小于分块长度'))
-    },
-    trigger: 'change'
-  }],
+  vectorModelId: [{ required: true, type: 'number', message: '请选择向量模型', trigger: 'change' }],
+  chatModelId: [{ required: true, type: 'number', message: '请选择聊天模型', trigger: 'change' }],
+  vectorIndexSuffix: [{ required: true, pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称后缀仅支持小写字母、数字、点、下划线和连字符', trigger: 'blur' }],
   vectorIndexPrefix: [{ required: true, pattern: /^[a-z0-9_-]+$/, message: '仅支持小写字母、数字、下划线和连字符', trigger: 'blur' }],
   vectorFieldPrefix: [{ required: true, pattern: /^[a-zA-Z0-9_-]+$/, message: '仅支持字母、数字、下划线和连字符', trigger: 'blur' }]
 }
 
 const applyConfig = (data: RagConfig) => {
   Object.assign(config, data)
+  const vectorIndexPrefix = data.vectorIndexPrefix || ''
+  const vectorIndexName = data.vectorIndexName || data.vectorIndex || ''
+  const vectorIndexPrefixWithSeparator = `${vectorIndexPrefix}_`
+  const vectorIndexSuffix = vectorIndexName.startsWith(vectorIndexPrefixWithSeparator)
+    ? vectorIndexName.slice(vectorIndexPrefixWithSeparator.length)
+    : data.embeddingModel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
   Object.assign(form, {
     enabled: data.enabled,
     sourceIndex: data.sourceIndex,
-    embeddingProvider: data.embeddingProvider,
-    embeddingBaseUrl: data.embeddingBaseUrl,
-    embeddingModel: data.embeddingModel,
-    dimensions: data.dimensions,
-    chatProvider: data.chatProvider,
-    chatBaseUrl: data.chatBaseUrl,
-    chatModel: data.chatModel,
-    apiKey: '',
-    clearApiKey: false,
-    topK: data.topK,
-    chunkSize: data.chunkSize,
-    chunkOverlap: data.chunkOverlap,
-    vectorIndexPrefix: data.vectorIndexPrefix,
+    vectorModelId: data.vectorModelId,
+    chatModelId: data.chatModelId,
+    vectorIndexSuffix,
+    vectorIndexPrefix,
     vectorFieldPrefix: data.vectorFieldPrefix
   })
 }
@@ -277,9 +256,15 @@ const applyConfig = (data: RagConfig) => {
 const loadConfig = async () => {
   loading.value = true
   try {
-    const response: any = await getRagConfig()
-    if (!response) return
-    applyConfig(response.data)
+    const [configResponse, vectorModelsResponse, chatModelsResponse]: any[] = await Promise.all([
+      getRagConfig(),
+      getVectorModels(),
+      getChatModels()
+    ])
+    if (!configResponse || !vectorModelsResponse || !chatModelsResponse) return
+    vectorModels.value = vectorModelsResponse.data || []
+    chatModels.value = chatModelsResponse.data || []
+    applyConfig(configResponse.data)
   } catch {
     ElMessage.error('加载 AI/RAG 配置失败')
   } finally {
@@ -293,21 +278,12 @@ const saveConfig = async () => {
   const payload: Record<string, unknown> = {
     enabled: form.enabled,
     sourceIndex: form.sourceIndex,
-    embeddingProvider: form.embeddingProvider,
-    embeddingBaseUrl: form.embeddingBaseUrl,
-    embeddingModel: form.embeddingModel,
-    dimensions: form.dimensions,
-    chatProvider: form.chatProvider,
-    chatBaseUrl: form.chatBaseUrl,
-    chatModel: form.chatModel,
-    topK: form.topK,
-    chunkSize: form.chunkSize,
-    chunkOverlap: form.chunkOverlap,
+    vectorModelId: form.vectorModelId,
+    chatModelId: form.chatModelId,
+    vectorIndex: `${form.vectorIndexPrefix}_${form.vectorIndexSuffix}`,
     vectorIndexPrefix: form.vectorIndexPrefix,
-    vectorFieldPrefix: form.vectorFieldPrefix,
-    clearApiKey: form.clearApiKey
+    vectorFieldPrefix: form.vectorFieldPrefix
   }
-  if (form.apiKey) payload.apiKey = form.apiKey
   try {
     const response: any = await updateRagConfig(payload)
     if (!response) return
@@ -320,7 +296,12 @@ const saveConfig = async () => {
   }
 }
 
+let hasActivated = false
 onMounted(loadConfig)
+onActivated(() => {
+  if (hasActivated) loadConfig()
+  hasActivated = true
+})
 </script>
 
 <style scoped>

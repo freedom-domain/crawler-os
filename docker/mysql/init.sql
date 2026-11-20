@@ -113,6 +113,8 @@ CREATE TABLE IF NOT EXISTS ai_rag_config (
     embedding_base_url VARCHAR(512) NOT NULL,
     embedding_model VARCHAR(128) NOT NULL,
     dimensions INT NOT NULL DEFAULT 1024,
+    vector_model_id BIGINT NULL,
+    chat_model_id BIGINT NULL,
     chat_provider VARCHAR(32) NOT NULL DEFAULT 'openai',
     chat_base_url VARCHAR(512) NOT NULL,
     chat_model VARCHAR(128) NOT NULL,
@@ -120,6 +122,7 @@ CREATE TABLE IF NOT EXISTS ai_rag_config (
     top_k INT NOT NULL DEFAULT 5,
     chunk_size INT NOT NULL DEFAULT 1500,
     chunk_overlap INT NOT NULL DEFAULT 200,
+    vector_index VARCHAR(255) NULL,
     vector_index_prefix VARCHAR(255) NOT NULL,
     vector_field_prefix VARCHAR(128) NOT NULL DEFAULT 'embedding',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -130,14 +133,67 @@ CREATE TABLE IF NOT EXISTS ai_rag_config (
 INSERT IGNORE INTO ai_rag_config (
     environment, enabled, source_index, embedding_provider, embedding_base_url,
     embedding_model, dimensions, chat_provider, chat_base_url, chat_model,
-    api_key, top_k, chunk_size, chunk_overlap, vector_index_prefix, vector_field_prefix
+    api_key, top_k, chunk_size, chunk_overlap, vector_index, vector_index_prefix, vector_field_prefix
 ) VALUES
     ('default', 0, 'spider_content', 'ollama', 'http://192.168.31.2:11434',
-     'bge-m3', 1024, 'openai', 'http://192.168.31.2:8099/v1', 'Qwen3.8-27B',
-     '', 5, 1500, 200, 'spider_content_vector', 'embedding'),
+     'bge-m3', 1024, 'openai', 'http://192.168.31.2:8900/v1', 'Qwen3.8-27B',
+     '', 5, 1500, 200, 'spider_content_vector_bge_m3', 'spider_content_vector', 'embedding'),
     ('local', 0, 'spider_content_local', 'ollama', 'http://192.168.31.2:11434',
-     'bge-m3', 1024, 'openai', 'http://192.168.31.2:8099/v1', 'Qwen3.8-27B',
-     '', 5, 1500, 200, 'spider_content_vector_local', 'embedding');
+     'bge-m3', 1024, 'openai', 'http://192.168.31.2:8900/v1', 'Qwen3.8-27B',
+     '', 5, 1500, 200, 'spider_content_vector_local_bge_m3', 'spider_content_vector_local', 'embedding');
+
+CREATE TABLE IF NOT EXISTS ai_rag_vector_model (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(128) NOT NULL,
+    embedding_provider VARCHAR(32) NOT NULL,
+    embedding_base_url VARCHAR(512) NOT NULL,
+    embedding_model VARCHAR(128) NOT NULL,
+    dimensions INT NOT NULL,
+    top_k INT NOT NULL,
+    chunk_size INT NOT NULL,
+    chunk_overlap INT NOT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_rag_vector_model_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO ai_rag_vector_model (
+    name, embedding_provider, embedding_base_url, embedding_model,
+    dimensions, top_k, chunk_size, chunk_overlap
+)
+SELECT CONCAT('默认向量模型-', environment), embedding_provider, embedding_base_url,
+       embedding_model, dimensions, top_k, chunk_size, chunk_overlap
+FROM ai_rag_config;
+
+UPDATE ai_rag_config config
+JOIN ai_rag_vector_model model
+    ON model.name = CONCAT('默认向量模型-', config.environment)
+SET config.vector_model_id = model.id;
+
+CREATE TABLE IF NOT EXISTS ai_rag_chat_model (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(128) NOT NULL,
+    chat_provider VARCHAR(32) NOT NULL,
+    chat_base_url VARCHAR(512) NOT NULL,
+    chat_model VARCHAR(128) NOT NULL,
+    api_key VARCHAR(1024) NOT NULL DEFAULT '',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_rag_chat_model_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO ai_rag_chat_model (
+    name, chat_provider, chat_base_url, chat_model, api_key
+)
+SELECT CONCAT('默认聊天模型-', environment), chat_provider, chat_base_url, chat_model, api_key
+FROM ai_rag_config;
+
+UPDATE ai_rag_config config
+JOIN ai_rag_chat_model model
+    ON model.name = CONCAT('默认聊天模型-', config.environment)
+SET config.chat_model_id = model.id;
 
 CREATE TABLE IF NOT EXISTS ai_chat_conversation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -587,6 +643,8 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2),
 (25, 'CF IP 优选', 'cf-ip:manage', 12, 1, '/cf-ip-management', 'Connection', 4),
 (26, 'AI 配置', 'ai:config', 12, 1, '/ai-config', 'Setting', 5),
+(28, '向量模型', 'ai:vector-models', 12, 1, '/ai-vector-models', 'Cpu', 6),
+(29, '聊天模型', 'ai:chat-models', 12, 1, '/ai-chat-models', 'ChatDotRound', 7),
 (27, 'AI 助手', 'ai:chat', 0, 1, '/ai-chat', 'ChatDotRound', 9);
 
 -- 角色权限绑定（管理员拥有全部权限）
@@ -594,7 +652,7 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
 (1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
-(1, 25),(1, 26),(1, 27),
+(1, 25),(1, 26),(1, 27),(1, 28),(1, 29),
 (2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)

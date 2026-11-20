@@ -89,7 +89,7 @@ import {
   roleList, roleCreate, roleUpdate, roleDelete,
   rolePermissions, roleAssignPermissions, permissionTree
 } from '@/api'
-import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Menu as MenuIcon, Edit, Delete } from '@element-plus/icons-vue'
+import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Menu as MenuIcon, Edit, Delete, Cpu } from '@element-plus/icons-vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 
 const list = ref<any[]>([])
@@ -127,6 +127,7 @@ const iconMap: Record<string, any> = {
   file: Folder,
   Folder,
   system: Setting,
+  Cpu,
   Setting
 }
 

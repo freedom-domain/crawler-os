@@ -11,6 +11,8 @@ public class RagConfigResponse {
     private String embeddingBaseUrl;
     private String embeddingModel;
     private Integer dimensions;
+    private Long vectorModelId;
+    private Long chatModelId;
     private String chatProvider;
     private String chatBaseUrl;
     private String chatModel;
@@ -18,6 +20,7 @@ public class RagConfigResponse {
     private Integer topK;
     private Integer chunkSize;
     private Integer chunkOverlap;
+    private String vectorIndexName;
     private String vectorIndexPrefix;
     private String vectorFieldPrefix;
     private String vectorIndex;
