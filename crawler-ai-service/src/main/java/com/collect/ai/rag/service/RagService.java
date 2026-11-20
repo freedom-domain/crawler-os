@@ -314,13 +314,22 @@ public class RagService {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
             ArrayNode messages = body.putArray("messages");
-            messages.addObject()
-                    .put("role", "system")
-                    .put("content", "你是一个只依据提供资料回答问题的中文助手。"
-                            + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。");
-            messages.addObject()
-                    .put("role", "user")
-                    .put("content", "资料：\n" + context + "\n\n问题：" + question);
+            if (context == null || context.isBlank()) {
+                messages.addObject()
+                        .put("role", "system")
+                        .put("content", "你是一个友好的中文助手，请直接、准确地回答用户问题。");
+                messages.addObject()
+                        .put("role", "user")
+                        .put("content", question);
+            } else {
+                messages.addObject()
+                        .put("role", "system")
+                        .put("content", "你是一个只依据提供资料回答问题的中文助手。"
+                                + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。");
+                messages.addObject()
+                        .put("role", "user")
+                        .put("content", "资料：\n" + context + "\n\n问题：" + question);
+            }
             if (!"ollama".equalsIgnoreCase(rag.getChatProvider())) {
                 body.put("temperature", 0.2);
             } else {
@@ -488,7 +497,7 @@ public class RagService {
     private RagDtos.QueryResponse emptyQueryResponse(String question,
                                                      RagProperties.Rag rag) {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
-        response.setAnswer("指定爬虫分组下没有可检索的数据。");
+        response.setAnswer(createChatAnswer(question, ""));
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());
