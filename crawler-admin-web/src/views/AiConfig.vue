@@ -110,7 +110,7 @@
             </el-form-item>
             <el-form-item label="当前模型配置">
               <span v-if="selectedChatModel">
-                {{ selectedChatModel.chatProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }} ·
+                {{ selectedChatModel.chatProvider === 'ollama' ? 'Ollama' : selectedChatModel.chatProvider === 'vllm' ? 'vLLM' : 'OpenAI 兼容' }} ·
                 {{ selectedChatModel.chatBaseUrl }} ·
                 API Key {{ selectedChatModel.apiKeyConfigured ? '已配置' : '未配置' }}
               </span>

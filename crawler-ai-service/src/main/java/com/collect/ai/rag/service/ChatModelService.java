@@ -23,7 +23,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ChatModelService {
 
-    private static final Set<String> PROVIDERS = Set.of("ollama", "openai");
+    private static final Set<String> PROVIDERS = Set.of("ollama", "openai", "vllm");
 
     private final AiRagChatModelMapper chatModelMapper;
     private final AiRagConfigMapper configMapper;
@@ -34,6 +34,24 @@ public class ChatModelService {
                         new LambdaQueryWrapper<AiRagChatModel>()
                                 .orderByAsc(AiRagChatModel::getId))
                 .stream().map(ChatModelService::toResponse).toList();
+    }
+
+    public String getApiKey(Long id) {
+        return requireModel(id).getApiKey();
+    }
+
+    @Transactional
+    public void updateApiKey(Long id, String apiKey) {
+        if (apiKey != null && apiKey.length() > 1024) {
+            throw new BizException("API Key 长度不能超过 1024 个字符");
+        }
+        AiRagChatModel model = requireModel(id);
+        model.setApiKey(apiKey == null ? "" : apiKey.trim());
+        model.setUpdateTime(LocalDateTime.now());
+        if (chatModelMapper.updateById(model) != 1) {
+            throw new IllegalStateException("保存聊天模型 API Key 失败");
+        }
+        ragConfigService.refreshSelectedChatModel(id);
     }
 
     @Transactional
@@ -128,7 +146,7 @@ public class ChatModelService {
             throw new BizException("聊天模型名称、提供方、服务地址和模型名称不能为空");
         }
         if (!PROVIDERS.contains(request.getChatProvider().trim().toLowerCase(Locale.ROOT))) {
-            throw new BizException("聊天模型提供方仅支持 ollama 或 openai");
+            throw new BizException("聊天模型提供方仅支持 ollama、openai 或 vllm");
         }
         try {
             URI uri = URI.create(request.getChatBaseUrl().trim());

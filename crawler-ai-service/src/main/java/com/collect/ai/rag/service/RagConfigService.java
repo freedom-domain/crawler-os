@@ -28,7 +28,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class RagConfigService {
 
-    private static final Set<String> PROVIDERS = Set.of("ollama", "openai");
+    private static final Set<String> EMBEDDING_PROVIDERS = Set.of("ollama", "openai");
+    private static final Set<String> CHAT_PROVIDERS = Set.of("ollama", "openai", "vllm");
     private static final String CONFIG_ID = "default";
 
     private final AiRagConfigMapper configMapper;
@@ -433,9 +434,9 @@ public class RagConfigService {
         if (!config.getSourceIndex().matches("[a-z0-9][a-z0-9._-]*")) {
             throw new IllegalArgumentException("ES 源索引名称不合法");
         }
-        if (!PROVIDERS.contains(config.getEmbeddingProvider())
-                || !PROVIDERS.contains(config.getChatProvider())) {
-            throw new IllegalArgumentException("模型提供方仅支持 ollama 或 openai");
+        if (!EMBEDDING_PROVIDERS.contains(config.getEmbeddingProvider())
+                || !CHAT_PROVIDERS.contains(config.getChatProvider())) {
+            throw new IllegalArgumentException("Embedding 提供方仅支持 ollama 或 openai；聊天模型提供方仅支持 ollama、openai 或 vllm");
         }
         validateHttpUrl(config.getEmbeddingBaseUrl(), "Embedding 地址");
         validateHttpUrl(config.getChatBaseUrl(), "聊天地址");

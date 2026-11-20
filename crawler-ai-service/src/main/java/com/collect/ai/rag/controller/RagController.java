@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Tag(name = "AI RAG")
 @RestController
@@ -86,6 +87,27 @@ public class RagController {
     public R<java.util.List<ChatModelResponse>> chatModels() {
         requireAdmin();
         return R.ok(chatModelService.list());
+    }
+
+    @Operation(summary = "读取聊天模型 API Key")
+    @GetMapping("/chat-models/{id}/api-key")
+    public R<String> getChatModelApiKey(@PathVariable Long id, HttpServletResponse response) {
+        requireAdmin();
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(chatModelService.getApiKey(id));
+    }
+
+    @Operation(summary = "更新聊天模型 API Key")
+    @PutMapping("/chat-models/{id}/api-key")
+    public R<Void> updateChatModelApiKey(@PathVariable Long id,
+                                         @RequestBody ChatModelRequest request) {
+        requireAdmin();
+        if (request == null) {
+            throw new BizException("API Key 请求不能为空");
+        }
+        chatModelService.updateApiKey(id, request.getApiKey());
+        return R.ok();
     }
 
     @Operation(summary = "创建聊天模型")

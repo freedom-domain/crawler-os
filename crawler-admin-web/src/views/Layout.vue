@@ -109,6 +109,7 @@ import { getMenu } from '@/api'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
+import { menuIconLibrary } from '@/utils/menuIcons'
 import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon, Sunny, Moon, ChatDotRound, Cpu } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -314,6 +315,7 @@ const MenuNode = defineComponent({
 
 // 根据权限 code 映射图标
 const iconMap: Record<string, any> = {
+  ...menuIconLibrary,
   odometer: Odometer,
   user: User,
   User,

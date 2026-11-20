@@ -16,6 +16,7 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -24,6 +25,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -103,6 +105,16 @@ public class RagService {
     }
 
     public RagDtos.QueryResponse query(RagDtos.QueryRequest request) {
+        return query(request, isLoggedIn(), null);
+    }
+
+    public RagDtos.QueryResponse queryForLoggedInUser(
+            RagDtos.QueryRequest request, Consumer<String> tokenConsumer) {
+        return query(request, true, tokenConsumer);
+    }
+
+    private RagDtos.QueryResponse query(
+            RagDtos.QueryRequest request, boolean loggedIn, Consumer<String> tokenConsumer) {
         ensureEnabled();
         if (request == null || request.getQuestion() == null
                 || request.getQuestion().isBlank()) {
@@ -122,16 +134,16 @@ public class RagService {
                 .set("query_vector", objectMapper.valueToTree(queryVector)));
 
         ObjectNode filter = null;
-        if (!isLoggedIn()) {
+        if (!loggedIn) {
             List<Long> publicSpiderIds = spiderMapper.selectList(
                             new LambdaQueryWrapper<Spider>().eq(Spider::getIsPublic, 1))
                     .stream().map(Spider::getId).toList();
             if (publicSpiderIds.isEmpty()) {
-                return emptyQueryResponse(request.getQuestion(), rag);
+                return emptyQueryResponse(request.getQuestion(), rag, tokenConsumer);
             }
             if (request.getSpiderId() != null
                     && !publicSpiderIds.contains(request.getSpiderId())) {
-                return emptyQueryResponse(request.getQuestion(), rag);
+                return emptyQueryResponse(request.getQuestion(), rag, tokenConsumer);
             }
             ArrayNode publicValues = objectMapper.createArrayNode();
             publicSpiderIds.forEach(publicValues::add);
@@ -148,7 +160,7 @@ public class RagService {
                                     .eq(Spider::getGroup, request.getSpiderGroup()))
                     .stream().map(Spider::getId).toList();
             if (spiderIds.isEmpty()) {
-                return emptyQueryResponse(request.getQuestion(), rag);
+                return emptyQueryResponse(request.getQuestion(), rag, tokenConsumer);
             }
             ArrayNode values = objectMapper.createArrayNode();
             spiderIds.forEach(values::add);
@@ -209,7 +221,9 @@ public class RagService {
                     .append("内容：").append(text).append("\n\n");
         }
 
-        String answer = createChatAnswer(request.getQuestion(), context.toString());
+        String answer = tokenConsumer == null
+                ? createChatAnswer(request.getQuestion(), context.toString())
+                : createStreamingChatAnswer(request.getQuestion(), context.toString(), tokenConsumer);
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
         response.setSources(sources);
@@ -358,6 +372,126 @@ public class RagService {
         }
     }
 
+            private String createStreamingChatAnswer(
+                    String question, String context, Consumer<String> tokenConsumer) {
+                RagProperties.Rag rag = properties.getRag();
+                try {
+                    ObjectNode body = objectMapper.createObjectNode();
+                    body.put("model", rag.getChatModel());
+                    ArrayNode messages = body.putArray("messages");
+                    if (context == null || context.isBlank()) {
+                        messages.addObject()
+                                .put("role", "system")
+                                .put("content", "你是一个友好的中文助手，请直接、准确地回答用户问题。");
+                        messages.addObject().put("role", "user").put("content", question);
+                    } else {
+                        messages.addObject()
+                                .put("role", "system")
+                                .put("content", "你是一个只依据提供资料回答问题的中文助手。"
+                                        + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。");
+                        messages.addObject()
+                                .put("role", "user")
+                                .put("content", "资料：\n" + context + "\n\n问题：" + question);
+                    }
+                    String provider = rag.getChatProvider();
+                    String path = "ollama".equalsIgnoreCase(provider) ? "/api/chat" : "/chat/completions";
+                    body.put("stream", true);
+                    if (!"ollama".equalsIgnoreCase(provider)) {
+                        body.put("temperature", 0.2);
+                    }
+                    streamChatRequest(path, body, tokenConsumer);
+                    return "";
+                } catch (Exception e) {
+                    if (e instanceof IllegalStateException state) throw state;
+                    throw new IllegalStateException("调用聊天模型失败: " + e.getMessage(), e);
+                }
+            }
+
+            private void streamChatRequest(
+                    String path, ObjectNode body, Consumer<String> tokenConsumer) throws Exception {
+                RagProperties.Rag rag = properties.getRag();
+                String baseUrl = path.equals("/api/chat")
+                        ? rag.getChatBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "")
+                        : rag.getChatBaseUrl().replaceAll("/$", "");
+                URI uri = URI.create(baseUrl + path);
+                String requestBody = objectMapper.writeValueAsString(body);
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
+                        .uri(uri)
+                        .timeout(Duration.ofSeconds(120))
+                        .header("Content-Type", "application/json");
+                boolean hasApiKey = rag.getApiKey() != null && !rag.getApiKey().isBlank();
+                if (hasApiKey) {
+                    builder.header("Authorization", "Bearer " + rag.getApiKey());
+                }
+                HttpRequest request = builder.POST(HttpRequest.BodyPublishers
+                        .ofString(requestBody, StandardCharsets.UTF_8)).build();
+                long startNanos = System.nanoTime();
+                String logUri = safeLogUri(uri);
+                log.info("发送流式聊天请求: method=POST, url={}, provider={}, model={}, bodyBytes={}, apiKeyConfigured={}",
+                        logUri, rag.getChatProvider(), safeLogValue(rag.getChatModel(), 128),
+                        requestBody.getBytes(StandardCharsets.UTF_8).length, hasApiKey);
+
+                try {
+                    HttpResponse<java.io.InputStream> response = HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(10)).build()
+                            .send(request, HttpResponse.BodyHandlers.ofInputStream());
+                    if (response.statusCode() >= 300) {
+                        try (java.io.InputStream input = response.body()) {
+                            String errorBody = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+                            log.warn("流式聊天请求返回错误: url={}, status={}, responseBytes={}, elapsedMs={}",
+                                    logUri, response.statusCode(),
+                                    errorBody.getBytes(StandardCharsets.UTF_8).length,
+                                    Duration.ofNanos(System.nanoTime() - startNanos).toMillis());
+                            throw new IllegalStateException("调用聊天模型失败: " + response.statusCode()
+                                    + " " + errorBody);
+                        }
+                    }
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                        if (path.equals("/api/chat")) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (!line.isBlank()) emitOllamaToken(line, tokenConsumer);
+                            }
+                        } else {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (line.startsWith("data:")) {
+                                    emitOpenAiToken(line.substring(5).trim(), tokenConsumer);
+                                }
+                            }
+                        }
+                    }
+                    log.info("流式聊天请求完成: url={}, provider={}, model={}, elapsedMs={}",
+                            logUri, rag.getChatProvider(), safeLogValue(rag.getChatModel(), 128),
+                            Duration.ofNanos(System.nanoTime() - startNanos).toMillis());
+                } catch (Exception e) {
+                    log.warn("流式聊天请求失败: url={}, provider={}, model={}, exception={}, elapsedMs={}",
+                            logUri, rag.getChatProvider(), safeLogValue(rag.getChatModel(), 128),
+                            e.getClass().getSimpleName(),
+                            Duration.ofNanos(System.nanoTime() - startNanos).toMillis());
+                    throw e;
+                }
+            }
+
+            private void emitOllamaToken(String line, Consumer<String> tokenConsumer) throws Exception {
+                JsonNode root = objectMapper.readTree(line);
+                String token = root.path("message").path("content").asText("");
+                if (!token.isEmpty()) tokenConsumer.accept(token);
+                if (root.path("error").isTextual()) {
+                    throw new IllegalStateException("聊天模型返回错误: " + root.path("error").asText());
+                }
+            }
+
+            private void emitOpenAiToken(String data, Consumer<String> tokenConsumer) throws Exception {
+                if (data.isEmpty() || "[DONE]".equals(data)) return;
+                JsonNode root = objectMapper.readTree(data);
+                JsonNode choices = root.path("choices");
+                if (!choices.isArray() || choices.isEmpty()) return;
+                String token = choices.get(0).path("delta").path("content").asText("");
+                if (!token.isEmpty()) tokenConsumer.accept(token);
+            }
+
     private HttpResponse<String> openAiRequest(String path, ObjectNode body) throws Exception {
         RagProperties.Rag rag = properties.getRag();
         String baseUrl;
@@ -376,19 +510,86 @@ public class RagService {
         } else {
             throw new IllegalArgumentException("不支持的模型 API 路径: " + path);
         }
+        URI requestUri = URI.create(baseUrl + path);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + path))
+                .uri(requestUri)
                 .timeout(Duration.ofSeconds(120))
                 .header("Content-Type", "application/json");
-        if (properties.getRag().getApiKey() != null
-                && !properties.getRag().getApiKey().isBlank()) {
-            builder.header("Authorization", "Bearer " + properties.getRag().getApiKey());
+        boolean hasApiKey = rag.getApiKey() != null && !rag.getApiKey().isBlank();
+        if (hasApiKey) {
+            builder.header("Authorization", "Bearer " + rag.getApiKey());
         }
+        String requestBody = objectMapper.writeValueAsString(body);
         HttpRequest request = builder.POST(HttpRequest.BodyPublishers
-                        .ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                        .ofString(requestBody, StandardCharsets.UTF_8))
                 .build();
-        return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-                .send(request, HttpResponse.BodyHandlers.ofString());
+        boolean chatRequest = path.equals("/api/chat") || path.startsWith("/chat/completions");
+        long startNanos = System.nanoTime();
+        String logUri = chatRequest ? safeLogUri(requestUri) : null;
+        String chatModel = chatRequest ? safeLogValue(rag.getChatModel(), 128) : null;
+        if (chatRequest) {
+            log.info("发送聊天模型请求: method=POST, url={}, provider={}, model={}, contentType=application/json, "
+                            + "bodyBytes={}, messages={}, apiKeyConfigured={}",
+                    logUri, rag.getChatProvider(), chatModel,
+                    requestBody.getBytes(StandardCharsets.UTF_8).length,
+                    summarizeMessages(body.path("messages")), hasApiKey);
+        }
+        try {
+            HttpResponse<String> response = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10)).build()
+                    .send(request, HttpResponse.BodyHandlers.ofString());
+            if (chatRequest) {
+                long elapsedMs = Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+                String contentType = response.headers().firstValue("content-type").orElse("unknown");
+                if (response.statusCode() >= 300) {
+                    log.warn("聊天模型请求返回错误: url={}, provider={}, model={}, status={}, "
+                                    + "contentType={}, responseBytes={}, elapsedMs={}",
+                            logUri, rag.getChatProvider(), chatModel, response.statusCode(),
+                            contentType, response.body().getBytes(StandardCharsets.UTF_8).length, elapsedMs);
+                } else {
+                    log.info("聊天模型请求完成: url={}, provider={}, model={}, status={}, "
+                                    + "contentType={}, responseBytes={}, elapsedMs={}",
+                            logUri, rag.getChatProvider(), chatModel, response.statusCode(),
+                            contentType, response.body().getBytes(StandardCharsets.UTF_8).length, elapsedMs);
+                }
+            }
+            return response;
+        } catch (Exception e) {
+            if (chatRequest) {
+                long elapsedMs = Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+                log.warn("聊天模型请求未收到响应: url={}, provider={}, model={}, exception={}, "
+                                + "elapsedMs={}",
+                        logUri, rag.getChatProvider(), chatModel,
+                        e.getClass().getSimpleName(), elapsedMs);
+            }
+            throw e;
+        }
+    }
+
+    private static String safeLogUri(URI uri) throws URISyntaxException {
+        return new URI(uri.getScheme(), null, uri.getHost(), uri.getPort(),
+                uri.getPath(), null, null).toString();
+    }
+
+    private static String safeLogValue(String value, int maxLength) {
+        if (value == null) {
+            return "unknown";
+        }
+        String sanitized = value.replaceAll("[\\p{Cntrl}]", "?");
+        return sanitized.length() <= maxLength
+                ? sanitized : sanitized.substring(0, maxLength);
+    }
+
+    private static List<String> summarizeMessages(JsonNode messages) {
+        List<String> summary = new ArrayList<>();
+        if (!messages.isArray()) {
+            return summary;
+        }
+        for (JsonNode message : messages) {
+            summary.add(message.path("role").asText("unknown") + ":"
+                    + message.path("content").asText("").length() + "chars");
+        }
+        return summary;
     }
 
     private HttpResponse<String> elasticsearchRequest(String method, String path, String body)
@@ -494,10 +695,12 @@ public class RagService {
         }
     }
 
-    private RagDtos.QueryResponse emptyQueryResponse(String question,
-                                                     RagProperties.Rag rag) {
+    private RagDtos.QueryResponse emptyQueryResponse(
+            String question, RagProperties.Rag rag, Consumer<String> tokenConsumer) {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
-        response.setAnswer(createChatAnswer(question, ""));
+        response.setAnswer(tokenConsumer == null
+                ? createChatAnswer(question, "")
+                : createStreamingChatAnswer(question, "", tokenConsumer));
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());

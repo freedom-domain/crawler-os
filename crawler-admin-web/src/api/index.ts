@@ -1,4 +1,5 @@
 import request from './request'
+import { useUserStore } from '@/stores/user'
 
 export const login = (data: { username: string; password: string }) =>
   request.post('/user/login', data)
@@ -31,6 +32,9 @@ export const createVectorModel = (data: any) => request.post('/ai/rag/vector-mod
 export const updateVectorModel = (id: number, data: any) => request.put(`/ai/rag/vector-models/${id}`, data)
 export const deleteVectorModel = (id: number) => request.delete(`/ai/rag/vector-models/${id}`)
 export const getChatModels = () => request.get('/ai/rag/chat-models')
+export const getChatModelApiKey = (id: number) => request.get(`/ai/rag/chat-models/${id}/api-key`)
+export const updateChatModelApiKey = (id: number, apiKey: string) =>
+  request.put(`/ai/rag/chat-models/${id}/api-key`, { apiKey })
 export const createChatModel = (data: any) => request.post('/ai/rag/chat-models', data)
 export const updateChatModel = (id: number, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
 export const deleteChatModel = (id: number) => request.delete(`/ai/rag/chat-models/${id}`)
@@ -41,6 +45,16 @@ export const chatConversationDelete = (id: number) => request.delete(`/ai/chat/c
 export const chatMessages = (id: number) => request.get(`/ai/chat/conversations/${id}/messages`)
 export const sendChatMessage = (id: number, data: { question: string; topK: number }) =>
   request.post(`/ai/chat/conversations/${id}/messages`, data)
+export const streamChatMessage = (id: number, data: { question: string; topK: number }) => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
+  const token = useUserStore().token
+  if (token) headers.Authorization = `Bearer ${token}`
+  return fetch(`/api/ai/chat/conversations/${id}/messages/stream`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(data)
+  })
+}
 export const roles = () => request.get('/user/roles')
 export const assignRole = (data: any) => request.put('/user/assign-role', data)
 

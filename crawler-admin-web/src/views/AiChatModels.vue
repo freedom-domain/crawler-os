@@ -18,13 +18,19 @@
         <el-table-column prop="name" label="配置名称" min-width="150" />
         <el-table-column label="提供方" width="130">
           <template #default="{ row }">
-            {{ row.chatProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
+            {{ providerLabel(row.chatProvider) }}
           </template>
         </el-table-column>
         <el-table-column prop="chatModel" label="模型名称" min-width="150" />
-        <el-table-column label="API Key" width="120">
+        <el-table-column prop="chatBaseUrl" label="API 地址" min-width="240" show-overflow-tooltip />
+        <el-table-column label="API Key" width="130">
           <template #default="{ row }">
-            <el-tag :type="row.apiKeyConfigured ? 'success' : 'info'" effect="light">
+            <el-tag
+              :type="row.apiKeyConfigured ? 'success' : 'info'"
+              class="is-clickable"
+              effect="light"
+              @click="editApiKey(row)"
+            >
               {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
             </el-tag>
           </template>
@@ -52,6 +58,7 @@
           <el-form-item label="服务提供方" prop="chatProvider">
             <el-select v-model="form.chatProvider">
               <el-option label="OpenAI 兼容 API" value="openai" />
+              <el-option label="vLLM（OpenAI 兼容 API）" value="vllm" />
               <el-option label="Ollama 原生 API" value="ollama" />
             </el-select>
           </el-form-item>
@@ -81,13 +88,35 @@
         <el-button type="primary" :loading="saving" @click="saveModel">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="apiKeyDialogVisible"
+      title="编辑 API Key"
+      width="520px"
+      @closed="apiKeyValue = ''"
+    >
+      <el-input
+        v-model="apiKeyValue"
+        type="password"
+        show-password
+        autocomplete="off"
+        placeholder="请输入新的 API Key；留空并保存可清除"
+      />
+      <template #footer>
+        <el-button @click="apiKeyDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="apiKeySaving" @click="saveApiKey">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { createChatModel, deleteChatModel, getChatModels, updateChatModel } from '@/api'
+import {
+  createChatModel, deleteChatModel, getChatModelApiKey, getChatModels, updateChatModel,
+  updateChatModelApiKey
+} from '@/api'
 
 interface ChatModel {
   id: number
@@ -115,6 +144,10 @@ const saving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<number | null>(null)
 const apiKeyConfigured = ref(false)
+const apiKeyDialogVisible = ref(false)
+const apiKeyValue = ref('')
+const apiKeySaving = ref(false)
+const editingApiKeyModel = ref<ChatModel | null>(null)
 
 const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   try {
@@ -131,6 +164,12 @@ const rules: FormRules = {
   chatProvider: [{ required: true, message: '请选择服务提供方', trigger: 'change' }],
   chatBaseUrl: [{ required: true, validator: validUrl, trigger: 'blur' }],
   chatModel: [{ required: true, message: '请输入模型名称', trigger: 'blur' }]
+}
+
+const providerLabel = (provider: string) => {
+  if (provider === 'ollama') return 'Ollama'
+  if (provider === 'vllm') return 'vLLM'
+  return 'OpenAI 兼容'
 }
 
 const loadModels = async () => {
@@ -200,6 +239,35 @@ const removeModel = async (model: ChatModel) => {
   }
 }
 
+const editApiKey = async (model: ChatModel) => {
+  editingApiKeyModel.value = model
+  apiKeyValue.value = ''
+  apiKeyDialogVisible.value = true
+  try {
+    const response: any = await getChatModelApiKey(model.id)
+    if (response) apiKeyValue.value = response.data || ''
+  } catch {
+    apiKeyDialogVisible.value = false
+    ElMessage.error('读取 API Key 失败')
+  }
+}
+
+const saveApiKey = async () => {
+  const model = editingApiKeyModel.value
+  if (!model) return
+  apiKeySaving.value = true
+  try {
+    await updateChatModelApiKey(model.id, apiKeyValue.value)
+    model.apiKeyConfigured = Boolean(apiKeyValue.value.trim())
+    ElMessage.success('API Key 已更新')
+    apiKeyDialogVisible.value = false
+  } catch {
+    ElMessage.error('更新 API Key 失败')
+  } finally {
+    apiKeySaving.value = false
+  }
+}
+
 onMounted(loadModels)
 </script>
 
@@ -210,6 +278,7 @@ onMounted(loadModels)
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
+.is-clickable { cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .form-grid :deep(.el-select) { width: 100%; }
 .form-grid :deep(.el-checkbox) { display: flex; margin-top: 8px; }

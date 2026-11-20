@@ -64,11 +64,13 @@
           <el-input v-model="form.path" placeholder="如 /user（仅菜单类型需要）" />
         </el-form-item>
         <el-form-item label="菜单图标" v-if="form.type !== 2">
-          <el-select v-model="form.icon" placeholder="请选择菜单图标" clearable style="width: 100%">
-            <el-option v-for="item in iconOptions" :key="item.value" :label="item.label" :value="item.value">
-              <span class="icon-option"><el-icon><component :is="item.icon" /></el-icon>{{ item.label }}</span>
-            </el-option>
-          </el-select>
+          <div class="icon-picker-field">
+            <button type="button" class="icon-picker-trigger" @click="openIconPicker">
+              <el-icon v-if="selectedIcon"><component :is="selectedIcon.icon" /></el-icon>
+              <span>{{ selectedIcon?.label || '选择菜单图标' }}</span>
+              <el-icon class="picker-caret"><ArrowDown /></el-icon>
+            </button>
+          </div>
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" />
@@ -79,6 +81,72 @@
         <el-button type="primary" :loading="saving" @click="saveForm">保存</el-button>
       </template>
     </el-dialog>
+    <el-dialog
+      v-model="iconDialogVisible"
+      title="选择菜单图标"
+      width="min(720px, calc(100vw - 32px))"
+      top="4vh"
+      append-to-body
+      :close-on-click-modal="false"
+      class="menu-icon-picker-dialog"
+      @closed="resetIconPicker"
+    >
+      <div class="icon-picker-panel">
+        <div class="icon-picker-heading">
+          <div class="icon-picker-current">
+            <el-icon v-if="selectedIcon" class="icon-picker-current-preview">
+              <component :is="selectedIcon.icon" />
+            </el-icon>
+            <strong>{{ selectedIcon ? `当前选择：${selectedIcon.label}` : '请选择一个图标' }}</strong>
+          </div>
+          <span>{{ iconOptions.length }} 个图标</span>
+        </div>
+        <el-input
+          v-model="iconSearch"
+          class="icon-picker-search"
+          placeholder="搜索图标名称"
+          clearable
+          @input="activeIconCategory = '全部'"
+        >
+          <template #prefix><el-icon><Search /></el-icon></template>
+        </el-input>
+        <div class="icon-category-list">
+          <button
+            v-for="category in iconCategories"
+            :key="category"
+            type="button"
+            class="icon-category-button"
+            :class="{ 'is-active': activeIconCategory === category }"
+            @click="activeIconCategory = category"
+          >{{ category }}</button>
+        </div>
+        <div v-if="visibleIconGroups.length" class="icon-picker-results">
+          <section v-for="group in visibleIconGroups" :key="group.name" class="icon-category-group">
+            <h4>{{ group.name }}</h4>
+            <div class="icon-picker-grid">
+              <button
+                v-for="item in group.items"
+                :key="item.value"
+                type="button"
+                class="icon-picker-option"
+                :class="{ 'is-selected': form.icon === item.value }"
+                :title="`${item.label} (${item.value})`"
+                :aria-label="`选择${item.label}图标`"
+                @click="selectMenuIcon(item.value)"
+              >
+                <el-icon><component :is="item.icon" /></el-icon>
+                <span>{{ item.label }}</span>
+              </button>
+            </div>
+          </section>
+        </div>
+        <el-empty v-else description="没有找到匹配的图标" :image-size="56" />
+        <div class="icon-picker-footer">
+          <span>{{ iconSearch ? `搜索结果 ${visibleIconCount} 个` : `当前分类 ${visibleIconCount} 个` }}</span>
+          <el-button v-if="form.icon" link type="danger" @click="clearMenuIcon">清除当前图标</el-button>
+        </div>
+      </div>
+    </el-dialog>
   </el-card>
 </template>
 
@@ -87,7 +155,8 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { permissionTree, permissionCreate, permissionUpdate, permissionDelete } from '@/api'
-import { Plus, User, Avatar, Lock, PriceTag, Connection, List, Search, Folder, Setting, Odometer, Monitor, DataAnalysis, Document, Collection, Rank, ArrowRight, Edit, Delete, ArrowUp, ArrowDown } from '@element-plus/icons-vue'
+import { menuIconCategories, menuIconLibrary, menuIconOptions } from '@/utils/menuIcons'
+import { Plus, ArrowDown, ArrowRight, Edit, Delete, ArrowUp, Search } from '@element-plus/icons-vue'
 import TableRowActions from '@/components/TableRowActions.vue'
 
 const tree = ref<any[]>([])
@@ -95,24 +164,45 @@ const loading = ref(false)
 const saving = ref(false)
 const formVisible = ref(false)
 const form = ref<any>({ id: null, name: '', code: '', type: 1, path: '', icon: '', sort: 0, parentId: 0 })
+const iconDialogVisible = ref(false)
+const iconSearch = ref('')
+const activeIconCategory = ref('全部')
 
-const iconOptions = [
-  { value: 'User', label: '用户', icon: User },
-  { value: 'Avatar', label: '角色', icon: Avatar },
-  { value: 'Lock', label: '权限', icon: Lock },
-  { value: 'PriceTag', label: '标签', icon: PriceTag },
-  { value: 'Connection', label: '连接', icon: Connection },
-  { value: 'List', label: '列表', icon: List },
-  { value: 'Search', label: '搜索', icon: Search },
-  { value: 'Folder', label: '文件夹', icon: Folder },
-  { value: 'Setting', label: '设置', icon: Setting },
-  { value: 'Monitor', label: '监控', icon: Monitor },
-  { value: 'DataAnalysis', label: '数据分析', icon: DataAnalysis },
-  { value: 'Document', label: '文档', icon: Document },
-  { value: 'Collection', label: '集合', icon: Collection },
-  { value: 'Odometer', label: '仪表盘', icon: Odometer }
-]
-const iconLibrary = Object.fromEntries(iconOptions.map(item => [item.value, item.icon]))
+const iconOptions = menuIconOptions
+const iconLibrary = menuIconLibrary
+const iconCategories = ['全部', ...menuIconCategories]
+const selectedIcon = computed(() => iconOptions.find(item => item.value === form.value.icon))
+const visibleIconGroups = computed(() => {
+  const search = iconSearch.value.trim().toLocaleLowerCase()
+  return iconCategories
+    .filter(category => category !== '全部')
+    .filter(category => activeIconCategory.value === '全部' || category === activeIconCategory.value)
+    .map(name => ({
+      name,
+      items: iconOptions.filter(item => item.category === name
+        && (!search || item.label.toLocaleLowerCase().includes(search)
+          || item.value.toLocaleLowerCase().includes(search)))
+    }))
+    .filter(group => group.items.length > 0)
+})
+const visibleIconCount = computed(() =>
+  visibleIconGroups.value.reduce((count, group) => count + group.items.length, 0)
+)
+const openIconPicker = () => {
+  iconDialogVisible.value = true
+}
+const selectMenuIcon = (value: string) => {
+  form.value.icon = value
+  iconDialogVisible.value = false
+}
+const clearMenuIcon = () => {
+  form.value.icon = ''
+  iconDialogVisible.value = false
+}
+const resetIconPicker = () => {
+  iconSearch.value = ''
+  activeIconCategory.value = '全部'
+}
 const getRowActions = (row: any) => [
   { command: 'create-child', label: '新增子项', icon: Plus },
   { command: 'edit', label: '编辑', icon: Edit },
@@ -335,7 +425,86 @@ onMounted(loadData)
 <style scoped>
 .permission-icon { color: var(--teal-bright); font-size: 18px; vertical-align: middle; }
 .icon-empty { color: var(--icon-empty-ink); font-size: 12px; }
-.icon-option { display: flex; align-items: center; gap: 8px; }
+.icon-picker-field { width: 100%; }
+.icon-picker-trigger {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink-700);
+  text-align: left;
+  cursor: pointer;
+}
+.icon-picker-trigger:hover { border-color: var(--teal-bright); }
+.icon-picker-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-picker-trigger .picker-caret { flex: 0 0 auto; margin-left: auto; color: var(--ink-500); }
+.icon-picker-panel {
+  display: flex;
+  height: min(600px, calc(100vh - 220px));
+  height: min(600px, calc(100dvh - 220px));
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+.icon-picker-heading { display: flex; align-items: center; justify-content: space-between; }
+.icon-picker-current { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.icon-picker-current-preview { color: var(--teal-bright); font-size: 19px; }
+.icon-picker-heading strong { color: var(--ink-900); font-size: 14px; }
+.icon-picker-heading span, .icon-picker-footer > span { color: var(--ink-500); font-size: 12px; }
+.icon-category-list { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--chrome-line); }
+.icon-category-button {
+  padding: 5px 10px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink-700);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.icon-category-button:hover, .icon-category-button.is-active {
+  border-color: var(--teal-bright);
+  background: var(--chrome-hover);
+  color: var(--teal-bright);
+}
+.icon-picker-results { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding-right: 4px; }
+.icon-category-group + .icon-category-group { margin-top: 14px; }
+.icon-category-group h4 { margin: 0 0 8px; color: var(--ink-700); font-size: 12px; font-weight: 600; }
+.icon-picker-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.icon-picker-option {
+  display: flex;
+  min-width: 0;
+  height: 62px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-700);
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.icon-picker-option .el-icon { font-size: 20px; }
+.icon-picker-option span { max-width: 100%; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.icon-picker-option:hover, .icon-picker-option.is-selected {
+  border-color: var(--teal-bright);
+  background: var(--chrome-hover);
+  color: var(--teal-bright);
+}
+.icon-picker-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--chrome-line); padding-top: 8px; }
+@media (max-height: 680px) {
+  .icon-picker-panel { gap: 8px; }
+  .icon-picker-results { min-height: 80px; }
+  .icon-picker-option { height: 54px; }
+}
 :deep(.permission-parent-row td:first-child .cell) {
   border-left: 3px solid var(--teal-bright);
   color: var(--permission-parent-ink);

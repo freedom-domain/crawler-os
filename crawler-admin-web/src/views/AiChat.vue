@@ -103,8 +103,23 @@
               <el-icon v-else><UserFilled /></el-icon>
             </div>
             <div class="message-content">
-              <div class="message-author">{{ message.role === 'assistant' ? 'CrawlerOS AI' : '你' }}</div>
-              <div class="message-text" :class="{ 'is-pending': message.pending, 'is-error': message.error }">
+              <div v-if="message.role === 'assistant'" class="message-author">CrawlerOS AI</div>
+              <div
+                v-if="message.role === 'assistant' && message.pending && message.text === loadingMessageText"
+                class="message-text is-pending"
+              >
+                {{ loadingMessageText }}
+                <span class="loading-dots" aria-hidden="true">
+                  <i v-for="dot in 3" :key="dot" />
+                </span>
+              </div>
+              <div
+                v-else-if="message.role === 'assistant'"
+                class="message-text message-markdown"
+                :class="{ 'is-pending': message.pending, 'is-error': message.error }"
+                v-html="renderMarkdown(displayMessageText(message))"
+              />
+              <div v-else class="message-text">
                 <el-icon v-if="message.pending" class="thinking-icon"><Loading /></el-icon>
                 {{ message.text }}
               </div>
@@ -176,9 +191,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import {
-  chatConversationCreate, chatConversationDelete, chatConversationList, chatMessages, sendChatMessage
+  chatConversationCreate, chatConversationDelete, chatConversationList, chatMessages, streamChatMessage
 } from '@/api'
 import {
   ArrowRight, ChatDotRound, Cpu, Delete, Link, Loading, MagicStick, Plus, Promotion, UserFilled
@@ -228,6 +245,17 @@ const messageListRef = ref<HTMLElement>()
 const creatingConversation = ref(false)
 const loadingMessages = ref(false)
 const historyError = ref('')
+const markdown = new MarkdownIt({
+  breaks: true,
+  html: false,
+  linkify: true,
+  typographer: false
+})
+markdown.renderer.rules.link_open = (tokens, index, options, environment, renderer) => {
+  tokens[index].attrSet('target', '_blank')
+  tokens[index].attrSet('rel', 'noopener noreferrer')
+  return renderer.renderToken(tokens, index, options)
+}
 
 const loadConversations = async () => {
   historyError.value = ''
@@ -250,9 +278,13 @@ const loadConversations = async () => {
 }
 
 const loadMessages = async (conversation: Conversation) => {
-  if (conversation.messagesLoaded) return
+  if (conversation.messagesLoaded) {
+    await scrollToBottom()
+    return
+  }
   loadingMessages.value = true
   historyError.value = ''
+  let loaded = false
   try {
     const response: any = await chatMessages(conversation.id)
     if (!response) return
@@ -265,12 +297,13 @@ const loadMessages = async (conversation: Conversation) => {
       sources: item.sources || []
     }))
     conversation.messagesLoaded = true
-    await scrollToBottom()
+    loaded = true
   } catch (error) {
     historyError.value = error instanceof Error ? error.message : '加载聊天记录失败'
   } finally {
     loadingMessages.value = false
   }
+  if (loaded) await scrollToBottom()
 }
 
 const selectConversation = async (id: number) => {
@@ -331,6 +364,12 @@ const safeSourceUrl = (value: string) => {
   }
 }
 
+const displayMessageText = (message: ChatMessage) =>
+  message.role === 'assistant' ? message.text.trimStart() : message.text
+
+const renderMarkdown = (text: string) => DOMPurify.sanitize(markdown.render(text))
+const loadingMessageText = '正在检索知识库并整理回答'
+
 const scrollToBottom = async () => {
   await nextTick()
   if (messageListRef.value) {
@@ -354,26 +393,77 @@ const sendMessage = async () => {
     conversation.title = question.length > 80 ? question.slice(0, 80) : question
   }
   conversation.messages.push({ role: 'user', text: question })
-  const responseMessage: ChatMessage = { role: 'assistant', text: '正在检索知识库并整理回答…', pending: true }
+  const responseMessage = reactive<ChatMessage>({
+    role: 'assistant',
+    text: loadingMessageText,
+    pending: true
+  })
   conversation.messages.push(responseMessage)
   conversation.messagesLoaded = true
   draft.value = ''
   await scrollToBottom()
 
   try {
-    const response: any = await sendChatMessage(conversation.id, { question, topK: topK.value })
-    if (!response) {
-      conversation.messages.splice(-2)
-      return
+    const response = await streamChatMessage(conversation.id, { question, topK: topK.value })
+    if (!response.ok || !response.body) {
+      const body = await response.text()
+      let message = body || `请求失败（${response.status}）`
+      try {
+        message = JSON.parse(body).msg || JSON.parse(body).message || message
+      } catch {
+        // Keep the response text when the server does not return JSON.
+      }
+      throw new Error(message)
     }
-    responseMessage.id = response.data?.id
-    responseMessage.text = response.data?.content || '暂时没有检索到相关内容。'
-    responseMessage.status = response.data?.status
-    responseMessage.error = response.data?.status === 'FAILED'
-    responseMessage.sources = response.data?.sources || []
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let receivedToken = false
+    let completed = false
+    const handleEvent = (block: string) => {
+      let event = ''
+      let data = ''
+      for (const line of block.split(/\r?\n/)) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) data += line.slice(5).trim()
+      }
+      if (!event || !data) return
+      const payload = JSON.parse(data)
+      if (event === 'token') {
+        if (!receivedToken) responseMessage.text = ''
+        receivedToken = true
+        responseMessage.text += payload
+      } else if (event === 'complete') {
+        responseMessage.id = payload.id
+        responseMessage.text = payload.content || responseMessage.text || '暂时没有检索到相关内容。'
+        responseMessage.status = payload.status
+        responseMessage.error = payload.status === 'FAILED'
+        responseMessage.sources = payload.sources || []
+        completed = true
+      } else if (event === 'error') {
+        responseMessage.error = true
+        responseMessage.status = 'FAILED'
+        if (!receivedToken) responseMessage.text = payload
+        throw new Error(payload)
+      }
+    }
+    while (true) {
+      const { value, done } = await reader.read()
+      buffer += decoder.decode(value, { stream: !done })
+      const blocks = buffer.split(/\r?\n\r?\n/)
+      buffer = blocks.pop() || ''
+      blocks.forEach(handleEvent)
+      if (done) break
+      await scrollToBottom()
+    }
+    if (buffer.trim()) handleEvent(buffer)
+    if (!completed) throw new Error('流式响应已意外结束')
   } catch (error) {
-    responseMessage.text = error instanceof Error ? `请求失败：${error.message}` : '请求失败，请稍后重试。'
+    if (!responseMessage.text || responseMessage.text === loadingMessageText) {
+      responseMessage.text = error instanceof Error ? `请求失败：${error.message}` : '请求失败，请稍后重试。'
+    }
     responseMessage.error = true
+    responseMessage.status = 'FAILED'
   } finally {
     responseMessage.pending = false
     sending.value = false
@@ -467,9 +557,45 @@ onMounted(loadConversations)
 .message-user .message-content { flex: 0 1 auto; max-width: min(78%, 560px); }
 .message-author { margin-bottom: 7px; color: var(--ink-700); font-size: 11px; font-weight: 650; }
 .message-text { color: var(--ink-900); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
-.message-user .message-content { padding: 10px 14px; border-radius: 4px 12px 12px; background: var(--surface-soft); }
+.message-markdown { white-space: normal; }
+.message-markdown :deep(:first-child) { margin-top: 0; }
+.message-markdown :deep(:last-child) { margin-bottom: 0; }
+.message-markdown :deep(p) { margin: 0 0 12px; }
+.message-markdown :deep(h1), .message-markdown :deep(h2), .message-markdown :deep(h3),
+.message-markdown :deep(h4), .message-markdown :deep(h5), .message-markdown :deep(h6) {
+  margin: 16px 0 8px;
+  color: var(--ink-950);
+  line-height: 1.45;
+}
+.message-markdown :deep(ul), .message-markdown :deep(ol) { margin: 8px 0 12px; padding-left: 24px; }
+.message-markdown :deep(blockquote) { margin: 10px 0; padding: 2px 12px; border-left: 3px solid var(--teal); color: var(--ink-600); }
+.message-markdown :deep(pre) { overflow-x: auto; margin: 10px 0; padding: 12px; border-radius: 8px; background: var(--surface-soft); }
+.message-markdown :deep(pre code) { padding: 0; background: transparent; }
+.message-markdown :deep(code) { padding: 2px 5px; border-radius: 4px; background: var(--surface-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+.message-markdown :deep(a) { color: var(--teal-ink); text-decoration: underline; }
+.message-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.message-markdown :deep(th), .message-markdown :deep(td) { padding: 6px 10px; border: 1px solid var(--chrome-line); text-align: left; }
+.message-user .message-content { padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: var(--surface-soft); }
 .message-user .message-author { margin-bottom: 3px; text-align: right; }
 .message-text.is-pending { color: var(--ink-500); }
+.loading-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; vertical-align: baseline; }
+.loading-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: .35;
+  animation: loading-dot-bounce 1s ease-in-out infinite;
+}
+.loading-dots i:nth-child(2) { animation-delay: .16s; }
+.loading-dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes loading-dot-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-dots i { animation: none; opacity: 1; }
+}
 .message-text.is-error { color: var(--action-danger-ink); }
 .message-status-failed { display: inline-block; margin-top: 6px; color: var(--action-danger-ink); font-size: 10px; }
 .thinking-icon { margin-right: 5px; vertical-align: -2px; animation: spin 1.2s linear infinite; }
