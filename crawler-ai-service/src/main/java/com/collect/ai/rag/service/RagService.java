@@ -105,16 +105,31 @@ public class RagService {
     }
 
     public RagDtos.QueryResponse query(RagDtos.QueryRequest request) {
-        return query(request, isLoggedIn(), null);
+        return query(request, isLoggedIn(), List.of(), null);
+    }
+
+    public RagDtos.QueryResponse queryForLoggedInUser(
+            RagDtos.QueryRequest request, List<RagDtos.ChatHistoryMessage> history) {
+        return query(request, true, history, null);
     }
 
     public RagDtos.QueryResponse queryForLoggedInUser(
             RagDtos.QueryRequest request, Consumer<String> tokenConsumer) {
-        return query(request, true, tokenConsumer);
+        return query(request, true, List.of(), tokenConsumer);
+    }
+
+    public RagDtos.QueryResponse queryForLoggedInUser(
+            RagDtos.QueryRequest request,
+            List<RagDtos.ChatHistoryMessage> history,
+            Consumer<String> tokenConsumer) {
+        return query(request, true, history, tokenConsumer);
     }
 
     private RagDtos.QueryResponse query(
-            RagDtos.QueryRequest request, boolean loggedIn, Consumer<String> tokenConsumer) {
+            RagDtos.QueryRequest request,
+            boolean loggedIn,
+            List<RagDtos.ChatHistoryMessage> history,
+            Consumer<String> tokenConsumer) {
         ensureEnabled();
         if (request == null || request.getQuestion() == null
                 || request.getQuestion().isBlank()) {
@@ -139,11 +154,11 @@ public class RagService {
                             new LambdaQueryWrapper<Spider>().eq(Spider::getIsPublic, 1))
                     .stream().map(Spider::getId).toList();
             if (publicSpiderIds.isEmpty()) {
-                return emptyQueryResponse(request.getQuestion(), rag, tokenConsumer);
+                return emptyQueryResponse(request.getQuestion(), rag, history, tokenConsumer);
             }
             if (request.getSpiderId() != null
                     && !publicSpiderIds.contains(request.getSpiderId())) {
-                return emptyQueryResponse(request.getQuestion(), rag, tokenConsumer);
+                return emptyQueryResponse(request.getQuestion(), rag, history, tokenConsumer);
             }
             ArrayNode publicValues = objectMapper.createArrayNode();
             publicSpiderIds.forEach(publicValues::add);
@@ -160,7 +175,7 @@ public class RagService {
                                     .eq(Spider::getGroup, request.getSpiderGroup()))
                     .stream().map(Spider::getId).toList();
             if (spiderIds.isEmpty()) {
-                return emptyQueryResponse(request.getQuestion(), rag, tokenConsumer);
+                return emptyQueryResponse(request.getQuestion(), rag, history, tokenConsumer);
             }
             ArrayNode values = objectMapper.createArrayNode();
             spiderIds.forEach(values::add);
@@ -222,8 +237,9 @@ public class RagService {
         }
 
         String answer = tokenConsumer == null
-                ? createChatAnswer(request.getQuestion(), context.toString())
-                : createStreamingChatAnswer(request.getQuestion(), context.toString(), tokenConsumer);
+                ? createChatAnswer(request.getQuestion(), context.toString(), history)
+                : createStreamingChatAnswer(
+                        request.getQuestion(), context.toString(), history, tokenConsumer);
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
         response.setSources(sources);
@@ -322,32 +338,19 @@ public class RagService {
         }
     }
 
-    private String createChatAnswer(String question, String context) {
+    private String createChatAnswer(
+            String question, String context, List<RagDtos.ChatHistoryMessage> history) {
         RagProperties.Rag rag = properties.getRag();
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
             ArrayNode messages = body.putArray("messages");
-            if (context == null || context.isBlank()) {
-                messages.addObject()
-                        .put("role", "system")
-                        .put("content", "你是一个友好的中文助手，请直接、准确地回答用户问题。");
-                messages.addObject()
-                        .put("role", "user")
-                        .put("content", question);
-            } else {
-                messages.addObject()
-                        .put("role", "system")
-                        .put("content", "你是一个只依据提供资料回答问题的中文助手。"
-                                + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。");
-                messages.addObject()
-                        .put("role", "user")
-                        .put("content", "资料：\n" + context + "\n\n问题：" + question);
-            }
+            appendChatMessages(messages, question, context, history);
             if (!"ollama".equalsIgnoreCase(rag.getChatProvider())) {
                 body.put("temperature", 0.2);
             } else {
                 body.put("stream", false);
+                body.putObject("options").put("num_ctx", rag.getContextLength());
             }
             String path = "ollama".equalsIgnoreCase(rag.getChatProvider())
                     ? "/api/chat"
@@ -372,40 +375,65 @@ public class RagService {
         }
     }
 
-            private String createStreamingChatAnswer(
-                    String question, String context, Consumer<String> tokenConsumer) {
-                RagProperties.Rag rag = properties.getRag();
-                try {
-                    ObjectNode body = objectMapper.createObjectNode();
-                    body.put("model", rag.getChatModel());
-                    ArrayNode messages = body.putArray("messages");
-                    if (context == null || context.isBlank()) {
-                        messages.addObject()
-                                .put("role", "system")
-                                .put("content", "你是一个友好的中文助手，请直接、准确地回答用户问题。");
-                        messages.addObject().put("role", "user").put("content", question);
-                    } else {
-                        messages.addObject()
-                                .put("role", "system")
-                                .put("content", "你是一个只依据提供资料回答问题的中文助手。"
-                                        + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。");
-                        messages.addObject()
-                                .put("role", "user")
-                                .put("content", "资料：\n" + context + "\n\n问题：" + question);
-                    }
-                    String provider = rag.getChatProvider();
-                    String path = "ollama".equalsIgnoreCase(provider) ? "/api/chat" : "/chat/completions";
-                    body.put("stream", true);
-                    if (!"ollama".equalsIgnoreCase(provider)) {
-                        body.put("temperature", 0.2);
-                    }
-                    streamChatRequest(path, body, tokenConsumer);
-                    return "";
-                } catch (Exception e) {
-                    if (e instanceof IllegalStateException state) throw state;
-                    throw new IllegalStateException("调用聊天模型失败: " + e.getMessage(), e);
-                }
+    private String createStreamingChatAnswer(
+            String question,
+            String context,
+            List<RagDtos.ChatHistoryMessage> history,
+            Consumer<String> tokenConsumer) {
+        RagProperties.Rag rag = properties.getRag();
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", rag.getChatModel());
+            ArrayNode messages = body.putArray("messages");
+            appendChatMessages(messages, question, context, history);
+            String provider = rag.getChatProvider();
+            String path = "ollama".equalsIgnoreCase(provider)
+                    ? "/api/chat"
+                    : "/chat/completions";
+            body.put("stream", true);
+            if (!"ollama".equalsIgnoreCase(provider)) {
+                body.put("temperature", 0.2);
+            } else {
+                body.putObject("options").put("num_ctx", rag.getContextLength());
             }
+            streamChatRequest(path, body, tokenConsumer);
+            return "";
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("调用聊天模型失败: " + e.getMessage(), e);
+        }
+    }
+
+    private void appendChatMessages(
+            ArrayNode messages,
+            String question,
+            String context,
+            List<RagDtos.ChatHistoryMessage> history) {
+        boolean hasContext = context != null && !context.isBlank();
+        messages.addObject()
+                .put("role", "system")
+                .put("content", hasContext
+                        ? "你是一个只依据提供资料回答问题的中文助手。"
+                                + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。"
+                        : "你是一个友好的中文助手，请结合当前对话历史直接、准确地回答用户问题。");
+        if (history != null) {
+            for (RagDtos.ChatHistoryMessage item : history) {
+                if (item == null || item.getContent() == null || item.getContent().isBlank()) {
+                    continue;
+                }
+                if (!"user".equals(item.getRole()) && !"assistant".equals(item.getRole())) {
+                    continue;
+                }
+                messages.addObject()
+                        .put("role", item.getRole())
+                        .put("content", item.getContent());
+            }
+        }
+        String currentMessage = hasContext
+                ? "资料：\n" + context + "\n\n问题：" + question
+                : question;
+        messages.addObject().put("role", "user").put("content", currentMessage);
+    }
 
             private void streamChatRequest(
                     String path, ObjectNode body, Consumer<String> tokenConsumer) throws Exception {
@@ -696,11 +724,14 @@ public class RagService {
     }
 
     private RagDtos.QueryResponse emptyQueryResponse(
-            String question, RagProperties.Rag rag, Consumer<String> tokenConsumer) {
+            String question,
+            RagProperties.Rag rag,
+            List<RagDtos.ChatHistoryMessage> history,
+            Consumer<String> tokenConsumer) {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(tokenConsumer == null
-                ? createChatAnswer(question, "")
-                : createStreamingChatAnswer(question, "", tokenConsumer));
+                ? createChatAnswer(question, "", history)
+                : createStreamingChatAnswer(question, "", history, tokenConsumer));
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());

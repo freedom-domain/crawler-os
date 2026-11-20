@@ -1,18 +1,21 @@
 <template>
   <div class="chat-models-page">
-    <el-card v-loading="loading" class="models-card">
-      <template #header>
-        <div class="card-header">
-          <div>
-            <h2>聊天模型管理</h2>
-            <p>管理聊天模型服务配置和 API Key，AI 配置可直接引用。</p>
-          </div>
-          <div class="header-actions">
-            <router-link to="/ai-config">返回 AI 配置</router-link>
-            <el-button type="primary" @click="openCreate">新增聊天模型</el-button>
-          </div>
+    <component
+      :is="embedded ? 'div' : 'el-card'"
+      v-loading="loading"
+      class="models-card"
+      :class="{ 'models-card--embedded': embedded }"
+    >
+      <div class="card-header">
+        <div>
+          <h2 v-if="!embedded">聊天模型管理</h2>
+          <p>管理聊天模型服务配置和 API Key，AI 配置可直接引用。</p>
         </div>
-      </template>
+        <div class="header-actions">
+          <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
+          <el-button type="primary" @click="openCreate">新增聊天模型</el-button>
+        </div>
+      </div>
 
       <el-table :data="models" empty-text="暂无聊天模型">
         <el-table-column prop="name" label="配置名称" min-width="150" />
@@ -22,6 +25,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="chatModel" label="模型名称" min-width="150" />
+        <el-table-column label="上下文长度" width="130">
+          <template #default="{ row }">{{ row.contextLength.toLocaleString() }} Token</template>
+        </el-table-column>
         <el-table-column prop="chatBaseUrl" label="API 地址" min-width="240" show-overflow-tooltip />
         <el-table-column label="API Key" width="130">
           <template #default="{ row }">
@@ -42,7 +48,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </component>
 
     <el-dialog
       v-model="dialogVisible"
@@ -67,6 +73,16 @@
           </el-form-item>
           <el-form-item label="模型名称" prop="chatModel">
             <el-input v-model="form.chatModel" maxlength="128" />
+          </el-form-item>
+          <el-form-item label="上下文长度（Token）" prop="contextLength">
+            <el-input-number
+              v-model="form.contextLength"
+              :min="1024"
+              :max="2000000"
+              :step="1024"
+              controls-position="right"
+            />
+            <small class="field-hint">Ollama 会用此值设置 num_ctx；其他提供方按此值估算历史消息预算。</small>
           </el-form-item>
           <el-form-item label="API Key">
             <el-input
@@ -118,12 +134,15 @@ import {
   updateChatModelApiKey
 } from '@/api'
 
+defineProps<{ embedded?: boolean }>()
+
 interface ChatModel {
   id: number
   name: string
   chatProvider: string
   chatBaseUrl: string
   chatModel: string
+  contextLength: number
   apiKeyConfigured: boolean
 }
 
@@ -132,6 +151,7 @@ const emptyModel = () => ({
   chatProvider: 'openai',
   chatBaseUrl: '',
   chatModel: '',
+  contextLength: 8192,
   apiKey: '',
   clearApiKey: false
 })
@@ -274,6 +294,7 @@ onMounted(loadModels)
 <style scoped>
 .chat-models-page { max-width: 1180px; margin: 0 auto; }
 .models-card { border-radius: 12px; }
+.models-card--embedded { border: 0; border-radius: 0; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
@@ -281,6 +302,8 @@ onMounted(loadModels)
 .is-clickable { cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .form-grid :deep(.el-select) { width: 100%; }
+.form-grid :deep(.el-input-number) { width: 100%; }
+.field-hint { display: block; margin-top: 5px; color: var(--ink-500); font-size: 12px; line-height: 1.5; }
 .form-grid :deep(.el-checkbox) { display: flex; margin-top: 8px; }
 @media (max-width: 680px) {
   .card-header { display: block; }

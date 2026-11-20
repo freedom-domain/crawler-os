@@ -472,6 +472,8 @@ const handleCommand = async (cmd: string) => {
 }
 :deep(.el-menu-item:hover), :deep(.el-sub-menu__title:hover) { background: var(--chrome-hover); }
 :deep(.el-menu-item.is-active) { background: var(--teal); box-shadow: 0 4px 14px rgba(var(--el-color-primary-rgb), .3); }
+:deep(.el-menu-item.is-active .el-icon),
+:deep(.el-sub-menu.is-active > .el-sub-menu__title .el-icon) { color: var(--on-teal); }
 :deep(.el-sub-menu.is-active > .el-sub-menu__title) { color: #fff; background: rgba(var(--el-color-primary-rgb), .32); }
 :deep(.el-menu--collapse .el-sub-menu.is-active > .el-sub-menu__title) { background: var(--teal); box-shadow: none; }
 :deep(.el-menu-item .el-icon), :deep(.el-sub-menu .el-icon) { color: var(--chrome-icon); }

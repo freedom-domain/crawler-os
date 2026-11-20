@@ -24,6 +24,9 @@ import java.util.Set;
 public class ChatModelService {
 
     private static final Set<String> PROVIDERS = Set.of("ollama", "openai", "vllm");
+    private static final int MIN_CONTEXT_LENGTH = 1024;
+    private static final int MAX_CONTEXT_LENGTH = 2_000_000;
+    private static final int DEFAULT_CONTEXT_LENGTH = 8192;
 
     private final AiRagChatModelMapper chatModelMapper;
     private final AiRagConfigMapper configMapper;
@@ -136,6 +139,8 @@ public class ChatModelService {
         model.setChatProvider(request.getChatProvider().trim().toLowerCase(Locale.ROOT));
         model.setChatBaseUrl(request.getChatBaseUrl().trim());
         model.setChatModel(request.getChatModel().trim());
+        model.setContextLength(
+                request.getContextLength() == null ? DEFAULT_CONTEXT_LENGTH : request.getContextLength());
     }
 
     private static void validate(ChatModelRequest request) {
@@ -157,6 +162,11 @@ public class ChatModelService {
         } catch (IllegalArgumentException e) {
             throw new BizException("聊天模型地址必须是有效的 HTTP 或 HTTPS URL");
         }
+        if (request.getContextLength() != null
+                && (request.getContextLength() < MIN_CONTEXT_LENGTH
+                || request.getContextLength() > MAX_CONTEXT_LENGTH)) {
+            throw new BizException("上下文长度必须在 1024 到 2000000 Token 之间");
+        }
         if (request.getName().trim().length() > 128
                 || request.getChatModel().trim().length() > 128
                 || request.getChatBaseUrl().trim().length() > 512
@@ -172,6 +182,7 @@ public class ChatModelService {
         copy.setChatProvider(source.getChatProvider());
         copy.setChatBaseUrl(source.getChatBaseUrl());
         copy.setChatModel(source.getChatModel());
+        copy.setContextLength(source.getContextLength());
         copy.setApiKey(source.getApiKey());
         copy.setCreateTime(source.getCreateTime());
         copy.setUpdateTime(source.getUpdateTime());
@@ -185,6 +196,8 @@ public class ChatModelService {
         response.setChatProvider(model.getChatProvider());
         response.setChatBaseUrl(model.getChatBaseUrl());
         response.setChatModel(model.getChatModel());
+        response.setContextLength(model.getContextLength() == null
+                ? DEFAULT_CONTEXT_LENGTH : model.getContextLength());
         response.setApiKeyConfigured(StringUtils.hasText(model.getApiKey()));
         return response;
     }

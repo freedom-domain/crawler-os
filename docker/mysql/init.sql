@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS ai_rag_config (
     chat_provider VARCHAR(32) NOT NULL DEFAULT 'openai',
     chat_base_url VARCHAR(512) NOT NULL,
     chat_model VARCHAR(128) NOT NULL,
+    context_length INT NOT NULL DEFAULT 8192,
     api_key VARCHAR(1024) NOT NULL DEFAULT '',
     top_k INT NOT NULL DEFAULT 5,
     chunk_size INT NOT NULL DEFAULT 1500,

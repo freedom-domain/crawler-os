@@ -1,18 +1,21 @@
 <template>
   <div class="vector-models-page">
-    <el-card v-loading="loading" class="models-card">
-      <template #header>
-        <div class="card-header">
-          <div>
-            <h2>向量模型管理</h2>
-            <p>管理 Embedding 模型及其检索、分块参数，AI 配置可直接引用。</p>
-          </div>
-          <div class="header-actions">
-            <router-link to="/ai-config">返回 AI 配置</router-link>
-            <el-button type="primary" @click="openCreate">新增向量模型</el-button>
-          </div>
+    <component
+      :is="embedded ? 'div' : 'el-card'"
+      v-loading="loading"
+      class="models-card"
+      :class="{ 'models-card--embedded': embedded }"
+    >
+      <div class="card-header">
+        <div>
+          <h2 v-if="!embedded">向量模型管理</h2>
+          <p>管理 Embedding 模型及其检索、分块参数，AI 配置可直接引用。</p>
         </div>
-      </template>
+        <div class="header-actions">
+          <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
+          <el-button type="primary" @click="openCreate">新增向量模型</el-button>
+        </div>
+      </div>
 
       <el-table :data="models" empty-text="暂无向量模型">
         <el-table-column prop="name" label="配置名称" min-width="150" />
@@ -36,7 +39,7 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+    </component>
 
     <el-dialog
       v-model="dialogVisible"
@@ -89,6 +92,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { createVectorModel, deleteVectorModel, getVectorModels, updateVectorModel } from '@/api'
+
+defineProps<{ embedded?: boolean }>()
 
 interface VectorModel {
   id: number
@@ -220,6 +225,7 @@ onMounted(loadModels)
 <style scoped>
 .vector-models-page { max-width: 1180px; margin: 0 auto; }
 .models-card { border-radius: 12px; }
+.models-card--embedded { border: 0; border-radius: 0; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }

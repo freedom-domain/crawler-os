@@ -40,9 +40,11 @@ export const updateChatModel = (id: number, data: any) => request.put(`/ai/rag/c
 export const deleteChatModel = (id: number) => request.delete(`/ai/rag/chat-models/${id}`)
 export const queryRag = (data: { question: string; topK: number }) => request.post('/ai/rag/query', data)
 export const chatConversationList = () => request.get('/ai/chat/conversations')
+export const chatContextWindow = () => request.get('/ai/chat/conversations/context-window')
 export const chatConversationCreate = () => request.post('/ai/chat/conversations')
 export const chatConversationDelete = (id: number) => request.delete(`/ai/chat/conversations/${id}`)
 export const chatMessages = (id: number) => request.get(`/ai/chat/conversations/${id}/messages`)
+export const clearChatMessages = (id: number) => request.delete(`/ai/chat/conversations/${id}/messages`)
 export const sendChatMessage = (id: number, data: { question: string; topK: number }) =>
   request.post(`/ai/chat/conversations/${id}/messages`, data)
 export const streamChatMessage = (id: number, data: { question: string; topK: number }) => {
@@ -54,6 +56,16 @@ export const streamChatMessage = (id: number, data: { question: string; topK: nu
     headers,
     body: JSON.stringify(data)
   })
+}
+export const resumeChatMessageStream = (conversationId: number, messageId: number, offset: number) => {
+  const headers: Record<string, string> = { Accept: 'text/event-stream' }
+  const token = useUserStore().token
+  if (token) headers.Authorization = `Bearer ${token}`
+  const params = new URLSearchParams({ offset: String(offset) })
+  return fetch(
+    `/api/ai/chat/conversations/${conversationId}/messages/${messageId}/stream?${params}`,
+    { headers }
+  )
 }
 export const roles = () => request.get('/user/roles')
 export const assignRole = (data: any) => request.put('/user/assign-role', data)

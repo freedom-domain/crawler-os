@@ -396,6 +396,7 @@ html[data-theme="black"] .el-empty__image {
   color: var(--on-teal) !important;
   background: var(--menu-popup-active-bg) !important;
 }
+.el-menu--popup .el-menu-item.is-active .el-icon { color: var(--on-teal); }
 .el-menu--popup .el-icon { color: var(--chrome-icon); }
 .el-popper {
   border: 1px solid var(--line) !important;

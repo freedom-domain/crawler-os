@@ -8,6 +8,7 @@ public class ChatModelRequest {
     private String chatProvider;
     private String chatBaseUrl;
     private String chatModel;
+    private Integer contextLength;
     private String apiKey;
     private Boolean clearApiKey;
 }

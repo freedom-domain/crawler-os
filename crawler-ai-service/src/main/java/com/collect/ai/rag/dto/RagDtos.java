@@ -18,6 +18,12 @@ public final class RagDtos {
     }
 
     @Data
+    public static class ChatHistoryMessage {
+        private String role;
+        private String content;
+    }
+
+    @Data
     public static class SyncResult {
         private long sourceDocuments;
         private long chunks;

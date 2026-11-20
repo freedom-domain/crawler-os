@@ -26,6 +26,7 @@ public class RagProperties {
         private String apiKey = "";
         private String embeddingModel = "bge-m3";
         private String chatModel = "Qwen3.8-27B";
+        private int contextLength = 8192;
         private int dimensions = 1024;
         private int topK = 5;
         private int chunkSize = 1500;

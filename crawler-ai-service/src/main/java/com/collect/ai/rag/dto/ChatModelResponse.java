@@ -9,5 +9,6 @@ public class ChatModelResponse {
     private String chatProvider;
     private String chatBaseUrl;
     private String chatModel;
+    private int contextLength;
     private boolean apiKeyConfigured;
 }

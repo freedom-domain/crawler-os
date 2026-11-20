@@ -25,6 +25,11 @@ public final class AiChatDtos {
     }
 
     @Data
+    public static class ContextWindowResponse {
+        private int contextLength;
+    }
+
+    @Data
     public static class MessageResponse {
         private Long id;
         private String role;

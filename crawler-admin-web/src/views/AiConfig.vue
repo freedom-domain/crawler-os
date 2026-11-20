@@ -1,21 +1,23 @@
 <template>
-  <div class="ai-config-page">
-    <el-card
+  <div class="ai-config-page" :class="{ 'ai-config-page--embedded': embedded }">
+    <component
+      :is="embedded ? 'div' : 'el-card'"
       v-loading="loading"
       element-loading-text="正在加载 AI/RAG 配置..."
       class="config-card"
+      :class="{ 'config-card--embedded': embedded }"
     >
-      <template #header>
-        <div class="card-header">
-          <div>
+      <div class="card-header">
+        <div class="card-heading">
+          <div class="card-title-row">
             <h2>AI / RAG 配置</h2>
-            <p>当前环境：{{ config.environment || '-' }}。修改保存后立即生效。</p>
+            <el-tag :type="form.enabled ? 'success' : 'info'" effect="light">
+              {{ form.enabled ? 'RAG 已启用' : 'RAG 已停用' }}
+            </el-tag>
           </div>
-          <el-tag :type="form.enabled ? 'success' : 'info'" effect="light">
-            {{ form.enabled ? 'RAG 已启用' : 'RAG 已停用' }}
-          </el-tag>
+          <p>当前环境：{{ config.environment || '-' }}。修改保存后立即生效。</p>
         </div>
-      </template>
+      </div>
 
       <el-alert
         title="密钥安全"
@@ -66,7 +68,9 @@
                   :value="model.id"
                 />
               </el-select>
-              <router-link to="/ai-vector-models">管理向量模型</router-link>
+              <el-button link type="primary" @click="vectorManagerVisible = true">
+                管理向量模型
+              </el-button>
             </el-form-item>
             <el-form-item label="检索与分块参数">
               <span>Top K {{ selectedVectorModel?.topK ?? config.topK }} · 分块长度 {{ selectedVectorModel?.chunkSize ?? config.chunkSize }} 字符 · 重叠 {{ selectedVectorModel?.chunkOverlap ?? config.chunkOverlap }} 字符</span>
@@ -106,7 +110,9 @@
                   :value="model.id"
                 />
               </el-select>
-              <router-link to="/ai-chat-models">管理聊天模型</router-link>
+              <el-button link type="primary" @click="chatManagerVisible = true">
+                管理聊天模型
+              </el-button>
             </el-form-item>
             <el-form-item label="当前模型配置">
               <span v-if="selectedChatModel">
@@ -128,7 +134,31 @@
           </el-button>
         </div>
       </el-form>
-    </el-card>
+    </component>
+
+    <el-dialog
+      v-model="vectorManagerVisible"
+      title="向量模型管理"
+      width="min(1100px, 94vw)"
+      top="5vh"
+      destroy-on-close
+      class="model-manager-dialog"
+      @closed="loadVectorModels"
+    >
+      <AiVectorModels embedded />
+    </el-dialog>
+
+    <el-dialog
+      v-model="chatManagerVisible"
+      title="聊天模型管理"
+      width="min(1100px, 94vw)"
+      top="5vh"
+      destroy-on-close
+      class="model-manager-dialog"
+      @closed="loadChatModels"
+    >
+      <AiChatModels embedded />
+    </el-dialog>
   </div>
 </template>
 
@@ -136,6 +166,10 @@
 import { computed, onActivated, onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getChatModels, getRagConfig, getVectorModels, updateRagConfig } from '@/api'
+import AiChatModels from '@/views/AiChatModels.vue'
+import AiVectorModels from '@/views/AiVectorModels.vue'
+
+defineProps<{ embedded?: boolean }>()
 
 interface RagConfig {
   environment: string
@@ -224,6 +258,8 @@ const selectedChatModel = computed(() =>
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const saving = ref(false)
+const vectorManagerVisible = ref(false)
+const chatManagerVisible = ref(false)
 
 const rules: FormRules = {
   sourceIndex: [{ required: true, message: '请输入 ES 源索引', trigger: 'blur' }, { pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称格式不合法', trigger: 'blur' }],
@@ -272,6 +308,24 @@ const loadConfig = async () => {
   }
 }
 
+const loadVectorModels = async () => {
+  try {
+    const response: any = await getVectorModels()
+    if (response) vectorModels.value = response.data || []
+  } catch {
+    ElMessage.error('刷新向量模型列表失败')
+  }
+}
+
+const loadChatModels = async () => {
+  try {
+    const response: any = await getChatModels()
+    if (response) chatModels.value = response.data || []
+  } catch {
+    ElMessage.error('刷新聊天模型列表失败')
+  }
+}
+
 const saveConfig = async () => {
   if (!await formRef.value?.validate().catch(() => false)) return
   saving.value = true
@@ -306,8 +360,12 @@ onActivated(() => {
 
 <style scoped>
 .ai-config-page { max-width: 1180px; margin: 0 auto; }
+.ai-config-page--embedded { max-width: none; margin: 0; }
 .config-card { border-radius: 12px; }
+.config-card--embedded { padding: 20px 22px; border: 0; border-radius: 0; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.card-heading { flex: 1; min-width: 0; }
+.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
 .config-alert { margin-bottom: 24px; }
@@ -323,7 +381,9 @@ onActivated(() => {
 .config-form :deep(.el-divider) { margin: 24px 0; }
 .config-form :deep(.el-form-item__content) { display: block; }
 .config-form :deep(.el-checkbox) { display: flex; margin-top: 8px; }
+:global(.model-manager-dialog .el-dialog__body) { max-height: 78vh; overflow: auto; }
 @media (max-width: 680px) {
+  .config-card--embedded { padding: 12px 4px; }
   .form-grid { grid-template-columns: 1fr; }
   .section-title { display: block; }
   .section-title span { display: block; margin-top: 5px; }

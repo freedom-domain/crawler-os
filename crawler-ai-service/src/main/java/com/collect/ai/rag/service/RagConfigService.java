@@ -223,6 +223,8 @@ public class RagConfigService {
         rag.setChatProvider(config.getChatProvider());
         rag.setChatBaseUrl(config.getChatBaseUrl());
         rag.setChatModel(config.getChatModel());
+        rag.setContextLength(chatModel.getContextLength() == null
+                ? 8192 : chatModel.getContextLength());
         rag.setApiKey(config.getApiKey());
         rag.setTopK(config.getTopK());
         rag.setChunkSize(config.getChunkSize());

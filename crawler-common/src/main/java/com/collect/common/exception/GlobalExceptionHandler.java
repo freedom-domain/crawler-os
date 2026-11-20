@@ -3,6 +3,8 @@ package com.collect.common.exception;
 import com.collect.common.result.R;
 import com.collect.common.result.ResultCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -32,6 +34,11 @@ public class GlobalExceptionHandler {
             // 图片/二进制请求出错时返回 404 空响应，避免 R 无法序列化为 image/* 类型
             return ResponseEntity.notFound().build();
         }
+        if (isEventStreamRequest(request)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(R.fail(e.getCode(), e.getMessage()));
+        }
         return R.fail(e.getCode(), e.getMessage());
     }
 
@@ -59,6 +66,11 @@ public class GlobalExceptionHandler {
         if (isBinaryRequest(request)) {
             return ResponseEntity.notFound().build();
         }
+        if (isEventStreamRequest(request)) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(R.fail(ResultCode.FAIL.getCode(), "系统异常: " + e.getMessage()));
+        }
         return R.fail(ResultCode.FAIL.getCode(), "系统异常: " + e.getMessage());
     }
 
@@ -76,5 +88,10 @@ public class GlobalExceptionHandler {
         }
         return accept.contains("image/") || accept.contains("application/octet-stream")
                 || accept.contains("multipart/");
+    }
+
+    private boolean isEventStreamRequest(WebRequest request) {
+        String accept = request.getHeader("Accept");
+        return accept != null && accept.contains(MediaType.TEXT_EVENT_STREAM_VALUE);
     }
 }
