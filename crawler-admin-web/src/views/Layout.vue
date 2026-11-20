@@ -11,7 +11,7 @@
           :default-active="route.path"
           :collapse="collapsed"
           :unique-opened="true"
-          router
+          @select="handleMenuSelect"
           background-color="transparent"
         >
           <MenuNode :item="{ path: '/dashboard', name: 'Dashboard', icon: 'odometer' }" />
@@ -202,6 +202,18 @@ const titleForPath = (path: string) => {
   }[path] || String(path).replace('/', ''))
 }
 
+const handleMenuSelect = (path: string) => {
+  if (!path) return
+  const resolved = router.resolve(path)
+  if (!resolved.matched.length) return
+  if (route.fullPath !== resolved.fullPath) {
+    router.push(resolved.fullPath)
+  }
+  if (mobile.value) {
+    drawerOpen.value = false
+  }
+}
+
 const openCurrentTab = () => {
   const current = route
   if (!current.name || current.path === '/login') return
@@ -293,9 +305,7 @@ const MenuNode = defineComponent({
           default: () => item.children.map((c: any) => h(MenuNode, { item: c, key: c.id }))
         })
       }
-      // 菜单路径无对应前端路由时禁用，避免"点了没反应"
-      const resolvable = typeof item.path === 'string' && item.path.length > 0 && router.resolve(item.path).matched.length > 0
-      return h(ElMenuItem, { index: item.path, disabled: !resolvable }, {
+      return h(ElMenuItem, { index: item.path }, {
         default: () => [icon, h('span', item.name)]
       })
     }
