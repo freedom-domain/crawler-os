@@ -307,7 +307,7 @@
                   <span class="source-index">{{ String(sourceIndex + 1).padStart(2, '0') }}</span>
                   <span class="source-copy">
                     <strong>{{ source.title || source.url || '未命名来源' }}</strong>
-                    <small>{{ source.spiderName || source.url || 'CrawlerOS 知识库' }}</small>
+                    <small>来源类型：{{ sourceTypeLabel(source) }}</small>
                   </span>
                   <el-icon v-if="safeSourceUrl(source.url)"><Link /></el-icon>
                 </a>
@@ -379,7 +379,7 @@
                     v-for="model in chatModels"
                     :key="model.id"
                     :label="model.name"
-                    :value="model.id"
+                    :value="String(model.id)"
                   />
                 </el-select>
               </div>
@@ -387,23 +387,36 @@
             <div
               v-if="contextWindow > 0"
               class="context-usage"
-              :title="`估算当前会话全部成功的历史消息（不含本次问题、系统提示和检索资料）；分母为 AI 配置中所选聊天模型的上下文长度。`"
-              aria-label="对话历史上下文使用估算"
             >
-              <div class="context-usage-copy">
-                <strong>约 {{ formatTokenCount(estimatedHistoryTokens) }} / {{ formatTokenCount(contextWindow) }} Token</strong>
-              </div>
-              <el-progress
-                :percentage="contextUsagePercentage"
-                :show-text="false"
-                :stroke-width="5"
-                :color="contextUsageColor"
-              />
-              <span v-if="estimatedHistoryTokens > contextWindow" class="context-usage-warning">
-                历史消息估算已超过模型上下文长度
-              </span>
+              <el-popover trigger="click" placement="top" :width="260" popper-class="context-usage-popover">
+                <template #reference>
+                  <button
+                    type="button"
+                    class="context-usage-trigger"
+                    aria-label="上下文用量，点击查看详情"
+                    title="点击查看上下文用量"
+                  >
+                    <el-progress
+                      type="circle"
+                      :percentage="contextUsagePercentage"
+                      :width="40"
+                      :stroke-width="4"
+                      :color="contextUsageColor"
+                      :show-text="false"
+                    />
+                    <span class="context-usage-percent">{{ contextUsagePercentage }}%</span>
+                  </button>
+                </template>
+                <div class="context-usage-details">
+                  <strong>上下文用量</strong>
+                  <span>约 {{ formatTokenCount(estimatedHistoryTokens) }} / {{ formatTokenCount(contextWindow) }} Token</span>
+                  <small>按当前会话成功的历史消息估算，不含本次问题、系统提示和检索资料。</small>
+                  <span v-if="estimatedHistoryTokens > contextWindow" class="context-usage-warning">
+                    历史消息估算已超过当前模型上下文长度
+                  </span>
+                </div>
+              </el-popover>
             </div>
-            <span v-else-if="contextWindowError" class="context-usage-error">上下文用量暂不可用</span>
             <div class="send-tools">
               <el-button
                 v-if="activeStreamingMessage?.id && activeConversation"
@@ -446,7 +459,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import {
-  cancelChatMessage, chatContextWindow, chatConversationCreate, chatConversationDelete, chatConversationList,
+  cancelChatMessage, chatConversationCreate, chatConversationDelete, chatConversationList,
   chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, getChatModels, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
@@ -460,6 +473,7 @@ interface SourceReference {
   title: string
   url: string
   spiderName: string
+  sourceType: string
   score: number
   snippet: string
 }
@@ -531,8 +545,11 @@ const activeStreamingMessage = computed(() =>
     .reverse()
     .find(message => message.role === 'assistant' && message.status === 'STREAMING' && message.id)
 )
-const contextWindow = ref(0)
-const contextWindowError = ref(false)
+const contextWindow = computed(() => {
+  const model = chatModels.value.find((item: any) => String(item.id) === String(selectedChatModelId.value))
+  const contextLength = Number(model?.contextLength)
+  return Number.isFinite(contextLength) && contextLength > 0 ? contextLength : 0
+})
 const estimateTokens = (content: string) => {
   let tokens = 0
   let plainCharacters = 0
@@ -566,6 +583,11 @@ const contextUsageColor = computed(() =>
     : contextUsagePercentage.value >= 90 ? '#e6a23c' : '#0f9b8e'
 )
 const formatTokenCount = (value: number) => value.toLocaleString()
+const sourceTypeLabel = (source: SourceReference) => {
+  if (source.sourceType === 'UPLOAD') return '直接上传文档'
+  if (source.sourceType === 'ES_INDEX') return 'ES 索引'
+  return source.sourceType || '未知'
+}
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
   durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)} 秒` : `${Math.round(durationMs)} 毫秒`
@@ -660,18 +682,6 @@ const loadConversations = async () => {
   }
   if (requestId === conversationLoadRequestId && selectedConversation?.messagesLoaded) {
     await restoreConversationScroll(selectedConversation)
-  }
-}
-
-const loadContextWindow = async () => {
-  contextWindowError.value = false
-  try {
-    const response: any = await chatContextWindow()
-    if (!response?.data?.contextLength) throw new Error('上下文窗口配置无效')
-    contextWindow.value = response.data.contextLength
-  } catch {
-    contextWindowError.value = true
-    ElMessage.error('读取上下文窗口失败')
   }
 }
 
@@ -1224,9 +1234,10 @@ onMounted(() => {
   }, 250)
   if (effectiveAssistantId.value) selectedAssistantId.value = effectiveAssistantId.value
   else if (queryAssistantId.value) selectedAssistantId.value = queryAssistantId.value
-  void loadContextWindow()
   void getChatModels().then((response: any) => {
-    chatModels.value = (response.data || []).filter((model: any) => model.enabled !== false)
+    chatModels.value = (response.data || [])
+      .filter((model: any) => model.enabled !== false)
+      .map((model: any) => ({ ...model, id: String(model.id) }))
     if (chatModels.value.length && selectedChatModelId.value === undefined) {
       selectedChatModelId.value = chatModels.value[0].id
     }
@@ -1593,12 +1604,14 @@ onActivated(() => {
 .retrieval-control :deep(.chat-model-selector) { width: 160px; }
 .retrieval-control :deep(.el-input__wrapper) { padding: 0 7px; box-shadow: none; background: var(--surface-soft); }
 .retrieval-control :deep(.el-input__inner) { height: 25px; font-size: 10px; }
-.context-usage { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
-.context-usage-copy { display: flex; justify-content: space-between; gap: 8px; color: var(--ink-500); font-size: 10px; }
-.context-usage-copy strong { color: var(--ink-700); font-size: 10px; font-weight: 550; white-space: nowrap; }
-.context-usage :deep(.el-progress-bar__outer) { background: var(--chrome-hover); }
-.context-usage-warning { color: var(--action-danger-ink); font-size: 9px; }
-.context-usage-error { color: var(--action-danger-ink); font-size: 10px; }
+.context-usage { display: flex; min-width: 0; align-items: center; justify-content: center; }
+.context-usage-trigger { position: relative; display: grid; width: 44px; height: 44px; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
+.context-usage-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.context-usage-percent { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-700); font-size: 9px; line-height: 1; pointer-events: none; }
+.context-usage-details { display: grid; gap: 8px; color: var(--ink-700); font-size: 12px; }
+.context-usage-details strong { color: var(--ink-900); font-size: 13px; }
+.context-usage-details small { color: var(--ink-500); font-size: 11px; line-height: 1.5; }
+.context-usage-warning { color: var(--action-danger-ink); font-size: 11px; }
 .keyboard-hint { color: var(--ink-500); font-size: 9px; }
 .send-button { width: 64px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 11px; }
 .send-button .el-icon { margin-right: 5px; }
@@ -1619,14 +1632,14 @@ onActivated(() => {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
   .chat-sidebar { display: none; }
   .sidebar-toggle { display: none; }
-  .chat-header { min-height: 62px; padding: 12px 15px; }
-  .header-actions { gap: 6px; }
+  .chat-header { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 15px; }
+  .chat-heading { min-width: 0; }
+  .header-actions { width: 100%; min-width: 0; gap: 6px; }
   .assistant-manage-button { width: 32px; padding: 0; font-size: 0; }
   .assistant-manage-button :deep(.el-icon) { margin: 0; font-size: 14px; }
-  .assistant-selector { width: 150px; }
-  .chat-title-row h1 { max-width: 52vw; font-size: 13px; }
+  .assistant-selector { width: auto; min-width: 0; flex: 1 1 110px; }
   .chat-header p { margin-left: 0; font-size: 10px; }
-  .model-badge { padding: 6px 8px; font-size: 9px; }
+  .model-badge { display: none; }
   .mobile-new-chat { display: inline-flex; height: 29px; padding: 0 8px; border-radius: 7px; font-size: 10px; }
   .mobile-new-chat .el-icon { margin-right: 3px; }
   .mobile-conversations { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; border-bottom: 1px solid var(--chrome-line); scrollbar-width: none; }
@@ -1634,14 +1647,12 @@ onActivated(() => {
   .mobile-conversation { max-width: 150px; flex: 0 0 auto; overflow: hidden; padding: 6px 10px; border: 1px solid var(--chrome-line); border-radius: 16px; background: var(--surface); color: var(--ink-700); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .mobile-conversation.is-active { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
   .composer-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
-  .retrieval-control { grid-column: 1; grid-row: 1; min-width: 0; gap: 6px; white-space: nowrap; }
-  .retrieval-control :deep(.el-select) { flex: 0 0 78px; }
-  .retrieval-control :deep(.chat-model-selector) { width: 112px; flex-basis: 112px; }
-  .send-tools { grid-column: 2; grid-row: 1; justify-content: flex-end; }
-  .context-usage, .context-usage-error { grid-column: 1 / -1; grid-row: 2; }
-  .context-usage { width: 100%; }
-  .context-usage-copy { flex-direction: column; align-items: flex-start; gap: 2px; }
-  .context-usage-copy strong { white-space: normal; overflow-wrap: anywhere; }
+  .retrieval-control { display: grid; grid-column: 1 / -1; grid-row: 1; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1.2fr); min-width: 0; gap: 5px; white-space: nowrap; }
+  .retrieval-control :deep(.el-select), .retrieval-control :deep(.chat-model-selector) { width: 100%; min-width: 0; }
+  .retrieval-control :deep(.el-input__wrapper) { min-width: 0; padding: 0 5px; }
+  .retrieval-control :deep(.el-input__inner) { font-size: 9px; }
+  .context-usage { grid-column: 1; grid-row: 2; justify-content: flex-start; }
+  .send-tools { grid-column: 2; grid-row: 2; justify-content: flex-end; }
   .reasoning-summary-content { display: flex; width: 100%; box-sizing: border-box; gap: 4px 10px; margin-top: 6px; margin-left: 0; }
   .reasoning-duration { min-width: 0; overflow-wrap: anywhere; }
   .message-list { padding: 16px 14px; }
@@ -1650,5 +1661,13 @@ onActivated(() => {
   .message-thread { gap: 22px; }
   .composer-wrap { width: calc(100% - 24px); padding-bottom: 9px; }
   .keyboard-hint { display: none; }
+}
+@media (max-width: 380px) {
+  .chat-header { padding-right: 10px; padding-left: 10px; }
+  .header-actions { gap: 4px; }
+  .assistant-manage-button { width: 29px; }
+  .mobile-new-chat { padding-right: 6px; padding-left: 6px; }
+  .retrieval-control { grid-template-columns: auto minmax(0, .8fr) auto minmax(0, 1.2fr); gap: 4px; font-size: 9px; }
+  .composer { padding-right: 9px; padding-left: 9px; }
 }
 </style>

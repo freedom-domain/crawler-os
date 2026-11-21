@@ -747,8 +747,7 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2),
 (25, 'CF IP 优选', 'cf-ip:manage', 12, 1, '/cf-ip-management', 'Connection', 4),
 (26, '管理 RAG 配置', 'ai:config', 30, 2, NULL, 1),
-(28, '向量模型', 'ai:vector-models', 12, 1, '/ai-vector-models', 'Cpu', 6),
-(29, '聊天模型', 'ai:chat-models', 12, 1, '/ai-chat-models', 'ChatDotRound', 7),
+(33, '模型管理', 'ai:models', 12, 1, '/ai-models', 'Cpu', 6),
 (30, '知识库管理', 'ai:knowledge', 12, 1, '/ai-knowledge', 'DataLine', 8),
 (32, '知识库文档管理', 'ai:knowledge-documents', 12, 1, '/ai-knowledge-documents', 'Document', 9),
 (27, 'AI 助手', 'ai:chat', 0, 1, '/ai-chat', 'ChatDotRound', 9),
@@ -759,7 +758,7 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
 (1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
-(1, 25),(1, 26),(1, 27),(1, 28),(1, 29),(1, 30),(1, 31),(1, 32),
+(1, 25),(1, 26),(1, 27),(1, 30),(1, 31),(1, 32),(1, 33),
 (2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)

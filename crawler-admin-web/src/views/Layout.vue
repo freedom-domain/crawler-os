@@ -349,6 +349,7 @@ const iconMap: Record<string, any> = {
   system: Setting,
   'ai:config': Setting,
   'ai:knowledge': DataLine,
+  'ai:models': Cpu,
   'ai:vector-models': Cpu,
   'ai:chat-models': ChatDotRound,
   'ai:chat': ChatDotRound,

@@ -1055,6 +1055,7 @@ public class RagService {
                     ref.setTitle(source.path("title").asText(""));
                     ref.setUrl(source.path("url").asText(""));
                     ref.setSpiderName(source.path("spiderName").asText(""));
+                    ref.setSourceType(knowledgeBase == null ? "" : knowledgeBase.getSourceType());
                     ref.setScore(hit.path("_score").asDouble(0));
                     String text = source.path("content").asText("");
                     ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));

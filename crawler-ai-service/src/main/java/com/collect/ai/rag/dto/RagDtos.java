@@ -45,6 +45,7 @@ public final class RagDtos {
         private String title;
         private String url;
         private String spiderName;
+        private String sourceType;
         private double score;
         private String snippet;
     }
