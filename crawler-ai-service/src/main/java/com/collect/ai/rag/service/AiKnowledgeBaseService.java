@@ -2,9 +2,10 @@ package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.collect.ai.entity.AiKnowledgeBase;
+import com.collect.ai.entity.AiAssistantKnowledgeBase;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
-import com.collect.ai.mapper.AiAssistantMapper;
+import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
 import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
 import com.collect.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ public class AiKnowledgeBaseService {
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiRagVectorModelMapper vectorModelMapper;
-    private final AiAssistantMapper assistantMapper;
+    private final AiAssistantKnowledgeBaseMapper assistantKnowledgeBaseMapper;
 
     public List<AiKnowledgeBaseDtos.Response> list() {
         return knowledgeBaseMapper.selectList(new LambdaQueryWrapper<AiKnowledgeBase>()
@@ -70,8 +71,8 @@ public class AiKnowledgeBaseService {
     @Transactional
     public void delete(Long id) {
         if (knowledgeBaseMapper.selectById(id) == null) throw new BizException("知识库不存在");
-        if (assistantMapper.selectCount(new LambdaQueryWrapper<com.collect.ai.entity.AiAssistant>()
-                .eq(com.collect.ai.entity.AiAssistant::getKnowledgeBaseId, id)) > 0) {
+        if (assistantKnowledgeBaseMapper.selectCount(new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
+                .eq(AiAssistantKnowledgeBase::getKnowledgeBaseId, id)) > 0) {
             throw new BizException("该知识库正被 AI 助手引用，不能删除");
         }
         if (knowledgeBaseMapper.deleteById(id) != 1) throw new IllegalStateException("删除知识库失败");

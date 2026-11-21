@@ -16,6 +16,7 @@ public final class RagDtos {
         private Long spiderId;
         private String spiderGroup;
         private Long knowledgeBaseId;
+        private List<Long> knowledgeBaseIds;
         private Long chatModelId;
     }
 

@@ -14,11 +14,11 @@ public class AiAssistant {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String name;
+    private String welcomeMessage;
     private String description;
     private String avatar;
     private String systemPrompt;
     private Boolean enabled;
-    private Long knowledgeBaseId;
     private Integer sort;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

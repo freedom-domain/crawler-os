@@ -2,7 +2,9 @@ package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.collect.ai.entity.AiAssistant;
+import com.collect.ai.entity.AiAssistantKnowledgeBase;
 import com.collect.ai.mapper.AiAssistantMapper;
+import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.rag.dto.AiAssistantDtos;
 import com.collect.common.exception.BizException;
@@ -20,6 +22,7 @@ public class AiAssistantService {
 
     private final AiAssistantMapper assistantMapper;
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
+    private final AiAssistantKnowledgeBaseMapper assistantKnowledgeBaseMapper;
 
     public List<AiAssistantDtos.Response> list() {
         return assistantMapper.selectList(new LambdaQueryWrapper<AiAssistant>()
@@ -50,6 +53,7 @@ public class AiAssistantService {
         assistant.setCreateTime(now);
         assistant.setUpdateTime(now);
         if (assistantMapper.insert(assistant) != 1) throw new IllegalStateException("创建 AI 助手失败");
+        syncKnowledgeBases(assistant.getId(), request.getKnowledgeBaseIds());
         return toResponse(assistant);
     }
 
@@ -61,6 +65,7 @@ public class AiAssistantService {
         fromRequest(assistant, request);
         assistant.setUpdateTime(LocalDateTime.now());
         if (assistantMapper.updateById(assistant) != 1) throw new IllegalStateException("更新 AI 助手失败");
+        syncKnowledgeBases(id, request.getKnowledgeBaseIds());
         return toResponse(assistant);
     }
 
@@ -68,6 +73,8 @@ public class AiAssistantService {
     public void delete(Long id) {
         AiAssistant assistant = assistantMapper.selectById(id);
         if (assistant == null) throw new BizException("AI 助手不存在");
+        assistantKnowledgeBaseMapper.delete(new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
+                .eq(AiAssistantKnowledgeBase::getAssistantId, id));
         if (assistantMapper.deleteById(id) != 1) throw new IllegalStateException("删除 AI 助手失败");
     }
 
@@ -75,34 +82,61 @@ public class AiAssistantService {
         if (request == null || !StringUtils.hasText(request.getName()))
             throw new BizException("助手名称不能为空");
         if (request.getName().trim().length() > 64) throw new BizException("助手名称不能超过 64 个字符");
-        if (request.getKnowledgeBaseId() != null
-                && knowledgeBaseMapper.selectById(request.getKnowledgeBaseId()) == null)
-            throw new BizException("请选择有效的知识库");
+        if (request.getWelcomeMessage() != null && request.getWelcomeMessage().trim().length() > 256)
+            throw new BizException("欢迎语不能超过 256 个字符");
+        if (request.getKnowledgeBaseIds() != null) {
+            for (Long knowledgeBaseId : request.getKnowledgeBaseIds()) {
+                if (knowledgeBaseMapper.selectById(knowledgeBaseId) == null)
+                    throw new BizException("请选择有效的知识库");
+            }
+        }
     }
 
     private AiAssistant fromRequest(AiAssistant assistant, AiAssistantDtos.Request request) {
         assistant.setName(request.getName().trim());
+        assistant.setWelcomeMessage(request.getWelcomeMessage() == null ? "" : request.getWelcomeMessage().trim());
         assistant.setDescription(request.getDescription() == null ? "" : request.getDescription().trim());
         assistant.setAvatar(request.getAvatar() == null ? "" : request.getAvatar().trim());
         assistant.setSystemPrompt(request.getSystemPrompt() == null ? "" : request.getSystemPrompt().trim());
         assistant.setEnabled(request.getEnabled() == null ? Boolean.TRUE : request.getEnabled());
-        assistant.setKnowledgeBaseId(request.getKnowledgeBaseId());
         assistant.setSort(request.getSort() == null ? 0 : request.getSort());
         return assistant;
+    }
+
+    private void syncKnowledgeBases(Long assistantId, List<Long> knowledgeBaseIds) {
+        assistantKnowledgeBaseMapper.delete(new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
+                .eq(AiAssistantKnowledgeBase::getAssistantId, assistantId));
+        if (knowledgeBaseIds == null) return;
+        for (Long knowledgeBaseId : knowledgeBaseIds.stream().distinct().toList()) {
+            AiAssistantKnowledgeBase relation = new AiAssistantKnowledgeBase();
+            relation.setAssistantId(assistantId);
+            relation.setKnowledgeBaseId(knowledgeBaseId);
+            if (assistantKnowledgeBaseMapper.insert(relation) != 1)
+                throw new IllegalStateException("保存 AI 助手知识库关联失败");
+        }
     }
 
     private AiAssistantDtos.Response toResponse(AiAssistant assistant) {
         AiAssistantDtos.Response response = new AiAssistantDtos.Response();
         response.setId(assistant.getId());
         response.setName(assistant.getName());
+        response.setWelcomeMessage(assistant.getWelcomeMessage());
         response.setDescription(assistant.getDescription());
         response.setAvatar(assistant.getAvatar());
         response.setSystemPrompt(assistant.getSystemPrompt());
         response.setEnabled(assistant.getEnabled());
-        response.setKnowledgeBaseId(assistant.getKnowledgeBaseId());
-        var knowledgeBase = assistant.getKnowledgeBaseId() == null
-                ? null : knowledgeBaseMapper.selectById(assistant.getKnowledgeBaseId());
-        response.setKnowledgeBaseName(knowledgeBase == null ? "-" : knowledgeBase.getName());
+        List<AiAssistantKnowledgeBase> relations = assistantKnowledgeBaseMapper.selectList(
+                new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
+                        .eq(AiAssistantKnowledgeBase::getAssistantId, assistant.getId()));
+        List<Long> knowledgeBaseIds = relations.stream()
+                .map(AiAssistantKnowledgeBase::getKnowledgeBaseId).distinct().toList();
+        List<String> knowledgeBaseNames = knowledgeBaseIds.stream()
+                .map(id -> {
+                    var base = knowledgeBaseMapper.selectById(id);
+                    return base == null ? "-" : base.getName();
+                }).toList();
+        response.setKnowledgeBaseIds(knowledgeBaseIds);
+        response.setKnowledgeBaseNames(knowledgeBaseNames);
         response.setSort(assistant.getSort());
         response.setCreateTime(assistant.getCreateTime());
         response.setUpdateTime(assistant.getUpdateTime());

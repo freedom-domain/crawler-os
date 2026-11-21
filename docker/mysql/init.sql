@@ -210,6 +210,7 @@ SET config.chat_model_id = model.id;
 CREATE TABLE IF NOT EXISTS ai_knowledge_base (
    id BIGINT PRIMARY KEY AUTO_INCREMENT,
    name VARCHAR(64) NOT NULL,
+   welcome_message VARCHAR(256) NOT NULL DEFAULT '',
    description VARCHAR(512) NOT NULL DEFAULT '',
    enabled TINYINT(1) NOT NULL DEFAULT 1,
    vector_model_id BIGINT NULL,
@@ -260,11 +261,18 @@ CREATE TABLE IF NOT EXISTS ai_assistant (
     avatar VARCHAR(32) NOT NULL DEFAULT '',
     system_prompt LONGTEXT NOT NULL,
     enabled TINYINT(1) NOT NULL DEFAULT 1,
-    knowledge_base_id BIGINT NULL,
     sort INT NOT NULL DEFAULT 0,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_ai_assistant_enabled_sort (enabled, sort, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS ai_assistant_knowledge_base (
+    assistant_id BIGINT NOT NULL,
+    knowledge_base_id BIGINT NOT NULL,
+    PRIMARY KEY (assistant_id, knowledge_base_id),
+    KEY idx_ai_assistant_knowledge_base_assistant (assistant_id),
+    KEY idx_ai_assistant_knowledge_base_base (knowledge_base_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO ai_assistant (
@@ -275,10 +283,14 @@ SELECT '知识库助手', '基于爬虫知识库回答问题，并附带资料�
        1, 0
 WHERE NOT EXISTS (SELECT 1 FROM ai_assistant WHERE name = '知识库助手');
 
-UPDATE ai_assistant assistant
+INSERT IGNORE INTO ai_assistant_knowledge_base (assistant_id, knowledge_base_id)
+SELECT assistant.id, base.id
+FROM ai_assistant assistant
 JOIN ai_knowledge_base base ON base.name = '默认知识库'
-SET assistant.knowledge_base_id = base.id
-WHERE assistant.knowledge_base_id IS NULL;
+WHERE NOT EXISTS (
+    SELECT 1 FROM ai_assistant_knowledge_base relation
+    WHERE relation.assistant_id = assistant.id
+);
 
 CREATE TABLE IF NOT EXISTS ai_chat_conversation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

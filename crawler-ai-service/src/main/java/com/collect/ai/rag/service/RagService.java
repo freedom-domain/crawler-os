@@ -51,6 +51,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -934,32 +935,19 @@ public class RagService {
             selectedRag.setContextLength(chatModel.getContextLength() == null ? 8192 : chatModel.getContextLength());
             rag = selectedRag;
         }
-        AiKnowledgeBase knowledgeBase = request.getKnowledgeBaseId() == null
-                ? null : knowledgeBaseMapper.selectById(request.getKnowledgeBaseId());
-        AiRagVectorModel knowledgeVectorModel = knowledgeBase == null
-                ? null : vectorModelMapper.selectById(knowledgeBase.getVectorModelId());
-        String vectorIndex = knowledgeBase != null && StringUtils.hasText(knowledgeBase.getVectorIndex())
-                ? knowledgeBase.getVectorIndex()
-                : properties.resolveVectorIndex();
-        String vectorField = knowledgeBase != null && StringUtils.hasText(knowledgeBase.getVectorField())
-                ? knowledgeBase.getVectorField()
-                : properties.resolveVectorField();
-        int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
-                ? knowledgeVectorModel.getDimensions()
-                : properties.resolveDimensions();
+        List<AiKnowledgeBase> knowledgeBases = new ArrayList<>();
+        if (request.getKnowledgeBaseIds() != null) {
+            for (Long knowledgeBaseId : request.getKnowledgeBaseIds()) {
+                AiKnowledgeBase knowledgeBase = knowledgeBaseMapper.selectById(knowledgeBaseId);
+                if (knowledgeBase != null) knowledgeBases.add(knowledgeBase);
+            }
+        } else if (request.getKnowledgeBaseId() != null) {
+            AiKnowledgeBase knowledgeBase = knowledgeBaseMapper.selectById(request.getKnowledgeBaseId());
+            if (knowledgeBase != null) knowledgeBases.add(knowledgeBase);
+        }
         int topK = request.getTopK() == null
                 ? rag.getTopK()
                 : Math.max(1, Math.min(request.getTopK(), 20));
-
-        List<Double> queryVector = knowledgeVectorModel == null
-                ? createEmbedding(request.getQuestion())
-                : createEmbedding(request.getQuestion(), knowledgeVectorModel, dimensions);
-        ObjectNode script = objectMapper.createObjectNode();
-        script.put("source",
-                "cosineSimilarity(params.query_vector, '" + vectorField
-                        + "') + 1.0");
-        script.set("params", objectMapper.createObjectNode()
-                .set("query_vector", objectMapper.valueToTree(queryVector)));
 
         ObjectNode filter = null;
         if (!loggedIn) {
@@ -997,53 +985,95 @@ public class RagService {
             filter = combineFilters(filter, groupFilter);
         }
 
-        ObjectNode scriptScore = objectMapper.createObjectNode();
-        ObjectNode body = objectMapper.createObjectNode();
-        body.put("size", topK);
-        body.set("_source", objectMapper.valueToTree(List.of(
-                "doc_id", "chunk_id", "title", "content", "url", "spiderName")));
-        if (filter != null) {
-            ObjectNode boolQuery = objectMapper.createObjectNode();
-            boolQuery.set("filter", objectMapper.createArrayNode().add(filter));
-            ObjectNode filteredQuery = objectMapper.createObjectNode();
-            filteredQuery.set("bool", boolQuery);
-            scriptScore.set("query", filteredQuery);
-        } else {
-            scriptScore.set("query", objectMapper.createObjectNode()
-                    .set("match_all", objectMapper.createObjectNode()));
-        }
-        scriptScore.set("script", script);
-        ObjectNode query = objectMapper.createObjectNode();
-        query.set("script_score", scriptScore);
-        body.set("query", query);
-
-        JsonNode root;
-        try {
-            HttpResponse<String> search = elasticsearchRequest("POST",
-                    "/" + vectorIndex + "/_search", toJson(body));
-            if (search.statusCode() >= 300) {
-                throw new IllegalStateException("RAG 向量检索失败: " + search.statusCode()
-                        + " " + search.body());
-            }
-            root = objectMapper.readTree(search.body());
-        } catch (Exception e) {
-            if (e instanceof IllegalStateException state) throw state;
-            throw new IllegalStateException("RAG 向量检索失败: " + e.getMessage(), e);
-        }
-
         List<RagDtos.SourceReference> sources = new ArrayList<>();
+        List<String> searchedTargets = new ArrayList<>();
+        if (knowledgeBases.isEmpty()) {
+            searchedTargets.add(properties.resolveVectorIndex());
+        } else {
+            for (AiKnowledgeBase knowledgeBase : knowledgeBases) {
+                searchedTargets.add(StringUtils.hasText(knowledgeBase.getVectorIndex())
+                        ? knowledgeBase.getVectorIndex()
+                        : properties.resolveVectorIndex());
+            }
+        }
+
+        for (String vectorIndex : searchedTargets.stream().distinct().toList()) {
+            AiKnowledgeBase knowledgeBase = knowledgeBases.stream()
+                    .filter(base -> (StringUtils.hasText(base.getVectorIndex())
+                            ? base.getVectorIndex()
+                            : properties.resolveVectorIndex()).equals(vectorIndex))
+                    .findFirst().orElse(null);
+            AiRagVectorModel knowledgeVectorModel = knowledgeBase == null
+                    ? null : vectorModelMapper.selectById(knowledgeBase.getVectorModelId());
+            int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
+                    ? knowledgeVectorModel.getDimensions()
+                    : properties.resolveDimensions();
+            String vectorField = knowledgeBase != null && StringUtils.hasText(knowledgeBase.getVectorField())
+                    ? knowledgeBase.getVectorField()
+                    : properties.resolveVectorField();
+            List<Double> queryVector = knowledgeVectorModel == null
+                    ? createEmbedding(request.getQuestion())
+                    : createEmbedding(request.getQuestion(), knowledgeVectorModel, dimensions);
+            ObjectNode script = objectMapper.createObjectNode();
+            script.put("source",
+                    "cosineSimilarity(params.query_vector, '" + vectorField + "') + 1.0");
+            script.set("params", objectMapper.createObjectNode()
+                    .set("query_vector", objectMapper.valueToTree(queryVector)));
+
+            ObjectNode scriptScore = objectMapper.createObjectNode();
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("size", topK);
+            body.set("_source", objectMapper.valueToTree(List.of(
+                    "doc_id", "chunk_id", "title", "content", "url", "spiderName")));
+            if (filter != null) {
+                ObjectNode boolQuery = objectMapper.createObjectNode();
+                boolQuery.set("filter", objectMapper.createArrayNode().add(filter));
+                ObjectNode filteredQuery = objectMapper.createObjectNode();
+                filteredQuery.set("bool", boolQuery);
+                scriptScore.set("query", filteredQuery);
+            } else {
+                scriptScore.set("query", objectMapper.createObjectNode()
+                        .set("match_all", objectMapper.createObjectNode()));
+            }
+            scriptScore.set("script", script);
+            ObjectNode query = objectMapper.createObjectNode();
+            query.set("script_score", scriptScore);
+            body.set("query", query);
+
+            try {
+                HttpResponse<String> search = elasticsearchRequest("POST",
+                        "/" + vectorIndex + "/_search", toJson(body));
+                if (search.statusCode() >= 300) {
+                    throw new IllegalStateException("RAG 向量检索失败: " + search.statusCode()
+                            + " " + search.body());
+                }
+                JsonNode root = objectMapper.readTree(search.body());
+                for (JsonNode hit : root.path("hits").path("hits")) {
+                    JsonNode source = hit.path("_source");
+                    RagDtos.SourceReference ref = new RagDtos.SourceReference();
+                    ref.setId(source.path("doc_id").asText());
+                    ref.setTitle(source.path("title").asText(""));
+                    ref.setUrl(source.path("url").asText(""));
+                    ref.setSpiderName(source.path("spiderName").asText(""));
+                    ref.setScore(hit.path("_score").asDouble(0));
+                    String text = source.path("content").asText("");
+                    ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));
+                    boolean duplicate = sources.stream()
+                            .anyMatch(existing -> existing.getId().equals(ref.getId())
+                                    && existing.getSnippet().equals(ref.getSnippet()));
+                    if (!duplicate) sources.add(ref);
+                }
+            } catch (Exception e) {
+                if (e instanceof IllegalStateException state) throw state;
+                throw new IllegalStateException("RAG 向量检索失败: " + e.getMessage(), e);
+            }
+        }
+
+        sources.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
+        if (sources.size() > topK) sources = new ArrayList<>(sources.subList(0, topK));
         StringBuilder context = new StringBuilder();
-        for (JsonNode hit : root.path("hits").path("hits")) {
-            JsonNode source = hit.path("_source");
-            RagDtos.SourceReference ref = new RagDtos.SourceReference();
-            ref.setId(source.path("doc_id").asText());
-            ref.setTitle(source.path("title").asText(""));
-            ref.setUrl(source.path("url").asText(""));
-            ref.setSpiderName(source.path("spiderName").asText(""));
-            ref.setScore(hit.path("_score").asDouble(0));
-            String text = source.path("content").asText("");
-            ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));
-            sources.add(ref);
+        for (RagDtos.SourceReference ref : sources) {
+            String text = ref.getSnippet();
             context.append("标题：").append(ref.getTitle()).append("\n")
                     .append("来源：").append(ref.getUrl()).append("\n")
                     .append("内容：").append(text).append("\n\n");

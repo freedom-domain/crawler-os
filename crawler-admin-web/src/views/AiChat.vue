@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-chat-page">
+  <div class="ai-chat-page" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
     <aside class="chat-sidebar">
       <div class="sidebar-heading">
         <div class="brand-mark"><el-icon><MagicStick /></el-icon></div>
@@ -67,21 +67,36 @@
 
     <section class="chat-main">
       <header class="chat-header">
-        <div>
-          <div class="chat-title-row">
-            <h1>{{ routeAssistantName || activeConversation?.title || 'AI 知识库助手' }}</h1>
-            <el-button
-              v-if="activeConversation"
-              class="rename-active-conversation"
-              link
-              aria-label="重命名当前对话"
-              title="重命名当前对话"
-              @click="renameConversation(activeConversation)"
-            >
-              <el-icon><EditPen /></el-icon>
-            </el-button>
+        <div class="chat-heading">
+          <button
+            type="button"
+            class="sidebar-toggle"
+            :aria-expanded="!sidebarCollapsed"
+            :aria-label="sidebarCollapsed ? '展开左侧栏' : '收起左侧栏'"
+            :title="sidebarCollapsed ? '展开左侧栏' : '收起左侧栏'"
+            @click="sidebarCollapsed = !sidebarCollapsed"
+          >
+            <el-icon>
+              <ArrowRight v-if="sidebarCollapsed" />
+              <ArrowLeft v-else />
+            </el-icon>
+          </button>
+          <div class="chat-heading-copy">
+            <div class="chat-title-row">
+              <h1>{{ activeConversation?.title || '新对话' }}</h1>
+              <el-button
+                v-if="activeConversation"
+                class="rename-active-conversation"
+                link
+                aria-label="重命名当前对话"
+                title="重命名当前对话"
+                @click="renameConversation(activeConversation)"
+              >
+                <el-icon><EditPen /></el-icon>
+              </el-button>
+            </div>
+            <p>{{ activeAssistant?.description || '向已收录的内容提问，答案附带相关来源' }}</p>
           </div>
-          <p>{{ routeAssistantName ? '当前助手的专属聊天会话' : '向已收录的内容提问，答案附带相关来源' }}</p>
         </div>
         <div class="header-actions">
           <el-tooltip content="管理 AI 助手" placement="bottom">
@@ -108,7 +123,7 @@
               v-for="assistant in assistants"
               :key="assistant.id"
               :label="assistant.name"
-              :value="assistant.id"
+              :value="String(assistant.id)"
               :disabled="!assistant.enabled"
             />
           </el-select>
@@ -142,8 +157,8 @@
         <div v-else-if="!activeConversation?.messages.length" class="welcome-state">
           <div class="welcome-icon"><el-icon><MagicStick /></el-icon></div>
           <p class="welcome-eyebrow">CRAWLEROS AI</p>
-          <h2>你好，有什么可以帮你？</h2>
-          <p class="welcome-description">我会从已收录的网页内容中检索信息，并附上答案来源。</p>
+          <h2>{{ activeAssistant?.welcomeMessage || '你好，有什么可以帮你？' }}</h2>
+          <p class="welcome-description">{{ activeAssistant?.description || '我会从已收录的网页内容中检索信息，并附上答案来源。' }}</p>
           <div class="suggestion-list">
             <button
               v-for="suggestion in suggestions"
@@ -435,7 +450,7 @@ import {
   chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, getChatModels, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, Help, Link, Loading, MagicStick, Plus,
+  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, Help, Link, Loading, MagicStick, Plus,
   Promotion, Refresh, Setting, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
@@ -479,6 +494,7 @@ const suggestions = [
 ]
 
 const conversations = ref<Conversation[]>([])
+const sidebarCollapsed = ref(false)
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
 const selectedAssistantId = ref<string | number | undefined>(undefined)
@@ -494,7 +510,17 @@ const effectiveAssistantId = computed(() =>
     ? String(props.assistantId)
     : routeAssistantId.value
 )
-const routeAssistantName = ref('')
+const queryAssistantId = computed(() =>
+  typeof route.query.assistantId === 'string' ? route.query.assistantId : undefined
+)
+const routeSelectedAssistantId = computed(() =>
+  effectiveAssistantId.value || queryAssistantId.value
+)
+const assistantsLoaded = ref(false)
+const activeAssistant = computed(() => {
+  const assistantId = routeSelectedAssistantId.value || selectedAssistantId.value
+  return assistants.value.find((assistant: any) => String(assistant.id) === String(assistantId))
+})
 const activeConversationId = ref<number | null>(null)
 const activeConversation = computed(() =>
   conversations.value.find(conversation => conversation.id === activeConversationId.value)
@@ -606,7 +632,9 @@ markdown.renderer.rules.link_open = (tokens, index, options, environment, render
 
 const loadConversations = async () => {
   const requestId = ++conversationLoadRequestId
-  const assistantId = effectiveAssistantId.value || selectedAssistantId.value
+  const assistantId = effectiveAssistantId.value
+    || queryAssistantId.value
+    || selectedAssistantId.value
   loadingConversations.value = true
   historyError.value = ''
   let selectedConversation: Conversation | undefined
@@ -702,7 +730,10 @@ const createConversation = async () => {
   creatingConversation.value = true
   historyError.value = ''
   try {
-    const response: any = await chatConversationCreate(selectedAssistantId.value)
+    const assistantId = effectiveAssistantId.value
+      || queryAssistantId.value
+      || selectedAssistantId.value
+    const response: any = await chatConversationCreate(assistantId)
     if (!response) return
     const conversation: Conversation = {
       id: response.data.id,
@@ -723,11 +754,8 @@ const createConversation = async () => {
 }
 
 const switchAssistant = async (assistantId: string | number) => {
-  selectedAssistantId.value = assistantId
-  saveScrollPosition()
-  activeConversationId.value = null
-  conversations.value = []
-  await loadConversations()
+  const nextQuery = { ...route.query, assistantId: String(assistantId), new: undefined }
+  await router.replace({ query: nextQuery })
 }
 
 const openAssistantManagement = () => {
@@ -1195,6 +1223,7 @@ onMounted(() => {
     elapsedClock.value = performance.now()
   }, 250)
   if (effectiveAssistantId.value) selectedAssistantId.value = effectiveAssistantId.value
+  else if (queryAssistantId.value) selectedAssistantId.value = queryAssistantId.value
   void loadContextWindow()
   void getChatModels().then((response: any) => {
     chatModels.value = (response.data || []).filter((model: any) => model.enabled !== false)
@@ -1204,16 +1233,14 @@ onMounted(() => {
   }).catch(() => {
     ElMessage.error('加载聊天模型失败，请刷新页面重试')
   })
-  void getChatAssistants().then((response: any) => {
+  void getChatAssistants().then(async (response: any) => {
     assistants.value = (response.data || []).filter((assistant: any) => assistant.enabled)
-    if (effectiveAssistantId.value) {
-      const assistant = assistants.value.find((item: any) => String(item.id) === String(effectiveAssistantId.value))
-      routeAssistantName.value = assistant?.name || 'AI 助手'
-      selectedAssistantId.value = effectiveAssistantId.value
-    } else if (assistants.value.length && !selectedAssistantId.value) {
-      selectedAssistantId.value = assistants.value[0].id
-    }
-    return loadConversations()
+    assistants.value = assistants.value.map((assistant: any) => ({
+      ...assistant,
+      id: String(assistant.id)
+    }))
+    assistantsLoaded.value = true
+    await syncRouteAssistant(true)
   }).catch(() => {
     ElMessage.error('加载 AI 助手失败，请刷新页面重试')
     loadingConversations.value = false
@@ -1222,18 +1249,41 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (elapsedClockTimer !== undefined) window.clearInterval(elapsedClockTimer)
 })
-watch(effectiveAssistantId, async (assistantId, previousId) => {
-  if (assistantId === previousId) return
-  selectedAssistantId.value = assistantId
-  routeAssistantName.value = ''
+const syncRouteAssistant = async (createNew: boolean) => {
+  const assistantId = routeSelectedAssistantId.value
+  if (assistantId) {
+    selectedAssistantId.value = String(assistantId)
+  } else {
+    if (!assistants.value.some((item: any) => String(item.id) === String(selectedAssistantId.value))) {
+      selectedAssistantId.value = assistants.value[0]?.id
+    }
+  }
+  saveScrollPosition()
   activeConversationId.value = null
   conversations.value = []
-  if (assistantId) {
-    const assistant = assistants.value.find((item: any) => String(item.id) === String(assistantId))
-    routeAssistantName.value = assistant?.name || 'AI 助手'
-  }
   await loadConversations()
-})
+  if (createNew && route.query.new === '1' && assistantId
+    && routeSelectedAssistantId.value === assistantId) {
+    await createConversation()
+    if (route.query.new === '1' && routeSelectedAssistantId.value === assistantId) {
+      const nextQuery = { ...route.query }
+      delete nextQuery.new
+      await router.replace({ query: nextQuery })
+    }
+  }
+}
+watch(
+  [routeSelectedAssistantId, () => route.query.new],
+  ([assistantId, newFlag], [previousAssistantId, previousNewFlag]) => {
+    if (!assistantsLoaded.value) return
+    const assistantChanged = assistantId !== previousAssistantId
+    const createRequested = newFlag === '1'
+      && (assistantChanged || previousNewFlag !== '1')
+    if (assistantChanged || createRequested) {
+      void syncRouteAssistant(createRequested)
+    }
+  }
+)
 onActivated(() => {
   const conversation = activeConversation.value
   if (conversation) void restoreConversationScroll(conversation)
@@ -1243,8 +1293,9 @@ onActivated(() => {
 <style scoped>
 .ai-chat-page {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
-  height: calc(100vh - 128px);
+  grid-template-columns: 224px minmax(0, 1fr);
+  transition: grid-template-columns .24s ease;
+  height: calc(100vh - 96px);
   min-height: 520px;
   overflow: hidden;
   border: 1px solid var(--chrome-line);
@@ -1253,15 +1304,20 @@ onActivated(() => {
   box-shadow: var(--shadow-soft);
   color: var(--ink-900);
 }
+.ai-chat-page.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
 
 .chat-sidebar {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
+  overflow: hidden;
   padding: 22px 14px 14px;
   border-right: 1px solid var(--chrome-line);
   background: var(--surface-soft);
+  transition: opacity .16s ease, padding .24s ease, border-color .24s ease;
 }
+.sidebar-collapsed .chat-sidebar { padding-right: 0; padding-left: 0; border-color: transparent; opacity: 0; pointer-events: none; }
 
 .sidebar-heading { display: flex; align-items: center; gap: 11px; padding: 0 7px 22px; }
 .brand-mark, .welcome-icon {
@@ -1298,7 +1354,13 @@ onActivated(() => {
 .chat-main { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .chat-header { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 26px; border-bottom: 1px solid var(--chrome-line); }
 .chat-header > div:first-child { min-width: 0; flex: 1; }
+.chat-heading { display: flex; align-items: center; gap: 10px; }
+.chat-heading-copy { min-width: 0; flex: 1; }
 .chat-title-row { display: flex; min-width: 0; align-items: center; gap: 4px; }
+.sidebar-toggle { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; transform: translateX(-8px); border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-soft); color: var(--teal-ink); box-shadow: var(--shadow-soft); cursor: pointer; transition: background .16s, color .16s, border-color .16s; }
+.sidebar-toggle .el-icon { font-size: 17px; font-weight: 700; }
+.sidebar-toggle:hover { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
+.sidebar-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .chat-title-row h1 { min-width: 0; }
 .rename-active-conversation { flex: 0 0 auto; padding: 4px; color: var(--ink-500); }
 .rename-active-conversation:hover { color: var(--teal-ink); }
@@ -1382,7 +1444,7 @@ onActivated(() => {
 .chat-header p { margin: 5px 0 0; color: var(--ink-500); font-size: 11px; }
 .model-badge { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--chrome-line); border-radius: 20px; color: var(--ink-700); font-size: 10px; }
 .model-badge span { width: 7px; height: 7px; border-radius: 50%; background: #35b98c; box-shadow: 0 0 0 3px rgba(53, 185, 140, .12); }
-.message-list { flex: 1; min-height: 0; overflow: auto; padding: 20px clamp(18px, 7vw, 88px); }
+.message-list { flex: 1; min-height: 0; overflow: auto; padding: 24px clamp(20px, 6vw, 96px); }
 .composer-wrap { position: relative; }
 .scroll-to-bottom { position: absolute; z-index: 2; bottom: calc(100% + 8px); left: 50%; width: 36px; height: 36px; transform: translateX(-50%); border-color: var(--chrome-line); background: var(--surface); color: var(--teal-ink); box-shadow: var(--shadow-soft); }
 .el-button.scroll-to-bottom:not(.is-text):not(.is-link):hover { transform: translateX(-50%); }
@@ -1402,7 +1464,7 @@ onActivated(() => {
 .suggestion-card:hover { transform: translateY(-1px); border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
 .suggestion-card span { font-size: 11px; line-height: 1.5; }
 .suggestion-card .el-icon { flex: 0 0 auto; color: var(--teal); font-size: 14px; }
-.message-thread { display: flex; max-width: 760px; flex-direction: column; gap: 28px; margin: 0 auto; }
+.message-thread { display: flex; max-width: 900px; flex-direction: column; gap: 30px; margin: 0 auto; }
 .message-row { display: flex; align-items: flex-start; gap: 12px; }
 .message-user { justify-content: flex-end; }
 .message-avatar { display: grid; flex: 0 0 auto; width: 30px; height: 30px; place-items: center; border: 1px solid var(--chrome-line); border-radius: 10px; background: var(--surface-soft); color: var(--ink-700); font-size: 15px; }
@@ -1415,7 +1477,7 @@ onActivated(() => {
 .reasoning-content { padding-top: 8px; color: var(--ink-900); font-size: 12px; line-height: 1.7; }
 
 .message-user .message-avatar { order: 2; }
-.message-user .message-content { flex: 0 1 auto; max-width: min(78%, 560px); }
+.message-user .message-content { flex: 0 1 auto; max-width: min(78%, 680px); }
 .message-author { margin-bottom: 7px; color: var(--ink-700); font-size: 11px; font-weight: 650; }
 .message-text { color: var(--ink-900); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message-markdown { white-space: normal; }
@@ -1483,7 +1545,7 @@ onActivated(() => {
 .source-copy small { color: var(--ink-500); font-size: 9px; }
 .source-card > .el-icon { color: var(--ink-500); font-size: 13px; }
 
-.composer-wrap { width: min(100% - 48px, 760px); margin: 0 auto; padding: 8px 0 13px; }
+.composer-wrap { width: min(100% - 48px, 900px); margin: 0 auto; padding: 8px 0 16px; }
 .composer { position: relative; padding: 11px 13px 9px; border: 1px solid var(--line-strong); border-radius: 13px; background: var(--surface); box-shadow: 0 5px 18px rgba(var(--teal-shadow-soft-rgb), .06); transition: border-color .18s, box-shadow .18s; }
 .composer:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px var(--focus-ring), 0 5px 18px rgba(var(--teal-shadow-soft-rgb), .06); }
 .slash-command-menu {
@@ -1548,7 +1610,7 @@ onActivated(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 800px) {
-  .ai-chat-page { grid-template-columns: 205px minmax(0, 1fr); height: calc(100vh - 105px); min-height: 460px; }
+  .ai-chat-page { grid-template-columns: 190px minmax(0, 1fr); height: calc(100vh - 88px); min-height: 460px; }
   .chat-sidebar { padding: 18px 10px 12px; }
   .message-list { padding-right: 22px; padding-left: 22px; }
   .composer-wrap { width: calc(100% - 36px); }
@@ -1556,13 +1618,14 @@ onActivated(() => {
 @media (max-width: 600px) {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
   .chat-sidebar { display: none; }
+  .sidebar-toggle { display: none; }
   .chat-header { min-height: 62px; padding: 12px 15px; }
   .header-actions { gap: 6px; }
   .assistant-manage-button { width: 32px; padding: 0; font-size: 0; }
   .assistant-manage-button :deep(.el-icon) { margin: 0; font-size: 14px; }
   .assistant-selector { width: 150px; }
   .chat-title-row h1 { max-width: 52vw; font-size: 13px; }
-  .chat-header p { font-size: 10px; }
+  .chat-header p { margin-left: 0; font-size: 10px; }
   .model-badge { padding: 6px 8px; font-size: 9px; }
   .mobile-new-chat { display: inline-flex; height: 29px; padding: 0 8px; border-radius: 7px; font-size: 10px; }
   .mobile-new-chat .el-icon { margin-right: 3px; }

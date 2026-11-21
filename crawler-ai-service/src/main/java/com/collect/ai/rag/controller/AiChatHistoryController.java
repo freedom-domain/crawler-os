@@ -135,8 +135,8 @@ public class AiChatHistoryController {
         query.setChatModelId(request.getChatModelId());
         Long assistantId = historyService.getAssistantId(userId, conversationId);
         if (assistantId != null) {
-            query.setKnowledgeBaseId(
-                    aiAssistantService.get(assistantId).getKnowledgeBaseId());
+            query.setKnowledgeBaseIds(
+                    aiAssistantService.get(assistantId).getKnowledgeBaseIds());
         }
         List<RagDtos.ChatHistoryMessage> context =
                 historyService.getSuccessfulContext(userId, conversationId);
@@ -171,8 +171,8 @@ public class AiChatHistoryController {
         query.setChatModelId(request.getChatModelId());
         Long streamingAssistantId = historyService.getAssistantId(userId, conversationId);
         if (streamingAssistantId != null) {
-            query.setKnowledgeBaseId(
-                    aiAssistantService.get(streamingAssistantId).getKnowledgeBaseId());
+            query.setKnowledgeBaseIds(
+                    aiAssistantService.get(streamingAssistantId).getKnowledgeBaseIds());
         }
         List<RagDtos.ChatHistoryMessage> context =
                 historyService.getSuccessfulContext(userId, conversationId);
