@@ -159,8 +159,10 @@ defineEmits<{
   width: 100%;
   height: 70vh;
   padding: 0;
+  background: #fff;
+  color: #333;
+  color-scheme: light;
   line-height: 1.8;
-  color: var(--preview-ink);
   word-break: break-word;
 }
 .preview-html img { max-width: 100%; height: auto; }

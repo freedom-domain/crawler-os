@@ -554,24 +554,40 @@
         <div class="source-preview-meta">
           <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
           <div class="source-preview-actions">
-            <el-button
+            <button
               v-if="sourceDocumentImages.length"
-              size="small"
+              type="button"
+              class="source-image-open-button"
               @click="openSourceImagePreview"
             >
               <el-icon><Picture /></el-icon>
-              预览图片（{{ sourceDocumentImages.length }}）
-            </el-button>
-            <a
-              v-if="safeSourceUrl(selectedSource.url)"
-              :href="safeSourceUrl(selectedSource.url)"
-              target="_blank"
-              rel="noopener noreferrer"
+              <span>图片预览</span>
+              <span class="source-image-count">{{ sourceDocumentImages.length }}</span>
+              <el-icon class="source-image-open-icon"><ArrowRight /></el-icon>
+            </button>
+            <button
+              v-if="selectedSource.sourceType !== 'UPLOAD'"
+              type="button"
+              class="source-image-open-button"
+              @click="openSourceSnapshotPreview"
             >
-              打开原文网页
-              <el-icon><Link /></el-icon>
-            </a>
+              <el-icon><Document /></el-icon>
+              <span>查看源码和快照</span>
+              <el-icon class="source-image-open-icon"><ArrowRight /></el-icon>
+            </button>
           </div>
+        </div>
+        <div v-if="sourcePreviewUrl" class="source-url-row">
+          <span class="source-url-label">来源链接</span>
+          <a
+            :href="sourcePreviewUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="sourcePreviewUrl"
+          >
+            {{ sourcePreviewUrl }}
+            <el-icon><Link /></el-icon>
+          </a>
         </div>
         <el-alert
           v-if="sourceOriginalError"
@@ -585,15 +601,30 @@
             v-for="(image, index) in sourceDocumentImages"
             :key="`${image}-${index}`"
             :src="sourceImageUrl(image)"
+            :preview-src-list="sourceDocumentImages.map(sourceImageUrl)"
+            :initial-index="index"
             fit="contain"
+            preview-teleported
             class="source-image-preview"
-            @click="openSourceImagePreview"
           />
         </div>
         <p v-if="sourceDocumentContent">{{ sourceDocumentContent }}</p>
         <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
       </div>
     </el-dialog>
+
+    <ContentPreviewDialog
+      v-model:visible="sourceSnapshotVisible"
+      :title="sourceSnapshotTitle"
+      :html="sourceSnapshotHtml"
+      :source="sourceSnapshotSource"
+      :loading="sourceSnapshotLoading"
+      :source-url="sourceSnapshotUrl"
+      v-model:localize="sourceSnapshotLocalize"
+      v-model:show-source="sourceSnapshotShowSource"
+      @localize-change="toggleSourceSnapshotLocalization"
+      @closed="closeSourceSnapshot"
+    />
 
   </div>
 </template>
@@ -608,11 +639,13 @@ import DOMPurify from 'dompurify'
 import {
   cancelChatMessage, chatConversationCreate, chatConversationDelete, chatConversationList,
   chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, getChatModels,
-  getChatSourceDocument, getChatSourceDocumentChunks, resumeChatMessageStream, streamChatMessage
+  getChatSourceDocument, getChatSourceDocumentChunks, resumeChatMessageStream, searchDetail, streamChatMessage
 } from '@/api'
+import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
+import { resolvePreviewHtml } from '@/utils/previewHtml'
 import {
   ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Moon, Plus,
-  Picture, Promotion, Refresh, Setting, Sunny, UserFilled
+  Document, Picture, Promotion, Refresh, Setting, Sunny, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
 
@@ -676,10 +709,23 @@ const sourcePreviewError = ref('')
 const sourceOriginalLoading = ref(false)
 const sourceOriginalError = ref('')
 const sourceDocumentContent = ref('')
+const sourceDocumentUrl = ref('')
 const sourceDocumentImages = ref<string[]>([])
+const sourceSnapshotVisible = ref(false)
+const sourceSnapshotLoading = ref(false)
+const sourceSnapshotTitle = ref('')
+const sourceSnapshotHtml = ref('')
+const sourceSnapshotSource = ref('')
+const sourceSnapshotUrl = ref('')
+const sourceSnapshotLocalize = ref(true)
+const sourceSnapshotShowSource = ref(false)
 const sourceChunks = ref<SourceChunk[]>([])
 const selectedSourceChunk = ref<SourceChunk | null>(null)
+const sourcePreviewUrl = computed(() =>
+  safeSourceUrl(sourceDocumentUrl.value) || safeSourceUrl(selectedSource.value?.url || '')
+)
 let sourcePreviewRequestId = 0
+let sourceSnapshotRequestId = 0
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
 const selectedAssistantId = ref<string | number | undefined>(undefined)
@@ -824,6 +870,7 @@ const openSourceOriginalPreview = async () => {
   sourceOriginalLoading.value = true
   sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
+  sourceDocumentUrl.value = ''
   sourceDocumentImages.value = []
   sourceOriginalPreviewVisible.value = true
   try {
@@ -832,6 +879,7 @@ const openSourceOriginalPreview = async () => {
     )
     if (requestId !== sourcePreviewRequestId) return
     sourceDocumentContent.value = response?.data?.content || ''
+    sourceDocumentUrl.value = response?.data?.url || ''
     sourceDocumentImages.value = Array.isArray(response?.data?.images)
       ? response.data.images.filter((image: unknown): image is string => typeof image === 'string' && image.trim().length > 0)
       : []
@@ -856,6 +904,7 @@ const closeSourcePreview = () => {
   sourceOriginalLoading.value = false
   sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
+  sourceDocumentUrl.value = ''
   sourceDocumentImages.value = []
   sourcePreviewFullscreen.value = false
   sourceOriginalFullscreen.value = false
@@ -882,6 +931,51 @@ const openSourceImagePreview = () => {
   })
   const win = window.open(`/image-preview?${query.toString()}`, '_blank')
   if (!win) ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
+}
+const openSourceSnapshotPreview = async () => {
+  const source = selectedSource.value
+  if (!source) return
+  const requestId = ++sourceSnapshotRequestId
+  sourceSnapshotVisible.value = true
+  sourceSnapshotLoading.value = true
+  sourceSnapshotTitle.value = source.title || '内容预览'
+  sourceSnapshotHtml.value = ''
+  sourceSnapshotSource.value = ''
+  sourceSnapshotUrl.value = ''
+  sourceSnapshotLocalize.value = true
+  sourceSnapshotShowSource.value = false
+  try {
+    const response: any = await searchDetail(source.id)
+    if (requestId !== sourceSnapshotRequestId) return
+    const data = response?.data
+    if (!data) throw new Error('未找到来源快照')
+    const rawHtml = data.rawHtml || data.content || '无原始内容'
+    sourceSnapshotSource.value = rawHtml
+    sourceSnapshotUrl.value = safeSourceUrl(data.url || source.url)
+    sourceSnapshotHtml.value = resolvePreviewHtml(
+      rawHtml, sourceSnapshotUrl.value, sourceSnapshotLocalize.value
+    )
+  } catch (error) {
+    if (requestId !== sourceSnapshotRequestId) return
+    sourceSnapshotHtml.value = '加载失败'
+    sourceSnapshotSource.value = '加载失败'
+    ElMessage.error(error instanceof Error ? error.message : '读取源码和快照失败')
+  } finally {
+    if (requestId === sourceSnapshotRequestId) sourceSnapshotLoading.value = false
+  }
+}
+const toggleSourceSnapshotLocalization = (enabled: string | number | boolean) => {
+  if (!sourceSnapshotSource.value || sourceSnapshotSource.value === '加载失败') return
+  sourceSnapshotHtml.value = resolvePreviewHtml(
+    sourceSnapshotSource.value, sourceSnapshotUrl.value, Boolean(enabled)
+  )
+}
+const closeSourceSnapshot = () => {
+  sourceSnapshotRequestId++
+  sourceSnapshotLoading.value = false
+  sourceSnapshotHtml.value = ''
+  sourceSnapshotSource.value = ''
+  sourceSnapshotUrl.value = ''
 }
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
@@ -1950,7 +2044,17 @@ onActivated(() => {
 .source-dialog-actions :deep(.el-icon) { font-size: 16px; }
 .source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .source-preview-actions { display: flex; align-items: center; gap: 12px; }
-.source-preview-meta a { display: inline-flex; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; }
+.source-url-row { display: flex; min-width: 0; align-items: baseline; gap: 10px; padding: 9px 11px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); }
+.source-url-label { flex: 0 0 auto; color: var(--ink-500); font-size: 11px; font-weight: 600; }
+.source-url-row a { display: inline-flex; min-width: 0; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; overflow-wrap: anywhere; }
+.source-url-row a:hover { text-decoration: underline; }
+.source-image-open-button { display: inline-flex; height: 32px; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--teal-tint-border); border-radius: 8px; background: var(--teal-tint-bg); color: var(--teal-tint-text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .16s, background .16s, box-shadow .16s; }
+.source-image-open-button:hover { border-color: var(--teal); background: var(--teal-tint-bg-strong); color: var(--teal-tint-text-strong, var(--teal-tint-text)); box-shadow: 0 0 0 2px var(--focus-ring), 0 3px 10px rgba(var(--teal-shadow-soft-rgb), .12); }
+.source-image-open-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.source-image-count { display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 6px; background: var(--teal-tint-chip); font-size: 10px; }
+.source-image-open-icon { margin-left: 1px; opacity: .7; }
+.source-preview-meta a { display: inline-flex; min-width: 0; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; overflow-wrap: anywhere; }
+.source-preview-meta a span { min-width: 0; overflow-wrap: anywhere; }
 .source-preview-meta a:hover { text-decoration: underline; }
 .source-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .source-image-preview { width: 100%; height: 180px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); cursor: zoom-in; }
