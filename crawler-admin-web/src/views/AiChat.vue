@@ -136,7 +136,7 @@
               <details
                 v-if="message.role === 'assistant' && (message.reasoningText || message.thinkingDurationMs !== undefined)"
                 class="reasoning-block"
-                open
+                :open="message.pending"
               >
                 <summary>
                   <span class="reasoning-summary-title">模型思考过程</span>
