@@ -246,7 +246,10 @@
                 class="message-text message-markdown"
                 :class="{ 'is-error': message.error }"
               >
-                <div v-html="renderMarkdown(displayMessageText(message))" />
+                <div
+                  v-html="renderAnswerMarkdown(message)"
+                  @click="handleAnswerCitationClick($event, message)"
+                />
                 <span v-if="message.pending" class="loading-dots" aria-hidden="true">
                   <i v-for="dot in 3" :key="dot" />
                 </span>
@@ -308,7 +311,7 @@
                 </el-button>
               </div>
               <span v-if="message.status === 'CANCELLED'" class="message-status-cancelled">已中断生成</span>
-              <div v-if="message.sources?.length" class="source-list">
+              <div v-if="message.sources?.length && !hasInlineSourceCitations(message)" class="source-list">
                 <div class="source-heading"><el-icon><Link /></el-icon>参考来源 <span>{{ message.sources.length }}</span></div>
                 <button
                   v-for="(source, sourceIndex) in message.sources"
@@ -879,10 +882,32 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: false
 })
+markdown.inline.ruler.before('link', 'source_citation', (state, silent) => {
+  const match = /^\[(\d+)\]/.exec(state.src.slice(state.pos))
+  if (!match) return false
+  if (!silent) {
+    const token = state.push('source_citation', '', 0)
+    token.meta = { index: Number(match[1]) - 1 }
+    token.content = match[0]
+  }
+  state.pos += match[0].length
+  return true
+})
 markdown.renderer.rules.link_open = (tokens, index, options, environment, renderer) => {
   tokens[index].attrSet('target', '_blank')
   tokens[index].attrSet('rel', 'noopener noreferrer')
   return renderer.renderToken(tokens, index, options)
+}
+markdown.renderer.rules.source_citation = (tokens, index, _options, environment) => {
+  const sourceIndex: unknown = tokens[index].meta?.index
+  const sourceCount = Number(environment?.sourceCount) || 0
+  if (typeof sourceIndex !== 'number'
+      || !Number.isInteger(sourceIndex)
+      || sourceIndex < 0
+      || sourceIndex >= sourceCount) {
+    return markdown.utils.escapeHtml(tokens[index].content)
+  }
+  return `<a class="source-citation" href="#" data-source-index="${sourceIndex}" aria-label="查看参考来源 ${sourceIndex + 1}" title="查看参考来源 ${sourceIndex + 1}">[${sourceIndex + 1}]</a>`
 }
 
 const loadConversations = async () => {
@@ -1099,6 +1124,22 @@ const displayMessageText = (message: ChatMessage) =>
   message.role === 'assistant' ? message.text.trimStart() : message.text
 
 const renderMarkdown = (text: string) => DOMPurify.sanitize(markdown.render(text))
+const renderAnswerMarkdown = (message: ChatMessage) => DOMPurify.sanitize(
+  markdown.render(displayMessageText(message), { sourceCount: message.sources?.length || 0 })
+)
+const hasInlineSourceCitations = (message: ChatMessage) =>
+  Boolean(message.sources?.length && [...message.text.matchAll(/\[(\d+)\]/g)]
+    .some(([, number]) => Number(number) > 0 && Number(number) <= message.sources!.length))
+const handleAnswerCitationClick = (event: MouseEvent, message: ChatMessage) => {
+  const target = event.target
+  const container = event.currentTarget
+  if (!(target instanceof Element) || !(container instanceof HTMLElement)) return
+  const citation = target.closest<HTMLAnchorElement>('.source-citation')
+  if (!citation || !container.contains(citation)) return
+  event.preventDefault()
+  const source = message.sources?.[Number(citation.dataset.sourceIndex)]
+  if (source) openSourcePreview(source)
+}
 const loadingMessageText = '正在检索知识库并整理回答'
 const resetSlashCommandSelection = () => {
   activeSlashCommandIndex.value = 0
@@ -1827,6 +1868,8 @@ onActivated(() => {
 .source-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; color: var(--ink-700); font-size: 10px; font-weight: 650; }
 .source-heading .el-icon { color: var(--teal); }
 .source-heading span { color: var(--ink-500); font-weight: 400; }
+.message-markdown :deep(.source-citation) { display: inline-block; margin: 0 2px; color: var(--teal-ink); font-size: .82em; font-weight: 650; text-decoration: none; vertical-align: super; }
+.message-markdown :deep(.source-citation:hover) { text-decoration: underline; }
 .source-card { display: flex; width: 100%; min-width: 0; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface); color: inherit; text-align: left; cursor: pointer; transition: border-color .16s, background .16s; }
 .source-card:hover, .source-card:focus-visible { border-color: var(--teal); background: var(--surface-soft); }
 .source-card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

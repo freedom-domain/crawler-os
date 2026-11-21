@@ -1075,9 +1075,11 @@ public class RagService {
         sources.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
         if (sources.size() > topK) sources = new ArrayList<>(sources.subList(0, topK));
         StringBuilder context = new StringBuilder();
-        for (RagDtos.SourceReference ref : sources) {
+        for (int i = 0; i < sources.size(); i++) {
+            RagDtos.SourceReference ref = sources.get(i);
             String text = ref.getSnippet();
-            context.append("标题：").append(ref.getTitle()).append("\n")
+            context.append("参考资料 [").append(i + 1).append("]\n")
+                    .append("标题：").append(ref.getTitle()).append("\n")
                     .append("来源：").append(ref.getUrl()).append("\n")
                     .append("内容：").append(text).append("\n\n");
         }
@@ -1374,7 +1376,10 @@ public class RagService {
                 .put("role", "system")
                 .put("content", hasContext
                         ? "你是一个只依据提供资料回答问题的中文助手。"
-                                + "如果资料不足，请明确说明不能确定，不要编造。回答时可引用资料标题或来源。"
+                                + "如果资料不足，请明确说明不能确定，不要编造。"
+                                + "回答中的每个事实性段落都要在相关内容后标注对应资料编号，格式为 [1]；"
+                                + "若有多个来源支持，可连续标注 [1][2]。编号必须来自提供的参考资料，"
+                                + "不要把所有引用统一放到答案末尾。"
                         : "你是一个友好的中文助手，请结合当前对话历史直接、准确地回答用户问题。");
         if (history != null) {
             for (RagDtos.ChatHistoryMessage item : history) {
