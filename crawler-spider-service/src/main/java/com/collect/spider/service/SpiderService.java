@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.support.CronExpression;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -64,6 +65,7 @@ public class SpiderService {
 
     @SuppressWarnings("null")
     public Spider create(SpiderCreateReq req) {
+        validateSchedule(req.getSchedule());
         String name = req.getName().trim();
         Spider exist = spiderMapper.selectOne(
                 new LambdaQueryWrapper<Spider>().eq(Spider::getName, name));
@@ -212,6 +214,7 @@ public class SpiderService {
     }
 
     public void update(Long id, SpiderUpdateReq req) {
+        validateSchedule(req.getSchedule());
         Spider exist = spiderMapper.selectById(id);
         if (exist == null) {
             throw new BizException("爬虫不存在");
@@ -271,9 +274,21 @@ public class SpiderService {
         if (spider.getSchedule() == null || spider.getSchedule().isBlank()) {
             throw new BizException("请先设置调度表达式后再启动定时任务");
         }
+        validateSchedule(spider.getSchedule());
         spider.setStatus(1);
         spider.setEnabled(1);
         spiderMapper.updateById(spider);
+    }
+
+    private static void validateSchedule(String schedule) {
+        if (schedule == null || schedule.isBlank()) {
+            return;
+        }
+        try {
+            CronExpression.parse(schedule.trim());
+        } catch (IllegalArgumentException e) {
+            throw new BizException("调度表达式无效，请检查 Cron 格式");
+        }
     }
 
     public void stop(Long id) {
