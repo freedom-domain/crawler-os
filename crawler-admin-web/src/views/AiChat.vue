@@ -31,9 +31,24 @@
           <el-icon><ChatDotRound /></el-icon>
           <span class="conversation-title">{{ conversation.title }}</span>
           <span
+            class="rename-conversation"
+            role="button"
+            tabindex="0"
+            title="重命名对话"
+            aria-label="重命名对话"
+            @click.stop="renameConversation(conversation)"
+            @keydown.enter.stop="renameConversation(conversation)"
+            @keydown.space.prevent.stop="renameConversation(conversation)"
+          ><el-icon><EditPen /></el-icon></span>
+          <span
             class="delete-conversation"
+            role="button"
+            tabindex="0"
             title="删除对话"
+            aria-label="删除对话"
             @click.stop="deleteConversation(conversation.id)"
+            @keydown.enter.stop="deleteConversation(conversation.id)"
+            @keydown.space.prevent.stop="deleteConversation(conversation.id)"
           ><el-icon><Delete /></el-icon></span>
         </button>
       </div>
@@ -53,7 +68,19 @@
     <section class="chat-main">
       <header class="chat-header">
         <div>
-          <h1>{{ routeAssistantName || activeConversation?.title || 'AI 知识库助手' }}</h1>
+          <div class="chat-title-row">
+            <h1>{{ routeAssistantName || activeConversation?.title || 'AI 知识库助手' }}</h1>
+            <el-button
+              v-if="activeConversation"
+              class="rename-active-conversation"
+              link
+              aria-label="重命名当前对话"
+              title="重命名当前对话"
+              @click="renameConversation(activeConversation)"
+            >
+              <el-icon><EditPen /></el-icon>
+            </el-button>
+          </div>
           <p>{{ routeAssistantName ? '当前助手的专属聊天会话' : '向已收录的内容提问，答案附带相关来源' }}</p>
         </div>
         <div class="header-actions">
@@ -63,7 +90,7 @@
             size="small"
             placeholder="选择助手"
             popper-class="assistant-select-popper"
-            @change="createConversation"
+            @change="switchAssistant"
             v-if="!effectiveAssistantId"
           >
             <el-option
@@ -134,21 +161,24 @@
             <div class="message-content">
               <div v-if="message.role === 'assistant'" class="message-author">CrawlerOS AI</div>
               <details
-                v-if="message.role === 'assistant' && (message.reasoningText || message.thinkingDurationMs !== undefined)"
+                v-if="message.role === 'assistant' && (message.reasoningText || message.waitDurationMs != null || message.thinkingDurationMs != null)"
                 class="reasoning-block"
                 :open="message.pending"
               >
                 <summary>
-                  <span class="reasoning-summary-title">模型思考过程</span>
+                  <span class="reasoning-summary-title">模型处理时间</span>
                   <span class="reasoning-summary-content">
+                    <span v-if="message.waitDurationMs != null" class="reasoning-duration">
+                      首响应等待 {{ formatDuration(message.waitDurationMs) }}
+                    </span>
+                    <span v-if="message.thinkingDurationMs != null" class="reasoning-duration">
+                      实际思考 {{ formatDuration(message.thinkingDurationMs) }}
+                    </span>
                     <span v-if="message.reasoningText" class="reasoning-duration">
                       {{ formatTokenCount(countCharacters(message.reasoningText)) }} 字
                     </span>
                     <span v-if="message.reasoningText" class="reasoning-duration">
                       约 {{ formatTokenCount(estimateTokens(message.reasoningText)) }} Token
-                    </span>
-                    <span v-if="message.thinkingDurationMs !== undefined" class="reasoning-duration">
-                      {{ formatDuration(message.thinkingDurationMs) }}
                     </span>
                     <span
                       v-if="message.thinkingDurationMs && message.thinkingDurationMs > 0 && message.reasoningText"
@@ -180,14 +210,26 @@
                 </span>
               </div>
               <div v-else class="message-text">
-                <el-icon v-if="message.pending" class="thinking-icon"><Loading /></el-icon>
-                {{ message.text }}
+                <div class="user-message-bubble">
+                  <el-icon v-if="message.pending" class="thinking-icon"><Loading /></el-icon>
+                  {{ message.text }}
+                </div>
               </div>
+              <el-button
+                v-if="message.role === 'user' && message.text"
+                class="copy-user-message-button"
+                link
+                aria-label="复制消息"
+                title="复制消息"
+                @click="copyMessage(message.text, '消息已复制')"
+              >
+                <el-icon><DocumentCopy /></el-icon>
+              </el-button>
               <div v-if="message.role === 'assistant' && message.status === 'SUCCESS'" class="message-stats">
                 <span v-if="message.generationDurationMs !== undefined">
-                  {{ formatDuration(message.generationDurationMs) }}
+                  回答生成 {{ formatDuration(message.generationDurationMs) }}
                 </span>
-                <span v-else-if="message.durationMs !== undefined">
+                <span v-if="message.durationMs !== undefined">
                   总耗时 {{ formatDuration(message.durationMs) }}
                 </span>
                 <span>{{ formatTokenCount(countCharacters(message.text)) }} 字</span>
@@ -355,15 +397,15 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import {
   cancelChatMessage, chatContextWindow, chatConversationCreate, chatConversationDelete, chatConversationList,
-  chatMessages, clearChatMessages, getChatAssistants, resumeChatMessageStream, streamChatMessage
+  chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, Help, Link, Loading, MagicStick, Plus,
+  ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, Help, Link, Loading, MagicStick, Plus,
   Promotion, Refresh, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
@@ -388,6 +430,7 @@ interface ChatMessage {
   sources?: SourceReference[]
   generationStartedAt?: number
   durationMs?: number
+  waitDurationMs?: number
   thinkingDurationMs?: number
   generationDurationMs?: number
 }
@@ -469,10 +512,10 @@ const formatDuration = (durationMs: number) =>
   durationMs >= 1000 ? `耗时 ${(durationMs / 1000).toFixed(1)} 秒` : `耗时 ${Math.round(durationMs)} 毫秒`
 const formatTokenRate = (content: string, durationMs: number) =>
   `约 ${(estimateTokens(content) * 1000 / durationMs).toFixed(1)} Token/秒`
-const copyMessage = async (content: string) => {
+const copyMessage = async (content: string, successMessage = '回答已复制') => {
   try {
     await navigator.clipboard.writeText(content)
-    ElMessage.success('回答已复制')
+    ElMessage.success(successMessage)
   } catch {
     ElMessage.error('复制失败，请检查浏览器剪贴板权限')
   }
@@ -513,6 +556,7 @@ const creatingConversation = ref(false)
 const loadingConversations = ref(true)
 const loadingMessages = ref(false)
 const historyError = ref('')
+let conversationLoadRequestId = 0
 const markdown = new MarkdownIt({
   breaks: true,
   html: false,
@@ -526,12 +570,15 @@ markdown.renderer.rules.link_open = (tokens, index, options, environment, render
 }
 
 const loadConversations = async () => {
+  const requestId = ++conversationLoadRequestId
+  const assistantId = effectiveAssistantId.value || selectedAssistantId.value
   loadingConversations.value = true
   historyError.value = ''
   let selectedConversation: Conversation | undefined
   try {
-    const response: any = await chatConversationList(effectiveAssistantId.value || selectedAssistantId.value)
+    const response: any = await chatConversationList(assistantId)
     if (!response) return
+    if (requestId !== conversationLoadRequestId) return
     conversations.value = (response.data || []).map((item: any) => ({
       id: item.id,
       title: item.title,
@@ -543,11 +590,14 @@ const loadConversations = async () => {
     activeConversationId.value = selectedConversation?.id ?? null
     if (selectedConversation) await loadMessages(selectedConversation)
   } catch (error) {
+    if (requestId !== conversationLoadRequestId) return
     historyError.value = error instanceof Error ? error.message : '加载聊天记录失败'
   } finally {
-    loadingConversations.value = false
+    if (requestId === conversationLoadRequestId) loadingConversations.value = false
   }
-  if (selectedConversation?.messagesLoaded) await restoreConversationScroll(selectedConversation)
+  if (requestId === conversationLoadRequestId && selectedConversation?.messagesLoaded) {
+    await restoreConversationScroll(selectedConversation)
+  }
 }
 
 const loadContextWindow = async () => {
@@ -584,7 +634,8 @@ const loadMessages = async (conversation: Conversation) => {
       error: item.status === 'FAILED',
       sources: item.sources || [],
       durationMs: item.durationMs,
-      thinkingDurationMs: item.thinkingDurationMs,
+      waitDurationMs: item.waitDurationMs ?? undefined,
+      thinkingDurationMs: item.thinkingDurationMs ?? undefined,
       generationDurationMs: item.generationDurationMs
     }))
     conversation.messagesLoaded = true
@@ -633,6 +684,45 @@ const createConversation = async () => {
     historyError.value = error instanceof Error ? error.message : '创建对话失败'
   } finally {
     creatingConversation.value = false
+  }
+}
+
+const switchAssistant = async (assistantId: string | number) => {
+  selectedAssistantId.value = assistantId
+  saveScrollPosition()
+  activeConversationId.value = null
+  conversations.value = []
+  await loadConversations()
+}
+
+const renameConversation = async (conversation: Conversation) => {
+  let title: string
+  try {
+    const result = await ElMessageBox.prompt('请输入新的对话名称', '重命名对话', {
+      inputValue: conversation.title,
+      inputPlaceholder: '对话名称',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputValidator: value => {
+        if (!value?.trim()) return '对话名称不能为空'
+        return value.trim().length <= 160 || '对话名称不能超过 160 个字符'
+      }
+    })
+    title = result.value.trim()
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error instanceof Error ? error.message : '打开重命名窗口失败')
+    return
+  }
+  if (!title || title === conversation.title) return
+  historyError.value = ''
+  try {
+    const response: any = await chatConversationRename(conversation.id, title)
+    if (!response) return
+    conversation.title = response.data.title
+    ElMessage.success('对话名称已更新')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '重命名对话失败')
   }
 }
 
@@ -893,8 +983,9 @@ const consumeChatStream = async (response: Response, message: ChatMessage, conve
       message.pending = false
       message.error = payload.status === 'FAILED'
       message.sources = payload.sources || []
+      message.waitDurationMs = payload.waitDurationMs ?? undefined
       if (payload.status === 'SUCCESS') {
-        message.thinkingDurationMs = payload.thinkingDurationMs
+        message.thinkingDurationMs = payload.thinkingDurationMs ?? undefined
         message.generationDurationMs = payload.generationDurationMs
         const elapsedMs = message.generationStartedAt === undefined
           ? undefined
@@ -1058,7 +1149,6 @@ const sendMessage = async (questionOverride?: string) => {
 
 onMounted(() => {
   if (effectiveAssistantId.value) selectedAssistantId.value = effectiveAssistantId.value
-  void loadConversations()
   void loadContextWindow()
   void getChatAssistants().then((response: any) => {
     assistants.value = (response.data || []).filter((assistant: any) => assistant.enabled)
@@ -1069,8 +1159,10 @@ onMounted(() => {
     } else if (assistants.value.length && !selectedAssistantId.value) {
       selectedAssistantId.value = assistants.value[0].id
     }
+    return loadConversations()
   }).catch(() => {
     ElMessage.error('加载 AI 助手失败，请刷新页面重试')
+    loadingConversations.value = false
   })
 })
 watch(effectiveAssistantId, async (assistantId, previousId) => {
@@ -1135,8 +1227,10 @@ onActivated(() => {
 .conversation-item:hover, .conversation-item.is-active { background: var(--tint); color: var(--teal-ink); }
 .conversation-item > .el-icon { flex: 0 0 auto; font-size: 15px; }
 .conversation-title { flex: 1; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.delete-conversation { display: grid; flex: 0 0 auto; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: var(--ink-500); opacity: 0; }
-.conversation-item:hover .delete-conversation, .conversation-item.is-active .delete-conversation { opacity: 1; }
+.rename-conversation, .delete-conversation { display: grid; flex: 0 0 auto; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: var(--ink-500); opacity: 0; }
+.conversation-item:hover .rename-conversation, .conversation-item:hover .delete-conversation,
+.conversation-item.is-active .rename-conversation, .conversation-item.is-active .delete-conversation { opacity: 1; }
+.rename-conversation:hover { background: var(--chrome-hover); color: var(--teal-ink); }
 .delete-conversation:hover { background: var(--ctx-danger-bg); color: var(--ctx-danger-ink); }
 .history-empty { padding: 12px 8px; color: var(--ink-500); font-size: 11px; }
 .history-error { display: grid; gap: 5px; padding: 8px; color: var(--action-danger-ink); font-size: 10px; overflow-wrap: anywhere; }
@@ -1147,6 +1241,10 @@ onActivated(() => {
 .chat-main { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .chat-header { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 26px; border-bottom: 1px solid var(--chrome-line); }
 .chat-header > div:first-child { min-width: 0; flex: 1; }
+.chat-title-row { display: flex; min-width: 0; align-items: center; gap: 4px; }
+.chat-title-row h1 { min-width: 0; }
+.rename-active-conversation { flex: 0 0 auto; padding: 4px; color: var(--ink-500); }
+.rename-active-conversation:hover { color: var(--teal-ink); }
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
 .assistant-selector { width: 220px; }
 .assistant-selector :deep(.el-select__selection), .assistant-selector :deep(.el-select__selected-item) { min-width: 0; }
@@ -1212,8 +1310,11 @@ onActivated(() => {
 .message-markdown :deep(a) { color: var(--teal-ink); text-decoration: underline; }
 .message-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 .message-markdown :deep(th), .message-markdown :deep(td) { padding: 6px 10px; border: 1px solid var(--chrome-line); text-align: left; }
-.message-user .message-content { padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: var(--surface-soft); }
+.message-user .message-content { padding: 0; }
+.message-user .user-message-bubble { padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: var(--surface-soft); }
 .message-user .message-author { margin-bottom: 3px; text-align: right; }
+.copy-user-message-button { display: flex; width: 20px; height: 20px; margin: 4px 4px 0 auto; padding: 0; color: var(--ink-500); font-size: 12px; }
+.copy-user-message-button:hover { color: var(--teal-ink); }
 .message-text.is-pending-indicator { color: var(--ink-500); }
 .loading-dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; vertical-align: baseline; }
 .loading-dots i {
@@ -1330,7 +1431,7 @@ onActivated(() => {
   .chat-sidebar { display: none; }
   .chat-header { min-height: 62px; padding: 12px 15px; }
   .assistant-selector { width: 150px; }
-  .chat-header h1 { max-width: 52vw; font-size: 13px; }
+  .chat-title-row h1 { max-width: 52vw; font-size: 13px; }
   .chat-header p { font-size: 10px; }
   .model-badge { padding: 6px 8px; font-size: 9px; }
   .mobile-new-chat { display: inline-flex; height: 29px; padding: 0 8px; border-radius: 7px; font-size: 10px; }

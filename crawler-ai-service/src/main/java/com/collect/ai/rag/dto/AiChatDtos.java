@@ -28,6 +28,11 @@ public final class AiChatDtos {
     }
 
     @Data
+    public static class RenameConversationRequest {
+        private String title;
+    }
+
+    @Data
     public static class ContextWindowResponse {
         private int contextLength;
     }
@@ -39,6 +44,7 @@ public final class AiChatDtos {
         private String content;
         private String reasoningContent;
         private Long durationMs;
+        private Long waitDurationMs;
         private Long thinkingDurationMs;
         private Long generationDurationMs;
         private String status;

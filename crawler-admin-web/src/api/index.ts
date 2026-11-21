@@ -113,6 +113,8 @@ export const chatConversationCreate = (assistantId?: string | number) =>
     ...chatRequestConfig,
     params: assistantId ? { assistantId } : undefined
   })
+export const chatConversationRename = (id: number, title: string) =>
+  request.put(`/ai/chat/conversations/${id}`, { title }, chatRequestConfig)
 export const chatConversationDelete = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}`, chatRequestConfig)
 export const chatMessages = (id: number) =>

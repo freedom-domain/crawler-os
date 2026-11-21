@@ -57,8 +57,11 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class RagService {
 
+    private static final String NO_RETRIEVED_RECORDS_ANSWER =
+            "当前知识库中没有检索到相关记录，请调整问题或先添加相关知识库文档。";
+
     private record StreamingChatResult(
-            String answer, long thinkingDurationMs, long generationDurationMs) {
+            String answer, long waitDurationMs, Long thinkingDurationMs, long generationDurationMs) {
     }
 
     private final RagProperties properties;
@@ -950,11 +953,11 @@ public class RagService {
                             new LambdaQueryWrapper<Spider>().eq(Spider::getIsPublic, 1))
                     .stream().map(Spider::getId).toList();
             if (publicSpiderIds.isEmpty()) {
-                return emptyQueryResponse(request.getQuestion(), rag, history, tokenConsumer);
+                return emptyQueryResponse(rag, tokenConsumer);
             }
             if (request.getSpiderId() != null
                     && !publicSpiderIds.contains(request.getSpiderId())) {
-                return emptyQueryResponse(request.getQuestion(), rag, history, tokenConsumer);
+                return emptyQueryResponse(rag, tokenConsumer);
             }
             ArrayNode publicValues = objectMapper.createArrayNode();
             publicSpiderIds.forEach(publicValues::add);
@@ -971,7 +974,7 @@ public class RagService {
                                     .eq(Spider::getGroup, request.getSpiderGroup()))
                     .stream().map(Spider::getId).toList();
             if (spiderIds.isEmpty()) {
-                return emptyQueryResponse(request.getQuestion(), rag, history, tokenConsumer);
+                return emptyQueryResponse(rag, tokenConsumer);
             }
             ArrayNode values = objectMapper.createArrayNode();
             spiderIds.forEach(values::add);
@@ -1032,6 +1035,10 @@ public class RagService {
                     .append("内容：").append(text).append("\n\n");
         }
 
+        if (sources.isEmpty()) {
+            return emptyQueryResponse(rag, tokenConsumer);
+        }
+
         StreamingChatResult streamingResult = tokenConsumer == null ? null
                 : createStreamingChatAnswer(
                         request.getQuestion(), context.toString(), history, tokenConsumer, reasoningConsumer);
@@ -1041,6 +1048,7 @@ public class RagService {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
         if (streamingResult != null) {
+            response.setWaitDurationMs(streamingResult.waitDurationMs());
             response.setThinkingDurationMs(streamingResult.thinkingDurationMs());
             response.setGenerationDurationMs(streamingResult.generationDurationMs());
         }
@@ -1276,19 +1284,33 @@ public class RagService {
                 body.putObject("options").put("num_ctx", rag.getContextLength());
             }
             long startNanos = System.nanoTime();
+            AtomicLong firstOutputNanos = new AtomicLong();
+            AtomicLong firstReasoningNanos = new AtomicLong();
             AtomicLong firstTokenNanos = new AtomicLong();
             Consumer<String> timedTokenConsumer = token -> {
-                firstTokenNanos.compareAndSet(0, System.nanoTime());
+                long now = System.nanoTime();
+                firstOutputNanos.compareAndSet(0, now);
+                firstTokenNanos.compareAndSet(0, now);
                 tokenConsumer.accept(token);
             };
-            streamChatRequest(path, body, timedTokenConsumer, reasoningConsumer);
+            Consumer<String> timedReasoningConsumer = reasoning -> {
+                firstOutputNanos.compareAndSet(0, System.nanoTime());
+                firstReasoningNanos.compareAndSet(0, System.nanoTime());
+                if (reasoningConsumer != null) reasoningConsumer.accept(reasoning);
+            };
+            streamChatRequest(path, body, timedTokenConsumer, timedReasoningConsumer);
             long completedNanos = System.nanoTime();
             long firstToken = firstTokenNanos.get();
-            long thinkingEnd = firstToken == 0 ? completedNanos : firstToken;
-            long thinkingDurationMs = Duration.ofNanos(thinkingEnd - startNanos).toMillis();
+            long firstOutput = firstOutputNanos.get();
+            long firstReasoning = firstReasoningNanos.get();
+            long waitEnd = firstOutput == 0 ? completedNanos : firstOutput;
+            long waitDurationMs = Duration.ofNanos(waitEnd - startNanos).toMillis();
+            Long thinkingDurationMs = firstReasoning == 0 ? null
+                    : Duration.ofNanos(Math.max(0,
+                            (firstToken == 0 ? completedNanos : firstToken) - firstReasoning)).toMillis();
             long generationDurationMs = firstToken == 0 ? 0
                     : Duration.ofNanos(completedNanos - firstToken).toMillis();
-            return new StreamingChatResult("", thinkingDurationMs, generationDurationMs);
+            return new StreamingChatResult("", waitDurationMs, thinkingDurationMs, generationDurationMs);
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("调用聊天模型失败: " + e.getMessage(), e);
@@ -1638,20 +1660,10 @@ public class RagService {
     }
 
     private RagDtos.QueryResponse emptyQueryResponse(
-            String question,
-            RagProperties.Rag rag,
-            List<RagDtos.ChatHistoryMessage> history,
-            Consumer<String> tokenConsumer) {
+            RagProperties.Rag rag, Consumer<String> tokenConsumer) {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
-        if (tokenConsumer == null) {
-            response.setAnswer(createChatAnswer(question, "", history));
-        } else {
-            StreamingChatResult streamingResult =
-                    createStreamingChatAnswer(question, "", history, tokenConsumer, null);
-            response.setAnswer(streamingResult.answer());
-            response.setThinkingDurationMs(streamingResult.thinkingDurationMs());
-            response.setGenerationDurationMs(streamingResult.generationDurationMs());
-        }
+        response.setAnswer(NO_RETRIEVED_RECORDS_ANSWER);
+        if (tokenConsumer != null) tokenConsumer.accept(NO_RETRIEVED_RECORDS_ANSWER);
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
         response.setVectorIndex(properties.resolveVectorIndex());

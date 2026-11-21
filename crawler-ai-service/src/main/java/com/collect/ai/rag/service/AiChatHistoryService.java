@@ -55,6 +55,22 @@ public class AiChatHistoryService {
         return toConversationResponse(conversation);
     }
 
+    public AiChatDtos.ConversationResponse renameConversation(
+            Long userId, Long conversationId, String title) {
+        if (title == null || title.isBlank()) {
+            throw new BizException("对话名称不能为空");
+        }
+        String normalizedTitle = title.trim();
+        if (normalizedTitle.length() > 160) {
+            throw new BizException("对话名称不能超过 160 个字符");
+        }
+        AiChatConversation conversation = findOwnedConversation(userId, conversationId);
+        conversation.setTitle(normalizedTitle);
+        conversation.setUpdatedAt(LocalDateTime.now());
+        conversationMapper.updateById(conversation);
+        return toConversationResponse(conversation);
+    }
+
     public List<AiChatDtos.MessageResponse> listMessages(Long userId, Long conversationId) {
         requireOwnedConversation(userId, conversationId);
         return messageMapper.selectByConversationId(conversationId).stream()
@@ -172,7 +188,8 @@ public class AiChatHistoryService {
             Long messageId,
             RagDtos.QueryResponse answer,
             String content,
-            long thinkingDurationMs,
+            long waitDurationMs,
+            Long thinkingDurationMs,
             long generationDurationMs) {
         findOwnedConversation(userId, conversationId);
         AiChatMessage message = findAssistantMessage(conversationId, messageId);
@@ -182,11 +199,15 @@ public class AiChatHistoryService {
         message.setContent(content == null ? "" : content);
         message.setThinkingDurationMs(thinkingDurationMs);
         message.setGenerationDurationMs(generationDurationMs);
-        message.setDurationMs(thinkingDurationMs + generationDurationMs);
+        message.setDurationMs(waitDurationMs
+                + (thinkingDurationMs == null ? 0 : thinkingDurationMs)
+                + generationDurationMs);
         message.setStatus("SUCCESS");
         message.setSourcesJson(writeSources(answer.getSources()));
         messageMapper.updateById(message);
-        return toMessageResponse(message);
+        AiChatDtos.MessageResponse response = toMessageResponse(message);
+        response.setWaitDurationMs(waitDurationMs);
+        return response;
     }
 
     @Transactional
