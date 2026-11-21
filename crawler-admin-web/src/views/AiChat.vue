@@ -229,11 +229,11 @@
                 <span v-if="message.generationDurationMs !== undefined">
                   回答生成 {{ formatDuration(message.generationDurationMs) }}
                 </span>
+                <span>{{ formatTokenCount(countCharacters(message.text)) }} 字</span>
+                <span>约 {{ formatTokenCount(estimateTokens(message.text)) }} Token</span>
                 <span v-if="message.durationMs !== undefined">
                   总耗时 {{ formatDuration(message.durationMs) }}
                 </span>
-                <span>{{ formatTokenCount(countCharacters(message.text)) }} 字</span>
-                <span>约 {{ formatTokenCount(estimateTokens(message.text)) }} Token</span>
                 <span v-if="message.generationDurationMs && message.generationDurationMs > 0">
                   {{ formatTokenRate(message.text, message.generationDurationMs) }}
                 </span>
@@ -245,6 +245,12 @@
                 >
                   <el-icon><DocumentCopy /></el-icon>
                 </el-button>
+              </div>
+              <div
+                v-if="message.role === 'assistant' && message.status === 'STREAMING' && message.generationStartedAt !== undefined"
+                class="message-stats"
+              >
+                <span>总耗时 {{ formatDuration(Math.max(0, elapsedClock - message.generationStartedAt)) }}</span>
               </div>
               <div v-if="message.status === 'FAILED'" class="failed-message-actions">
                 <span class="message-status-failed">回答失败</span>
@@ -395,7 +401,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
@@ -509,7 +515,9 @@ const contextUsageColor = computed(() =>
 const formatTokenCount = (value: number) => value.toLocaleString()
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
-  durationMs >= 1000 ? `耗时 ${(durationMs / 1000).toFixed(1)} 秒` : `耗时 ${Math.round(durationMs)} 毫秒`
+  durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)} 秒` : `${Math.round(durationMs)} 毫秒`
+const elapsedClock = ref(performance.now())
+let elapsedClockTimer: number | undefined
 const formatTokenRate = (content: string, durationMs: number) =>
   `约 ${(estimateTokens(content) * 1000 / durationMs).toFixed(1)} Token/秒`
 const copyMessage = async (content: string, successMessage = '回答已复制') => {
@@ -1148,6 +1156,9 @@ const sendMessage = async (questionOverride?: string) => {
 }
 
 onMounted(() => {
+  elapsedClockTimer = window.setInterval(() => {
+    elapsedClock.value = performance.now()
+  }, 250)
   if (effectiveAssistantId.value) selectedAssistantId.value = effectiveAssistantId.value
   void loadContextWindow()
   void getChatAssistants().then((response: any) => {
@@ -1164,6 +1175,9 @@ onMounted(() => {
     ElMessage.error('加载 AI 助手失败，请刷新页面重试')
     loadingConversations.value = false
   })
+})
+onBeforeUnmount(() => {
+  if (elapsedClockTimer !== undefined) window.clearInterval(elapsedClockTimer)
 })
 watch(effectiveAssistantId, async (assistantId, previousId) => {
   if (assistantId === previousId) return

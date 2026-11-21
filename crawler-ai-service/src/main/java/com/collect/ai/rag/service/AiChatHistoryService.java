@@ -197,6 +197,7 @@ public class AiChatHistoryService {
             throw new IllegalStateException("聊天流已结束");
         }
         message.setContent(content == null ? "" : content);
+        message.setWaitDurationMs(waitDurationMs);
         message.setThinkingDurationMs(thinkingDurationMs);
         message.setGenerationDurationMs(generationDurationMs);
         message.setDurationMs(waitDurationMs
@@ -316,6 +317,7 @@ public class AiChatHistoryService {
         response.setContent(message.getContent());
         response.setReasoningContent(message.getReasoningContent() == null ? "" : message.getReasoningContent());
         response.setDurationMs(message.getDurationMs());
+        response.setWaitDurationMs(message.getWaitDurationMs());
         response.setThinkingDurationMs(message.getThinkingDurationMs());
         response.setGenerationDurationMs(message.getGenerationDurationMs());
         response.setStatus(message.getStatus());

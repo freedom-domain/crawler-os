@@ -46,7 +46,6 @@ public class AiChatHistoryController {
     private final ObjectMapper objectMapper;
     private final Executor streamExecutor;
     private final ConcurrentMap<Long, Future<?>> streamTasks = new ConcurrentHashMap<>();
-    private final ConcurrentMap<Long, Long> streamWaitDurations = new ConcurrentHashMap<>();
 
     public AiChatHistoryController(
             AiChatHistoryService historyService,
@@ -280,14 +279,12 @@ public class AiChatHistoryController {
                     reasoning -> historyService.appendAssistantReasoning(messageId, reasoning));
             answer.setAnswer(answerText.toString());
             long waitDurationMs = answer.getWaitDurationMs() == null ? 0 : answer.getWaitDurationMs();
-            streamWaitDurations.put(messageId, waitDurationMs);
             historyService.completeAssistantStream(
                     userId, conversationId, messageId, answer, answerText.toString(),
                     waitDurationMs,
-                    answer.getThinkingDurationMs() == null ? 0 : answer.getThinkingDurationMs(),
+                    answer.getThinkingDurationMs(),
                     answer.getGenerationDurationMs() == null ? 0 : answer.getGenerationDurationMs());
         } catch (Exception e) {
-            streamWaitDurations.remove(messageId);
             log.error("AI 聊天流式回答失败，conversationId={}, messageId={}",
                     conversationId, messageId, e);
             try {
@@ -328,7 +325,6 @@ public class AiChatHistoryController {
             }
             if (!"STREAMING".equals(message.getStatus())) {
                 if ("SUCCESS".equals(message.getStatus()) || "CANCELLED".equals(message.getStatus())) {
-                    message.setWaitDurationMs(streamWaitDurations.remove(messageId));
                     writeEvent(output, "complete", message);
                 } else {
                     writeEvent(output, "error", content);
@@ -359,7 +355,6 @@ public class AiChatHistoryController {
                         conversationId, messageId, e);
                 writeEvent(output, "error", "读取聊天回答失败，请重新打开会话重试。");
             } catch (IOException e) {
-                streamWaitDurations.remove(messageId);
                 log.warn("AI 聊天流连接中断，conversationId={}, messageId={}",
                         conversationId, messageId, e);
             }

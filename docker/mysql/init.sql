@@ -304,6 +304,7 @@ CREATE TABLE IF NOT EXISTS ai_chat_message (
     content LONGTEXT NOT NULL,
     reasoning_content LONGTEXT NULL,
     duration_ms BIGINT NULL,
+    wait_duration_ms BIGINT NULL,
     thinking_duration_ms BIGINT NULL,
     generation_duration_ms BIGINT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'SUCCESS',

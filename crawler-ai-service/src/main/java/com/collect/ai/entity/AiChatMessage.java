@@ -19,6 +19,7 @@ public class AiChatMessage {
     private String content;
     private String reasoningContent;
     private Long durationMs;
+    private Long waitDurationMs;
     private Long thinkingDurationMs;
     private Long generationDurationMs;
     private String status;
