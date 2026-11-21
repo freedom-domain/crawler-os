@@ -66,6 +66,38 @@
           <el-select v-model="form.vectorModelId" style="width:100%" placeholder="请选择向量模型">
             <el-option v-for="model in vectorModels" :key="model.id" :label="model.name" :value="model.id" />
           </el-select>
+          <el-descriptions
+            v-if="selectedVectorModel"
+            :column="2"
+            border
+            size="small"
+            class="selected-model-config"
+          >
+            <el-descriptions-item label="服务提供方">
+              {{ selectedVectorModel.embeddingProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="模型名称">
+              {{ selectedVectorModel.embeddingModel }}
+            </el-descriptions-item>
+            <el-descriptions-item label="服务地址">
+              {{ selectedVectorModel.embeddingBaseUrl }}
+            </el-descriptions-item>
+            <el-descriptions-item label="API Key">
+              {{ selectedVectorModel.apiKeyConfigured ? '已配置' : '未配置' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="向量维度">
+              {{ selectedVectorModel.dimensions }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Top K">
+              {{ selectedVectorModel.topK }}
+            </el-descriptions-item>
+            <el-descriptions-item label="分块长度">
+              {{ selectedVectorModel.chunkSize }} 字符
+            </el-descriptions-item>
+            <el-descriptions-item label="分块重叠">
+              {{ selectedVectorModel.chunkOverlap }} 字符
+            </el-descriptions-item>
+          </el-descriptions>
         </el-form-item>
         <el-form-item label="向量索引" required>
           <el-input v-model="form.vectorIndex" placeholder="例如：product_docs_vector" />
@@ -91,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
@@ -100,9 +132,25 @@ import {
   getVectorModels, updateKnowledgeBase
 } from '@/api'
 
+interface VectorModel {
+  id: string
+  name: string
+  embeddingProvider: string
+  embeddingBaseUrl: string
+  embeddingModel: string
+  apiKeyConfigured: boolean
+  dimensions: number
+  topK: number
+  chunkSize: number
+  chunkOverlap: number
+}
+
 const knowledgeBases = ref<any[]>([])
 const router = useRouter()
-const vectorModels = ref<any[]>([])
+const vectorModels = ref<VectorModel[]>([])
+const selectedVectorModel = computed(() =>
+  vectorModels.value.find(model => model.id === form.value.vectorModelId)
+)
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
@@ -206,4 +254,5 @@ onMounted(loadAll)
 .page-heading p { margin: 0; color: var(--el-text-color-secondary); }
 .heading-actions { display: flex; align-items: center; gap: 8px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.selected-model-config { width: 100%; margin-top: 12px; }
 </style>

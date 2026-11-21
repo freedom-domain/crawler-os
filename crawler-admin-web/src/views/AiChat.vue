@@ -294,23 +294,20 @@
               <span v-if="message.status === 'CANCELLED'" class="message-status-cancelled">已中断生成</span>
               <div v-if="message.sources?.length" class="source-list">
                 <div class="source-heading"><el-icon><Link /></el-icon>参考来源 <span>{{ message.sources.length }}</span></div>
-                <a
+                <button
                   v-for="(source, sourceIndex) in message.sources"
                   :key="source.id || `${source.url}-${sourceIndex}`"
+                  type="button"
                   class="source-card"
-                  :href="safeSourceUrl(source.url)"
-                  :target="safeSourceUrl(source.url) ? '_blank' : undefined"
-                  rel="noopener noreferrer"
-                  :class="{ 'is-disabled': !safeSourceUrl(source.url) }"
-                  @click="!safeSourceUrl(source.url) && $event.preventDefault()"
+                  @click="openSourcePreview(source)"
                 >
                   <span class="source-index">{{ String(sourceIndex + 1).padStart(2, '0') }}</span>
                   <span class="source-copy">
                     <strong>{{ source.title || source.url || '未命名来源' }}</strong>
                     <small>来源类型：{{ sourceTypeLabel(source) }}</small>
                   </span>
-                  <el-icon v-if="safeSourceUrl(source.url)"><Link /></el-icon>
-                </a>
+                  <el-icon><ArrowRight /></el-icon>
+                </button>
               </div>
             </div>
           </article>
@@ -449,6 +446,30 @@
         <p class="disclaimer">AI 生成的内容可能不准确，请结合原始来源进行判断。</p>
       </div>
     </section>
+
+    <el-dialog
+      v-model="sourcePreviewVisible"
+      :title="selectedSource?.title || '参考来源预览'"
+      width="min(680px, 92vw)"
+      append-to-body
+      @closed="selectedSource = null"
+    >
+      <div v-if="selectedSource" class="source-preview">
+        <div class="source-preview-meta">
+          <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
+          <a
+            v-if="safeSourceUrl(selectedSource.url)"
+            :href="safeSourceUrl(selectedSource.url)"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            打开原文
+            <el-icon><Link /></el-icon>
+          </a>
+        </div>
+        <p>{{ selectedSource.snippet || '暂无搜索结果内容预览。' }}</p>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -509,6 +530,8 @@ const suggestions = [
 
 const conversations = ref<Conversation[]>([])
 const sidebarCollapsed = ref(false)
+const selectedSource = ref<SourceReference | null>(null)
+const sourcePreviewVisible = ref(false)
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
 const selectedAssistantId = ref<string | number | undefined>(undefined)
@@ -587,6 +610,10 @@ const sourceTypeLabel = (source: SourceReference) => {
   if (source.sourceType === 'UPLOAD') return '直接上传文档'
   if (source.sourceType === 'ES_INDEX') return 'ES 索引'
   return source.sourceType || '未知'
+}
+const openSourcePreview = (source: SourceReference) => {
+  selectedSource.value = source
+  sourcePreviewVisible.value = true
 }
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
@@ -1546,15 +1573,20 @@ onActivated(() => {
 .source-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; color: var(--ink-700); font-size: 10px; font-weight: 650; }
 .source-heading .el-icon { color: var(--teal); }
 .source-heading span { color: var(--ink-500); font-weight: 400; }
-.source-card { display: flex; min-width: 0; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface); color: inherit; text-decoration: none; transition: border-color .16s, background .16s; }
-.source-card[href]:hover { border-color: var(--teal); background: var(--surface-soft); }
-.source-card.is-disabled { cursor: default; }
+.source-card { display: flex; width: 100%; min-width: 0; align-items: center; gap: 11px; padding: 10px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface); color: inherit; text-align: left; cursor: pointer; transition: border-color .16s, background .16s; }
+.source-card:hover, .source-card:focus-visible { border-color: var(--teal); background: var(--surface-soft); }
+.source-card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .source-index { color: var(--teal); font-size: 10px; font-weight: 700; }
 .source-copy { display: grid; min-width: 0; flex: 1; gap: 4px; }
 .source-copy strong, .source-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-copy strong { color: var(--ink-900); font-size: 11px; font-weight: 600; }
 .source-copy small { color: var(--ink-500); font-size: 9px; }
 .source-card > .el-icon { color: var(--ink-500); font-size: 13px; }
+.source-preview { display: grid; gap: 14px; }
+.source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-preview-meta a { display: inline-flex; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; }
+.source-preview-meta a:hover { text-decoration: underline; }
+.source-preview p { max-height: min(50vh, 480px); overflow: auto; margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .composer-wrap { width: min(100% - 48px, 900px); margin: 0 auto; padding: 8px 0 16px; }
 .composer { position: relative; padding: 11px 13px 9px; border: 1px solid var(--line-strong); border-radius: 13px; background: var(--surface); box-shadow: 0 5px 18px rgba(var(--teal-shadow-soft-rgb), .06); transition: border-color .18s, box-shadow .18s; }

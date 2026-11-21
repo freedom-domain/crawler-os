@@ -349,7 +349,9 @@ async function vectorizeDocument(row: KnowledgeDocument) {
   try {
     const response: any = await vectorizeKnowledgeBaseDocument(row.id, selectedKnowledgeBaseId.value)
     if (!response) return
-    ElMessage.success(`文档向量化完成，共生成 ${response.data.chunks} 个分块`)
+    ElMessage.success(
+      `向量索引 ${selectedBase.value?.vectorIndex || ''} 已更新，文档向量化完成，共生成 ${response.data.chunks} 个分块`
+    )
     await loadAll()
   } catch {
     ElMessage.error('文档向量化失败，请检查向量模型服务')
@@ -410,7 +412,7 @@ async function uploadDocument(options: any) {
   uploading.value = true
   try {
     await uploadKnowledgeBaseDocument(selectedKnowledgeBaseId.value, options.file)
-    ElMessage.success('文档上传并向量化成功')
+    ElMessage.success(`文档上传并向量化成功，向量索引 ${selectedBase.value?.vectorIndex || ''} 已更新`)
     await loadKnowledgeDocumentContext()
     await loadAll()
   } catch {
@@ -434,7 +436,9 @@ async function rebuildIndex() {
   try {
     const response: any = await syncRagIndex(selectedKnowledgeBaseId.value)
     if (!response) return
-    ElMessage.success(`知识库重建完成：${response.data.chunks} 个分块`)
+    ElMessage.success(
+      `向量索引 ${selectedBase.value?.vectorIndex || ''} 已构建，知识库重建完成：${response.data.chunks} 个分块`
+    )
     await loadAll()
   } catch {
     ElMessage.error('知识库重建失败，请检查 RAG 配置和向量模型服务')
