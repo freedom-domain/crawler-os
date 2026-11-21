@@ -9,8 +9,14 @@
         <el-button type="primary" size="small" :icon="Plus" @click="showCreateParent">新增</el-button>
       </div>
       <div class="search-box">
-        <el-input v-model="keyword" placeholder="搜索分类" clearable :prefix-icon="Search" size="small" />
-        <el-button size="small" @click="keyword = ''">重置</el-button>
+        <el-input
+          v-model="keyword"
+          placeholder="搜索分类名称、值或子项"
+          clearable
+          :prefix-icon="Search"
+          aria-label="搜索字典分类"
+        />
+        <el-button class="search-reset" :disabled="!keyword" @click="keyword = ''">重置</el-button>
       </div>
       <div class="table-scroll-wrapper category-table-wrap">
         <el-table :data="pagedCategories" v-loading="loading" stripe border resizable>
@@ -394,19 +400,53 @@ onMounted(loadData)
 .search-box {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .search-box :deep(.el-input) {
   min-width: 0;
 }
 
+.search-box :deep(.el-input__wrapper) {
+  min-height: 38px;
+  padding: 1px 12px;
+  border-radius: 9px;
+  background: var(--surface-soft);
+  box-shadow: 0 0 0 1px var(--line) inset;
+  transition: background-color .18s ease, box-shadow .18s ease;
+}
+
+.search-box :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--line-strong) inset;
+}
+
+.search-box :deep(.el-input__wrapper.is-focus) {
+  background: var(--surface);
+}
+
+.search-reset {
+  flex: 0 0 auto;
+  min-width: 58px;
+  height: 38px;
+  border-radius: 9px;
+}
+
 .category-table-wrap {
-  flex: 1;
+  flex: 0 1 auto;
   min-height: 0;
   padding: 10px 16px 0;
+}
+
+.category-table-wrap :deep(.el-table__inner-wrapper::before) {
+  display: block;
+  background-color: var(--line);
+}
+
+.category-panel :deep(.el-pagination) {
+  margin-top: 8px;
 }
 
 .child-table-wrap {

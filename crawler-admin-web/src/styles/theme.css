@@ -150,7 +150,6 @@
   --chrome-icon: #0f9f9a;
   --chrome-line: #e3ecf0;
   --chrome-hover: rgba(15, 159, 154, .08);
-  --chrome-shadow: 4px 0 18px rgba(23, 43, 77, .06);
   --header-bg: rgba(255, 255, 255, .94);
   --header-shadow: 0 1px 12px rgba(23, 43, 77, .05);
   --tab-active-color: #0f9f9a;
@@ -200,15 +199,15 @@
 
 html[data-theme="black"] {
   /* ===== 纯黑主题 ===== */
-  --ink-950: #e8f4f2;
-  --ink-900: #cfe0e6;
-  --ink-700: #9db4c0;
-  --ink-500: #5f7688;
+  --ink-950: #f1f1f1;
+  --ink-900: #d9dde0;
+  --ink-700: #b4bac0;
+  --ink-500: #979ea5;
   --line: rgba(114, 224, 200, .14);
   --line-strong: rgba(114, 224, 200, .28);
   --dialog-border: rgba(114, 224, 200, .10);
   --dialog-shadow: 0 24px 70px rgba(0, 0, 0, .8), 0 0 28px rgba(114, 224, 200, .08);
-  --table-row-stripe-bg: rgba(114, 224, 200, .035);
+  --table-row-stripe-bg: #050505;
   --canvas: #000000;
   --surface: #0a0a0a;
   --surface-soft: rgba(114, 224, 200, .05);
@@ -225,21 +224,21 @@ html[data-theme="black"] {
   --loading-mask: rgba(0, 0, 0, .72);
   --chrome-popup-bg: #101010;
   --login-bg: radial-gradient(circle at 15% 20%, rgba(114, 224, 200, .12), transparent 22rem), linear-gradient(135deg, #000000 0%, #0a0a0a 100%);
+  --login-aside-copy: #b8bdc2;
   --login-input-bg: #0d1211;
   --login-input-border: rgba(114, 224, 200, .18);
-  --login-input-text: #e8f4f2;
-  --login-input-placeholder: #7f9aaa;
+  --login-input-text: #f1f1f1;
+  --login-input-placeholder: #9fa5aa;
   --login-input-icon: #72e0c8;
 
   --chrome-bg: linear-gradient(180deg, #000000 0%, #050505 100%);
   --chrome-bg-soft: rgba(5, 12, 22, .5);
-  --chrome-text: #b7c9d9;
-  --chrome-text-strong: #e2eef2;
-  --chrome-muted: #7fa8b8;
+  --chrome-text: #b8bdc2;
+  --chrome-text-strong: #ececec;
+  --chrome-muted: #9aa0a6;
   --chrome-icon: #72e0c8;
   --chrome-line: rgba(114, 224, 200, .12);
   --chrome-hover: rgba(114, 224, 200, .09);
-  --chrome-shadow: 5px 0 18px rgba(2, 8, 16, .3);
   --header-bg: rgba(0, 0, 0, .94);
   --header-shadow: 0 1px 18px rgba(2, 8, 16, .35);
   --tab-active-color: #72e0c8;
@@ -271,16 +270,16 @@ html[data-theme="black"] {
   --viewer-overlay-bg: rgba(0, 0, 0, .94);
 
   /* ===== Element Plus 菜单（跟随主题）===== */
-  --el-menu-text-color: #b7c9d9 !important;
+  --el-menu-text-color: #b8bdc2 !important;
 
   /* ===== Element Plus 纯黑基础变量（表格/弹窗/输入框/下拉等）===== */
   --el-bg-color: #0a0a0a !important;
   --el-bg-color-page: #000000 !important;
   --el-bg-color-overlay: #101010 !important;
-  --el-text-color-primary: #e8f4f2 !important;
-  --el-text-color-regular: #cfe0e6 !important;
-  --el-text-color-secondary: #9db4c0 !important;
-  --el-text-color-placeholder: #7f9aaa !important;
+  --el-text-color-primary: #f1f1f1 !important;
+  --el-text-color-regular: #d9dde0 !important;
+  --el-text-color-secondary: #b4bac0 !important;
+  --el-text-color-placeholder: #9fa5aa !important;
   --el-border-color: rgba(114, 224, 200, .16) !important;
   --el-border-color-light: rgba(114, 224, 200, .12) !important;
   --el-border-color-lighter: rgba(114, 224, 200, .08) !important;
@@ -312,23 +311,23 @@ html[data-theme="black"] {
   --el-color-info-light-9: rgba(144, 147, 153, .14) !important;
 
   /* ===== 纯黑单色槽位：文字类使用可读亮色 ===== */
-  --detail-title-ink: #e8f4f2;
+  --detail-title-ink: #f1f1f1;
   --detail-url-ink: #72e0c8;
-  --detail-meta-ink: #9db4c0;
+  --detail-meta-ink: #b4bac0;
   --detail-line: rgba(114, 224, 200, .12);
   --thumb-line: rgba(114, 224, 200, .16);
-  --preview-ink: #cfe0e6;
+  --preview-ink: #d9dde0;
   --preview-line: rgba(114, 224, 200, .16);
   --preview-bg: #0a0a0a;
   --mobile-card-bg: #0a0a0a;
   --gray-line: rgba(114, 224, 200, .35);
   --search-box-line-hover: rgba(114, 224, 200, .28);
   --history-hover-bg: rgba(114, 224, 200, .14);
-  --permission-parent-ink: #e8f4f2;
-  --permission-child-ink: #cfe0e6;
-  --icon-empty-ink: #5f7688;
-  --fund-asof-ink: #9db4c0;
-  --public-muted-ink: #9db4c0;
+  --permission-parent-ink: #f1f1f1;
+  --permission-child-ink: #d9dde0;
+  --icon-empty-ink: #979ea5;
+  --fund-asof-ink: #b4bac0;
+  --public-muted-ink: #b4bac0;
   --public-link-ink: #72e0c8;
   --public-error-ink: #ff9d95;
   --sync-error-ink: #ff9d95;
@@ -346,7 +345,7 @@ html[data-theme="black"] {
   --spider-resource-ink: #c4a3f0;
   --spider-resource-hover: #d4baff;
   --spider-danger-ink: #ff9d95;
-  --spider-heading-ink: #7fa8b8;
+  --spider-heading-ink: #9aa0a6;
   --spider-highlight-bg: rgba(230, 162, 60, .16);
   --chart-daily-ink: #e6a23c;
   --chart-cumulative-ink: #67c23a;
@@ -356,24 +355,38 @@ html[data-theme="black"] {
   --chart-scroll-thumb: rgba(114, 224, 200, .4);
   --chart-scroll-thumb-hover: rgba(114, 224, 200, .6);
   --available-ink: #5fd39a;
-  --drag-handle-ink: #5f7688;
+  --drag-handle-ink: #979ea5;
   --profile-accent: #72e0c8;
 }
 
 html[data-theme="black"] .el-table .el-table__body tr > td.el-table__cell {
-  color: #cfe0e6 !important;
-  background-color: #080d0c !important;
+  color: #d9dde0 !important;
+  background-color: #000000 !important;
+}
+html[data-theme="black"] .el-table {
+  --el-table-bg-color: #000000 !important;
+  --el-table-tr-bg-color: #000000 !important;
+  --el-table-header-bg-color: #050505 !important;
 }
 html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.el-table__row--striped > td.el-table__cell {
-  background-color: #101816 !important;
+  background-color: #050505 !important;
 }
 html[data-theme="black"] .el-table .el-table__body tr.hover-row > td.el-table__cell,
 html[data-theme="black"] .el-table .el-table__body tr:hover > td.el-table__cell,
 html[data-theme="black"] .el-table .el-table__body tr > td.hover-cell {
   background-color: #122824 !important;
 }
+html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.el-table__row--striped.hover-row > td.el-table__cell,
+html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.el-table__row--striped:hover > td.el-table__cell,
+html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.el-table__row--striped > td.hover-cell {
+  background-color: #122824 !important;
+}
 html[data-theme="black"] .el-table .el-table__body tr.current-row > td.el-table__cell,
 html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.current-row > td.el-table__cell {
+  background-color: #15332d !important;
+}
+html[data-theme="black"] .el-table .el-table__body tr:has(.el-checkbox.is-checked) > td.el-table__cell,
+html[data-theme="black"] .el-table.el-table--striped .el-table__body tr.el-table__row--striped:has(.el-checkbox.is-checked) > td.el-table__cell {
   background-color: #15332d !important;
 }
 html[data-theme="black"] .el-table .el-table__body tr.spider-highlight-row > td.el-table__cell {

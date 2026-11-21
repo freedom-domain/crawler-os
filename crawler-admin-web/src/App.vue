@@ -256,8 +256,17 @@ html[data-theme="black"] .el-empty__image {
 .el-table .el-table__body tr > td.hover-cell {
   background-color: var(--el-table-row-hover-bg-color) !important;
 }
+.el-table.el-table--striped .el-table__body tr.el-table__row--striped.hover-row > td.el-table__cell,
+.el-table.el-table--striped .el-table__body tr.el-table__row--striped:hover > td.el-table__cell,
+.el-table.el-table--striped .el-table__body tr.el-table__row--striped > td.hover-cell {
+  background-color: var(--el-table-row-hover-bg-color) !important;
+}
 .el-table .el-table__body tr.current-row > td.el-table__cell,
 .el-table.el-table--striped .el-table__body tr.current-row > td.el-table__cell {
+  background-color: var(--el-table-current-row-bg-color) !important;
+}
+.el-table .el-table__body tr:has(.el-checkbox.is-checked) > td.el-table__cell,
+.el-table.el-table--striped .el-table__body tr.el-table__row--striped:has(.el-checkbox.is-checked) > td.el-table__cell {
   background-color: var(--el-table-current-row-bg-color) !important;
 }
 .el-tag { border-radius: 6px; font-weight: 600; }

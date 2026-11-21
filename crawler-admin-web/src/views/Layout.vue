@@ -423,9 +423,9 @@ const handleCommand = async (cmd: string) => {
   flex-direction: column;
   min-height: 0;
   background: var(--chrome-bg);
+  border-right: 1px solid var(--chrome-line);
   transition: width 0.25s ease;
   overflow: hidden;
-  box-shadow: var(--chrome-shadow);
 }
 .drawer-mask {
   position: fixed;
