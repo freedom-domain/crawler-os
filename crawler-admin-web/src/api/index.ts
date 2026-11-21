@@ -27,12 +27,25 @@ export const permissionUpdate = (id: number, data: any) => request.put(`/permiss
 export const permissionDelete = (id: number) => request.delete(`/permission/${id}`)
 export const getRagConfig = () => request.get('/ai/rag/config')
 export const updateRagConfig = (data: any) => request.put('/ai/rag/config', data)
+export interface AiManagementPageParams {
+  page: number
+  pageSize: number
+  keyword?: string
+  provider?: string
+  apiKeyStatus?: string
+  sourceType?: string
+  enabled?: boolean
+}
 export const getAssistants = () => request.get('/ai/rag/assistants')
+export const getAssistantPage = (params: AiManagementPageParams) =>
+  request.get('/ai/rag/assistants/page', { params })
 export const getChatAssistants = () => request.get('/ai/chat/conversations/assistants')
 export const createAssistant = (data: any) => request.post('/ai/rag/assistants', data)
 export const updateAssistant = (id: string, data: any) => request.put(`/ai/rag/assistants/${id}`, data)
 export const deleteAssistant = (id: string) => request.delete(`/ai/rag/assistants/${id}`)
 export const getKnowledgeBases = () => request.get('/ai/rag/knowledge-bases')
+export const getKnowledgeBasePage = (params: AiManagementPageParams) =>
+  request.get('/ai/rag/knowledge-bases/page', { params })
 export const createKnowledgeBase = (data: any) => request.post('/ai/rag/knowledge-bases', data)
 export const updateKnowledgeBase = (id: string, data: any) => request.put(`/ai/rag/knowledge-bases/${id}`, data)
 export const deleteKnowledgeBase = (id: string) => request.delete(`/ai/rag/knowledge-bases/${id}`)
@@ -47,6 +60,8 @@ export const uploadKnowledgeBaseDocument = (id: string, file: File) => {
   })
 }
 export const getVectorModels = () => request.get('/ai/rag/vector-models')
+export const getVectorModelPage = (params: AiManagementPageParams) =>
+  request.get('/ai/rag/vector-models/page', { params })
 export const discoverVectorModels = (data: {
   modelId: string | null
   provider: string
@@ -60,6 +75,8 @@ export const getVectorModelApiKey = (id: string) => request.get(`/ai/rag/vector-
 export const updateVectorModelApiKey = (id: string, apiKey: string) =>
   request.put(`/ai/rag/vector-models/${id}/api-key`, { apiKey })
 export const getChatModels = () => request.get('/ai/rag/chat-models')
+export const getChatModelPage = (params: AiManagementPageParams) =>
+  request.get('/ai/rag/chat-models/page', { params })
 export const discoverChatModels = (data: {
   modelId: string | null
   provider: string

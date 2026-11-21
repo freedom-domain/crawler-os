@@ -1,7 +1,10 @@
 package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ai.entity.AiAssistant;
+import com.collect.ai.entity.AiKnowledgeBase;
 import com.collect.ai.entity.AiAssistantKnowledgeBase;
 import com.collect.ai.mapper.AiAssistantMapper;
 import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
@@ -29,6 +32,36 @@ public class AiAssistantService {
                         .orderByAsc(AiAssistant::getSort)
                         .orderByDesc(AiAssistant::getId))
                 .stream().map(this::toResponse).toList();
+    }
+
+    public IPage<AiAssistantDtos.Response> page(long current, long size, String keyword, Boolean enabled) {
+        LambdaQueryWrapper<AiAssistant> query = new LambdaQueryWrapper<AiAssistant>()
+                .eq(enabled != null, AiAssistant::getEnabled, enabled)
+                .orderByAsc(AiAssistant::getSort)
+                .orderByDesc(AiAssistant::getId);
+        if (StringUtils.hasText(keyword)) {
+            String search = keyword.trim();
+            List<Long> matchingBaseIds = knowledgeBaseMapper.selectList(
+                            new LambdaQueryWrapper<AiKnowledgeBase>()
+                                    .select(AiKnowledgeBase::getId)
+                                    .like(AiKnowledgeBase::getName, search))
+                    .stream().map(AiKnowledgeBase::getId).toList();
+            List<Long> matchingAssistantIds = matchingBaseIds.isEmpty()
+                    ? List.of()
+                    : assistantKnowledgeBaseMapper.selectList(
+                                    new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
+                                            .select(AiAssistantKnowledgeBase::getAssistantId)
+                                            .in(AiAssistantKnowledgeBase::getKnowledgeBaseId, matchingBaseIds))
+                            .stream().map(AiAssistantKnowledgeBase::getAssistantId).distinct().toList();
+            query.and(wrapper -> {
+                wrapper.like(AiAssistant::getName, search).or().like(AiAssistant::getDescription, search);
+                if (!matchingAssistantIds.isEmpty()) {
+                    wrapper.or().in(AiAssistant::getId, matchingAssistantIds);
+                }
+            });
+        }
+        return assistantMapper.selectPage(new Page<>(safeCurrent(current), safeSize(size)), query)
+                .convert(this::toResponse);
     }
 
     public List<AiAssistantDtos.Response> listEnabled() {
@@ -141,5 +174,13 @@ public class AiAssistantService {
         response.setCreateTime(assistant.getCreateTime());
         response.setUpdateTime(assistant.getUpdateTime());
         return response;
+    }
+
+    private static long safeCurrent(long current) {
+        return Math.max(1, current);
+    }
+
+    private static long safeSize(long size) {
+        return Math.min(100, Math.max(1, size));
     }
 }

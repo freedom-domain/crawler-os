@@ -18,6 +18,7 @@
             v-model="searchKeyword"
             clearable
             placeholder="搜索知识库名称、简介、索引"
+            @keyup.enter="searchKnowledgeBases"
           />
         </el-form-item>
         <el-form-item>
@@ -33,11 +34,14 @@
           </el-select>
         </el-form-item>
         <el-form-item>
+          <el-button type="primary" @click="searchKnowledgeBases">查询</el-button>
+        </el-form-item>
+        <el-form-item>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
       </el-form>
       <div class="table-scroll-wrapper">
-        <el-table :data="filteredKnowledgeBases" v-loading="loading" stripe resizable border>
+        <el-table :data="knowledgeBases" v-loading="loading" stripe resizable border>
           <template #empty>
             <el-empty v-if="!loading" description="暂无知识库" />
           </template>
@@ -72,6 +76,14 @@
           </el-table-column>
         </el-table>
       </div>
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 15, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @change="loadKnowledgeBasePage"
+      />
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑知识库' : '新建知识库'" width="680px">
@@ -160,7 +172,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, FolderOpened, Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
-  createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBases,
+  createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBasePage,
   getVectorModels, updateKnowledgeBase
 } from '@/api'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -181,24 +193,15 @@ interface VectorModel {
 const knowledgeBases = ref<any[]>([])
 const router = useRouter()
 const vectorModels = ref<VectorModel[]>([])
+const page = ref(1)
+const pageSize = ref(15)
+const total = ref(0)
 const searchKeyword = ref('')
 const sourceTypeFilter = ref('')
 const enabledFilter = ref<boolean | null>(null)
 const selectedVectorModel = computed(() =>
   vectorModels.value.find(model => model.id === form.value.vectorModelId)
 )
-const filteredKnowledgeBases = computed(() => {
-  const keyword = searchKeyword.value.trim().toLocaleLowerCase()
-  return knowledgeBases.value.filter(base => {
-    const matchesKeyword = !keyword || [
-      base.name, base.description, base.vectorModelName, base.sourceIndex,
-      base.vectorIndex, base.vectorField
-    ].some(value => String(value || '').toLocaleLowerCase().includes(keyword))
-    const matchesSourceType = !sourceTypeFilter.value || base.sourceType === sourceTypeFilter.value
-    const matchesEnabled = enabledFilter.value == null || base.enabled === enabledFilter.value
-    return matchesKeyword && matchesSourceType && matchesEnabled
-  })
-})
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
@@ -219,9 +222,34 @@ const form = ref({
 async function loadAll() {
   loading.value = true
   try {
-    const [baseResponse, vectorResponse] = await Promise.all([getKnowledgeBases(), getVectorModels()])
-    knowledgeBases.value = baseResponse.data || []
+    const [_, vectorResponse] = await Promise.all([fetchKnowledgeBasePage(), getVectorModels()])
     vectorModels.value = vectorResponse.data || []
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchKnowledgeBasePage() {
+  const response: any = await getKnowledgeBasePage({
+    page: page.value,
+    pageSize: pageSize.value,
+    keyword: searchKeyword.value.trim() || undefined,
+    sourceType: sourceTypeFilter.value || undefined,
+    enabled: enabledFilter.value ?? undefined
+  })
+  knowledgeBases.value = response.data.records || []
+  total.value = response.data.total
+  const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
+  if (page.value > lastPage) {
+    page.value = lastPage
+    await fetchKnowledgeBasePage()
+  }
+}
+
+async function loadKnowledgeBasePage() {
+  loading.value = true
+  try {
+    await fetchKnowledgeBasePage()
   } finally {
     loading.value = false
   }
@@ -254,6 +282,13 @@ function resetFilters() {
   searchKeyword.value = ''
   sourceTypeFilter.value = ''
   enabledFilter.value = null
+  page.value = 1
+  void loadKnowledgeBasePage()
+}
+
+function searchKnowledgeBases() {
+  page.value = 1
+  void loadKnowledgeBasePage()
 }
 
 function openCreate() {

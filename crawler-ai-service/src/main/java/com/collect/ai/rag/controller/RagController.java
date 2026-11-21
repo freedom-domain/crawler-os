@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -73,6 +74,18 @@ public class RagController {
         return R.ok(aiKnowledgeBaseService.list());
     }
 
+    @Operation(summary = "分页查询知识库")
+    @GetMapping("/knowledge-bases/page")
+    public R<IPage<AiKnowledgeBaseDtos.Response>> knowledgeBasePage(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "15") long pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String sourceType,
+            @RequestParam(required = false) Boolean enabled) {
+        requireAdmin();
+        return R.ok(aiKnowledgeBaseService.page(page, pageSize, keyword, sourceType, enabled));
+    }
+
     @Operation(summary = "创建知识库")
     @PostMapping("/knowledge-bases")
     public R<AiKnowledgeBaseDtos.Response> createKnowledgeBase(
@@ -102,6 +115,17 @@ public class RagController {
     public R<java.util.List<AiAssistantDtos.Response>> assistants() {
         requireAdmin();
         return R.ok(aiAssistantService.list());
+    }
+
+    @Operation(summary = "分页查询 AI 助手")
+    @GetMapping("/assistants/page")
+    public R<IPage<AiAssistantDtos.Response>> assistantPage(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "15") long pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean enabled) {
+        requireAdmin();
+        return R.ok(aiAssistantService.page(page, pageSize, keyword, enabled));
     }
 
     @Operation(summary = "读取 AI 助手详情")
@@ -153,6 +177,18 @@ public class RagController {
     public R<java.util.List<VectorModelResponse>> vectorModels() {
         requireAdmin();
         return R.ok(vectorModelService.list());
+    }
+
+    @Operation(summary = "分页查询向量模型")
+    @GetMapping("/vector-models/page")
+    public R<IPage<VectorModelResponse>> vectorModelPage(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "15") long pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String provider,
+            @RequestParam(required = false) String apiKeyStatus) {
+        requireAdmin();
+        return R.ok(vectorModelService.page(page, pageSize, keyword, provider, apiKeyStatus));
     }
 
     @Operation(summary = "读取向量模型 API Key")
@@ -211,6 +247,18 @@ public class RagController {
     public R<java.util.List<ChatModelResponse>> chatModels() {
         requireAdmin();
         return R.ok(chatModelService.list());
+    }
+
+    @Operation(summary = "分页查询聊天模型")
+    @GetMapping("/chat-models/page")
+    public R<IPage<ChatModelResponse>> chatModelPage(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "15") long pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String provider,
+            @RequestParam(required = false) String apiKeyStatus) {
+        requireAdmin();
+        return R.ok(chatModelService.page(page, pageSize, keyword, provider, apiKeyStatus));
     }
 
     @Operation(summary = "自动拉取聊天模型列表")

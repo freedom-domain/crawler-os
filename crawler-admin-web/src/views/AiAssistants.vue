@@ -8,30 +8,69 @@
       <el-button type="primary" :icon="Plus" @click="openCreate">新增助手</el-button>
     </div>
 
-    <el-table :data="assistants" empty-text="暂无 AI 助手" stripe>
-      <el-table-column prop="name" label="助手名称" min-width="180" />
-      <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip />
-      <el-table-column label="知识库" min-width="220" show-overflow-tooltip>
-        <template #default="{ row }">
-          {{ row.knowledgeBaseNames?.length ? row.knowledgeBaseNames.join('、') : '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.enabled ? 'success' : 'info'" effect="light">
-            {{ row.enabled ? '已启用' : '已停用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="sort" label="排序" width="80" />
-      <el-table-column label="操作" width="220" fixed="right">
-        <template #default="{ row }">
-          <el-button v-if="row.enabled" link type="success" @click="startConversation(row)">开始对话</el-button>
-          <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button link type="danger" @click="removeAssistant(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <el-form class="assistant-toolbar" :inline="true" @submit.prevent>
+      <el-form-item>
+        <el-input
+          v-model="keyword"
+          placeholder="搜索助手名称、简介或知识库"
+          clearable
+          @keyup.enter="searchAssistants"
+        />
+      </el-form-item>
+      <el-form-item>
+        <el-select v-model="enabledFilter" placeholder="全部状态" clearable style="width: 130px">
+          <el-option label="已启用" :value="true" />
+          <el-option label="已停用" :value="false" />
+        </el-select>
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" :icon="Search" @click="searchAssistants">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form-item>
+    </el-form>
+
+    <div class="table-scroll-wrapper">
+      <el-table :data="assistants" v-loading="loading" empty-text="暂无 AI 助手" stripe resizable border>
+        <el-table-column prop="id" label="ID" min-width="80" resizable />
+        <el-table-column prop="name" label="助手名称" min-width="180" resizable />
+        <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
+        <el-table-column label="知识库" min-width="220" show-overflow-tooltip resizable>
+          <template #default="{ row }">
+            {{ row.knowledgeBaseNames?.length ? row.knowledgeBaseNames.join('、') : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" resizable>
+          <template #default="{ row }">
+            <el-tag :type="row.enabled ? 'success' : 'info'" effect="light">
+              {{ row.enabled ? '已启用' : '已停用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="sort" label="排序" width="80" resizable />
+        <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
+          <template #default="{ row }">{{ formatDateTime(row.createTime) || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
+          <template #default="{ row }">{{ formatDateTime(row.updateTime) || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="220" fixed="right" resizable>
+          <template #default="{ row }">
+            <el-button v-if="row.enabled" link type="success" @click="startConversation(row)">开始对话</el-button>
+            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button link type="danger" @click="removeAssistant(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <el-pagination
+      v-model:current-page="page"
+      v-model:page-size="pageSize"
+      :total="total"
+      :page-sizes="[10, 15, 20, 50, 100]"
+      layout="total, sizes, prev, pager, next, jumper"
+      @change="loadAssistantPage"
+    />
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑 AI 助手' : '新增 AI 助手'" width="680px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
@@ -114,11 +153,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  createAssistant, deleteAssistant, getAssistants, getKnowledgeBases, updateAssistant
+  createAssistant, deleteAssistant, getAssistantPage, getKnowledgeBases, updateAssistant
 } from '@/api'
+import { formatDateTime } from '@/utils/dateTime'
 
 interface Assistant {
   id: string
@@ -131,11 +171,18 @@ interface Assistant {
   knowledgeBaseIds: string[]
   knowledgeBaseNames: string[]
   sort: number
+  createTime?: string
+  updateTime?: string
 }
 
 const assistants = ref<Assistant[]>([])
 const knowledgeBases = ref<any[]>([])
 const loading = ref(false)
+const keyword = ref('')
+const enabledFilter = ref<boolean | undefined>()
+const page = ref(1)
+const pageSize = ref(15)
+const total = ref(0)
 const saving = ref(false)
 const dialogVisible = ref(false)
 const knowledgeBaseDialogVisible = ref(false)
@@ -158,14 +205,50 @@ const selectedKnowledgeBaseNames = computed(() => {
     .map((base: any) => base.name)
 })
 
+function searchAssistants() {
+  page.value = 1
+  void loadAssistantPage()
+}
+
+function resetFilters() {
+  keyword.value = ''
+  enabledFilter.value = undefined
+  page.value = 1
+  void loadAssistantPage()
+}
+
 async function loadAll() {
   loading.value = true
   try {
     const [assistantRes, knowledgeBaseRes] = await Promise.all([
-      getAssistants(), getKnowledgeBases()
+      fetchAssistantPage(), getKnowledgeBases()
     ])
-    assistants.value = assistantRes.data || []
     knowledgeBases.value = knowledgeBaseRes.data || []
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchAssistantPage() {
+  const response: any = await getAssistantPage({
+    page: page.value,
+    pageSize: pageSize.value,
+    keyword: keyword.value.trim() || undefined,
+    enabled: enabledFilter.value
+  })
+  assistants.value = response.data.records || []
+  total.value = response.data.total
+  const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
+  if (page.value > lastPage) {
+    page.value = lastPage
+    await fetchAssistantPage()
+  }
+}
+
+async function loadAssistantPage() {
+  loading.value = true
+  try {
+    await fetchAssistantPage()
   } finally {
     loading.value = false
   }
@@ -231,7 +314,7 @@ async function removeAssistant(row: Assistant) {
   await ElMessageBox.confirm(`确定删除 AI 助手“${row.name}”？`, '删除助手', { type: 'warning' })
   await deleteAssistant(row.id)
   ElMessage.success('删除成功')
-  await loadAll()
+  await loadAssistantPage()
 }
 
 function resetForm() {
@@ -247,6 +330,7 @@ onMounted(loadAll)
 .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .card-header h2 { margin:0 0 6px; }
 .card-header p { margin:0; color:var(--el-text-color-secondary); }
+.assistant-toolbar { margin-bottom: 4px; }
 .knowledge-base-picker {
   display: flex;
   width: 100%;

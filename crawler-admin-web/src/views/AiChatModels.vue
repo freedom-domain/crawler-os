@@ -22,6 +22,7 @@
           v-model="searchKeyword"
           clearable
           placeholder="搜索配置名称、模型名称或服务地址"
+          @keyup.enter="searchModels"
         />
         <el-select v-model="providerFilter" clearable placeholder="全部提供方">
           <el-option label="OpenAI 兼容" value="openai" />
@@ -32,11 +33,12 @@
           <el-option label="已配置" value="configured" />
           <el-option label="未配置" value="unconfigured" />
         </el-select>
+        <el-button type="primary" @click="searchModels">查询</el-button>
         <el-button @click="resetFilters">重置</el-button>
       </el-form>
 
       <div class="table-scroll-wrapper model-table-scroll">
-        <el-table :data="filteredModels" empty-text="暂无聊天模型" stripe resizable border>
+        <el-table :data="models" empty-text="暂无聊天模型" stripe resizable border>
           <el-table-column prop="name" label="配置名称" min-width="130" resizable />
           <el-table-column label="提供方" min-width="110" resizable>
             <template #default="{ row }">{{ providerLabel(row.chatProvider) }}</template>
@@ -68,6 +70,14 @@
           </el-table-column>
         </el-table>
       </div>
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 15, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @change="loadModels"
+      />
     </component>
 
     <el-dialog
@@ -157,7 +167,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Delete, Edit } from '@element-plus/icons-vue'
 import {
-  createChatModel, deleteChatModel, discoverChatModels, getChatModelApiKey, getChatModels, updateChatModel,
+  createChatModel, deleteChatModel, discoverChatModels, getChatModelApiKey, getChatModelPage, updateChatModel,
   updateChatModelApiKey
 } from '@/api'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -185,6 +195,9 @@ const emptyModel = () => ({
 })
 
 const models = ref<ChatModel[]>([])
+const page = ref(1)
+const pageSize = ref(15)
+const total = ref(0)
 const searchKeyword = ref('')
 const providerFilter = ref('')
 const apiKeyFilter = ref('')
@@ -210,19 +223,6 @@ const rowActions: TableRowAction[] = [
   { command: 'edit', label: '编辑', icon: Edit },
   { command: 'delete', label: '删除', icon: Delete, danger: true }
 ]
-const filteredModels = computed(() => {
-  const keyword = searchKeyword.value.trim().toLocaleLowerCase()
-  return models.value.filter(model => {
-    const matchesKeyword = !keyword || [
-      model.name, model.chatModel, model.chatBaseUrl
-    ].some(value => value.toLocaleLowerCase().includes(keyword))
-    const matchesProvider = !providerFilter.value || model.chatProvider === providerFilter.value
-    const matchesApiKey = !apiKeyFilter.value
-      || (apiKeyFilter.value === 'configured' ? model.apiKeyConfigured : !model.apiKeyConfigured)
-    return matchesKeyword && matchesProvider && matchesApiKey
-  })
-})
-
 const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   try {
     const url = new URL(value)
@@ -246,10 +246,17 @@ const providerLabel = (provider: string) => {
   return 'OpenAI 兼容'
 }
 
+const searchModels = () => {
+  page.value = 1
+  void loadModels()
+}
+
 const resetFilters = () => {
   searchKeyword.value = ''
   providerFilter.value = ''
   apiKeyFilter.value = ''
+  page.value = 1
+  void loadModels()
 }
 
 const exactModelId = (id: unknown) => {
@@ -261,12 +268,24 @@ const exactModelId = (id: unknown) => {
 const loadModels = async () => {
   loading.value = true
   try {
-    const response: any = await getChatModels()
+    const response: any = await getChatModelPage({
+      page: page.value,
+      pageSize: pageSize.value,
+      keyword: searchKeyword.value.trim() || undefined,
+      provider: providerFilter.value || undefined,
+      apiKeyStatus: apiKeyFilter.value || undefined
+    })
     if (response) {
-      models.value = response.data.map((model: ChatModel) => ({
+      models.value = (response.data.records || []).map((model: ChatModel) => ({
         ...model,
         id: exactModelId(model.id)
       }))
+      total.value = response.data.total
+      const lastPage = Math.max(1, Math.ceil(total.value / pageSize.value))
+      if (page.value > lastPage) {
+        page.value = lastPage
+        await loadModels()
+      }
     }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '加载聊天模型失败')
@@ -418,7 +437,7 @@ onMounted(loadModels)
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
-.model-filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 200px)) auto; gap: 12px; margin: 16px 0; }
+.model-filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 200px)) auto auto; gap: 12px; margin: 16px 0; }
 .is-clickable { cursor: pointer; }
 .model-table-scroll :deep(.el-table) { width: 100%; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }

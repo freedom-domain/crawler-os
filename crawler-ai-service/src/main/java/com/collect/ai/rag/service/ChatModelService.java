@@ -1,6 +1,8 @@
 package com.collect.ai.rag.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ai.entity.AiRagChatModel;
 import com.collect.ai.entity.AiRagConfig;
 import com.collect.ai.mapper.AiRagChatModelMapper;
@@ -37,6 +39,25 @@ public class ChatModelService {
                         new LambdaQueryWrapper<AiRagChatModel>()
                                 .orderByAsc(AiRagChatModel::getId))
                 .stream().map(ChatModelService::toResponse).toList();
+    }
+
+    public IPage<ChatModelResponse> page(long current, long size, String keyword,
+                                         String provider, String apiKeyStatus) {
+        LambdaQueryWrapper<AiRagChatModel> query = new LambdaQueryWrapper<AiRagChatModel>()
+                .and(StringUtils.hasText(keyword), wrapper -> wrapper
+                        .like(AiRagChatModel::getName, keyword.trim())
+                        .or().like(AiRagChatModel::getChatModel, keyword.trim())
+                        .or().like(AiRagChatModel::getChatBaseUrl, keyword.trim()))
+                .eq(StringUtils.hasText(provider), AiRagChatModel::getChatProvider, provider)
+                .orderByAsc(AiRagChatModel::getId);
+        if ("configured".equals(apiKeyStatus)) {
+            query.isNotNull(AiRagChatModel::getApiKey).ne(AiRagChatModel::getApiKey, "");
+        } else if ("unconfigured".equals(apiKeyStatus)) {
+            query.and(wrapper -> wrapper.isNull(AiRagChatModel::getApiKey)
+                    .or().eq(AiRagChatModel::getApiKey, ""));
+        }
+        return chatModelMapper.selectPage(new Page<>(safeCurrent(current), safeSize(size)), query)
+                .convert(ChatModelService::toResponse);
     }
 
     public String getApiKey(Long id) {
@@ -200,5 +221,13 @@ public class ChatModelService {
                 ? DEFAULT_CONTEXT_LENGTH : model.getContextLength());
         response.setApiKeyConfigured(StringUtils.hasText(model.getApiKey()));
         return response;
+    }
+
+    private static long safeCurrent(long current) {
+        return Math.max(1, current);
+    }
+
+    private static long safeSize(long size) {
+        return Math.min(100, Math.max(1, size));
     }
 }

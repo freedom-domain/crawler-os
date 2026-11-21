@@ -1,6 +1,8 @@
 package com.collect.ai.rag.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ai.entity.AiRagConfig;
 import com.collect.ai.entity.AiRagVectorModel;
 import com.collect.ai.mapper.AiRagConfigMapper;
@@ -34,6 +36,25 @@ public class VectorModelService {
                         new LambdaQueryWrapper<AiRagVectorModel>()
                                 .orderByAsc(AiRagVectorModel::getId))
                 .stream().map(VectorModelService::toResponse).toList();
+    }
+
+    public IPage<VectorModelResponse> page(long current, long size, String keyword,
+                                           String provider, String apiKeyStatus) {
+        LambdaQueryWrapper<AiRagVectorModel> query = new LambdaQueryWrapper<AiRagVectorModel>()
+                .and(StringUtils.hasText(keyword), wrapper -> wrapper
+                        .like(AiRagVectorModel::getName, keyword.trim())
+                        .or().like(AiRagVectorModel::getEmbeddingModel, keyword.trim())
+                        .or().like(AiRagVectorModel::getEmbeddingBaseUrl, keyword.trim()))
+                .eq(StringUtils.hasText(provider), AiRagVectorModel::getEmbeddingProvider, provider)
+                .orderByAsc(AiRagVectorModel::getId);
+        if ("configured".equals(apiKeyStatus)) {
+            query.isNotNull(AiRagVectorModel::getApiKey).ne(AiRagVectorModel::getApiKey, "");
+        } else if ("unconfigured".equals(apiKeyStatus)) {
+            query.and(wrapper -> wrapper.isNull(AiRagVectorModel::getApiKey)
+                    .or().eq(AiRagVectorModel::getApiKey, ""));
+        }
+        return vectorModelMapper.selectPage(new Page<>(safeCurrent(current), safeSize(size)), query)
+                .convert(VectorModelService::toResponse);
     }
 
     public String getApiKey(Long id) {
@@ -208,5 +229,13 @@ public class VectorModelService {
         response.setChunkSize(model.getChunkSize());
         response.setChunkOverlap(model.getChunkOverlap());
         return response;
+    }
+
+    private static long safeCurrent(long current) {
+        return Math.max(1, current);
+    }
+
+    private static long safeSize(long size) {
+        return Math.min(100, Math.max(1, size));
     }
 }

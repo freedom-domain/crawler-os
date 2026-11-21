@@ -1,7 +1,10 @@
 package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ai.entity.AiKnowledgeBase;
+import com.collect.ai.entity.AiRagVectorModel;
 import com.collect.ai.entity.AiAssistantKnowledgeBase;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
@@ -30,6 +33,35 @@ public class AiKnowledgeBaseService {
                         .orderByAsc(AiKnowledgeBase::getSort)
                         .orderByAsc(AiKnowledgeBase::getId))
                 .stream().map(this::toResponse).toList();
+    }
+
+    public IPage<AiKnowledgeBaseDtos.Response> page(long current, long size, String keyword,
+                                                    String sourceType, Boolean enabled) {
+        LambdaQueryWrapper<AiKnowledgeBase> query = new LambdaQueryWrapper<AiKnowledgeBase>()
+                .eq(StringUtils.hasText(sourceType), AiKnowledgeBase::getSourceType, sourceType)
+                .eq(enabled != null, AiKnowledgeBase::getEnabled, enabled)
+                .orderByAsc(AiKnowledgeBase::getSort)
+                .orderByAsc(AiKnowledgeBase::getId);
+        if (StringUtils.hasText(keyword)) {
+            String search = keyword.trim();
+            List<Long> modelIds = vectorModelMapper.selectList(
+                            new LambdaQueryWrapper<AiRagVectorModel>()
+                                    .select(AiRagVectorModel::getId)
+                                    .like(AiRagVectorModel::getName, search))
+                    .stream().map(AiRagVectorModel::getId).toList();
+            query.and(wrapper -> {
+                wrapper.like(AiKnowledgeBase::getName, search)
+                        .or().like(AiKnowledgeBase::getDescription, search)
+                        .or().like(AiKnowledgeBase::getSourceIndex, search)
+                        .or().like(AiKnowledgeBase::getVectorIndex, search)
+                        .or().like(AiKnowledgeBase::getVectorField, search);
+                if (!modelIds.isEmpty()) {
+                    wrapper.or().in(AiKnowledgeBase::getVectorModelId, modelIds);
+                }
+            });
+        }
+        return knowledgeBaseMapper.selectPage(new Page<>(safeCurrent(current), safeSize(size)), query)
+                .convert(this::toResponse);
     }
 
     public List<AiKnowledgeBaseDtos.Response> listEnabled() {
@@ -138,5 +170,13 @@ public class AiKnowledgeBaseService {
         response.setCreateTime(base.getCreateTime());
         response.setUpdateTime(base.getUpdateTime());
         return response;
+    }
+
+    private static long safeCurrent(long current) {
+        return Math.max(1, current);
+    }
+
+    private static long safeSize(long size) {
+        return Math.min(100, Math.max(1, size));
     }
 }

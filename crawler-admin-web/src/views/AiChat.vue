@@ -470,7 +470,7 @@
       v-model="sourcePreviewVisible"
       class="source-preview-dialog"
       :fullscreen="sourcePreviewFullscreen"
-      width="min(760px, 92vw)"
+      width="min(1000px, 94vw)"
       append-to-body
       @closed="closeSourcePreview"
     >
@@ -499,7 +499,7 @@
           <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
           <span v-if="selectedSourceChunk">{{ selectedSourceChunk.characterCount }} 字符</span>
           <el-button
-            v-if="selectedSourceChunk"
+            v-if="selectedSourceChunk && sourceChunks.length > 1"
             type="primary"
             link
             :loading="sourceOriginalLoading"
@@ -523,7 +523,7 @@
       v-model="sourceOriginalPreviewVisible"
       class="source-preview-dialog"
       :fullscreen="sourceOriginalFullscreen"
-      width="min(760px, 92vw)"
+      width="min(1000px, 94vw)"
       append-to-body
       @closed="sourceOriginalFullscreen = false"
     >
@@ -1836,8 +1836,11 @@ onActivated(() => {
 .source-copy strong { color: var(--ink-900); font-size: 11px; font-weight: 600; }
 .source-copy small { color: var(--ink-500); font-size: 9px; }
 .source-card > .el-icon { color: var(--ink-500); font-size: 13px; }
-.source-preview { display: grid; max-height: min(65vh, 640px); gap: 14px; overflow: auto; }
-.source-preview--fullscreen { max-height: calc(100dvh - 140px); }
+.source-preview { display: grid; max-height: min(80vh, 820px); gap: 14px; overflow: auto; }
+.source-preview-dialog:deep(.el-dialog.is-fullscreen) { display: flex; flex-direction: column; }
+.source-preview-dialog:deep(.el-dialog.is-fullscreen .el-dialog__header) { flex: 0 0 auto; }
+.source-preview-dialog:deep(.el-dialog.is-fullscreen .el-dialog__body) { width: 100%; flex: 1; min-height: 0; box-sizing: border-box; overflow: hidden; }
+.source-preview--fullscreen { width: 100%; height: 100%; max-height: none; min-width: 0; min-height: 0; box-sizing: border-box; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
 .source-dialog-header { display: flex; min-width: 0; align-items: center; gap: 16px; padding-right: 100px; }
 .source-dialog-title { min-width: 0; overflow: hidden; color: var(--ink-950); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .source-dialog-actions { position: absolute; top: 0; right: 48px; display: grid; width: 48px; height: 48px; place-items: center; }
@@ -1846,7 +1849,8 @@ onActivated(() => {
 .source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .source-preview-meta a { display: inline-flex; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; }
 .source-preview-meta a:hover { text-decoration: underline; }
-.source-preview p { max-height: min(50vh, 480px); overflow: auto; margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.source-preview p { max-height: min(65vh, 640px); overflow: auto; margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.source-preview--fullscreen p { width: 100%; height: 100%; max-height: none; min-width: 0; min-height: 0; box-sizing: border-box; }
 
 .composer-wrap { width: min(100% - 48px, 900px); margin: 0 auto; padding: 8px 0 16px; }
 .composer { position: relative; padding: 11px 13px 9px; border: 1px solid var(--line-strong); border-radius: 13px; background: var(--surface); box-shadow: 0 5px 18px rgba(var(--teal-shadow-soft-rgb), .06); transition: border-color .18s, box-shadow .18s; }
