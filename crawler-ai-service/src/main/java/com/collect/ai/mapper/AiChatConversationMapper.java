@@ -12,11 +12,22 @@ import java.util.List;
 public interface AiChatConversationMapper extends BaseMapper<AiChatConversation> {
 
     @Select("""
-            SELECT id, user_id, title, created_at, updated_at
+            SELECT id, user_id, assistant_id, title, created_at, updated_at
             FROM ai_chat_conversation
             WHERE user_id = #{userId}
             ORDER BY updated_at DESC, id DESC
             LIMIT 100
             """)
     List<AiChatConversation> selectRecentByUserId(@Param("userId") Long userId);
+
+    @Select("""
+            SELECT id, user_id, assistant_id, title, created_at, updated_at
+            FROM ai_chat_conversation
+            WHERE user_id = #{userId} AND assistant_id = #{assistantId}
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 100
+            """)
+    List<AiChatConversation> selectRecentByUserIdAndAssistant(
+            @Param("userId") Long userId,
+            @Param("assistantId") Long assistantId);
 }

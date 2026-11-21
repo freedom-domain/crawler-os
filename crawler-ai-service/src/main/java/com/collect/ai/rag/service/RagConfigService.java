@@ -13,10 +13,13 @@ import com.collect.ai.rag.dto.RagConfigResponse;
 import com.collect.ai.rag.initializer.RagIndexInitializer;
 import com.collect.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -26,6 +29,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class RagConfigService {
 
     private static final Set<String> EMBEDDING_PROVIDERS = Set.of("ollama", "openai");
@@ -92,6 +96,9 @@ public class RagConfigService {
             throw new IllegalArgumentException("配置请求不能为空");
         }
         AiRagConfig config = requireConfig();
+        RagProperties.Rag previous = properties.getRag();
+        String previousVectorIndex = properties.resolveVectorIndex();
+        String previousSourceIndex = previous.getSourceIndex();
         AiRagVectorModel legacyUpdatedModel = null;
         AiRagChatModel legacyUpdatedChatModel = null;
         if (request.getEnabled() != null) config.setEnabled(request.getEnabled());
@@ -178,15 +185,19 @@ public class RagConfigService {
             }
         }
         config.setUpdateTime(LocalDateTime.now());
-        RagProperties.Rag previous = properties.getRag();
         apply(config);
         try {
+            String vectorIndex = properties.resolveVectorIndex();
+            if (vectorIndex.equals(config.getSourceIndex())) {
+                throw new BizException("向量索引不能与 ES 源索引相同");
+            }
             if (Boolean.TRUE.equals(config.getEnabled())) {
                 indexInitializer.ensureVectorIndex();
             }
             if (configMapper.updateById(config) != 1) {
                 throw new IllegalStateException("保存 RAG 数据库配置失败");
             }
+            deleteOldVectorIndexAfterCommit(previousVectorIndex, vectorIndex, previousSourceIndex);
         } catch (RuntimeException e) {
             properties.replace(previous);
             throw e;
@@ -321,6 +332,9 @@ public class RagConfigService {
         if (!vectorModelId.equals(config.getVectorModelId())) {
             return;
         }
+        RagProperties.Rag previous = properties.getRag();
+        String previousVectorIndex = properties.resolveVectorIndex();
+        String previousSourceIndex = previous.getSourceIndex();
         AiRagVectorModel model = vectorModelMapper.selectById(vectorModelId);
         if (model == null) {
             throw new IllegalStateException("RAG 配置引用的向量模型不存在");
@@ -331,19 +345,67 @@ public class RagConfigService {
         } catch (IllegalArgumentException e) {
             throw new BizException(e.getMessage());
         }
-        RagProperties.Rag previous = properties.getRag();
         apply(config);
         try {
+            String vectorIndex = properties.resolveVectorIndex();
+            if (vectorIndex.equals(config.getSourceIndex())) {
+                throw new BizException("向量索引不能与 ES 源索引相同");
+            }
             if (Boolean.TRUE.equals(config.getEnabled())) {
                 indexInitializer.ensureVectorIndex();
             }
             if (configMapper.updateById(config) != 1) {
                 throw new IllegalStateException("保存 RAG 数据库配置失败");
             }
+            deleteOldVectorIndexAfterCommit(previousVectorIndex, vectorIndex, previousSourceIndex);
         } catch (RuntimeException e) {
             properties.replace(previous);
             throw e;
         }
+    }
+
+    private void deleteOldVectorIndexAfterCommit(
+            String previousIndex, String currentIndex, String previousSourceIndex) {
+        if (previousIndex.equals(currentIndex)) {
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            throw new IllegalStateException("无法在事务提交后清理旧 RAG 向量索引");
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (previousIndex.equals(previousSourceIndex)) {
+                    log.warn("旧 RAG 向量索引名称与 ES 源索引相同，跳过删除以保护源数据: {}",
+                            previousIndex);
+                    return;
+                }
+                if (isIndexReferencedByAnotherEnvironment(previousIndex)) {
+                    log.warn("旧 RAG 向量索引仍被其他环境使用，跳过删除: {}", previousIndex);
+                    return;
+                }
+                indexInitializer.deleteVectorIndex(previousIndex);
+            }
+        });
+    }
+
+    private boolean isIndexReferencedByAnotherEnvironment(String index) {
+        return configMapper.selectList(new LambdaQueryWrapper<AiRagConfig>()
+                        .ne(AiRagConfig::getEnvironment, resolveEnvironment()))
+                .stream()
+                .anyMatch(config -> index.equals(config.getSourceIndex())
+                        || index.equals(resolveVectorIndex(config)));
+    }
+
+    private String resolveVectorIndex(AiRagConfig config) {
+        if (StringUtils.hasText(config.getVectorIndex())) {
+            return config.getVectorIndex().trim();
+        }
+        String model = config.getEmbeddingModel() == null
+                ? "unknown"
+                : config.getEmbeddingModel().toLowerCase(Locale.ROOT)
+                        .replaceAll("[^a-z0-9]+", "_").replaceAll("^_|_$", "");
+        return config.getVectorIndexPrefix() + "_" + model;
     }
 
     private void ensureVectorModel(AiRagConfig config) {

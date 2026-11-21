@@ -31,6 +31,12 @@ public final class RagDtos {
     }
 
     @Data
+    public static class DocumentVectorizationResult {
+        private String documentId;
+        private long chunks;
+    }
+
+    @Data
     public static class SourceReference {
         private String id;
         private String title;

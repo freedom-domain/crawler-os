@@ -82,6 +82,22 @@ public class RagIndexInitializer {
         }
     }
 
+    public void deleteVectorIndex(String index) {
+        try {
+            HttpResponse<String> response = elasticsearchRequest("DELETE", "/" + index, null);
+            if (response.statusCode() != 404
+                    && (response.statusCode() < 200 || response.statusCode() >= 300)) {
+                throw new IllegalStateException("删除旧 RAG 向量索引失败: "
+                        + response.statusCode() + " " + response.body());
+            }
+            log.info("已删除旧 RAG 向量索引: {}", index);
+        } catch (Exception e) {
+            log.error("删除旧 RAG 向量索引失败: {}", index, e);
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("删除旧 RAG 向量索引失败: " + index, e);
+        }
+    }
+
     private void validateVectorMapping(String index) throws Exception {
         String vectorField = properties.resolveVectorField();
         int dimensions = properties.resolveDimensions();

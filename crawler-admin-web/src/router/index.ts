@@ -42,10 +42,13 @@ const router = createRouter({
         { path: 'user', name: 'User', component: () => import('@/views/User.vue') },
         { path: 'role', name: 'Role', component: () => import('@/views/Role.vue') },
         { path: 'permission', name: 'Permission', component: () => import('@/views/Permission.vue') },
-        { path: 'ai-config', name: 'AiConfig', component: () => import('@/views/AiConfig.vue') },
+        { path: 'ai-config', redirect: '/ai-knowledge' },
+        { path: 'ai-knowledge', name: 'AiKnowledgeBase', component: () => import('@/views/AiKnowledgeBase.vue') },
         { path: 'ai-vector-models', name: 'AiVectorModels', component: () => import('@/views/AiVectorModels.vue') },
         { path: 'ai-chat-models', name: 'AiChatModels', component: () => import('@/views/AiChatModels.vue') },
+        { path: 'ai-assistants', name: 'AiAssistants', component: () => import('@/views/AiAssistants.vue') },
         { path: 'ai-chat', name: 'AiChat', component: () => import('@/views/AiChat.vue') },
+        { path: 'ai-chat/:assistantId', name: 'AiChatAssistant', component: () => import('@/views/AiChat.vue') },
         { path: 'cf-ip-management', name: 'CfIpManagement', component: () => import('@/views/CfIpManagement.vue') },
         { path: 'profile', name: 'Profile', component: () => import('@/views/Profile.vue') }
       ]

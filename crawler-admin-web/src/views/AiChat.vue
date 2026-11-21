@@ -53,36 +53,33 @@
     <section class="chat-main">
       <header class="chat-header">
         <div>
-          <h1>{{ activeConversation?.title || 'AI 知识库助手' }}</h1>
-          <p>向已收录的内容提问，答案附带相关来源</p>
+          <h1>{{ routeAssistantName || activeConversation?.title || 'AI 知识库助手' }}</h1>
+          <p>{{ routeAssistantName ? '当前助手的专属聊天会话' : '向已收录的内容提问，答案附带相关来源' }}</p>
         </div>
         <div class="header-actions">
+          <el-select
+            v-model="selectedAssistantId"
+            class="assistant-selector"
+            size="small"
+            placeholder="选择助手"
+            popper-class="assistant-select-popper"
+            @change="createConversation"
+            v-if="!effectiveAssistantId"
+          >
+            <el-option
+              v-for="assistant in assistants"
+              :key="assistant.id"
+              :label="assistant.name"
+              :value="assistant.id"
+              :disabled="!assistant.enabled"
+            />
+          </el-select>
           <el-button class="mobile-new-chat" size="small" :loading="creatingConversation" @click="createConversation">
             <el-icon><Plus /></el-icon>新对话
-          </el-button>
-          <el-button
-            v-if="canConfigureAi"
-            class="ai-settings-button"
-            plain
-            @click="settingsVisible = true"
-          >
-            <el-icon><Setting /></el-icon>
-            <span>AI 配置</span>
           </el-button>
           <div class="model-badge"><span></span> RAG 知识库</div>
         </div>
       </header>
-
-      <el-drawer
-        v-model="settingsVisible"
-        title="AI 配置"
-        size="min(900px, 94vw)"
-        destroy-on-close
-        class="ai-settings-drawer"
-        @closed="loadContextWindow"
-      >
-        <AiConfig embedded />
-      </el-drawer>
 
       <div v-if="conversations.length > 0" class="mobile-conversations">
         <button
@@ -142,8 +139,8 @@
                 open
               >
                 <summary>
+                  <span class="reasoning-summary-title">模型思考过程</span>
                   <span class="reasoning-summary-content">
-                    <span>模型思考过程</span>
                     <span v-if="message.reasoningText" class="reasoning-duration">
                       {{ formatTokenCount(countCharacters(message.reasoningText)) }} 字
                     </span>
@@ -157,7 +154,7 @@
                       v-if="message.thinkingDurationMs && message.thinkingDurationMs > 0 && message.reasoningText"
                       class="reasoning-duration"
                     >
-                      {{ formatTokenRate(message.reasoningText, message.thinkingDurationMs, '思考') }}
+                      {{ formatTokenRate(message.reasoningText, message.thinkingDurationMs) }}
                     </span>
                   </span>
                 </summary>
@@ -188,7 +185,7 @@
               </div>
               <div v-if="message.role === 'assistant' && message.status === 'SUCCESS'" class="message-stats">
                 <span v-if="message.generationDurationMs !== undefined">
-                  生成 {{ formatDuration(message.generationDurationMs) }}
+                  {{ formatDuration(message.generationDurationMs) }}
                 </span>
                 <span v-else-if="message.durationMs !== undefined">
                   总耗时 {{ formatDuration(message.durationMs) }}
@@ -196,7 +193,7 @@
                 <span>{{ formatTokenCount(countCharacters(message.text)) }} 字</span>
                 <span>约 {{ formatTokenCount(estimateTokens(message.text)) }} Token</span>
                 <span v-if="message.generationDurationMs && message.generationDurationMs > 0">
-                  {{ formatTokenRate(message.text, message.generationDurationMs, '生成') }}
+                  {{ formatTokenRate(message.text, message.generationDurationMs) }}
                 </span>
                 <el-button
                   class="copy-message-button"
@@ -356,21 +353,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import {
   cancelChatMessage, chatContextWindow, chatConversationCreate, chatConversationDelete, chatConversationList,
-  chatMessages, clearChatMessages, resumeChatMessageStream, streamChatMessage
+  chatMessages, clearChatMessages, getChatAssistants, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
   ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, Help, Link, Loading, MagicStick, Plus,
-  Promotion, Refresh, Setting, UserFilled
+  Promotion, Refresh, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
-import AiConfig from '@/views/AiConfig.vue'
-import { useUserStore } from '@/stores/user'
 
 interface SourceReference {
   id: string
@@ -410,10 +406,20 @@ const suggestions = [
 ]
 
 const conversations = ref<Conversation[]>([])
+const assistants = ref<any[]>([])
+const selectedAssistantId = ref<string | number | undefined>(undefined)
+const route = useRoute()
+const props = defineProps<{ assistantId?: string | number; embedded?: boolean }>()
+const routeAssistantId = computed(() =>
+  typeof route.params.assistantId === 'string' ? route.params.assistantId : undefined
+)
+const effectiveAssistantId = computed(() =>
+  props.assistantId !== undefined && props.assistantId !== ''
+    ? String(props.assistantId)
+    : routeAssistantId.value
+)
+const routeAssistantName = ref('')
 const activeConversationId = ref<number | null>(null)
-const settingsVisible = ref(false)
-const userStore = useUserStore()
-const canConfigureAi = computed(() => userStore.permissions.includes('ai:config'))
 const activeConversation = computed(() =>
   conversations.value.find(conversation => conversation.id === activeConversationId.value)
 )
@@ -461,8 +467,8 @@ const formatTokenCount = (value: number) => value.toLocaleString()
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
   durationMs >= 1000 ? `耗时 ${(durationMs / 1000).toFixed(1)} 秒` : `耗时 ${Math.round(durationMs)} 毫秒`
-const formatTokenRate = (content: string, durationMs: number, phase: '思考' | '生成') =>
-  `${phase}约 ${(estimateTokens(content) * 1000 / durationMs).toFixed(1)} Token/秒`
+const formatTokenRate = (content: string, durationMs: number) =>
+  `约 ${(estimateTokens(content) * 1000 / durationMs).toFixed(1)} Token/秒`
 const copyMessage = async (content: string) => {
   try {
     await navigator.clipboard.writeText(content)
@@ -524,7 +530,7 @@ const loadConversations = async () => {
   historyError.value = ''
   let selectedConversation: Conversation | undefined
   try {
-    const response: any = await chatConversationList()
+    const response: any = await chatConversationList(effectiveAssistantId.value || selectedAssistantId.value)
     if (!response) return
     conversations.value = (response.data || []).map((item: any) => ({
       id: item.id,
@@ -610,7 +616,7 @@ const createConversation = async () => {
   creatingConversation.value = true
   historyError.value = ''
   try {
-    const response: any = await chatConversationCreate()
+    const response: any = await chatConversationCreate(selectedAssistantId.value)
     if (!response) return
     const conversation: Conversation = {
       id: response.data.id,
@@ -1051,8 +1057,33 @@ const sendMessage = async (questionOverride?: string) => {
 }
 
 onMounted(() => {
+  if (effectiveAssistantId.value) selectedAssistantId.value = effectiveAssistantId.value
   void loadConversations()
   void loadContextWindow()
+  void getChatAssistants().then((response: any) => {
+    assistants.value = (response.data || []).filter((assistant: any) => assistant.enabled)
+    if (effectiveAssistantId.value) {
+      const assistant = assistants.value.find((item: any) => String(item.id) === String(effectiveAssistantId.value))
+      routeAssistantName.value = assistant?.name || 'AI 助手'
+      selectedAssistantId.value = effectiveAssistantId.value
+    } else if (assistants.value.length && !selectedAssistantId.value) {
+      selectedAssistantId.value = assistants.value[0].id
+    }
+  }).catch(() => {
+    ElMessage.error('加载 AI 助手失败，请刷新页面重试')
+  })
+})
+watch(effectiveAssistantId, async (assistantId, previousId) => {
+  if (assistantId === previousId) return
+  selectedAssistantId.value = assistantId
+  routeAssistantName.value = ''
+  activeConversationId.value = null
+  conversations.value = []
+  if (assistantId) {
+    const assistant = assistants.value.find((item: any) => String(item.id) === String(assistantId))
+    routeAssistantName.value = assistant?.name || 'AI 助手'
+  }
+  await loadConversations()
 })
 onActivated(() => {
   const conversation = activeConversation.value
@@ -1115,10 +1146,13 @@ onActivated(() => {
 
 .chat-main { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .chat-header { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 26px; border-bottom: 1px solid var(--chrome-line); }
+.chat-header > div:first-child { min-width: 0; flex: 1; }
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
-.ai-settings-button { flex: 0 0 auto; border-radius: 20px; font-size: 11px; }
-.ai-settings-button .el-icon { margin-right: 4px; }
-:global(.ai-settings-drawer .el-drawer__body) { overflow: auto; padding: 18px; }
+.assistant-selector { width: 220px; }
+.assistant-selector :deep(.el-select__selection), .assistant-selector :deep(.el-select__selected-item) { min-width: 0; }
+.assistant-selector :deep(.el-select__selected-item) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:global(.assistant-select-popper) { min-width: 220px; max-width: 360px; }
+:global(.assistant-select-popper .el-select-dropdown__item) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-new-chat, .mobile-conversations { display: none; }
 .chat-header h1 { margin: 0; overflow: hidden; color: var(--ink-950); font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .chat-header p { margin: 5px 0 0; color: var(--ink-500); font-size: 11px; }
@@ -1152,7 +1186,7 @@ onActivated(() => {
 .message-content { min-width: 0; flex: 1; padding-top: 2px; }
 .reasoning-block { margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); color: var(--ink-900); }
 .reasoning-block summary { color: var(--ink-700); font-size: 11px; font-weight: 650; cursor: pointer; }
-.reasoning-summary-content { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.reasoning-summary-content { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-left: 12px; }
 .reasoning-duration { color: var(--ink-500); font-size: 10px; font-weight: 400; }
 .reasoning-content { padding-top: 8px; color: var(--ink-900); font-size: 12px; line-height: 1.7; }
 
@@ -1295,24 +1329,26 @@ onActivated(() => {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
   .chat-sidebar { display: none; }
   .chat-header { min-height: 62px; padding: 12px 15px; }
+  .assistant-selector { width: 150px; }
   .chat-header h1 { max-width: 52vw; font-size: 13px; }
   .chat-header p { font-size: 10px; }
   .model-badge { padding: 6px 8px; font-size: 9px; }
-  .ai-settings-button { width: 29px; height: 29px; padding: 0 6px; }
-  .ai-settings-button span { display: none; }
   .mobile-new-chat { display: inline-flex; height: 29px; padding: 0 8px; border-radius: 7px; font-size: 10px; }
   .mobile-new-chat .el-icon { margin-right: 3px; }
   .mobile-conversations { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; border-bottom: 1px solid var(--chrome-line); scrollbar-width: none; }
   .mobile-conversations::-webkit-scrollbar { display: none; }
   .mobile-conversation { max-width: 150px; flex: 0 0 auto; overflow: hidden; padding: 6px 10px; border: 1px solid var(--chrome-line); border-radius: 16px; background: var(--surface); color: var(--ink-700); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .mobile-conversation.is-active { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
-  .composer-toolbar { grid-template-columns: auto minmax(0, 1fr); }
-  .retrieval-control { grid-column: 1; grid-row: 1; }
+  .composer-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .retrieval-control { grid-column: 1; grid-row: 1; min-width: 0; gap: 6px; white-space: nowrap; }
+  .retrieval-control :deep(.el-select) { flex: 0 0 78px; }
   .send-tools { grid-column: 2; grid-row: 1; justify-content: flex-end; }
   .context-usage, .context-usage-error { grid-column: 1 / -1; grid-row: 2; }
   .context-usage { width: 100%; }
   .context-usage-copy { flex-direction: column; align-items: flex-start; gap: 2px; }
   .context-usage-copy strong { white-space: normal; overflow-wrap: anywhere; }
+  .reasoning-summary-content { display: flex; width: 100%; box-sizing: border-box; gap: 4px 10px; margin-top: 6px; margin-left: 0; }
+  .reasoning-duration { min-width: 0; overflow-wrap: anywhere; }
   .message-list { padding: 16px 14px; }
   .suggestion-list { grid-template-columns: 1fr; }
   .suggestion-card { min-height: 44px; }

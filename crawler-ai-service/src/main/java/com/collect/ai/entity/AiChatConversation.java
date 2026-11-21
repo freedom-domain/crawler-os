@@ -15,6 +15,7 @@ public class AiChatConversation {
     private Long id;
 
     private Long userId;
+    private Long assistantId;
     private String title;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

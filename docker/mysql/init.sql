@@ -131,6 +131,15 @@ CREATE TABLE IF NOT EXISTS ai_rag_config (
     PRIMARY KEY (environment)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS ai_rag_excluded_document (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    source_index VARCHAR(255) NOT NULL,
+    document_id VARCHAR(512) NOT NULL,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_rag_excluded_source_document (source_index, document_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT IGNORE INTO ai_rag_config (
     environment, enabled, source_index, embedding_provider, embedding_base_url,
     embedding_model, dimensions, chat_provider, chat_base_url, chat_model,
@@ -197,13 +206,42 @@ JOIN ai_rag_chat_model model
     ON model.name = CONCAT('默认聊天模型-', config.environment)
 SET config.chat_model_id = model.id;
 
+CREATE TABLE IF NOT EXISTS ai_assistant (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(64) NOT NULL,
+    description VARCHAR(512) NOT NULL DEFAULT '',
+    avatar VARCHAR(32) NOT NULL DEFAULT '',
+    system_prompt LONGTEXT NOT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    chat_model_id BIGINT NULL,
+    vector_model_id BIGINT NULL,
+    sort INT NOT NULL DEFAULT 0,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_ai_assistant_enabled_sort (enabled, sort, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO ai_assistant (
+    name, description, avatar, system_prompt, enabled, chat_model_id, vector_model_id, sort
+)
+SELECT '知识库助手', '基于爬虫知识库回答问题，并附带资料来源。',
+       'knowledge', '你是一个专业的中文知识库助手。请只依据提供的资料回答问题；资料不足时明确说明，不要编造。',
+       1, c.id, v.id, 0
+FROM ai_rag_chat_model c
+JOIN ai_rag_vector_model v
+WHERE c.id = (SELECT MIN(id) FROM ai_rag_chat_model)
+  AND v.id = (SELECT MIN(id) FROM ai_rag_vector_model)
+  AND NOT EXISTS (SELECT 1 FROM ai_assistant WHERE name = '知识库助手');
+
 CREATE TABLE IF NOT EXISTS ai_chat_conversation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
+    assistant_id BIGINT NULL,
     title VARCHAR(160) NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    KEY idx_ai_chat_conversation_user_updated (user_id, updated_at, id)
+    KEY idx_ai_chat_conversation_user_updated (user_id, updated_at, id),
+    KEY idx_ai_chat_conversation_assistant (assistant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS ai_chat_message (
@@ -648,17 +686,19 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (23, '基金管理', 'investment:fund-management', 18, 1, '/investment/fund-management', 'Coin', 3),
 (24, '股票管理', 'investment:stock-management', 18, 1, '/investment/stock-management', 'TrendCharts', 2),
 (25, 'CF IP 优选', 'cf-ip:manage', 12, 1, '/cf-ip-management', 'Connection', 4),
-(26, 'AI 配置', 'ai:config', 12, 1, '/ai-config', 'Setting', 5),
+(26, '管理 RAG 配置', 'ai:config', 30, 2, NULL, 1),
 (28, '向量模型', 'ai:vector-models', 12, 1, '/ai-vector-models', 'Cpu', 6),
 (29, '聊天模型', 'ai:chat-models', 12, 1, '/ai-chat-models', 'ChatDotRound', 7),
-(27, 'AI 助手', 'ai:chat', 0, 1, '/ai-chat', 'ChatDotRound', 9);
+(30, '知识库管理', 'ai:knowledge', 12, 1, '/ai-knowledge', 'DataLine', 8),
+(27, 'AI 助手', 'ai:chat', 0, 1, '/ai-chat', 'ChatDotRound', 9),
+(31, 'AI 助手管理', 'ai:assistant', 0, 1, '/ai-assistants', 'Service', 10);
 
 -- 角色权限绑定（管理员拥有全部权限）
 INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
 (1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
-(1, 25),(1, 26),(1, 27),(1, 28),(1, 29),
+(1, 25),(1, 26),(1, 27),(1, 28),(1, 29),(1, 30),(1, 31),
 (2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)

@@ -1,14 +1,19 @@
 package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.collect.ai.entity.AiRagExcludedDocument;
 import com.collect.ai.entity.Spider;
+import com.collect.ai.mapper.AiRagExcludedDocumentMapper;
 import com.collect.ai.mapper.SpiderMapper;
 import com.collect.ai.rag.config.RagProperties;
+import com.collect.ai.rag.dto.KnowledgeBaseDtos;
 import com.collect.ai.rag.dto.RagDtos;
+import com.collect.common.exception.BizException;
 import com.collect.common.security.LoginUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -22,6 +27,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -40,6 +46,7 @@ public class RagService {
     private final RagProperties properties;
     private final ObjectMapper objectMapper;
     private final SpiderMapper spiderMapper;
+    private final AiRagExcludedDocumentMapper excludedDocumentMapper;
 
     @Value("${spring.elasticsearch.uris:http://127.0.0.1:9200}")
     private String elasticsearchUris;
@@ -107,6 +114,293 @@ public class RagService {
         result.setChunks(chunks);
         result.setVectorDocuments(chunks);
         return result;
+    }
+
+    public KnowledgeBaseDtos.Stats getKnowledgeBaseStats() {
+        RagProperties.Rag rag = properties.getRag();
+        KnowledgeBaseDtos.Stats stats = new KnowledgeBaseDtos.Stats();
+        stats.setEnabled(rag.isEnabled());
+        stats.setSourceIndex(rag.getSourceIndex());
+        stats.setVectorIndex(properties.resolveVectorIndex());
+        List<String> excludedIds = getExcludedDocumentIds();
+        stats.setSourceDocuments(countDocuments(rag.getSourceIndex(), matchAllQuery()));
+        stats.setExcludedDocuments(excludedIds.isEmpty() ? 0
+                : countDocuments(rag.getSourceIndex(), excludedDocumentIdsQuery(excludedIds)));
+        stats.setIncludedDocuments(Math.max(0,
+                stats.getSourceDocuments() - stats.getExcludedDocuments()));
+        stats.setVectorDocuments(countDocuments(properties.resolveVectorIndex(), matchAllQuery()));
+        return stats;
+    }
+
+    public KnowledgeBaseDtos.DocumentPage listKnowledgeBaseDocuments(
+            int page, int pageSize, String keyword, boolean includeExcluded) {
+        if (page < 1 || pageSize < 1 || pageSize > 100 || (long) (page - 1) * pageSize >= 10_000) {
+            throw new BizException("分页参数不合法");
+        }
+        List<String> excludedIds = getExcludedDocumentIds();
+        ObjectNode query = sourceDocumentQuery(keyword, includeExcluded, excludedIds);
+        ObjectNode body = objectMapper.createObjectNode()
+                .put("from", (page - 1) * pageSize)
+                .put("size", pageSize);
+        body.putArray("sort").add("_doc");
+        body.putArray("_source").add("title").add("content").add("url")
+                .add("spiderName").add("spiderId");
+        body.set("query", query);
+        try {
+            HttpResponse<String> response = elasticsearchRequest("POST",
+                    "/" + properties.getRag().getSourceIndex() + "/_search", toJson(body));
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("读取知识库文档失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode totalNode = root.path("hits").path("total");
+            long total = totalNode.isNumber() ? totalNode.asLong() : totalNode.path("value").asLong();
+            List<KnowledgeBaseDtos.Document> records = new ArrayList<>();
+            for (JsonNode hit : root.path("hits").path("hits")) {
+                JsonNode source = hit.path("_source");
+                KnowledgeBaseDtos.Document document = new KnowledgeBaseDtos.Document();
+                document.setId(hit.path("_id").asText());
+                document.setTitle(source.path("title").asText(""));
+                document.setSnippet(snippet(source.path("content").asText(""), 240));
+                document.setUrl(source.path("url").asText(""));
+                document.setSpiderName(source.path("spiderName").asText(""));
+                document.setSpiderId(source.path("spiderId").isNumber()
+                        ? source.path("spiderId").asLong() : null);
+                document.setExcluded(excludedIds.contains(document.getId()));
+                records.add(document);
+            }
+            KnowledgeBaseDtos.DocumentPage result = new KnowledgeBaseDtos.DocumentPage();
+            result.setRecords(records);
+            result.setTotal(total);
+            result.setPage(page);
+            result.setPageSize(pageSize);
+            return result;
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("读取知识库文档失败: " + e.getMessage(), e);
+        }
+    }
+
+    public KnowledgeBaseDtos.DocumentDetail getKnowledgeBaseDocument(String documentId) {
+        JsonNode hit = findSourceDocument(documentId);
+        JsonNode source = hit.path("_source");
+        KnowledgeBaseDtos.DocumentDetail detail = new KnowledgeBaseDtos.DocumentDetail();
+        detail.setId(hit.path("_id").asText());
+        detail.setTitle(source.path("title").asText(""));
+        detail.setContent(source.path("content").asText(""));
+        detail.setUrl(source.path("url").asText(""));
+        detail.setSpiderName(source.path("spiderName").asText(""));
+        detail.setSpiderId(source.path("spiderId").isNumber()
+                ? source.path("spiderId").asLong() : null);
+        detail.setExcluded(isDocumentExcluded(documentId));
+        return detail;
+    }
+
+    public RagDtos.DocumentVectorizationResult vectorizeDocument(String documentId) {
+        ensureEnabled();
+        JsonNode hit = findSourceDocument(documentId);
+        JsonNode source = hit.path("_source");
+        List<ObjectNode> operations = createDocumentVectorOperations(documentId, source);
+        if (operations.isEmpty()) {
+            throw new BizException("文档没有可向量化的标题或正文内容");
+        }
+        for (int i = 0; i < operations.size(); i += 200) {
+            bulkOperations(operations.subList(i, Math.min(i + 200, operations.size())));
+        }
+        deleteDocumentVectorsExcept(documentId, chunkIds(operations));
+        setDocumentExcluded(documentId, false);
+
+        RagDtos.DocumentVectorizationResult result = new RagDtos.DocumentVectorizationResult();
+        result.setDocumentId(documentId);
+        result.setChunks(operations.size() / 2);
+        return result;
+    }
+
+    public void excludeKnowledgeBaseDocument(String documentId) {
+        findSourceDocument(documentId);
+        deleteDocumentVectorsExcept(documentId, List.of());
+        setDocumentExcluded(documentId, true);
+    }
+
+    private List<ObjectNode> createDocumentVectorOperations(String documentId, JsonNode source) {
+        String title = source.path("title").asText("");
+        String content = source.path("content").asText("");
+        String text = title.isBlank() ? content : title + "\n" + content;
+        List<String> chunks = splitText(text, properties.getRag().getChunkSize(),
+                properties.getRag().getChunkOverlap());
+        List<ObjectNode> operations = new ArrayList<>(chunks.size() * 2);
+        for (int i = 0; i < chunks.size(); i++) {
+            String chunkId = documentId + ":" + i;
+            ObjectNode action = objectMapper.createObjectNode();
+            action.set("index", objectMapper.createObjectNode()
+                    .put("_index", properties.resolveVectorIndex())
+                    .put("_id", chunkId));
+            operations.add(action);
+
+            ObjectNode row = objectMapper.createObjectNode();
+            row.put("doc_id", documentId);
+            row.put("chunk_id", chunkId);
+            row.put("title", title);
+            row.put("content", chunks.get(i));
+            row.put("url", source.path("url").asText(""));
+            row.put("spiderName", source.path("spiderName").asText(""));
+            row.put("embedding_model", properties.getRag().getEmbeddingModel());
+            if (source.path("spiderId").isNumber()) {
+                row.put("spiderId", source.path("spiderId").asLong());
+            }
+            ArrayNode vector = row.putArray(properties.resolveVectorField());
+            createEmbedding(chunks.get(i)).forEach(vector::add);
+            operations.add(row);
+        }
+        return operations;
+    }
+
+    private List<String> chunkIds(List<ObjectNode> operations) {
+        List<String> chunkIds = new ArrayList<>(operations.size() / 2);
+        for (int i = 0; i < operations.size(); i += 2) {
+            chunkIds.add(operations.get(i).path("index").path("_id").asText());
+        }
+        return chunkIds;
+    }
+
+    private void deleteDocumentVectorsExcept(String documentId, List<String> chunkIds) {
+        ObjectNode bool = objectMapper.createObjectNode();
+        bool.putArray("filter").add(objectMapper.createObjectNode()
+                .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
+        if (!chunkIds.isEmpty()) {
+            bool.putArray("must_not").add(objectMapper.createObjectNode()
+                    .set("terms", objectMapper.createObjectNode()
+                            .set("chunk_id", objectMapper.valueToTree(chunkIds))));
+        }
+        ObjectNode body = objectMapper.createObjectNode()
+                .set("query", objectMapper.createObjectNode().set("bool", bool));
+        try {
+            HttpResponse<String> response = elasticsearchRequest("POST",
+                    "/" + properties.resolveVectorIndex()
+                            + "/_delete_by_query?refresh=true&conflicts=proceed",
+                    toJson(body));
+            if (response.statusCode() >= 300 && response.statusCode() != 404) {
+                throw new IllegalStateException("清理文档向量失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("清理文档向量失败: " + e.getMessage(), e);
+        }
+    }
+
+    private void setDocumentExcluded(String documentId, boolean excluded) {
+        String sourceIndex = properties.getRag().getSourceIndex();
+        LambdaQueryWrapper<AiRagExcludedDocument> query = new LambdaQueryWrapper<AiRagExcludedDocument>()
+                .eq(AiRagExcludedDocument::getSourceIndex, sourceIndex)
+                .eq(AiRagExcludedDocument::getDocumentId, documentId);
+        if (excluded) {
+            if (excludedDocumentMapper.selectCount(query) > 0) return;
+            AiRagExcludedDocument record = new AiRagExcludedDocument();
+            record.setSourceIndex(sourceIndex);
+            record.setDocumentId(documentId);
+            record.setCreateTime(LocalDateTime.now());
+            try {
+                if (excludedDocumentMapper.insert(record) != 1) {
+                    throw new IllegalStateException("保存知识库排除状态失败");
+                }
+            } catch (DuplicateKeyException ignored) {
+                if (!isDocumentExcluded(documentId)) {
+                    throw new IllegalStateException("保存知识库排除状态失败");
+                }
+            }
+        } else {
+            excludedDocumentMapper.delete(query);
+        }
+    }
+
+    private boolean isDocumentExcluded(String documentId) {
+        return excludedDocumentMapper.selectCount(new LambdaQueryWrapper<AiRagExcludedDocument>()
+                .eq(AiRagExcludedDocument::getSourceIndex, properties.getRag().getSourceIndex())
+                .eq(AiRagExcludedDocument::getDocumentId, documentId)) > 0;
+    }
+
+    private List<String> getExcludedDocumentIds() {
+        return excludedDocumentMapper.selectList(new LambdaQueryWrapper<AiRagExcludedDocument>()
+                        .eq(AiRagExcludedDocument::getSourceIndex, properties.getRag().getSourceIndex())
+                        .select(AiRagExcludedDocument::getDocumentId))
+                .stream().map(AiRagExcludedDocument::getDocumentId).toList();
+    }
+
+    private JsonNode findSourceDocument(String documentId) {
+        if (documentId == null || documentId.isBlank()) {
+            throw new BizException("文档 ID 不能为空");
+        }
+        ObjectNode body = objectMapper.createObjectNode().put("size", 1);
+        body.set("query", objectMapper.createObjectNode()
+                .set("term", objectMapper.createObjectNode().put("_id", documentId)));
+        try {
+            HttpResponse<String> response = elasticsearchRequest("POST",
+                    "/" + properties.getRag().getSourceIndex() + "/_search", toJson(body));
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("读取爬虫源文档失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            JsonNode hits = objectMapper.readTree(response.body()).path("hits").path("hits");
+            if (!hits.isArray() || hits.isEmpty()) {
+                throw new BizException("爬虫源文档不存在或已被移除");
+            }
+            return hits.get(0);
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            if (e instanceof BizException business) throw business;
+            throw new IllegalStateException("读取爬虫源文档失败: " + e.getMessage(), e);
+        }
+    }
+
+    private long countDocuments(String index, ObjectNode query) {
+        ObjectNode body = objectMapper.createObjectNode().set("query", query);
+        try {
+            HttpResponse<String> response = elasticsearchRequest("POST", "/" + index + "/_count", toJson(body));
+            if (response.statusCode() == 404 && index.equals(properties.resolveVectorIndex())) {
+                return 0;
+            }
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("统计知识库文档失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            return objectMapper.readTree(response.body()).path("count").asLong();
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("统计知识库文档失败: " + e.getMessage(), e);
+        }
+    }
+
+    private ObjectNode sourceDocumentQuery(
+            String keyword, boolean includeExcluded, List<String> excludedIds) {
+        ObjectNode bool = objectMapper.createObjectNode();
+        if (keyword != null && !keyword.isBlank()) {
+            ObjectNode multiMatch = objectMapper.createObjectNode().put("query", keyword.trim());
+            multiMatch.putArray("fields").add("title^3").add("content").add("url").add("spiderName");
+            bool.putArray("must").add(objectMapper.createObjectNode()
+                    .set("multi_match", multiMatch));
+        }
+        if (!includeExcluded && !excludedIds.isEmpty()) {
+            bool.putArray("must_not").add(excludedDocumentIdsQuery(excludedIds));
+        }
+        return bool.isEmpty() ? matchAllQuery()
+                : objectMapper.createObjectNode().set("bool", bool);
+    }
+
+    private ObjectNode excludedDocumentIdsQuery(List<String> excludedIds) {
+        return objectMapper.createObjectNode().set("terms",
+                objectMapper.createObjectNode().set("_id", objectMapper.valueToTree(excludedIds)));
+    }
+
+    private ObjectNode matchAllQuery() {
+        return objectMapper.createObjectNode().set("match_all", objectMapper.createObjectNode());
+    }
+
+    private static String snippet(String content, int maxLength) {
+        String normalized = content.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= maxLength
+                ? normalized : normalized.substring(0, maxLength) + "…";
     }
 
     public RagDtos.QueryResponse query(RagDtos.QueryRequest request) {
@@ -274,8 +568,15 @@ public class RagService {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("size", 1000);
             body.set("sort", objectMapper.createArrayNode().add("_doc"));
-            body.set("query", objectMapper.createObjectNode()
-                    .set("match_all", objectMapper.createObjectNode()));
+            List<String> excludedIds = getExcludedDocumentIds();
+            if (excludedIds.isEmpty()) {
+                body.set("query", matchAllQuery());
+            } else {
+                ObjectNode activeQuery = objectMapper.createObjectNode();
+                activeQuery.putArray("must").add(matchAllQuery());
+                activeQuery.putArray("must_not").add(excludedDocumentIdsQuery(excludedIds));
+                body.set("query", objectMapper.createObjectNode().set("bool", activeQuery));
+            }
             HttpResponse<String> response = elasticsearchRequest("POST",
                     "/" + properties.getRag().getSourceIndex() + "/_search?scroll=1m", toJson(body));
             if (response.statusCode() >= 300) {

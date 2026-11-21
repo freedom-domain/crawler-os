@@ -3,6 +3,7 @@ package com.collect.ai.rag.controller;
 import com.collect.ai.rag.dto.AiChatDtos;
 import com.collect.ai.rag.dto.RagDtos;
 import com.collect.ai.rag.service.AiChatHistoryService;
+import com.collect.ai.rag.service.AiAssistantService;
 import com.collect.ai.rag.service.RagService;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
@@ -39,6 +40,7 @@ import java.util.concurrent.FutureTask;
 public class AiChatHistoryController {
 
     private final AiChatHistoryService historyService;
+    private final AiAssistantService aiAssistantService;
     private final RagService ragService;
     private final ObjectMapper objectMapper;
     private final Executor streamExecutor;
@@ -46,19 +48,22 @@ public class AiChatHistoryController {
 
     public AiChatHistoryController(
             AiChatHistoryService historyService,
+            AiAssistantService aiAssistantService,
             RagService ragService,
             ObjectMapper objectMapper,
             @Qualifier("aiChatStreamExecutor") Executor streamExecutor) {
         this.historyService = historyService;
+        this.aiAssistantService = aiAssistantService;
         this.ragService = ragService;
         this.objectMapper = objectMapper;
         this.streamExecutor = streamExecutor;
     }
 
     @GetMapping
-    public R<List<AiChatDtos.ConversationResponse>> listConversations() {
+    public R<List<AiChatDtos.ConversationResponse>> listConversations(
+            @RequestParam(required = false) Long assistantId) {
         requireChatPermission();
-        return R.ok(historyService.listConversations(LoginUtils.getUserId()));
+        return R.ok(historyService.listConversations(LoginUtils.getUserId(), assistantId));
     }
 
     @GetMapping("/context-window")
@@ -69,10 +74,24 @@ public class AiChatHistoryController {
         return R.ok(response);
     }
 
-    @PostMapping
-    public R<AiChatDtos.ConversationResponse> createConversation() {
+    @GetMapping("/assistants")
+    public R<java.util.List<com.collect.ai.rag.dto.AiAssistantDtos.Response>> listAssistants() {
         requireChatPermission();
-        return R.ok(historyService.createConversation(LoginUtils.getUserId()));
+        return R.ok(aiAssistantService.listEnabled());
+    }
+
+    @PostMapping
+    public R<AiChatDtos.ConversationResponse> createConversation(
+            @RequestParam(required = false) Long assistantId) {
+        requireChatPermission();
+        if (assistantId != null) {
+            com.collect.ai.rag.dto.AiAssistantDtos.Response assistant =
+                    aiAssistantService.get(assistantId);
+            if (!Boolean.TRUE.equals(assistant.getEnabled())) {
+                throw new BizException("AI 助手已停用");
+            }
+        }
+        return R.ok(historyService.createConversation(LoginUtils.getUserId(), assistantId));
     }
 
     @GetMapping("/{conversationId}/messages")

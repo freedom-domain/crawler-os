@@ -13,6 +13,9 @@ public final class AiChatDtos {
     @Data
     public static class ConversationResponse {
         private Long id;
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(
+                using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
+        private Long assistantId;
         private String title;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;

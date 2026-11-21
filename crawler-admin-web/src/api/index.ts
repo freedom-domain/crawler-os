@@ -27,6 +27,11 @@ export const permissionUpdate = (id: number, data: any) => request.put(`/permiss
 export const permissionDelete = (id: number) => request.delete(`/permission/${id}`)
 export const getRagConfig = () => request.get('/ai/rag/config')
 export const updateRagConfig = (data: any) => request.put('/ai/rag/config', data)
+export const getAssistants = () => request.get('/ai/rag/assistants')
+export const getChatAssistants = () => request.get('/ai/chat/conversations/assistants')
+export const createAssistant = (data: any) => request.post('/ai/rag/assistants', data)
+export const updateAssistant = (id: string, data: any) => request.put(`/ai/rag/assistants/${id}`, data)
+export const deleteAssistant = (id: string) => request.delete(`/ai/rag/assistants/${id}`)
 export const getVectorModels = () => request.get('/ai/rag/vector-models')
 export const discoverVectorModels = (data: {
   modelId: string | null
@@ -50,11 +55,32 @@ export const updateChatModelApiKey = (id: string, apiKey: string) =>
 export const createChatModel = (data: any) => request.post('/ai/rag/chat-models', data)
 export const updateChatModel = (id: string, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
 export const deleteChatModel = (id: string) => request.delete(`/ai/rag/chat-models/${id}`)
+export const syncRagIndex = () => request.post('/ai/rag/sync', undefined, { timeout: 0 })
+export const getKnowledgeBaseStats = () => request.get('/ai/rag/knowledge/stats')
+export const getKnowledgeBaseDocuments = (params: {
+  page: number
+  pageSize: number
+  keyword: string
+  includeExcluded: boolean
+}) => request.get('/ai/rag/knowledge/documents', { params })
+export const getKnowledgeBaseDocument = (id: string) => request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`)
+export const vectorizeKnowledgeBaseDocument = (id: string) =>
+  request.post(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/vectorize`, undefined, { timeout: 0 })
+export const excludeKnowledgeBaseDocument = (id: string) =>
+  request.delete(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`)
 export const queryRag = (data: { question: string; topK: number }) => request.post('/ai/rag/query', data)
 const chatRequestConfig = { timeout: 0 }
-export const chatConversationList = () => request.get('/ai/chat/conversations', chatRequestConfig)
+export const chatConversationList = (assistantId?: string | number) =>
+  request.get('/ai/chat/conversations', {
+    ...chatRequestConfig,
+    params: assistantId ? { assistantId } : undefined
+  })
 export const chatContextWindow = () => request.get('/ai/chat/conversations/context-window', chatRequestConfig)
-export const chatConversationCreate = () => request.post('/ai/chat/conversations', undefined, chatRequestConfig)
+export const chatConversationCreate = (assistantId?: string | number) =>
+  request.post('/ai/chat/conversations', undefined, {
+    ...chatRequestConfig,
+    params: assistantId ? { assistantId } : undefined
+  })
 export const chatConversationDelete = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}`, chatRequestConfig)
 export const chatMessages = (id: number) =>

@@ -30,8 +30,11 @@ public class AiChatHistoryService {
     private final ObjectMapper objectMapper;
     private final RagProperties ragProperties;
 
-    public List<AiChatDtos.ConversationResponse> listConversations(Long userId) {
-        return conversationMapper.selectRecentByUserId(userId).stream()
+    public List<AiChatDtos.ConversationResponse> listConversations(Long userId, Long assistantId) {
+        List<AiChatConversation> conversations = assistantId == null
+                ? conversationMapper.selectRecentByUserId(userId)
+                : conversationMapper.selectRecentByUserIdAndAssistant(userId, assistantId);
+        return conversations.stream()
                 .map(this::toConversationResponse)
                 .toList();
     }
@@ -40,10 +43,11 @@ public class AiChatHistoryService {
         return ragProperties.getRag().getContextLength();
     }
 
-    public AiChatDtos.ConversationResponse createConversation(Long userId) {
+    public AiChatDtos.ConversationResponse createConversation(Long userId, Long assistantId) {
         LocalDateTime now = LocalDateTime.now();
         AiChatConversation conversation = new AiChatConversation();
         conversation.setUserId(userId);
+        conversation.setAssistantId(assistantId);
         conversation.setTitle(DEFAULT_TITLE);
         conversation.setCreatedAt(now);
         conversation.setUpdatedAt(now);
@@ -272,6 +276,7 @@ public class AiChatHistoryService {
     private AiChatDtos.ConversationResponse toConversationResponse(AiChatConversation conversation) {
         AiChatDtos.ConversationResponse response = new AiChatDtos.ConversationResponse();
         response.setId(conversation.getId());
+        response.setAssistantId(conversation.getAssistantId());
         response.setTitle(conversation.getTitle());
         response.setCreatedAt(conversation.getCreatedAt());
         response.setUpdatedAt(conversation.getUpdatedAt());
