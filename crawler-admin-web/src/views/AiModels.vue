@@ -7,10 +7,10 @@
       </div>
     </div>
     <el-tabs :model-value="activeTab" @tab-change="changeTab">
-      <el-tab-pane label="向量模型" name="vector">
+      <el-tab-pane label="向量模型" name="vector" lazy>
         <AiVectorModels embedded />
       </el-tab-pane>
-      <el-tab-pane label="大语言模型" name="chat">
+      <el-tab-pane label="大语言模型" name="chat" lazy>
         <AiChatModels embedded />
       </el-tab-pane>
     </el-tabs>

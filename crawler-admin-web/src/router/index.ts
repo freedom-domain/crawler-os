@@ -20,6 +20,11 @@ const router = createRouter({
       component: () => import('@/views/PublicSearch.vue')
     },
     {
+      path: '/ai-chat-window',
+      name: 'AiChatWindow',
+      component: () => import('@/views/AiChat.vue')
+    },
+    {
       path: '/',
       component: () => import('@/views/Layout.vue'),
       children: [

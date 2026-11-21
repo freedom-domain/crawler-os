@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-models-page">
+  <div class="chat-models-page" :class="{ 'chat-models-page--embedded': embedded }">
     <component
       :is="embedded ? 'div' : 'el-card'"
       v-loading="loading"
@@ -17,37 +17,57 @@
         </div>
       </div>
 
-      <el-table :data="models" empty-text="暂无聊天模型">
-        <el-table-column prop="name" label="配置名称" min-width="150" />
-        <el-table-column label="提供方" width="130">
-          <template #default="{ row }">
-            {{ providerLabel(row.chatProvider) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="chatModel" label="模型名称" min-width="220" show-overflow-tooltip />
-        <el-table-column label="上下文长度" width="130">
-          <template #default="{ row }">{{ row.contextLength.toLocaleString() }} Token</template>
-        </el-table-column>
-        <el-table-column prop="chatBaseUrl" label="API 地址" min-width="240" show-overflow-tooltip />
-        <el-table-column label="API Key" width="130">
-          <template #default="{ row }">
-            <el-tag
-              :type="row.apiKeyConfigured ? 'success' : 'info'"
-              class="is-clickable"
-              effect="light"
-              @click="editApiKey(row)"
-            >
-              {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeModel(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-form class="model-filters" @submit.prevent>
+        <el-input
+          v-model="searchKeyword"
+          clearable
+          placeholder="搜索配置名称、模型名称或服务地址"
+        />
+        <el-select v-model="providerFilter" clearable placeholder="全部提供方">
+          <el-option label="OpenAI 兼容" value="openai" />
+          <el-option label="vLLM" value="vllm" />
+          <el-option label="Ollama" value="ollama" />
+        </el-select>
+        <el-select v-model="apiKeyFilter" clearable placeholder="全部 API Key 状态">
+          <el-option label="已配置" value="configured" />
+          <el-option label="未配置" value="unconfigured" />
+        </el-select>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form>
+
+      <div class="table-scroll-wrapper model-table-scroll">
+        <el-table :data="filteredModels" empty-text="暂无聊天模型" stripe resizable border>
+          <el-table-column prop="name" label="配置名称" min-width="130" resizable />
+          <el-table-column label="提供方" min-width="110" resizable>
+            <template #default="{ row }">{{ providerLabel(row.chatProvider) }}</template>
+          </el-table-column>
+          <el-table-column prop="chatModel" label="模型名称" min-width="180" show-overflow-tooltip resizable />
+          <el-table-column label="上下文长度" min-width="115" resizable>
+            <template #default="{ row }">{{ row.contextLength.toLocaleString() }} Token</template>
+          </el-table-column>
+          <el-table-column prop="chatBaseUrl" label="API 地址" min-width="180" show-overflow-tooltip resizable />
+          <el-table-column label="API Key" min-width="110" resizable>
+            <template #default="{ row }">
+              <el-tag
+                :type="row.apiKeyConfigured ? 'success' : 'info'"
+                class="is-clickable"
+                effect="light"
+                @click="editApiKey(row)"
+              >
+                {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <TableRowActions
+                :items="rowActions"
+                @command="command => handleRowAction(command, row)"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </component>
 
     <el-dialog
@@ -135,10 +155,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Delete, Edit } from '@element-plus/icons-vue'
 import {
   createChatModel, deleteChatModel, discoverChatModels, getChatModelApiKey, getChatModels, updateChatModel,
   updateChatModelApiKey
 } from '@/api'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 defineProps<{ embedded?: boolean }>()
 
@@ -163,6 +185,9 @@ const emptyModel = () => ({
 })
 
 const models = ref<ChatModel[]>([])
+const searchKeyword = ref('')
+const providerFilter = ref('')
+const apiKeyFilter = ref('')
 const form = reactive(emptyModel())
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -180,6 +205,22 @@ const modelOptions = computed(() => {
   const options = [...availableModels.value]
   if (form.chatModel && !options.includes(form.chatModel)) options.unshift(form.chatModel)
   return options
+})
+const rowActions: TableRowAction[] = [
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, danger: true }
+]
+const filteredModels = computed(() => {
+  const keyword = searchKeyword.value.trim().toLocaleLowerCase()
+  return models.value.filter(model => {
+    const matchesKeyword = !keyword || [
+      model.name, model.chatModel, model.chatBaseUrl
+    ].some(value => value.toLocaleLowerCase().includes(keyword))
+    const matchesProvider = !providerFilter.value || model.chatProvider === providerFilter.value
+    const matchesApiKey = !apiKeyFilter.value
+      || (apiKeyFilter.value === 'configured' ? model.apiKeyConfigured : !model.apiKeyConfigured)
+    return matchesKeyword && matchesProvider && matchesApiKey
+  })
 })
 
 const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
@@ -203,6 +244,12 @@ const providerLabel = (provider: string) => {
   if (provider === 'ollama') return 'Ollama'
   if (provider === 'vllm') return 'vLLM'
   return 'OpenAI 兼容'
+}
+
+const resetFilters = () => {
+  searchKeyword.value = ''
+  providerFilter.value = ''
+  apiKeyFilter.value = ''
 }
 
 const exactModelId = (id: unknown) => {
@@ -315,6 +362,11 @@ const removeModel = async (model: ChatModel) => {
   }
 }
 
+const handleRowAction = (command: string, model: ChatModel) => {
+  if (command === 'edit') openEdit(model)
+  else if (command === 'delete') void removeModel(model)
+}
+
 const editApiKey = async (model: ChatModel) => {
   editingApiKeyModel.value = model
   apiKeyValue.value = ''
@@ -359,13 +411,16 @@ onMounted(loadModels)
 
 <style scoped>
 .chat-models-page { max-width: 1180px; margin: 0 auto; }
+.chat-models-page--embedded { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
 .models-card { border-radius: 12px; }
 .models-card--embedded { border: 0; border-radius: 0; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
+.model-filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 200px)) auto; gap: 12px; margin: 16px 0; }
 .is-clickable { cursor: pointer; }
+.model-table-scroll :deep(.el-table) { width: 100%; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .model-picker { display: flex; width: 100%; gap: 8px; }
 .model-picker :deep(.el-select) { width: auto; min-width: 0; flex: 1; }
@@ -377,5 +432,6 @@ onMounted(loadModels)
   .card-header { display: block; }
   .header-actions { margin-top: 12px; }
   .form-grid { grid-template-columns: 1fr; }
+  .model-filters { grid-template-columns: 1fr; }
 }
 </style>

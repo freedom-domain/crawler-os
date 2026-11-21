@@ -1052,6 +1052,8 @@ public class RagService {
                     JsonNode source = hit.path("_source");
                     RagDtos.SourceReference ref = new RagDtos.SourceReference();
                     ref.setId(source.path("doc_id").asText());
+                    ref.setChunkId(source.path("chunk_id").asText(""));
+                    ref.setKnowledgeBaseId(knowledgeBase == null ? null : knowledgeBase.getId());
                     ref.setTitle(source.path("title").asText(""));
                     ref.setUrl(source.path("url").asText(""));
                     ref.setSpiderName(source.path("spiderName").asText(""));

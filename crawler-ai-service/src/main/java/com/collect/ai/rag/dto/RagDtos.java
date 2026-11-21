@@ -1,5 +1,7 @@
 package com.collect.ai.rag.dto;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 import java.util.List;
@@ -42,6 +44,9 @@ public final class RagDtos {
     @Data
     public static class SourceReference {
         private String id;
+        private String chunkId;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long knowledgeBaseId;
         private String title;
         private String url;
         private String spiderName;

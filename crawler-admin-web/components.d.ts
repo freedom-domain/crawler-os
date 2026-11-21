@@ -14,6 +14,7 @@ declare module 'vue' {
     ChangePasswordDialog: typeof import('./src/components/ChangePasswordDialog.vue')['default']
     ContentPreviewDialog: typeof import('./src/components/ContentPreviewDialog.vue')['default']
     DcaPerformanceChart: typeof import('./src/components/DcaPerformanceChart.vue')['default']
+    ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']

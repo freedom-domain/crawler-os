@@ -11,35 +11,67 @@
       </div>
     </header>
 
-    <el-card shadow="never" v-loading="loading">
-      <el-table :data="knowledgeBases" stripe>
-        <el-table-column prop="name" label="名称" min-width="160" />
-        <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="vectorModelName" label="向量模型" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="sourceIndex" label="源索引" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="vectorIndex" label="向量索引" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="vectorField" label="向量字段" min-width="160" show-overflow-tooltip />
-        <el-table-column label="来源类型" width="120">
-          <template #default="{ row }">
-            {{ row.sourceType === 'UPLOAD' ? '直接上传' : 'ES 索引' }}
+    <el-card shadow="never">
+      <el-form class="knowledge-filters" :inline="true" @submit.prevent>
+        <el-form-item>
+          <el-input
+            v-model="searchKeyword"
+            clearable
+            placeholder="搜索知识库名称、简介、索引"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-select v-model="sourceTypeFilter" clearable placeholder="全部来源类型">
+            <el-option label="ES 索引" value="ES_INDEX" />
+            <el-option label="直接上传" value="UPLOAD" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-select v-model="enabledFilter" clearable placeholder="全部状态">
+            <el-option label="已启用" :value="true" />
+            <el-option label="已停用" :value="false" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-form-item>
+      </el-form>
+      <div class="table-scroll-wrapper">
+        <el-table :data="filteredKnowledgeBases" v-loading="loading" stripe resizable border>
+          <template #empty>
+            <el-empty v-if="!loading" description="暂无知识库" />
           </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'">
-              {{ row.enabled ? '已启用' : '已停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="sort" label="排序" width="80" />
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="success" @click="openKnowledgeDocuments(row)">文档管理</el-button>
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeKnowledgeBase(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip resizable />
+          <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
+          <el-table-column prop="vectorModelName" label="向量模型" min-width="180" show-overflow-tooltip resizable />
+          <el-table-column prop="sourceIndex" label="源索引" min-width="160" show-overflow-tooltip resizable />
+          <el-table-column prop="vectorIndex" label="向量索引" min-width="160" show-overflow-tooltip resizable />
+          <el-table-column prop="vectorField" label="向量字段" min-width="160" show-overflow-tooltip resizable />
+          <el-table-column label="来源类型" min-width="120" align="center" resizable>
+            <template #default="{ row }">
+              <el-tag size="small" effect="light">
+                {{ row.sourceType === 'UPLOAD' ? '直接上传' : 'ES 索引' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" min-width="100" align="center" resizable>
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.enabled ? 'success' : 'info'">
+                {{ row.enabled ? '已启用' : '已停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="sort" label="排序" min-width="80" align="center" resizable />
+          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <TableRowActions
+                :items="rowActions"
+                @command="command => handleRowAction(command, row)"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑知识库' : '新建知识库'" width="680px">
@@ -125,12 +157,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Delete, Edit, FolderOpened, Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBases,
   getVectorModels, updateKnowledgeBase
 } from '@/api'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 interface VectorModel {
   id: string
@@ -148,9 +181,24 @@ interface VectorModel {
 const knowledgeBases = ref<any[]>([])
 const router = useRouter()
 const vectorModels = ref<VectorModel[]>([])
+const searchKeyword = ref('')
+const sourceTypeFilter = ref('')
+const enabledFilter = ref<boolean | null>(null)
 const selectedVectorModel = computed(() =>
   vectorModels.value.find(model => model.id === form.value.vectorModelId)
 )
+const filteredKnowledgeBases = computed(() => {
+  const keyword = searchKeyword.value.trim().toLocaleLowerCase()
+  return knowledgeBases.value.filter(base => {
+    const matchesKeyword = !keyword || [
+      base.name, base.description, base.vectorModelName, base.sourceIndex,
+      base.vectorIndex, base.vectorField
+    ].some(value => String(value || '').toLocaleLowerCase().includes(keyword))
+    const matchesSourceType = !sourceTypeFilter.value || base.sourceType === sourceTypeFilter.value
+    const matchesEnabled = enabledFilter.value == null || base.enabled === enabledFilter.value
+    return matchesKeyword && matchesSourceType && matchesEnabled
+  })
+})
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
@@ -188,6 +236,24 @@ function openKnowledgeDocuments(row: any) {
     name: 'AiKnowledgeDocumentsById',
     params: { knowledgeBaseId: String(row.id) }
   })
+}
+
+const rowActions: TableRowAction[] = [
+  { command: 'documents', label: '文档管理', icon: FolderOpened },
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, divided: true, danger: true }
+]
+
+function handleRowAction(command: string, row: any) {
+  if (command === 'documents') openKnowledgeDocuments(row)
+  else if (command === 'edit') openEdit(row)
+  else if (command === 'delete') void removeKnowledgeBase(row)
+}
+
+function resetFilters() {
+  searchKeyword.value = ''
+  sourceTypeFilter.value = ''
+  enabledFilter.value = null
 }
 
 function openCreate() {
@@ -248,11 +314,20 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
-.knowledge-page { max-width: 1440px; margin: 0 auto; }
+.knowledge-page { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
 .page-heading h1 { margin: 0 0 6px; }
 .page-heading p { margin: 0; color: var(--el-text-color-secondary); }
 .heading-actions { display: flex; align-items: center; gap: 8px; }
+.knowledge-filters { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.knowledge-filters :deep(.el-input) { width: min(320px, 70vw); }
+.knowledge-filters :deep(.el-select) { width: 160px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .selected-model-config { width: 100%; margin-top: 12px; }
+@media (max-width: 680px) {
+  .page-heading { flex-direction: column; align-items: stretch; }
+  .heading-actions { flex-wrap: wrap; }
+  .knowledge-filters { display: grid; grid-template-columns: 1fr; }
+  .knowledge-filters :deep(.el-input), .knowledge-filters :deep(.el-select) { width: 100%; }
+}
 </style>

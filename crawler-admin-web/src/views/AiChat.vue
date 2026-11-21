@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-chat-page" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+  <div class="ai-chat-page" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'ai-chat-page--standalone': isStandaloneWindow }">
     <aside class="chat-sidebar">
       <div class="sidebar-heading">
         <div class="brand-mark"><el-icon><MagicStick /></el-icon></div>
@@ -59,10 +59,6 @@
       </div>
       <div v-else class="history-empty">对话会显示在这里</div>
 
-      <div class="sidebar-footer">
-        <el-icon><Cpu /></el-icon>
-        <span>回答基于已收录的爬虫内容</span>
-      </div>
     </aside>
 
     <section class="chat-main">
@@ -99,7 +95,18 @@
           </div>
         </div>
         <div class="header-actions">
-          <el-tooltip content="管理 AI 助手" placement="bottom">
+          <el-button
+            v-if="!isStandaloneWindow"
+            class="standalone-chat-button"
+            size="small"
+            :icon="Link"
+            title="在独立窗口中打开当前对话"
+            aria-label="在独立窗口中打开当前对话"
+            @click="openChatInWindow"
+          >
+            独立窗口
+          </el-button>
+          <el-tooltip v-if="!isStandaloneWindow" content="管理 AI 助手" placement="bottom">
             <el-button
               class="assistant-manage-button"
               size="small"
@@ -449,12 +456,86 @@
 
     <el-dialog
       v-model="sourcePreviewVisible"
-      :title="selectedSource?.title || '参考来源预览'"
-      width="min(680px, 92vw)"
+      class="source-preview-dialog"
+      :fullscreen="sourcePreviewFullscreen"
+      width="min(760px, 92vw)"
       append-to-body
-      @closed="selectedSource = null"
+      @closed="closeSourcePreview"
     >
-      <div v-if="selectedSource" class="source-preview">
+      <template #header>
+        <div class="source-dialog-header">
+          <strong class="source-dialog-title">{{ selectedSource?.title || '参考来源分块预览' }}</strong>
+          <div class="source-dialog-actions">
+            <el-button
+              link
+              :aria-label="sourcePreviewFullscreen ? '还原预览窗口' : '最大化预览窗口'"
+              :title="sourcePreviewFullscreen ? '还原' : '最大化'"
+              @click="sourcePreviewFullscreen = !sourcePreviewFullscreen"
+            >
+              <el-icon><component :is="sourcePreviewFullscreen ? Minus : FullScreen" /></el-icon>
+            </el-button>
+          </div>
+        </div>
+      </template>
+      <div
+        v-if="selectedSource"
+        v-loading="sourcePreviewLoading"
+        class="source-preview"
+        :class="{ 'source-preview--fullscreen': sourcePreviewFullscreen }"
+      >
+        <div class="source-preview-meta">
+          <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
+          <span v-if="selectedSourceChunk">{{ selectedSourceChunk.characterCount }} 字符</span>
+          <el-button
+            v-if="selectedSourceChunk"
+            type="primary"
+            link
+            :loading="sourceOriginalLoading"
+            @click="openSourceOriginalPreview"
+          >
+            预览原文
+          </el-button>
+        </div>
+        <el-alert
+          v-if="sourcePreviewError"
+          :title="sourcePreviewError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <p v-else-if="selectedSourceChunk">{{ selectedSourceChunk.content || '该分块内容为空。' }}</p>
+      </div>
+    </el-dialog>
+
+    <el-dialog
+      v-model="sourceOriginalPreviewVisible"
+      class="source-preview-dialog"
+      :fullscreen="sourceOriginalFullscreen"
+      width="min(760px, 92vw)"
+      append-to-body
+      @closed="sourceOriginalFullscreen = false"
+    >
+      <template #header>
+        <div class="source-dialog-header">
+          <strong class="source-dialog-title">{{ selectedSource?.title || '原文预览' }}</strong>
+          <div class="source-dialog-actions">
+            <el-button
+              link
+              :aria-label="sourceOriginalFullscreen ? '还原预览窗口' : '最大化预览窗口'"
+              :title="sourceOriginalFullscreen ? '还原' : '最大化'"
+              @click="sourceOriginalFullscreen = !sourceOriginalFullscreen"
+            >
+              <el-icon><component :is="sourceOriginalFullscreen ? Minus : FullScreen" /></el-icon>
+            </el-button>
+          </div>
+        </div>
+      </template>
+      <div
+        v-if="selectedSource"
+        v-loading="sourceOriginalLoading"
+        class="source-preview"
+        :class="{ 'source-preview--fullscreen': sourceOriginalFullscreen }"
+      >
         <div class="source-preview-meta">
           <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
           <a
@@ -463,11 +544,18 @@
             target="_blank"
             rel="noopener noreferrer"
           >
-            打开原文
+            打开原文网页
             <el-icon><Link /></el-icon>
           </a>
         </div>
-        <p>{{ selectedSource.snippet || '暂无搜索结果内容预览。' }}</p>
+        <el-alert
+          v-if="sourceOriginalError"
+          :title="sourceOriginalError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <p v-else>{{ sourceDocumentContent || '暂无原文内容。' }}</p>
       </div>
     </el-dialog>
   </div>
@@ -481,22 +569,32 @@ import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import {
   cancelChatMessage, chatConversationCreate, chatConversationDelete, chatConversationList,
-  chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, getChatModels, resumeChatMessageStream, streamChatMessage
+  chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, getChatModels,
+  getChatSourceDocument, getChatSourceDocumentChunks, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, Help, Link, Loading, MagicStick, Plus,
+  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Plus,
   Promotion, Refresh, Setting, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
 
 interface SourceReference {
   id: string
+  chunkId?: string
+  knowledgeBaseId?: string
   title: string
   url: string
   spiderName: string
   sourceType: string
   score: number
   snippet: string
+}
+
+interface SourceChunk {
+  chunkId: string
+  index: number
+  content: string
+  characterCount: number
 }
 
 interface ChatMessage {
@@ -532,12 +630,24 @@ const conversations = ref<Conversation[]>([])
 const sidebarCollapsed = ref(false)
 const selectedSource = ref<SourceReference | null>(null)
 const sourcePreviewVisible = ref(false)
+const sourcePreviewFullscreen = ref(false)
+const sourceOriginalPreviewVisible = ref(false)
+const sourceOriginalFullscreen = ref(false)
+const sourcePreviewLoading = ref(false)
+const sourcePreviewError = ref('')
+const sourceOriginalLoading = ref(false)
+const sourceOriginalError = ref('')
+const sourceDocumentContent = ref('')
+const sourceChunks = ref<SourceChunk[]>([])
+const selectedSourceChunk = ref<SourceChunk | null>(null)
+let sourcePreviewRequestId = 0
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
 const selectedAssistantId = ref<string | number | undefined>(undefined)
 const selectedChatModelId = ref<string | number | undefined>(undefined)
 const route = useRoute()
 const router = useRouter()
+const isStandaloneWindow = computed(() => route.name === 'AiChatWindow')
 const props = defineProps<{ assistantId?: string | number; embedded?: boolean }>()
 const routeAssistantId = computed(() =>
   typeof route.params.assistantId === 'string' ? route.params.assistantId : undefined
@@ -553,6 +663,12 @@ const queryAssistantId = computed(() =>
 const routeSelectedAssistantId = computed(() =>
   effectiveAssistantId.value || queryAssistantId.value
 )
+const routeConversationId = computed(() => {
+  const value = route.query.conversationId
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null
+  const id = Number(value)
+  return Number.isSafeInteger(id) ? id : null
+})
 const assistantsLoaded = ref(false)
 const activeAssistant = computed(() => {
   const assistantId = routeSelectedAssistantId.value || selectedAssistantId.value
@@ -612,8 +728,79 @@ const sourceTypeLabel = (source: SourceReference) => {
   return source.sourceType || '未知'
 }
 const openSourcePreview = (source: SourceReference) => {
+  const requestId = ++sourcePreviewRequestId
   selectedSource.value = source
   sourcePreviewVisible.value = true
+  sourcePreviewError.value = ''
+  sourceChunks.value = []
+  selectedSourceChunk.value = null
+  sourcePreviewLoading.value = true
+  const conversationId = activeConversationId.value
+  if (!conversationId) {
+    sourcePreviewError.value = '无法确定来源所属对话'
+    sourcePreviewLoading.value = false
+    return
+  }
+  void getChatSourceDocumentChunks(conversationId, source.id, source.knowledgeBaseId)
+    .then((response: any) => {
+      if (requestId !== sourcePreviewRequestId) return
+      sourceChunks.value = response?.data || []
+      selectedSourceChunk.value = sourceChunks.value.find(chunk => chunk.chunkId === source.chunkId)
+        || sourceChunks.value.find(chunk =>
+          source.snippet && (chunk.content.startsWith(source.snippet) || source.snippet.startsWith(chunk.content))
+        )
+        || sourceChunks.value[0]
+        || null
+      if (!selectedSourceChunk.value) sourcePreviewError.value = '该来源暂无可预览的分块'
+    })
+    .catch((error: unknown) => {
+      if (requestId !== sourcePreviewRequestId) return
+      sourcePreviewError.value = error instanceof Error ? error.message : '读取分块失败'
+    })
+    .finally(() => {
+      if (requestId === sourcePreviewRequestId) sourcePreviewLoading.value = false
+    })
+}
+const openSourceOriginalPreview = async () => {
+  const source = selectedSource.value
+  const conversationId = activeConversationId.value
+  if (!source || !conversationId) {
+    sourceOriginalError.value = '无法确定来源所属对话'
+    sourceOriginalPreviewVisible.value = true
+    return
+  }
+  const requestId = ++sourcePreviewRequestId
+  sourceOriginalLoading.value = true
+  sourceOriginalError.value = ''
+  sourceDocumentContent.value = ''
+  sourceOriginalPreviewVisible.value = true
+  try {
+    const response: any = await getChatSourceDocument(
+      conversationId, source.id, source.knowledgeBaseId
+    )
+    if (requestId !== sourcePreviewRequestId) return
+    sourceDocumentContent.value = response?.data?.content || ''
+    if (!sourceDocumentContent.value) sourceOriginalError.value = '原文内容为空'
+  } catch (error) {
+    if (requestId !== sourcePreviewRequestId) return
+    sourceOriginalError.value = error instanceof Error ? error.message : '读取原文失败'
+  } finally {
+    if (requestId === sourcePreviewRequestId) sourceOriginalLoading.value = false
+  }
+}
+const closeSourcePreview = () => {
+  sourcePreviewRequestId++
+  selectedSource.value = null
+  sourcePreviewLoading.value = false
+  sourcePreviewError.value = ''
+  sourceChunks.value = []
+  selectedSourceChunk.value = null
+  sourceOriginalPreviewVisible.value = false
+  sourceOriginalLoading.value = false
+  sourceOriginalError.value = ''
+  sourceDocumentContent.value = ''
+  sourcePreviewFullscreen.value = false
+  sourceOriginalFullscreen.value = false
 }
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
@@ -697,9 +884,11 @@ const loadConversations = async () => {
       messages: [],
       messagesLoaded: false
     }))
-    selectedConversation = conversations.value.find(item => item.id === activeConversationId.value)
+    selectedConversation = conversations.value.find(item => item.id === routeConversationId.value)
+      || conversations.value.find(item => item.id === activeConversationId.value)
       || conversations.value[0]
     activeConversationId.value = selectedConversation?.id ?? null
+    updateConversationQuery(selectedConversation?.id ?? null)
     if (selectedConversation) await loadMessages(selectedConversation)
   } catch (error) {
     if (requestId !== conversationLoadRequestId) return
@@ -755,6 +944,7 @@ const selectConversation = async (id: number) => {
   saveScrollPosition()
   pendingScrollRestoreId.value = id
   activeConversationId.value = id
+  updateConversationQuery(id)
   const conversation = conversations.value.find(item => item.id === id)
   if (conversation) {
     await loadMessages(conversation)
@@ -781,6 +971,7 @@ const createConversation = async () => {
     conversations.value.unshift(conversation)
     pendingScrollRestoreId.value = conversation.id
     activeConversationId.value = conversation.id
+    updateConversationQuery(conversation.id)
     draft.value = ''
     await restoreConversationScroll(conversation)
   } catch (error) {
@@ -791,8 +982,23 @@ const createConversation = async () => {
 }
 
 const switchAssistant = async (assistantId: string | number) => {
-  const nextQuery = { ...route.query, assistantId: String(assistantId), new: undefined }
+  const nextQuery = { ...route.query, assistantId: String(assistantId), conversationId: undefined, new: undefined }
   await router.replace({ query: nextQuery })
+}
+
+const updateConversationQuery = (conversationId: number | null) => {
+  if (!isStandaloneWindow.value) return
+  const query = { ...route.query, conversationId: conversationId ? String(conversationId) : undefined }
+  void router.replace({ query })
+}
+
+const openChatInWindow = () => {
+  const query: Record<string, string> = {}
+  const assistantId = routeSelectedAssistantId.value || selectedAssistantId.value
+  if (assistantId !== undefined && assistantId !== '') query.assistantId = String(assistantId)
+  if (activeConversationId.value !== null) query.conversationId = String(activeConversationId.value)
+  const { href } = router.resolve({ name: 'AiChatWindow', query })
+  window.open(href, '_blank', 'popup=yes,width=1280,height=900,resizable=yes,scrollbars=yes,noopener,noreferrer')
 }
 
 const openAssistantManagement = () => {
@@ -854,7 +1060,10 @@ const deleteConversation = async (id: number) => {
   if (wasActive) {
     const next = conversations.value[0]
     if (next) await selectConversation(next.id)
-    else activeConversationId.value = null
+    else {
+      activeConversationId.value = null
+      updateConversationQuery(null)
+    }
   }
 }
 
@@ -1342,6 +1551,13 @@ onActivated(() => {
   box-shadow: var(--shadow-soft);
   color: var(--ink-900);
 }
+.ai-chat-page.ai-chat-page--standalone {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
 .ai-chat-page.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
 
 .chat-sidebar {
@@ -1582,7 +1798,13 @@ onActivated(() => {
 .source-copy strong { color: var(--ink-900); font-size: 11px; font-weight: 600; }
 .source-copy small { color: var(--ink-500); font-size: 9px; }
 .source-card > .el-icon { color: var(--ink-500); font-size: 13px; }
-.source-preview { display: grid; gap: 14px; }
+.source-preview { display: grid; max-height: min(65vh, 640px); gap: 14px; overflow: auto; }
+.source-preview--fullscreen { max-height: calc(100dvh - 140px); }
+.source-dialog-header { display: flex; min-width: 0; align-items: center; gap: 16px; padding-right: 100px; }
+.source-dialog-title { min-width: 0; overflow: hidden; color: var(--ink-950); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.source-dialog-actions { position: absolute; top: 0; right: 48px; display: grid; width: 48px; height: 48px; place-items: center; }
+.source-dialog-actions :deep(.el-button) { display: inline-flex; width: 48px; height: 48px; margin: 0; padding: 0; line-height: 1; }
+.source-dialog-actions :deep(.el-icon) { font-size: 16px; }
 .source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .source-preview-meta a { display: inline-flex; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; }
 .source-preview-meta a:hover { text-decoration: underline; }
@@ -1662,6 +1884,7 @@ onActivated(() => {
 }
 @media (max-width: 600px) {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
+  .ai-chat-page.ai-chat-page--standalone { grid-template-columns: minmax(0, 1fr); }
   .chat-sidebar { display: none; }
   .sidebar-toggle { display: none; }
   .chat-header { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 15px; }
@@ -1669,6 +1892,8 @@ onActivated(() => {
   .header-actions { width: 100%; min-width: 0; gap: 6px; }
   .assistant-manage-button { width: 32px; padding: 0; font-size: 0; }
   .assistant-manage-button :deep(.el-icon) { margin: 0; font-size: 14px; }
+  .standalone-chat-button { width: 32px; padding: 0; font-size: 0; }
+  .standalone-chat-button :deep(.el-icon) { margin: 0; font-size: 14px; }
   .assistant-selector { width: auto; min-width: 0; flex: 1 1 110px; }
   .chat-header p { margin-left: 0; font-size: 10px; }
   .model-badge { display: none; }

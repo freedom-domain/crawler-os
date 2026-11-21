@@ -1,5 +1,5 @@
 <template>
-  <div class="vector-models-page">
+  <div class="vector-models-page" :class="{ 'vector-models-page--embedded': embedded }">
     <component
       :is="embedded ? 'div' : 'el-card'"
       v-loading="loading"
@@ -17,40 +17,61 @@
         </div>
       </div>
 
-      <el-table :data="models" empty-text="暂无向量模型">
-        <el-table-column prop="name" label="配置名称" min-width="150" />
-        <el-table-column label="提供方" width="130">
-          <template #default="{ row }">
-            {{ row.embeddingProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="embeddingModel" label="模型名称" min-width="220" show-overflow-tooltip />
-        <el-table-column label="API Key" width="110">
-          <template #default="{ row }">
-            <el-tag
-              :type="row.apiKeyConfigured ? 'success' : 'info'"
-              class="is-clickable"
-              effect="light"
-              @click="editApiKey(row)"
-            >
-              {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="dimensions" label="维度" width="90" />
-        <el-table-column prop="topK" label="Top K" width="90" />
-        <el-table-column label="分块（长度 / 重叠）" width="170">
-          <template #default="{ row }">
-            {{ row.chunkSize }} / {{ row.chunkOverlap }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeModel(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <el-form class="model-filters" @submit.prevent>
+        <el-input
+          v-model="searchKeyword"
+          clearable
+          placeholder="搜索配置名称、模型名称或服务地址"
+        />
+        <el-select v-model="providerFilter" clearable placeholder="全部提供方">
+          <el-option label="Ollama" value="ollama" />
+          <el-option label="OpenAI 兼容" value="openai" />
+        </el-select>
+        <el-select v-model="apiKeyFilter" clearable placeholder="全部 API Key 状态">
+          <el-option label="已配置" value="configured" />
+          <el-option label="未配置" value="unconfigured" />
+        </el-select>
+        <el-button @click="resetFilters">重置</el-button>
+      </el-form>
+
+      <div class="table-scroll-wrapper model-table-scroll">
+        <el-table :data="filteredModels" empty-text="暂无向量模型" stripe resizable border>
+          <el-table-column prop="name" label="配置名称" min-width="130" resizable />
+          <el-table-column label="提供方" min-width="110" resizable>
+            <template #default="{ row }">
+              {{ row.embeddingProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="embeddingModel" label="模型名称" min-width="180" show-overflow-tooltip resizable />
+          <el-table-column label="API Key" min-width="100" resizable>
+            <template #default="{ row }">
+              <el-tag
+                :type="row.apiKeyConfigured ? 'success' : 'info'"
+                class="is-clickable"
+                effect="light"
+                @click="editApiKey(row)"
+              >
+                {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="dimensions" label="维度" min-width="70" resizable />
+          <el-table-column prop="topK" label="Top K" min-width="75" resizable />
+          <el-table-column label="分块（长度 / 重叠）" min-width="140" resizable>
+            <template #default="{ row }">
+              {{ row.chunkSize }} / {{ row.chunkOverlap }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <TableRowActions
+                :items="rowActions"
+                @command="command => handleRowAction(command, row)"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </component>
 
     <el-dialog
@@ -145,10 +166,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { Delete, Edit } from '@element-plus/icons-vue'
 import {
   createVectorModel, deleteVectorModel, discoverVectorModels, getVectorModelApiKey, getVectorModels,
   updateVectorModel, updateVectorModelApiKey
 } from '@/api'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 defineProps<{ embedded?: boolean }>()
 
@@ -179,6 +202,9 @@ const emptyModel = () => ({
 })
 
 const models = ref<VectorModel[]>([])
+const searchKeyword = ref('')
+const providerFilter = ref('')
+const apiKeyFilter = ref('')
 const form = reactive(emptyModel())
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -196,6 +222,22 @@ const modelOptions = computed(() => {
   const options = [...availableModels.value]
   if (form.embeddingModel && !options.includes(form.embeddingModel)) options.unshift(form.embeddingModel)
   return options
+})
+const rowActions: TableRowAction[] = [
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, danger: true }
+]
+const filteredModels = computed(() => {
+  const keyword = searchKeyword.value.trim().toLocaleLowerCase()
+  return models.value.filter(model => {
+    const matchesKeyword = !keyword || [
+      model.name, model.embeddingModel, model.embeddingBaseUrl
+    ].some(value => value.toLocaleLowerCase().includes(keyword))
+    const matchesProvider = !providerFilter.value || model.embeddingProvider === providerFilter.value
+    const matchesApiKey = !apiKeyFilter.value
+      || (apiKeyFilter.value === 'configured' ? model.apiKeyConfigured : !model.apiKeyConfigured)
+    return matchesKeyword && matchesProvider && matchesApiKey
+  })
 })
 
 const validUrl = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
@@ -270,6 +312,12 @@ const clearDiscoveredModels = () => {
   availableModels.value = []
 }
 
+const resetFilters = () => {
+  searchKeyword.value = ''
+  providerFilter.value = ''
+  apiKeyFilter.value = ''
+}
+
 const discoverModels = async () => {
   if (!await formRef.value?.validateField(['embeddingProvider', 'embeddingBaseUrl']).then(() => true).catch(() => false)) return
   discovering.value = true
@@ -337,6 +385,11 @@ const removeModel = async (model: VectorModel) => {
   }
 }
 
+const handleRowAction = (command: string, model: VectorModel) => {
+  if (command === 'edit') openEdit(model)
+  else if (command === 'delete') void removeModel(model)
+}
+
 const editApiKey = async (model: VectorModel) => {
   editingApiKeyModel.value = model
   apiKeyValue.value = ''
@@ -381,13 +434,16 @@ onMounted(loadModels)
 
 <style scoped>
 .vector-models-page { max-width: 1180px; margin: 0 auto; }
+.vector-models-page--embedded { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
 .models-card { border-radius: 12px; }
 .models-card--embedded { border: 0; border-radius: 0; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
+.model-filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 200px)) auto; gap: 12px; margin: 16px 0; }
 .is-clickable { cursor: pointer; }
+.model-table-scroll :deep(.el-table) { width: 100%; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-input-number) { width: 100%; }
 .model-picker { display: flex; width: 100%; gap: 8px; }
@@ -396,5 +452,6 @@ onMounted(loadModels)
 @media (max-width: 680px) {
   .card-header { flex-direction: column; }
   .form-grid { grid-template-columns: 1fr; }
+  .model-filters { grid-template-columns: 1fr; }
 }
 </style>

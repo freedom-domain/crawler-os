@@ -122,6 +122,22 @@ export const chatConversationDelete = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}`, chatRequestConfig)
 export const chatMessages = (id: number) =>
   request.get(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
+export const getChatSourceDocument = (
+  conversationId: number,
+  documentId: string,
+  knowledgeBaseId?: string
+) => request.get(`/ai/chat/conversations/${conversationId}/source`, {
+  ...chatRequestConfig,
+  params: { documentId, ...(knowledgeBaseId ? { knowledgeBaseId } : {}) }
+})
+export const getChatSourceDocumentChunks = (
+  conversationId: number,
+  documentId: string,
+  knowledgeBaseId?: string
+) => request.get(`/ai/chat/conversations/${conversationId}/source/chunks`, {
+  ...chatRequestConfig,
+  params: { documentId, ...(knowledgeBaseId ? { knowledgeBaseId } : {}) }
+})
 export const clearChatMessages = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
 export const sendChatMessage = (id: number, data: { question: string; topK: number; chatModelId?: string | number }) =>

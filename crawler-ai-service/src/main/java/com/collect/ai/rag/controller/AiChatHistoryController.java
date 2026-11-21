@@ -1,6 +1,7 @@
 package com.collect.ai.rag.controller;
 
 import com.collect.ai.rag.dto.AiChatDtos;
+import com.collect.ai.rag.dto.KnowledgeBaseDtos;
 import com.collect.ai.rag.dto.RagDtos;
 import com.collect.ai.rag.service.AiChatHistoryService;
 import com.collect.ai.rag.service.AiAssistantService;
@@ -8,6 +9,7 @@ import com.collect.ai.rag.service.RagService;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
@@ -108,6 +110,55 @@ public class AiChatHistoryController {
     public R<List<AiChatDtos.MessageResponse>> listMessages(@PathVariable Long conversationId) {
         requireChatPermission();
         return R.ok(historyService.listMessages(LoginUtils.getUserId(), conversationId));
+    }
+
+    @GetMapping("/{conversationId}/source")
+    public R<KnowledgeBaseDtos.DocumentDetail> getSourceDocument(
+            @PathVariable Long conversationId,
+            @RequestParam String documentId,
+            @RequestParam(required = false) Long knowledgeBaseId,
+            HttpServletResponse response) {
+        requireChatPermission();
+        validateSourceAccess(conversationId, documentId, knowledgeBaseId);
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(ragService.getKnowledgeBaseDocument(knowledgeBaseId, documentId));
+    }
+
+    @GetMapping("/{conversationId}/source/chunks")
+    public R<List<KnowledgeBaseDtos.VectorChunk>> getSourceChunks(
+            @PathVariable Long conversationId,
+            @RequestParam String documentId,
+            @RequestParam(required = false) Long knowledgeBaseId,
+            HttpServletResponse response) {
+        requireChatPermission();
+        validateSourceAccess(conversationId, documentId, knowledgeBaseId);
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(ragService.getKnowledgeBaseDocumentChunks(knowledgeBaseId, documentId));
+    }
+
+    private void validateSourceAccess(Long conversationId, String documentId, Long knowledgeBaseId) {
+        if (documentId == null || documentId.isBlank()) {
+            throw new BizException("来源文档 ID 不能为空");
+        }
+        Long userId = LoginUtils.getUserId();
+        historyService.requireOwnedConversation(userId, conversationId);
+        Long assistantId = historyService.getAssistantId(userId, conversationId);
+        if (assistantId != null) {
+            List<Long> allowedKnowledgeBaseIds =
+                    aiAssistantService.get(assistantId).getKnowledgeBaseIds();
+            if (knowledgeBaseId != null
+                    && (allowedKnowledgeBaseIds == null || !allowedKnowledgeBaseIds.contains(knowledgeBaseId))) {
+                throw new BizException("该来源不属于当前 AI 助手的知识库");
+            }
+            if (knowledgeBaseId == null && allowedKnowledgeBaseIds != null
+                    && !allowedKnowledgeBaseIds.isEmpty()) {
+                throw new BizException("参考来源缺少知识库信息，请重新提问后查看原文");
+            }
+        } else if (knowledgeBaseId != null) {
+            throw new BizException("该来源不属于当前对话");
+        }
     }
 
     @DeleteMapping("/{conversationId}/messages")
