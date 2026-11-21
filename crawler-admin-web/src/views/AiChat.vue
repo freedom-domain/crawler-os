@@ -91,7 +91,6 @@
                 <el-icon><EditPen /></el-icon>
               </el-button>
             </div>
-            <p>{{ activeAssistant?.description || '向已收录的内容提问，答案附带相关来源' }}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -106,6 +105,16 @@
           >
             独立窗口
           </el-button>
+          <button
+            v-if="isStandaloneWindow"
+            type="button"
+            class="standalone-theme-button"
+            :title="themeModeTitle"
+            :aria-label="themeModeTitle"
+            @click="toggleTheme"
+          >
+            <el-icon :size="18"><component :is="themeIcon" /></el-icon>
+          </button>
           <el-tooltip v-if="!isStandaloneWindow" content="管理 AI 助手" placement="bottom">
             <el-button
               class="assistant-manage-button"
@@ -322,6 +331,9 @@
       </div>
 
       <div class="composer-wrap">
+        <p class="assistant-description">
+          {{ activeAssistant?.description || '向已收录的内容提问，答案附带相关来源' }}
+        </p>
         <el-button
           v-if="showScrollToBottom && activeConversation?.messages.length"
           class="scroll-to-bottom"
@@ -564,6 +576,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useThemeStore } from '@/stores/theme'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
@@ -573,8 +586,8 @@ import {
   getChatSourceDocument, getChatSourceDocumentChunks, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Plus,
-  Promotion, Refresh, Setting, UserFilled
+  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Moon, Plus,
+  Promotion, Refresh, Setting, Sunny, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
 
@@ -647,7 +660,13 @@ const selectedAssistantId = ref<string | number | undefined>(undefined)
 const selectedChatModelId = ref<string | number | undefined>(undefined)
 const route = useRoute()
 const router = useRouter()
+const themeStore = useThemeStore()
 const isStandaloneWindow = computed(() => route.name === 'AiChatWindow')
+const themeIcon = computed(() => themeStore.mode === 'light' ? Moon : Sunny)
+const themeModeTitle = computed(() =>
+  themeStore.mode === 'light' ? '浅色，点击切换为纯黑' : '纯黑，点击切换为浅色'
+)
+const toggleTheme = () => themeStore.choose(themeStore.mode === 'light' ? 'black' : 'light')
 const props = defineProps<{ assistantId?: string | number; embedded?: boolean }>()
 const routeAssistantId = computed(() =>
   typeof route.params.assistantId === 'string' ? route.params.assistantId : undefined
@@ -1542,7 +1561,7 @@ onActivated(() => {
   display: grid;
   grid-template-columns: 224px minmax(0, 1fr);
   transition: grid-template-columns .24s ease;
-  height: calc(100vh - 96px);
+  height: calc(100vh - 136px);
   min-height: 520px;
   overflow: hidden;
   border: 1px solid var(--chrome-line);
@@ -1633,6 +1652,25 @@ onActivated(() => {
   background: var(--chrome-hover);
   color: var(--teal-ink);
 }
+.standalone-theme-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--chrome-line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-700);
+  cursor: pointer;
+}
+.standalone-theme-button:hover,
+.standalone-theme-button:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--chrome-hover);
+  color: var(--teal-ink);
+}
+.standalone-theme-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .assistant-selector { width: 220px; }
 .assistant-selector :deep(.el-select__wrapper) {
   min-height: 32px;
@@ -1695,7 +1733,7 @@ onActivated(() => {
 }
 .mobile-new-chat, .mobile-conversations { display: none; }
 .chat-header h1 { margin: 0; overflow: hidden; color: var(--ink-950); font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.chat-header p { margin: 5px 0 0; color: var(--ink-500); font-size: 11px; }
+.assistant-description { margin: 0 0 8px; color: var(--ink-500); font-size: 11px; line-height: 1.5; text-align: center; }
 .model-badge { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--chrome-line); border-radius: 20px; color: var(--ink-700); font-size: 10px; }
 .model-badge span { width: 7px; height: 7px; border-radius: 50%; background: #35b98c; box-shadow: 0 0 0 3px rgba(53, 185, 140, .12); }
 .message-list { flex: 1; min-height: 0; overflow: auto; padding: 24px clamp(20px, 6vw, 96px); }
@@ -1877,10 +1915,13 @@ onActivated(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 800px) {
-  .ai-chat-page { grid-template-columns: 190px minmax(0, 1fr); height: calc(100vh - 88px); min-height: 460px; }
+  .ai-chat-page { grid-template-columns: 190px minmax(0, 1fr); height: calc(100vh - 112px); min-height: 460px; }
   .chat-sidebar { padding: 18px 10px 12px; }
   .message-list { padding-right: 22px; padding-left: 22px; }
   .composer-wrap { width: calc(100% - 36px); }
+}
+@media (min-width: 801px) and (max-width: 1100px) {
+  .ai-chat-page { height: calc(100vh - 112px); }
 }
 @media (max-width: 600px) {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
@@ -1895,7 +1936,7 @@ onActivated(() => {
   .standalone-chat-button { width: 32px; padding: 0; font-size: 0; }
   .standalone-chat-button :deep(.el-icon) { margin: 0; font-size: 14px; }
   .assistant-selector { width: auto; min-width: 0; flex: 1 1 110px; }
-  .chat-header p { margin-left: 0; font-size: 10px; }
+  .assistant-description { margin-bottom: 6px; font-size: 10px; }
   .model-badge { display: none; }
   .mobile-new-chat { display: inline-flex; height: 29px; padding: 0 8px; border-radius: 7px; font-size: 10px; }
   .mobile-new-chat .el-icon { margin-right: 3px; }
