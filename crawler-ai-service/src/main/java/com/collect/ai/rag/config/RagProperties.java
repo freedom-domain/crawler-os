@@ -35,6 +35,29 @@ public class RagProperties {
         private String vectorIndex;
         private String vectorIndexPrefix = "spider_content_vector";
         private String vectorFieldPrefix = "embedding";
+
+        public Rag copy() {
+            Rag copy = new Rag();
+            copy.setEnabled(enabled);
+            copy.setSourceIndex(sourceIndex);
+            copy.setEmbeddingProvider(embeddingProvider);
+            copy.setEmbeddingBaseUrl(embeddingBaseUrl);
+            copy.setEmbeddingApiKey(embeddingApiKey);
+            copy.setChatProvider(chatProvider);
+            copy.setChatBaseUrl(chatBaseUrl);
+            copy.setApiKey(apiKey);
+            copy.setEmbeddingModel(embeddingModel);
+            copy.setChatModel(chatModel);
+            copy.setContextLength(contextLength);
+            copy.setDimensions(dimensions);
+            copy.setTopK(topK);
+            copy.setChunkSize(chunkSize);
+            copy.setChunkOverlap(chunkOverlap);
+            copy.setVectorIndex(vectorIndex);
+            copy.setVectorIndexPrefix(vectorIndexPrefix);
+            copy.setVectorFieldPrefix(vectorFieldPrefix);
+            return copy;
+        }
     }
 
     public String resolveVectorIndex() {

@@ -3,10 +3,12 @@ package com.collect.ai.rag.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.collect.ai.entity.AiRagExcludedDocument;
 import com.collect.ai.entity.AiKnowledgeBase;
+import com.collect.ai.entity.AiRagChatModel;
 import com.collect.ai.entity.AiRagVectorModel;
 import com.collect.ai.entity.Spider;
 import com.collect.ai.mapper.AiRagExcludedDocumentMapper;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
+import com.collect.ai.mapper.AiRagChatModelMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
 import com.collect.ai.entity.AiKnowledgeDocument;
 import com.collect.ai.mapper.AiKnowledgeDocumentMapper;
@@ -70,6 +72,7 @@ public class RagService {
     private final AiRagExcludedDocumentMapper excludedDocumentMapper;
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiRagVectorModelMapper vectorModelMapper;
+    private final AiRagChatModelMapper chatModelMapper;
     private final AiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final MinioClient minioClient;
 
@@ -920,6 +923,17 @@ public class RagService {
             throw new IllegalArgumentException("question不能为空");
         }
         RagProperties.Rag rag = properties.getRag();
+        if (request.getChatModelId() != null) {
+            AiRagChatModel chatModel = chatModelMapper.selectById(request.getChatModelId());
+            if (chatModel == null) throw new BizException("聊天模型不存在");
+            RagProperties.Rag selectedRag = rag.copy();
+            selectedRag.setChatProvider(chatModel.getChatProvider());
+            selectedRag.setChatBaseUrl(chatModel.getChatBaseUrl());
+            selectedRag.setApiKey(chatModel.getApiKey());
+            selectedRag.setChatModel(chatModel.getChatModel());
+            selectedRag.setContextLength(chatModel.getContextLength() == null ? 8192 : chatModel.getContextLength());
+            rag = selectedRag;
+        }
         AiKnowledgeBase knowledgeBase = request.getKnowledgeBaseId() == null
                 ? null : knowledgeBaseMapper.selectById(request.getKnowledgeBaseId());
         AiRagVectorModel knowledgeVectorModel = knowledgeBase == null
@@ -1041,9 +1055,9 @@ public class RagService {
 
         StreamingChatResult streamingResult = tokenConsumer == null ? null
                 : createStreamingChatAnswer(
-                        request.getQuestion(), context.toString(), history, tokenConsumer, reasoningConsumer);
+                        request.getQuestion(), context.toString(), history, tokenConsumer, reasoningConsumer, rag);
         String answer = streamingResult == null
-                ? createChatAnswer(request.getQuestion(), context.toString(), history)
+                ? createChatAnswer(request.getQuestion(), context.toString(), history, rag)
                 : streamingResult.answer();
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
@@ -1224,8 +1238,8 @@ public class RagService {
     }
 
     private String createChatAnswer(
-            String question, String context, List<RagDtos.ChatHistoryMessage> history) {
-        RagProperties.Rag rag = properties.getRag();
+            String question, String context, List<RagDtos.ChatHistoryMessage> history,
+            RagProperties.Rag rag) {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
@@ -1240,7 +1254,7 @@ public class RagService {
             String path = "ollama".equalsIgnoreCase(rag.getChatProvider())
                     ? "/api/chat"
                     : "/chat/completions";
-            HttpResponse<String> response = openAiRequest(path, body);
+            HttpResponse<String> response = openAiRequest(path, body, rag);
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("调用聊天模型失败: " + response.statusCode()
                         + " " + response.body());
@@ -1265,8 +1279,8 @@ public class RagService {
             String context,
             List<RagDtos.ChatHistoryMessage> history,
             Consumer<String> tokenConsumer,
-            Consumer<String> reasoningConsumer) {
-        RagProperties.Rag rag = properties.getRag();
+            Consumer<String> reasoningConsumer,
+            RagProperties.Rag rag) {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
@@ -1298,7 +1312,7 @@ public class RagService {
                 firstReasoningNanos.compareAndSet(0, System.nanoTime());
                 if (reasoningConsumer != null) reasoningConsumer.accept(reasoning);
             };
-            streamChatRequest(path, body, timedTokenConsumer, timedReasoningConsumer);
+            streamChatRequest(path, body, timedTokenConsumer, timedReasoningConsumer, rag);
             long completedNanos = System.nanoTime();
             long firstToken = firstTokenNanos.get();
             long firstOutput = firstOutputNanos.get();
@@ -1352,8 +1366,8 @@ public class RagService {
                     String path,
                     ObjectNode body,
                     Consumer<String> tokenConsumer,
-                    Consumer<String> reasoningConsumer) throws Exception {
-                RagProperties.Rag rag = properties.getRag();
+                    Consumer<String> reasoningConsumer,
+                    RagProperties.Rag rag) throws Exception {
                 String baseUrl = path.equals("/api/chat")
                         ? rag.getChatBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "")
                         : rag.getChatBaseUrl().replaceAll("/$", "");
@@ -1457,7 +1471,11 @@ public class RagService {
             }
 
     private HttpResponse<String> openAiRequest(String path, ObjectNode body) throws Exception {
-        RagProperties.Rag rag = properties.getRag();
+        return openAiRequest(path, body, properties.getRag());
+    }
+
+    private HttpResponse<String> openAiRequest(
+            String path, ObjectNode body, RagProperties.Rag rag) throws Exception {
         String baseUrl;
         if (path.equals("/api/embeddings")) {
             baseUrl = rag.getEmbeddingBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "");

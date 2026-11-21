@@ -18,8 +18,6 @@ public class AiAssistant {
     private String avatar;
     private String systemPrompt;
     private Boolean enabled;
-    private Long chatModelId;
-    private Long vectorModelId;
     private Long knowledgeBaseId;
     private Integer sort;
     private LocalDateTime createTime;

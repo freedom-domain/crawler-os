@@ -260,8 +260,6 @@ CREATE TABLE IF NOT EXISTS ai_assistant (
     avatar VARCHAR(32) NOT NULL DEFAULT '',
     system_prompt LONGTEXT NOT NULL,
     enabled TINYINT(1) NOT NULL DEFAULT 1,
-    chat_model_id BIGINT NULL,
-    vector_model_id BIGINT NULL,
     knowledge_base_id BIGINT NULL,
     sort INT NOT NULL DEFAULT 0,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -270,16 +268,12 @@ CREATE TABLE IF NOT EXISTS ai_assistant (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO ai_assistant (
-    name, description, avatar, system_prompt, enabled, chat_model_id, vector_model_id, sort
+    name, description, avatar, system_prompt, enabled, sort
 )
 SELECT '知识库助手', '基于爬虫知识库回答问题，并附带资料来源。',
        'knowledge', '你是一个专业的中文知识库助手。请只依据提供的资料回答问题；资料不足时明确说明，不要编造。',
-       1, c.id, v.id, 0
-FROM ai_rag_chat_model c
-JOIN ai_rag_vector_model v
-WHERE c.id = (SELECT MIN(id) FROM ai_rag_chat_model)
-  AND v.id = (SELECT MIN(id) FROM ai_rag_vector_model)
-  AND NOT EXISTS (SELECT 1 FROM ai_assistant WHERE name = '知识库助手');
+       1, 0
+WHERE NOT EXISTS (SELECT 1 FROM ai_assistant WHERE name = '知识库助手');
 
 UPDATE ai_assistant assistant
 JOIN ai_knowledge_base base ON base.name = '默认知识库'

@@ -17,10 +17,6 @@ public final class AiAssistantDtos {
         private String systemPrompt;
         private Boolean enabled;
         @JsonSerialize(using = ToStringSerializer.class)
-        private Long chatModelId;
-        @JsonSerialize(using = ToStringSerializer.class)
-        private Long vectorModelId;
-        @JsonSerialize(using = ToStringSerializer.class)
         private Long knowledgeBaseId;
         private Integer sort;
     }
@@ -34,12 +30,6 @@ public final class AiAssistantDtos {
         private String avatar;
         private String systemPrompt;
         private Boolean enabled;
-        @JsonSerialize(using = ToStringSerializer.class)
-        private Long chatModelId;
-        private String chatModelName;
-        @JsonSerialize(using = ToStringSerializer.class)
-        private Long vectorModelId;
-        private String vectorModelName;
         @JsonSerialize(using = ToStringSerializer.class)
         private Long knowledgeBaseId;
         private String knowledgeBaseName;

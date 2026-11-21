@@ -3,7 +3,7 @@
     <div class="card-header">
       <div>
         <h2>AI 助手管理</h2>
-        <p>新建和维护可选的 AI 助手，为每个助手配置聊天模型和知识检索模型。</p>
+        <p>新建和维护可选的 AI 助手，并为助手配置知识库、提示词和状态。</p>
       </div>
       <el-button type="primary" :icon="Plus" @click="openCreate">新增助手</el-button>
     </div>
@@ -11,8 +11,6 @@
     <el-table :data="assistants" empty-text="暂无 AI 助手" stripe>
       <el-table-column prop="name" label="助手名称" min-width="180" />
       <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="chatModelName" label="聊天模型" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="vectorModelName" label="向量模型" min-width="180" show-overflow-tooltip />
       <el-table-column prop="knowledgeBaseName" label="知识库" min-width="180" show-overflow-tooltip />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
@@ -38,16 +36,6 @@
         </el-form-item>
         <el-form-item label="助手简介" prop="description">
           <el-input v-model="form.description" maxlength="512" placeholder="简要描述助手用途" />
-        </el-form-item>
-        <el-form-item label="聊天模型" prop="chatModelId">
-          <el-select v-model="form.chatModelId" placeholder="请选择聊天模型" style="width:100%">
-            <el-option v-for="model in chatModels" :key="model.id" :label="`${model.name}（${model.chatModel}）`" :value="model.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="向量模型" prop="vectorModelId">
-          <el-select v-model="form.vectorModelId" placeholder="请选择向量模型" style="width:100%">
-            <el-option v-for="model in vectorModels" :key="model.id" :label="`${model.name}（${model.embeddingModel}）`" :value="model.id" />
-          </el-select>
         </el-form-item>
         <el-form-item label="知识库">
           <el-select v-model="form.knowledgeBaseId" placeholder="请选择知识库" clearable style="width:100%">
@@ -96,7 +84,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  createAssistant, deleteAssistant, getAssistants, getChatModels, getKnowledgeBases, getVectorModels, updateAssistant
+  createAssistant, deleteAssistant, getAssistants, getKnowledgeBases, updateAssistant
 } from '@/api'
 import AiChat from '@/views/AiChat.vue'
 
@@ -107,18 +95,12 @@ interface Assistant {
   avatar: string
   systemPrompt: string
   enabled: boolean
-  chatModelId: string
-  vectorModelId: string
   knowledgeBaseId: string
-  chatModelName: string
-  vectorModelName: string
   knowledgeBaseName: string
   sort: number
 }
 
 const assistants = ref<Assistant[]>([])
-const chatModels = ref<any[]>([])
-const vectorModels = ref<any[]>([])
 const knowledgeBases = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
@@ -130,23 +112,19 @@ const editingId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive({
   name: '', description: '', avatar: '', systemPrompt: '',
-  enabled: true, chatModelId: '', vectorModelId: '', knowledgeBaseId: '', sort: 0
+  enabled: true, knowledgeBaseId: '', sort: 0
 })
 const rules: FormRules = {
-  name: [{ required: true, message: '请输入助手名称', trigger: 'blur' }],
-  chatModelId: [{ required: true, message: '请选择聊天模型', trigger: 'change' }],
-  vectorModelId: [{ required: true, message: '请选择向量模型', trigger: 'change' }]
+  name: [{ required: true, message: '请输入助手名称', trigger: 'blur' }]
 }
 
 async function loadAll() {
   loading.value = true
   try {
-    const [assistantRes, chatRes, vectorRes, knowledgeBaseRes] = await Promise.all([
-      getAssistants(), getChatModels(), getVectorModels(), getKnowledgeBases()
+    const [assistantRes, knowledgeBaseRes] = await Promise.all([
+      getAssistants(), getKnowledgeBases()
     ])
     assistants.value = assistantRes.data || []
-    chatModels.value = chatRes.data || []
-    vectorModels.value = vectorRes.data || []
     knowledgeBases.value = knowledgeBaseRes.data || []
   } finally {
     loading.value = false
@@ -156,13 +134,21 @@ async function loadAll() {
 function openCreate() {
   editingId.value = null
   Object.assign(form, { name: '', description: '', avatar: '', systemPrompt: '',
-    enabled: true, chatModelId: '', vectorModelId: '', knowledgeBaseId: '', sort: 0 })
+    enabled: true, knowledgeBaseId: '', sort: 0 })
   dialogVisible.value = true
 }
 
 function openEdit(row: Assistant) {
   editingId.value = row.id
-  Object.assign(form, row)
+  Object.assign(form, {
+    name: row.name,
+    description: row.description,
+    avatar: row.avatar,
+    systemPrompt: row.systemPrompt,
+    enabled: row.enabled,
+    knowledgeBaseId: row.knowledgeBaseId,
+    sort: row.sort
+  })
   dialogVisible.value = true
 }
 

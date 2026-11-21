@@ -84,6 +84,17 @@
           <p>{{ routeAssistantName ? '当前助手的专属聊天会话' : '向已收录的内容提问，答案附带相关来源' }}</p>
         </div>
         <div class="header-actions">
+          <el-tooltip content="管理 AI 助手" placement="bottom">
+            <el-button
+              class="assistant-manage-button"
+              size="small"
+              :icon="Setting"
+              aria-label="管理 AI 助手"
+              @click="openAssistantManagement"
+            >
+              管理助手
+            </el-button>
+          </el-tooltip>
           <el-select
             v-model="selectedAssistantId"
             class="assistant-selector"
@@ -329,7 +340,7 @@
             :autosize="{ minRows: 1, maxRows: 5 }"
             maxlength="2000"
             resize="none"
-            placeholder="输入问题，输入 / 查看 AI 命令..."
+            placeholder="输入问题，输入 / 查看 AI 命令… · Enter 发送 · Shift + Enter 换行"
             aria-label="输入问题"
             @input="resetSlashCommandSelection"
             @keydown="handleComposerKeydown"
@@ -341,6 +352,21 @@
                 <el-select v-model="topK" size="small" aria-label="检索数量">
                   <el-option v-for="count in retrievalOptions" :key="count" :label="`${count} 条`" :value="count" />
                 </el-select>
+                <span>聊天模型</span>
+                <el-select
+                  v-model="selectedChatModelId"
+                  class="chat-model-selector"
+                  size="small"
+                  popper-class="chat-model-select-popper"
+                  aria-label="聊天模型"
+                >
+                  <el-option
+                    v-for="model in chatModels"
+                    :key="model.id"
+                    :label="model.name"
+                    :value="model.id"
+                  />
+                </el-select>
               </div>
             </div>
             <div
@@ -350,7 +376,6 @@
               aria-label="对话历史上下文使用估算"
             >
               <div class="context-usage-copy">
-                <span>上下文使用估算</span>
                 <strong>约 {{ formatTokenCount(estimatedHistoryTokens) }} / {{ formatTokenCount(contextWindow) }} Token</strong>
               </div>
               <el-progress
@@ -365,7 +390,6 @@
             </div>
             <span v-else-if="contextWindowError" class="context-usage-error">上下文用量暂不可用</span>
             <div class="send-tools">
-              <span class="keyboard-hint">Enter 发送 · Shift + Enter 换行</span>
               <el-button
                 v-if="activeStreamingMessage?.id && activeConversation"
                 class="send-button stop-button"
@@ -402,17 +426,17 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import {
   cancelChatMessage, chatContextWindow, chatConversationCreate, chatConversationDelete, chatConversationList,
-  chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, resumeChatMessageStream, streamChatMessage
+  chatConversationRename, chatMessages, clearChatMessages, getChatAssistants, getChatModels, resumeChatMessageStream, streamChatMessage
 } from '@/api'
 import {
   ArrowDown, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, Help, Link, Loading, MagicStick, Plus,
-  Promotion, Refresh, UserFilled
+  Promotion, Refresh, Setting, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
 
@@ -456,8 +480,11 @@ const suggestions = [
 
 const conversations = ref<Conversation[]>([])
 const assistants = ref<any[]>([])
+const chatModels = ref<any[]>([])
 const selectedAssistantId = ref<string | number | undefined>(undefined)
+const selectedChatModelId = ref<string | number | undefined>(undefined)
 const route = useRoute()
+const router = useRouter()
 const props = defineProps<{ assistantId?: string | number; embedded?: boolean }>()
 const routeAssistantId = computed(() =>
   typeof route.params.assistantId === 'string' ? route.params.assistantId : undefined
@@ -701,6 +728,10 @@ const switchAssistant = async (assistantId: string | number) => {
   activeConversationId.value = null
   conversations.value = []
   await loadConversations()
+}
+
+const openAssistantManagement = () => {
+  void router.push({ name: 'AiAssistants' })
 }
 
 const renameConversation = async (conversation: Conversation) => {
@@ -1137,7 +1168,11 @@ const sendMessage = async (questionOverride?: string) => {
   await scrollToBottom()
 
   try {
-    const response = await streamChatMessage(conversation.id, { question, topK: topK.value })
+    const response = await streamChatMessage(conversation.id, {
+      question,
+      topK: topK.value,
+      chatModelId: selectedChatModelId.value
+    })
     responseMessage.id = Number(response.headers.get('X-Chat-Message-Id')) || undefined
     await consumeChatStream(response, responseMessage, conversation.id)
   } catch (error) {
@@ -1161,6 +1196,14 @@ onMounted(() => {
   }, 250)
   if (effectiveAssistantId.value) selectedAssistantId.value = effectiveAssistantId.value
   void loadContextWindow()
+  void getChatModels().then((response: any) => {
+    chatModels.value = (response.data || []).filter((model: any) => model.enabled !== false)
+    if (chatModels.value.length && selectedChatModelId.value === undefined) {
+      selectedChatModelId.value = chatModels.value[0].id
+    }
+  }).catch(() => {
+    ElMessage.error('加载聊天模型失败，请刷新页面重试')
+  })
   void getChatAssistants().then((response: any) => {
     assistants.value = (response.data || []).filter((assistant: any) => assistant.enabled)
     if (effectiveAssistantId.value) {
@@ -1260,11 +1303,80 @@ onActivated(() => {
 .rename-active-conversation { flex: 0 0 auto; padding: 4px; color: var(--ink-500); }
 .rename-active-conversation:hover { color: var(--teal-ink); }
 .header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.assistant-manage-button {
+  height: 32px;
+  border-radius: 8px;
+  border-color: var(--chrome-line);
+  background: var(--surface);
+  color: var(--ink-700);
+  font-size: 12px;
+}
+.assistant-manage-button:hover,
+.assistant-manage-button:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--chrome-hover);
+  color: var(--teal-ink);
+}
 .assistant-selector { width: 220px; }
+.assistant-selector :deep(.el-select__wrapper) {
+  min-height: 32px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  box-shadow: 0 0 0 1px var(--chrome-line) inset;
+  transition: background-color .16s ease, box-shadow .16s ease;
+}
+.assistant-selector :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--line-strong) inset;
+}
+.assistant-selector :deep(.el-select__wrapper.is-focused) {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--teal) inset, 0 0 0 3px var(--focus-ring);
+}
+.assistant-selector :deep(.el-select__placeholder),
+.assistant-selector :deep(.el-select__selected-item) {
+  color: var(--ink-700);
+  font-size: 12px;
+}
 .assistant-selector :deep(.el-select__selection), .assistant-selector :deep(.el-select__selected-item) { min-width: 0; }
 .assistant-selector :deep(.el-select__selected-item) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:global(.assistant-select-popper) { min-width: 220px; max-width: 360px; }
-:global(.assistant-select-popper .el-select-dropdown__item) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:global(.assistant-select-popper) {
+  min-width: 220px;
+  max-width: 360px;
+  padding: 6px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+:global(.assistant-select-popper .el-select-dropdown__list) {
+  margin: 0;
+}
+:global(.assistant-select-popper .el-select-dropdown__item) {
+  min-height: 36px;
+  margin: 2px 0;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global(.assistant-select-popper .el-select-dropdown__item:hover),
+:global(.assistant-select-popper .el-select-dropdown__item.is-hovering) {
+  background: var(--chrome-hover);
+  color: var(--teal-ink);
+}
+:global(.assistant-select-popper .el-select-dropdown__item.is-selected) {
+  background: var(--tint);
+  color: var(--teal-ink);
+  font-weight: 650;
+}
+:global(.assistant-select-popper .el-select-dropdown__item.is-disabled) {
+  color: var(--ink-500);
+  opacity: .65;
+}
 .mobile-new-chat, .mobile-conversations { display: none; }
 .chat-header h1 { margin: 0; overflow: hidden; color: var(--ink-950); font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .chat-header p { margin: 5px 0 0; color: var(--ink-500); font-size: 11px; }
@@ -1416,6 +1528,7 @@ onActivated(() => {
 .retrieval-control, .send-tools { display: flex; align-items: center; gap: 8px; }
 .retrieval-control { color: var(--ink-500); font-size: 10px; }
 .retrieval-control :deep(.el-select) { width: 78px; }
+.retrieval-control :deep(.chat-model-selector) { width: 160px; }
 .retrieval-control :deep(.el-input__wrapper) { padding: 0 7px; box-shadow: none; background: var(--surface-soft); }
 .retrieval-control :deep(.el-input__inner) { height: 25px; font-size: 10px; }
 .context-usage { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
@@ -1444,6 +1557,9 @@ onActivated(() => {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
   .chat-sidebar { display: none; }
   .chat-header { min-height: 62px; padding: 12px 15px; }
+  .header-actions { gap: 6px; }
+  .assistant-manage-button { width: 32px; padding: 0; font-size: 0; }
+  .assistant-manage-button :deep(.el-icon) { margin: 0; font-size: 14px; }
   .assistant-selector { width: 150px; }
   .chat-title-row h1 { max-width: 52vw; font-size: 13px; }
   .chat-header p { font-size: 10px; }
@@ -1457,6 +1573,7 @@ onActivated(() => {
   .composer-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
   .retrieval-control { grid-column: 1; grid-row: 1; min-width: 0; gap: 6px; white-space: nowrap; }
   .retrieval-control :deep(.el-select) { flex: 0 0 78px; }
+  .retrieval-control :deep(.chat-model-selector) { width: 112px; flex-basis: 112px; }
   .send-tools { grid-column: 2; grid-row: 1; justify-content: flex-end; }
   .context-usage, .context-usage-error { grid-column: 1 / -1; grid-row: 2; }
   .context-usage { width: 100%; }

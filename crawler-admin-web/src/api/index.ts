@@ -121,9 +121,9 @@ export const chatMessages = (id: number) =>
   request.get(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
 export const clearChatMessages = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
-export const sendChatMessage = (id: number, data: { question: string; topK: number }) =>
+export const sendChatMessage = (id: number, data: { question: string; topK: number; chatModelId?: string | number }) =>
   request.post(`/ai/chat/conversations/${id}/messages`, data, chatRequestConfig)
-export const streamChatMessage = (id: number, data: { question: string; topK: number }) => {
+export const streamChatMessage = (id: number, data: { question: string; topK: number; chatModelId?: string | number }) => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
   const token = useUserStore().token
   if (token) headers.Authorization = `Bearer ${token}`
