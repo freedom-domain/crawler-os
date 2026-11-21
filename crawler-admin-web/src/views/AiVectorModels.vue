@@ -27,7 +27,12 @@
         <el-table-column prop="embeddingModel" label="模型名称" min-width="220" show-overflow-tooltip />
         <el-table-column label="API Key" width="110">
           <template #default="{ row }">
-            <el-tag :type="row.apiKeyConfigured ? 'success' : 'info'" effect="light">
+            <el-tag
+              :type="row.apiKeyConfigured ? 'success' : 'info'"
+              class="is-clickable"
+              effect="light"
+              @click="editApiKey(row)"
+            >
               {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
             </el-tag>
           </template>
@@ -114,6 +119,26 @@
         <el-button type="primary" :loading="saving" @click="saveModel">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="apiKeyDialogVisible"
+      title="编辑 API Key"
+      width="520px"
+      @closed="apiKeyValue = ''"
+    >
+      <el-input
+        v-model="apiKeyValue"
+        type="password"
+        show-password
+        autocomplete="off"
+        placeholder="请输入新的 API Key；留空并保存可清除"
+      />
+      <template #footer>
+        <el-button :disabled="!apiKeyValue" @click="copyApiKey">复制 API Key</el-button>
+        <el-button @click="apiKeyDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="apiKeySaving" @click="saveApiKey">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -121,7 +146,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  createVectorModel, deleteVectorModel, discoverVectorModels, getVectorModels, updateVectorModel
+  createVectorModel, deleteVectorModel, discoverVectorModels, getVectorModelApiKey, getVectorModels,
+  updateVectorModel, updateVectorModelApiKey
 } from '@/api'
 
 defineProps<{ embedded?: boolean }>()
@@ -160,6 +186,10 @@ const saving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref<string | null>(null)
 const apiKeyConfigured = ref(false)
+const apiKeyDialogVisible = ref(false)
+const apiKeyValue = ref('')
+const apiKeySaving = ref(false)
+const editingApiKeyModel = ref<VectorModel | null>(null)
 const discovering = ref(false)
 const availableModels = ref<string[]>([])
 const modelOptions = computed(() => {
@@ -307,6 +337,45 @@ const removeModel = async (model: VectorModel) => {
   }
 }
 
+const editApiKey = async (model: VectorModel) => {
+  editingApiKeyModel.value = model
+  apiKeyValue.value = ''
+  apiKeyDialogVisible.value = true
+  try {
+    const response: any = await getVectorModelApiKey(model.id)
+    if (response) apiKeyValue.value = response.data || ''
+  } catch {
+    apiKeyDialogVisible.value = false
+    ElMessage.error('读取 API Key 失败')
+  }
+}
+
+const copyApiKey = async () => {
+  if (!apiKeyValue.value) return
+  try {
+    await navigator.clipboard.writeText(apiKeyValue.value)
+    ElMessage.success('API Key 已复制')
+  } catch {
+    ElMessage.error('复制 API Key 失败，请检查浏览器剪贴板权限')
+  }
+}
+
+const saveApiKey = async () => {
+  const model = editingApiKeyModel.value
+  if (!model) return
+  apiKeySaving.value = true
+  try {
+    await updateVectorModelApiKey(model.id, apiKeyValue.value)
+    model.apiKeyConfigured = Boolean(apiKeyValue.value.trim())
+    ElMessage.success('API Key 已更新')
+    apiKeyDialogVisible.value = false
+  } catch {
+    ElMessage.error('更新 API Key 失败')
+  } finally {
+    apiKeySaving.value = false
+  }
+}
+
 onMounted(loadModels)
 </script>
 
@@ -318,6 +387,7 @@ onMounted(loadModels)
 .card-header h2 { margin: 0; color: var(--ink-900); font-size: 20px; }
 .card-header p { margin: 6px 0 0; color: var(--ink-500); font-size: 13px; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
+.is-clickable { cursor: pointer; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-input-number) { width: 100%; }
 .model-picker { display: flex; width: 100%; gap: 8px; }

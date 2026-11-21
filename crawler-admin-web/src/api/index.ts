@@ -56,6 +56,9 @@ export const discoverVectorModels = (data: {
 export const createVectorModel = (data: any) => request.post('/ai/rag/vector-models', data)
 export const updateVectorModel = (id: string, data: any) => request.put(`/ai/rag/vector-models/${id}`, data)
 export const deleteVectorModel = (id: string) => request.delete(`/ai/rag/vector-models/${id}`)
+export const getVectorModelApiKey = (id: string) => request.get(`/ai/rag/vector-models/${id}/api-key`)
+export const updateVectorModelApiKey = (id: string, apiKey: string) =>
+  request.put(`/ai/rag/vector-models/${id}/api-key`, { apiKey })
 export const getChatModels = () => request.get('/ai/rag/chat-models')
 export const discoverChatModels = (data: {
   modelId: string | null

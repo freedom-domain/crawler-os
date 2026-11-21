@@ -155,6 +155,27 @@ public class RagController {
         return R.ok(vectorModelService.list());
     }
 
+    @Operation(summary = "读取向量模型 API Key")
+    @GetMapping("/vector-models/{id}/api-key")
+    public R<String> getVectorModelApiKey(@PathVariable Long id, HttpServletResponse response) {
+        requireAdmin();
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(vectorModelService.getApiKey(id));
+    }
+
+    @Operation(summary = "更新向量模型 API Key")
+    @PutMapping("/vector-models/{id}/api-key")
+    public R<Void> updateVectorModelApiKey(@PathVariable Long id,
+                                           @RequestBody VectorModelRequest request) {
+        requireAdmin();
+        if (request == null) {
+            throw new BizException("API Key 请求不能为空");
+        }
+        vectorModelService.updateApiKey(id, request.getApiKey());
+        return R.ok();
+    }
+
     @Operation(summary = "创建向量模型")
     @PostMapping("/vector-models")
     public R<VectorModelResponse> createVectorModel(@RequestBody VectorModelRequest request) {

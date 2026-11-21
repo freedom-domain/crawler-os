@@ -36,6 +36,24 @@ public class VectorModelService {
                 .stream().map(VectorModelService::toResponse).toList();
     }
 
+    public String getApiKey(Long id) {
+        return requireModel(id).getApiKey();
+    }
+
+    @Transactional
+    public void updateApiKey(Long id, String apiKey) {
+        if (apiKey != null && apiKey.length() > 1024) {
+            throw new BizException("API Key 长度不能超过 1024 个字符");
+        }
+        AiRagVectorModel model = requireModel(id);
+        model.setApiKey(apiKey == null ? "" : apiKey.trim());
+        model.setUpdateTime(LocalDateTime.now());
+        if (vectorModelMapper.updateById(model) != 1) {
+            throw new IllegalStateException("保存向量模型 API Key 失败");
+        }
+        ragConfigService.refreshSelectedVectorModel(id);
+    }
+
     @Transactional
     public VectorModelResponse create(VectorModelRequest request) {
         validate(request);

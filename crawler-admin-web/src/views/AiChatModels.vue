@@ -124,6 +124,7 @@
         placeholder="请输入新的 API Key；留空并保存可清除"
       />
       <template #footer>
+        <el-button :disabled="!apiKeyValue" @click="copyApiKey">复制 API Key</el-button>
         <el-button @click="apiKeyDialogVisible = false">关闭</el-button>
         <el-button type="primary" :loading="apiKeySaving" @click="saveApiKey">保存</el-button>
       </template>
@@ -340,6 +341,16 @@ const saveApiKey = async () => {
     ElMessage.error('更新 API Key 失败')
   } finally {
     apiKeySaving.value = false
+  }
+}
+
+const copyApiKey = async () => {
+  if (!apiKeyValue.value) return
+  try {
+    await navigator.clipboard.writeText(apiKeyValue.value)
+    ElMessage.success('API Key 已复制')
+  } catch {
+    ElMessage.error('复制 API Key 失败，请检查浏览器剪贴板权限')
   }
 }
 
