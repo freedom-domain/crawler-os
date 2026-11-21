@@ -13,6 +13,7 @@
       <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip />
       <el-table-column prop="chatModelName" label="聊天模型" min-width="180" show-overflow-tooltip />
       <el-table-column prop="vectorModelName" label="向量模型" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="knowledgeBaseName" label="知识库" min-width="180" show-overflow-tooltip />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.enabled ? 'success' : 'info'" effect="light">
@@ -46,6 +47,17 @@
         <el-form-item label="向量模型" prop="vectorModelId">
           <el-select v-model="form.vectorModelId" placeholder="请选择向量模型" style="width:100%">
             <el-option v-for="model in vectorModels" :key="model.id" :label="`${model.name}（${model.embeddingModel}）`" :value="model.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="知识库">
+          <el-select v-model="form.knowledgeBaseId" placeholder="请选择知识库" clearable style="width:100%">
+            <el-option
+              v-for="base in knowledgeBases"
+              :key="base.id"
+              :label="base.name"
+              :value="base.id"
+              :disabled="!base.enabled"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="系统提示词">
@@ -84,7 +96,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  createAssistant, deleteAssistant, getAssistants, getChatModels, getVectorModels, updateAssistant
+  createAssistant, deleteAssistant, getAssistants, getChatModels, getKnowledgeBases, getVectorModels, updateAssistant
 } from '@/api'
 import AiChat from '@/views/AiChat.vue'
 
@@ -97,14 +109,17 @@ interface Assistant {
   enabled: boolean
   chatModelId: string
   vectorModelId: string
+  knowledgeBaseId: string
   chatModelName: string
   vectorModelName: string
+  knowledgeBaseName: string
   sort: number
 }
 
 const assistants = ref<Assistant[]>([])
 const chatModels = ref<any[]>([])
 const vectorModels = ref<any[]>([])
+const knowledgeBases = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
@@ -115,7 +130,7 @@ const editingId = ref<string | null>(null)
 const formRef = ref<FormInstance>()
 const form = reactive({
   name: '', description: '', avatar: '', systemPrompt: '',
-  enabled: true, chatModelId: '', vectorModelId: '', sort: 0
+  enabled: true, chatModelId: '', vectorModelId: '', knowledgeBaseId: '', sort: 0
 })
 const rules: FormRules = {
   name: [{ required: true, message: '请输入助手名称', trigger: 'blur' }],
@@ -126,12 +141,13 @@ const rules: FormRules = {
 async function loadAll() {
   loading.value = true
   try {
-    const [assistantRes, chatRes, vectorRes] = await Promise.all([
-      getAssistants(), getChatModels(), getVectorModels()
+    const [assistantRes, chatRes, vectorRes, knowledgeBaseRes] = await Promise.all([
+      getAssistants(), getChatModels(), getVectorModels(), getKnowledgeBases()
     ])
     assistants.value = assistantRes.data || []
     chatModels.value = chatRes.data || []
     vectorModels.value = vectorRes.data || []
+    knowledgeBases.value = knowledgeBaseRes.data || []
   } finally {
     loading.value = false
   }
@@ -140,7 +156,7 @@ async function loadAll() {
 function openCreate() {
   editingId.value = null
   Object.assign(form, { name: '', description: '', avatar: '', systemPrompt: '',
-    enabled: true, chatModelId: '', vectorModelId: '', sort: 0 })
+    enabled: true, chatModelId: '', vectorModelId: '', knowledgeBaseId: '', sort: 0 })
   dialogVisible.value = true
 }
 

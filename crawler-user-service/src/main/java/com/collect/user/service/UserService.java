@@ -227,6 +227,7 @@ public class UserService {
             node.setType(p.getType());
             node.setSort(p.getSort());
             node.setIcon(p.getIcon() != null && !p.getIcon().isBlank() ? p.getIcon() : defaultMenuIcon(p.getCode()));
+            node.setShowInMenu(p.getShowInMenu() == null ? 1 : p.getShowInMenu());
             nodeMap.put(p.getId(), node);
             parentMap.put(p.getId(), p.getParentId());
         }

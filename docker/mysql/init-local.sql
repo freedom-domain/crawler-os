@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS sys_permission (
     path VARCHAR(255),
     icon VARCHAR(64),
     sort INT DEFAULT 0,
+    show_in_menu TINYINT NOT NULL DEFAULT 1 COMMENT '是否显示在侧边菜单',
     deleted TINYINT DEFAULT 0,
     create_time DATETIME,
     update_time DATETIME,
@@ -206,6 +207,52 @@ JOIN ai_rag_chat_model model
     ON model.name = CONCAT('默认聊天模型-', config.environment)
 SET config.chat_model_id = model.id;
 
+CREATE TABLE IF NOT EXISTS ai_knowledge_base (
+   id BIGINT PRIMARY KEY AUTO_INCREMENT,
+   name VARCHAR(64) NOT NULL,
+   description VARCHAR(512) NOT NULL DEFAULT '',
+   enabled TINYINT(1) NOT NULL DEFAULT 1,
+   vector_model_id BIGINT NULL,
+   source_index VARCHAR(255) NOT NULL,
+   vector_index VARCHAR(255) NOT NULL,
+   vector_field VARCHAR(255) NOT NULL,
+   source_type VARCHAR(16) NOT NULL DEFAULT 'ES_INDEX',
+   upload_bucket VARCHAR(128) NOT NULL DEFAULT 'crawler-knowledge',
+   sort INT NOT NULL DEFAULT 0,
+   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+   UNIQUE KEY uk_ai_knowledge_base_name (name),
+   KEY idx_ai_knowledge_base_enabled_sort (enabled, sort, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO ai_knowledge_base (
+   name, description, enabled, vector_model_id, source_index, vector_index, vector_field, sort
+)
+SELECT '默认知识库', '系统现有爬虫内容知识库。', 1, config.vector_model_id,
+      config.source_index,
+      COALESCE(config.vector_index, CONCAT(config.vector_index_prefix, '_', LOWER(REPLACE(config.embedding_model, '-', '_')))),
+      CONCAT(config.vector_field_prefix, '_', LOWER(REPLACE(config.embedding_model, '-', '_'))),
+      0
+FROM ai_rag_config config
+WHERE NOT EXISTS (SELECT 1 FROM ai_knowledge_base);
+
+CREATE TABLE IF NOT EXISTS ai_knowledge_document (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    knowledge_base_id BIGINT NOT NULL,
+    title VARCHAR(512) NOT NULL DEFAULT '',
+    original_name VARCHAR(512) NOT NULL,
+    content_type VARCHAR(128) NOT NULL DEFAULT '',
+    file_size BIGINT NOT NULL DEFAULT 0,
+    minio_bucket VARCHAR(128) NOT NULL,
+    object_name VARCHAR(1024) NOT NULL,
+    source_document_id VARCHAR(512) NOT NULL,
+    vectorized TINYINT(1) NOT NULL DEFAULT 0,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_ai_knowledge_document_object (minio_bucket, object_name(512)),
+    KEY idx_ai_knowledge_document_base (knowledge_base_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS ai_assistant (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(64) NOT NULL,
@@ -215,6 +262,7 @@ CREATE TABLE IF NOT EXISTS ai_assistant (
     enabled TINYINT(1) NOT NULL DEFAULT 1,
     chat_model_id BIGINT NULL,
     vector_model_id BIGINT NULL,
+    knowledge_base_id BIGINT NULL,
     sort INT NOT NULL DEFAULT 0,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -232,6 +280,11 @@ JOIN ai_rag_vector_model v
 WHERE c.id = (SELECT MIN(id) FROM ai_rag_chat_model)
   AND v.id = (SELECT MIN(id) FROM ai_rag_vector_model)
   AND NOT EXISTS (SELECT 1 FROM ai_assistant WHERE name = '知识库助手');
+
+UPDATE ai_assistant assistant
+JOIN ai_knowledge_base base ON base.name = '默认知识库'
+SET assistant.knowledge_base_id = base.id
+WHERE assistant.knowledge_base_id IS NULL;
 
 CREATE TABLE IF NOT EXISTS ai_chat_conversation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -688,6 +741,7 @@ INSERT INTO sys_permission (id, name, code, parent_id, type, path, icon, sort) V
 (28, '向量模型', 'ai:vector-models', 12, 1, '/ai-vector-models', 'Cpu', 6),
 (29, '聊天模型', 'ai:chat-models', 12, 1, '/ai-chat-models', 'ChatDotRound', 7),
 (30, '知识库管理', 'ai:knowledge', 12, 1, '/ai-knowledge', 'DataLine', 8),
+(32, '知识库文档管理', 'ai:knowledge-documents', 12, 1, '/ai-knowledge-documents', 'Document', 9),
 (27, 'AI 助手', 'ai:chat', 0, 1, '/ai-chat', 'ChatDotRound', 9),
 (31, 'AI 助手管理', 'ai:assistant', 0, 1, '/ai-assistants', 'Service', 10);
 
@@ -696,7 +750,7 @@ INSERT INTO sys_role_permission (role_id, permission_id) VALUES
 (1, 1),(1, 2),(1, 3),(1, 4),(1, 5),
 (1, 6),(1, 7),(1, 8),(1, 9),(1, 10),(1, 11),
 (1, 12),(1, 13),(1, 14),(1, 15),(1, 16),(1, 17),(1, 18),(1, 23),(1, 24),
-(1, 25),(1, 26),(1, 27),(1, 28),(1, 29),(1, 30),(1, 31),
+(1, 25),(1, 26),(1, 27),(1, 28),(1, 29),(1, 30),(1, 31),(1, 32),
 (2, 18),(2, 23),(2, 24);
 
 -- 默认管理员 (密码: admin123, MD5)

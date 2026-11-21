@@ -40,6 +40,16 @@ public final class KnowledgeBaseDtos {
     }
 
     @Data
+    public static class VectorChunk {
+        private String chunkId;
+        private int index;
+        private String title;
+        private String content;
+        private int characterCount;
+        private String embeddingModel;
+    }
+
+    @Data
     public static class Stats {
         private boolean enabled;
         private String sourceIndex;

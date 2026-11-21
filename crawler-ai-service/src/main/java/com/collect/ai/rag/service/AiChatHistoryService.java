@@ -261,6 +261,11 @@ public class AiChatHistoryService {
         return conversation;
     }
 
+    public Long getAssistantId(Long userId, Long conversationId) {
+        AiChatConversation conversation = findOwnedConversation(userId, conversationId);
+        return conversation.getAssistantId();
+    }
+
     private AiChatMessage findAssistantMessage(Long conversationId, Long messageId) {
         AiChatMessage message = messageMapper.selectOne(
                 new LambdaQueryWrapper<AiChatMessage>()

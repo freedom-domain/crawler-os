@@ -10,7 +10,9 @@ import com.collect.ai.rag.dto.KnowledgeBaseDtos;
 import com.collect.ai.rag.dto.VectorModelRequest;
 import com.collect.ai.rag.dto.VectorModelResponse;
 import com.collect.ai.rag.dto.AiAssistantDtos;
+import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
 import com.collect.ai.rag.service.AiAssistantService;
+import com.collect.ai.rag.service.AiKnowledgeBaseService;
 import com.collect.ai.rag.service.ChatModelService;
 import com.collect.ai.rag.service.ModelDiscoveryService;
 import com.collect.ai.rag.service.RagConfigService;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "AI RAG")
 @RestController
@@ -45,6 +48,54 @@ public class RagController {
     private final ChatModelService chatModelService;
     private final ModelDiscoveryService modelDiscoveryService;
     private final AiAssistantService aiAssistantService;
+    private final AiKnowledgeBaseService aiKnowledgeBaseService;
+
+    @Operation(summary = "读取知识库上传文档列表")
+    @GetMapping("/knowledge-bases/{id}/documents")
+    public R<java.util.List<com.collect.ai.rag.dto.AiKnowledgeDocumentDtos.Response>>
+            knowledgeBaseDocuments(@PathVariable Long id) {
+        requireAdmin();
+        return R.ok(ragService.listKnowledgeDocuments(id));
+    }
+
+    @Operation(summary = "上传知识库文档")
+    @PostMapping("/knowledge-bases/{id}/documents")
+    public R<com.collect.ai.rag.dto.AiKnowledgeDocumentDtos.Response> uploadKnowledgeDocument(
+            @PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        requireAdmin();
+        return R.ok(ragService.uploadKnowledgeDocument(id, file));
+    }
+
+    @Operation(summary = "读取知识库列表")
+    @GetMapping("/knowledge-bases")
+    public R<java.util.List<AiKnowledgeBaseDtos.Response>> knowledgeBases() {
+        requireAdmin();
+        return R.ok(aiKnowledgeBaseService.list());
+    }
+
+    @Operation(summary = "创建知识库")
+    @PostMapping("/knowledge-bases")
+    public R<AiKnowledgeBaseDtos.Response> createKnowledgeBase(
+            @RequestBody AiKnowledgeBaseDtos.Request request) {
+        requireAdmin();
+        return R.ok(aiKnowledgeBaseService.create(request));
+    }
+
+    @Operation(summary = "更新知识库")
+    @PutMapping("/knowledge-bases/{id}")
+    public R<AiKnowledgeBaseDtos.Response> updateKnowledgeBase(
+            @PathVariable Long id, @RequestBody AiKnowledgeBaseDtos.Request request) {
+        requireAdmin();
+        return R.ok(aiKnowledgeBaseService.update(id, request));
+    }
+
+    @Operation(summary = "删除知识库")
+    @DeleteMapping("/knowledge-bases/{id}")
+    public R<Void> deleteKnowledgeBase(@PathVariable Long id) {
+        requireAdmin();
+        aiKnowledgeBaseService.delete(id);
+        return R.ok();
+    }
 
     @Operation(summary = "读取 AI 助手列表")
     @GetMapping("/assistants")
@@ -194,48 +245,67 @@ public class RagController {
 
     @Operation(summary = "同步 ES 文档并建立向量索引")
     @PostMapping("/sync")
-    public R<RagDtos.SyncResult> sync() {
+    public R<RagDtos.SyncResult> sync(
+            @RequestParam(required = false) Long knowledgeBaseId) {
         requirePermission("search:query");
-        return R.ok(ragService.syncContentIndex());
+        return R.ok(ragService.syncContentIndex(knowledgeBaseId));
     }
 
     @Operation(summary = "读取知识库索引状态")
     @GetMapping("/knowledge/stats")
-    public R<KnowledgeBaseDtos.Stats> knowledgeBaseStats() {
+    public R<KnowledgeBaseDtos.Stats> knowledgeBaseStats(
+            @RequestParam(required = false) Long knowledgeBaseId) {
         requireAdmin();
-        return R.ok(ragService.getKnowledgeBaseStats());
+        return R.ok(ragService.getKnowledgeBaseStats(knowledgeBaseId));
     }
 
     @Operation(summary = "分页搜索知识库文档")
     @GetMapping("/knowledge/documents")
     public R<KnowledgeBaseDtos.DocumentPage> knowledgeBaseDocuments(
+            @RequestParam Long knowledgeBaseId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "true") boolean includeExcluded) {
         requireAdmin();
-        return R.ok(ragService.listKnowledgeBaseDocuments(page, pageSize, keyword, includeExcluded));
+        return R.ok(ragService.listKnowledgeBaseDocuments(
+                knowledgeBaseId, page, pageSize, keyword, includeExcluded));
     }
 
     @Operation(summary = "读取知识库文档详情")
     @GetMapping("/knowledge/documents/{id}")
-    public R<KnowledgeBaseDtos.DocumentDetail> knowledgeBaseDocument(@PathVariable String id) {
+    public R<KnowledgeBaseDtos.DocumentDetail> knowledgeBaseDocument(
+            @PathVariable String id,
+            @RequestParam(required = false) Long knowledgeBaseId) {
         requireAdmin();
-        return R.ok(ragService.getKnowledgeBaseDocument(id));
+        return R.ok(ragService.getKnowledgeBaseDocument(knowledgeBaseId, id));
+    }
+
+    @Operation(summary = "读取知识库文档向量分块详情")
+    @GetMapping("/knowledge/documents/{id}/chunks")
+    public R<java.util.List<KnowledgeBaseDtos.VectorChunk>> knowledgeBaseDocumentChunks(
+            @PathVariable String id,
+            @RequestParam(required = false) Long knowledgeBaseId) {
+        requireAdmin();
+        return R.ok(ragService.getKnowledgeBaseDocumentChunks(knowledgeBaseId, id));
     }
 
     @Operation(summary = "重新向量化单篇知识库文档")
     @PostMapping("/knowledge/documents/{id}/vectorize")
-    public R<RagDtos.DocumentVectorizationResult> vectorizeDocument(@PathVariable String id) {
+    public R<RagDtos.DocumentVectorizationResult> vectorizeDocument(
+            @PathVariable String id,
+            @RequestParam(required = false) Long knowledgeBaseId) {
         requireAdmin();
-        return R.ok(ragService.vectorizeDocument(id));
+        return R.ok(ragService.vectorizeDocument(knowledgeBaseId, id));
     }
 
     @Operation(summary = "从知识库排除文档")
     @DeleteMapping("/knowledge/documents/{id}")
-    public R<Void> excludeKnowledgeBaseDocument(@PathVariable String id) {
+    public R<Void> excludeKnowledgeBaseDocument(
+            @PathVariable String id,
+            @RequestParam(required = false) Long knowledgeBaseId) {
         requireAdmin();
-        ragService.excludeKnowledgeBaseDocument(id);
+        ragService.excludeKnowledgeBaseDocument(knowledgeBaseId, id);
         return R.ok();
     }
 

@@ -20,6 +20,8 @@ public final class AiAssistantDtos {
         private Long chatModelId;
         @JsonSerialize(using = ToStringSerializer.class)
         private Long vectorModelId;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long knowledgeBaseId;
         private Integer sort;
     }
 
@@ -38,6 +40,9 @@ public final class AiAssistantDtos {
         @JsonSerialize(using = ToStringSerializer.class)
         private Long vectorModelId;
         private String vectorModelName;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long knowledgeBaseId;
+        private String knowledgeBaseName;
         private Integer sort;
         private LocalDateTime createTime;
         private LocalDateTime updateTime;

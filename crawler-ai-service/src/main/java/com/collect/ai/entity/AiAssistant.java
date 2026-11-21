@@ -20,6 +20,7 @@ public class AiAssistant {
     private Boolean enabled;
     private Long chatModelId;
     private Long vectorModelId;
+    private Long knowledgeBaseId;
     private Integer sort;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

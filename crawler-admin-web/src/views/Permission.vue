@@ -23,6 +23,13 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="showInMenu" label="菜单显示" min-width="100" resizable>
+        <template #default="{ row }">
+          <el-tag :type="row.showInMenu === 0 ? 'info' : 'success'">
+            {{ row.showInMenu === 0 ? '隐藏' : '显示' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="path" label="路由路径" min-width="160"  resizable />
       <el-table-column prop="sort" label="排序" min-width="80"  resizable />
       <el-table-column label="操作" width="70" fixed="right" align="center" resizable>
@@ -59,6 +66,15 @@
             <el-radio :value="1">菜单</el-radio>
             <el-radio :value="2">按钮</el-radio>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="form.type !== 2" label="菜单显示">
+          <el-switch
+            v-model="form.showInMenu"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="显示"
+            inactive-text="隐藏"
+          />
         </el-form-item>
         <el-form-item label="路由路径" v-if="form.type === 1">
           <el-input v-model="form.path" placeholder="如 /user（仅菜单类型需要）" />
@@ -163,7 +179,9 @@ const tree = ref<any[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const formVisible = ref(false)
-const form = ref<any>({ id: null, name: '', code: '', type: 1, path: '', icon: '', sort: 0, parentId: 0 })
+const form = ref<any>({
+  id: null, name: '', code: '', type: 1, path: '', icon: '', sort: 0, parentId: 0, showInMenu: 1
+})
 const iconDialogVisible = ref(false)
 const iconSearch = ref('')
 const activeIconCategory = ref('全部')
@@ -257,7 +275,8 @@ const openCreate = (parent: any) => {
     path: '',
     icon: '',
     sort: 0,
-    parentId: parent ? parent.id : 0
+    parentId: parent ? parent.id : 0,
+    showInMenu: 1
   }
   formVisible.value = true
 }
@@ -271,7 +290,8 @@ const openEdit = (row: any) => {
     path: row.path,
     icon: row.icon || '',
     sort: row.sort,
-    parentId: row.parentId
+    parentId: row.parentId,
+    showInMenu: row.showInMenu ?? 1
   }
   formVisible.value = true
 }

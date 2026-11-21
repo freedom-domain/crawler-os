@@ -44,6 +44,8 @@ const router = createRouter({
         { path: 'permission', name: 'Permission', component: () => import('@/views/Permission.vue') },
         { path: 'ai-config', redirect: '/ai-knowledge' },
         { path: 'ai-knowledge', name: 'AiKnowledgeBase', component: () => import('@/views/AiKnowledgeBase.vue') },
+        { path: 'ai-knowledge-documents', name: 'AiKnowledgeDocuments', component: () => import('@/views/AiKnowledgeDocuments.vue') },
+        { path: 'ai-knowledge-documents/:knowledgeBaseId', name: 'AiKnowledgeDocumentsById', component: () => import('@/views/AiKnowledgeDocuments.vue') },
         { path: 'ai-vector-models', name: 'AiVectorModels', component: () => import('@/views/AiVectorModels.vue') },
         { path: 'ai-chat-models', name: 'AiChatModels', component: () => import('@/views/AiChatModels.vue') },
         { path: 'ai-assistants', name: 'AiAssistants', component: () => import('@/views/AiAssistants.vue') },

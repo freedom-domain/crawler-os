@@ -15,5 +15,6 @@ public class MenuNode {
     private Integer type;
     private Integer sort;
     private String icon;
+    private Integer showInMenu;
     private List<MenuNode> children = new ArrayList<>();
 }

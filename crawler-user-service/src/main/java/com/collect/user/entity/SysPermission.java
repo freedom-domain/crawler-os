@@ -21,6 +21,7 @@ public class SysPermission extends BaseEntity {
     private String path;
     private String icon;
     private Integer sort;
+    private Integer showInMenu;
 
     /** 子权限（仅用于树形展示，非数据库字段） */
     @TableField(exist = false)

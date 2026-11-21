@@ -47,6 +47,9 @@ public class PermissionService {
         if (perm.getSort() == null) {
             perm.setSort(0);
         }
+        if (perm.getShowInMenu() == null) {
+            perm.setShowInMenu(1);
+        }
         permissionMapper.insert(perm);
     }
 
@@ -70,6 +73,9 @@ public class PermissionService {
         exist.setIcon(perm.getIcon());
         if (perm.getSort() != null) {
             exist.setSort(perm.getSort());
+        }
+        if (perm.getShowInMenu() != null) {
+            exist.setShowInMenu(perm.getShowInMenu());
         }
         permissionMapper.updateById(exist);
     }

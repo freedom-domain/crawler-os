@@ -16,7 +16,7 @@
         >
           <MenuNode :item="{ path: '/dashboard', name: 'Dashboard', icon: 'odometer' }" />
 
-          <template v-for="item in menuList" :key="item.id">
+          <template v-for="item in visibleMenuList" :key="item.id">
             <MenuNode :item="item" />
           </template>
         </el-menu>
@@ -124,6 +124,12 @@ const themeModeTitle = computed(() =>
 const toggleTheme = () => themeStore.choose(themeStore.mode === 'light' ? 'black' : 'light')
 const collapsed = ref(false)
 const menuList = ref<any[]>([])
+const visibleMenuList = computed(() => {
+  const filterVisible = (items: any[]): any[] => items
+    .filter(item => item.showInMenu !== 0)
+    .map(item => ({ ...item, children: filterVisible(item.children || []) }))
+  return filterVisible(menuList.value)
+})
 const pwdDialogVisible = ref(false)
 // 移动端判断：宽度 < 768，或小屏幕（短边 < 768）横屏——横屏时宽度过阈值但仍是手机，
 // 侧边菜单需按抽屉隐藏
@@ -189,7 +195,10 @@ router.afterEach(() => {
 const titleForPath = (path: string) => {
   const findTitle = (items: any[]): string => {
     for (const item of items) {
-      if (item.path === path) return item.name
+      if (item.path === path
+          || (item.path === '/ai-knowledge-documents' && path.startsWith(`${item.path}/`))) {
+        return item.name
+      }
       if (item.children?.length) {
         const found = findTitle(item.children)
         if (found) return found
@@ -352,7 +361,7 @@ const getIcon = (item: any) => {
 }
 
 const loadMenu = async () => {
-  const cacheKey = `crawler-menu:v3:${userStore.userId}`
+  const cacheKey = `crawler-menu:v4:${userStore.userId}`
   let shouldRefresh = true
   try {
     const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null')
@@ -486,7 +495,7 @@ const handleCommand = async (cmd: string) => {
 :deep(.app-tabs .el-tabs__nav-wrap) { overflow-x: auto; overflow-y: hidden; }
 :deep(.app-tabs .el-tabs__nav-wrap::after) { display: none; }
 :deep(.app-tabs .el-tabs__nav) { gap: 7px; border: 0; min-width: max-content; }
-:deep(.app-tabs .el-tabs__item) { position: relative; height: 38px; margin-top: 0; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
+:deep(.app-tabs .el-tabs__item) { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 38px; margin-top: 0; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; line-height: normal; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item:first-child) { border-left: 1px solid transparent; }
 :deep(.app-tabs .el-tabs__item.is-active) { color: var(--tab-active-color); border-color: var(--tab-active-border); background: var(--tab-active-bg); box-shadow: 0 0 14px var(--tab-active-glow); font-weight: 700; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item:first-child.is-active) { border-left-color: var(--tab-active-border); }
@@ -495,7 +504,7 @@ const handleCommand = async (cmd: string) => {
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-active.is-closable) { padding-left: 14px; padding-right: 14px; }
 :deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item) { transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
 :deep(.app-tabs .el-tabs__active-bar) { display: none; }
-.tab-label { display: inline-flex; align-items: center; gap: 7px; cursor: grab; user-select: none; }
+.tab-label { display: inline-flex; align-items: center; justify-content: center; gap: 7px; line-height: 1; cursor: grab; user-select: none; }
 .tab-label:active { cursor: grabbing; }
 .tab-close { width: 17px; height: 17px; padding: 0; border: 0; border-radius: 50%; color: var(--chrome-muted); background: transparent; font: inherit; font-size: 15px; line-height: 15px; cursor: pointer; transition: color .18s ease, background .18s ease; }
 .tab-close:hover { color: #fff; background: #e87968; }

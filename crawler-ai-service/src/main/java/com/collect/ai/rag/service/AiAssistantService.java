@@ -5,6 +5,7 @@ import com.collect.ai.entity.AiAssistant;
 import com.collect.ai.mapper.AiAssistantMapper;
 import com.collect.ai.mapper.AiRagChatModelMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
+import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.rag.dto.AiAssistantDtos;
 import com.collect.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class AiAssistantService {
     private final AiAssistantMapper assistantMapper;
     private final AiRagChatModelMapper chatModelMapper;
     private final AiRagVectorModelMapper vectorModelMapper;
+    private final AiKnowledgeBaseMapper knowledgeBaseMapper;
 
     public List<AiAssistantDtos.Response> list() {
         return assistantMapper.selectList(new LambdaQueryWrapper<AiAssistant>()
@@ -81,6 +83,9 @@ public class AiAssistantService {
             throw new BizException("请选择有效的聊天模型");
         if (request.getVectorModelId() == null || vectorModelMapper.selectById(request.getVectorModelId()) == null)
             throw new BizException("请选择有效的向量模型");
+        if (request.getKnowledgeBaseId() != null
+                && knowledgeBaseMapper.selectById(request.getKnowledgeBaseId()) == null)
+            throw new BizException("请选择有效的知识库");
     }
 
     private AiAssistant fromRequest(AiAssistant assistant, AiAssistantDtos.Request request) {
@@ -91,6 +96,7 @@ public class AiAssistantService {
         assistant.setEnabled(request.getEnabled() == null ? Boolean.TRUE : request.getEnabled());
         assistant.setChatModelId(request.getChatModelId());
         assistant.setVectorModelId(request.getVectorModelId());
+        assistant.setKnowledgeBaseId(request.getKnowledgeBaseId());
         assistant.setSort(request.getSort() == null ? 0 : request.getSort());
         return assistant;
     }
@@ -105,10 +111,14 @@ public class AiAssistantService {
         response.setEnabled(assistant.getEnabled());
         response.setChatModelId(assistant.getChatModelId());
         response.setVectorModelId(assistant.getVectorModelId());
+        response.setKnowledgeBaseId(assistant.getKnowledgeBaseId());
         var chatModel = chatModelMapper.selectById(assistant.getChatModelId());
         var vectorModel = vectorModelMapper.selectById(assistant.getVectorModelId());
+        var knowledgeBase = assistant.getKnowledgeBaseId() == null
+                ? null : knowledgeBaseMapper.selectById(assistant.getKnowledgeBaseId());
         response.setChatModelName(chatModel == null ? "-" : chatModel.getName());
         response.setVectorModelName(vectorModel == null ? "-" : vectorModel.getName());
+        response.setKnowledgeBaseName(knowledgeBase == null ? "-" : knowledgeBase.getName());
         response.setSort(assistant.getSort());
         response.setCreateTime(assistant.getCreateTime());
         response.setUpdateTime(assistant.getUpdateTime());

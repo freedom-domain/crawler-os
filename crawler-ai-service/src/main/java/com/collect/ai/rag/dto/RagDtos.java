@@ -15,6 +15,7 @@ public final class RagDtos {
         private Integer topK;
         private Long spiderId;
         private String spiderGroup;
+        private Long knowledgeBaseId;
     }
 
     @Data

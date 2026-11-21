@@ -161,6 +161,8 @@ Compose 内默认使用 `http://crawler-gateway:8080`，适用于前端与网关
 
 已有数据库升级时，需执行 `docker/mysql/migration/008_spider_skip_tls_verify.sql` 和 `docker/mysql/migration/052_task_log_cleanup_time.sql`，再部署更新后的服务。爬虫配置中的“跳过 TLS 校验”默认为关闭；仅当目标站点证书异常且确认站点可信时才应开启，启用后会跳过 HTTPS 证书链及主机名校验。任务页“并发策略”可配置已完成任务及日志的每日清理时间（上海时区，默认凌晨 3:00），也可立即清理超过已保存保留期限的终态任务；新建数据库已包含所需配置。
 
+权限管理支持单独控制目录或菜单是否显示在侧边栏；隐藏节点及其子菜单不会出现在侧边栏，但权限分配和路由访问不受影响。已有数据库升级时执行 `docker/mysql/migration/075_permission_menu_visibility.sql`；新建数据库已包含该字段。
+
 AI/RAG 配置保存在 `ai_rag_config` 表中，向量模型及 Top K、分块参数保存在 `ai_rag_vector_model` 表中，聊天模型与各自的 API Key 保存在 `ai_rag_chat_model` 表中。知识库排除状态保存在 `ai_rag_excluded_document` 表中。已有数据库部署 AI 服务前执行 `docker/mysql/migration/053_ai_rag_config.sql` 至 `docker/mysql/migration/070_ai_config_in_knowledge_menu.sql`；新建数据库会自动创建默认和 local 环境配置、聊天记录表及默认向量和聊天模型。AI 服务根据 Spring profile 选择对应配置行（`local` 或 `default`）。管理员在知识库管理页维护 RAG 配置，查看文档和索引状态、按关键词搜索、查看详情、单篇重新向量化、排除文档以及批量重建向量索引；向量及聊天模型仍在各自管理页维护。升级迁移会把现有聊天配置和 API Key 转为默认聊天模型。RAG 配置也可通过 `GET /api/ai/rag/config`、`PUT /api/ai/rag/config` 管理并即时生效。排除文档仅从 RAG 知识库移除，保留在爬虫源索引和普通搜索中；批量重建会跳过已排除文档。向量索引名称变更后，配置事务提交时会删除不再使用的旧索引；仍被其他环境引用的索引不会删除。API Key 不会在读取接口中返回。登录用户的 AI 助手会话、问答、成功/失败状态、回答耗时及引用来源保存在数据库中，用户只能读取和删除自己的会话。RAG 参数不再从环境变量读取。
 
 文件管理在大数据量下的列表查询优化，已有数据库需依次执行 `docker/mysql/migration/043_file_metadata_page_indexes.sql`、`docker/mysql/migration/044_file_metadata_title_ngram.sql`、`docker/mysql/migration/045_file_metadata_referrer.sql` 和 `docker/mysql/migration/046_file_metadata_source_unique.sql`；新建数据库会自动创建所需索引和来源地址字段。若 `046` 因重复源地址而执行失败，请先处理重复记录后重试。

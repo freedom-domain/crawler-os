@@ -32,6 +32,20 @@ export const getChatAssistants = () => request.get('/ai/chat/conversations/assis
 export const createAssistant = (data: any) => request.post('/ai/rag/assistants', data)
 export const updateAssistant = (id: string, data: any) => request.put(`/ai/rag/assistants/${id}`, data)
 export const deleteAssistant = (id: string) => request.delete(`/ai/rag/assistants/${id}`)
+export const getKnowledgeBases = () => request.get('/ai/rag/knowledge-bases')
+export const createKnowledgeBase = (data: any) => request.post('/ai/rag/knowledge-bases', data)
+export const updateKnowledgeBase = (id: string, data: any) => request.put(`/ai/rag/knowledge-bases/${id}`, data)
+export const deleteKnowledgeBase = (id: string) => request.delete(`/ai/rag/knowledge-bases/${id}`)
+export const getKnowledgeBaseUploadedDocuments = (id: string) =>
+  request.get(`/ai/rag/knowledge-bases/${id}/documents`)
+export const uploadKnowledgeBaseDocument = (id: string, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post(`/ai/rag/knowledge-bases/${id}/documents`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 0
+  })
+}
 export const getVectorModels = () => request.get('/ai/rag/vector-models')
 export const discoverVectorModels = (data: {
   modelId: string | null
@@ -55,19 +69,37 @@ export const updateChatModelApiKey = (id: string, apiKey: string) =>
 export const createChatModel = (data: any) => request.post('/ai/rag/chat-models', data)
 export const updateChatModel = (id: string, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
 export const deleteChatModel = (id: string) => request.delete(`/ai/rag/chat-models/${id}`)
-export const syncRagIndex = () => request.post('/ai/rag/sync', undefined, { timeout: 0 })
-export const getKnowledgeBaseStats = () => request.get('/ai/rag/knowledge/stats')
+export const syncRagIndex = (knowledgeBaseId?: string) =>
+  request.post('/ai/rag/sync', undefined, {
+    timeout: 0,
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
+export const getKnowledgeBaseStats = (knowledgeBaseId?: string) =>
+  request.get('/ai/rag/knowledge/stats', { params: knowledgeBaseId ? { knowledgeBaseId } : undefined })
 export const getKnowledgeBaseDocuments = (params: {
+  knowledgeBaseId?: string
   page: number
   pageSize: number
   keyword: string
   includeExcluded: boolean
 }) => request.get('/ai/rag/knowledge/documents', { params })
-export const getKnowledgeBaseDocument = (id: string) => request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`)
-export const vectorizeKnowledgeBaseDocument = (id: string) =>
-  request.post(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/vectorize`, undefined, { timeout: 0 })
-export const excludeKnowledgeBaseDocument = (id: string) =>
-  request.delete(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`)
+export const getKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
+  request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`, {
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
+export const getKnowledgeBaseDocumentChunks = (id: string, knowledgeBaseId?: string) =>
+  request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/chunks`, {
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
+export const vectorizeKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
+  request.post(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/vectorize`, undefined, {
+    ...{ timeout: 0 },
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
+export const excludeKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
+  request.delete(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`, {
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
 export const queryRag = (data: { question: string; topK: number }) => request.post('/ai/rag/query', data)
 const chatRequestConfig = { timeout: 0 }
 export const chatConversationList = (assistantId?: string | number) =>
