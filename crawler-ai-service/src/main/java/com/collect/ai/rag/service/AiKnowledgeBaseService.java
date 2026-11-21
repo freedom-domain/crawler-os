@@ -105,7 +105,7 @@ public class AiKnowledgeBaseService {
         if (knowledgeBaseMapper.selectById(id) == null) throw new BizException("知识库不存在");
         if (assistantKnowledgeBaseMapper.selectCount(new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
                 .eq(AiAssistantKnowledgeBase::getKnowledgeBaseId, id)) > 0) {
-            throw new BizException("该知识库正被 AI 助手引用，不能删除");
+            throw new BizException("该知识库正被智能体引用，不能删除");
         }
         if (knowledgeBaseMapper.deleteById(id) != 1) throw new IllegalStateException("删除知识库失败");
     }

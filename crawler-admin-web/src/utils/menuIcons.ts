@@ -27,7 +27,7 @@ export const menuIconOptions: Array<{
   { value: 'HomeFilled', label: '工作台', category: '常用', icon: HomeFilled },
   { value: 'Grid', label: '应用', category: '常用', icon: Grid },
   { value: 'Menu', label: '菜单', category: '常用', icon: Menu },
-  { value: 'MagicStick', label: 'AI 助手', category: 'AI 智能', icon: MagicStick },
+  { value: 'MagicStick', label: '智能体', category: 'AI 智能', icon: MagicStick },
   { value: 'ChatLineRound', label: 'AI 对话', category: 'AI 智能', icon: ChatLineRound },
   { value: 'ChatSquare', label: '智能问答', category: 'AI 智能', icon: ChatSquare },
   { value: 'Lightning', label: '智能生成', category: 'AI 智能', icon: Lightning },

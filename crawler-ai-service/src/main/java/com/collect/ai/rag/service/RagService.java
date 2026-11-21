@@ -507,6 +507,7 @@ public class RagService {
         detail.setSpiderName(source.path("spiderName").asText(""));
         detail.setSpiderId(source.path("spiderId").isNumber()
                 ? source.path("spiderId").asLong() : null);
+        detail.setImages(readDocumentImages(source));
         detail.setExcluded(excludedDocumentMapper.selectCount(
                 new LambdaQueryWrapper<AiRagExcludedDocument>()
                         .eq(AiRagExcludedDocument::getSourceIndex, base.getSourceIndex())
@@ -525,8 +526,22 @@ public class RagService {
         detail.setSpiderName(source.path("spiderName").asText(""));
         detail.setSpiderId(source.path("spiderId").isNumber()
                 ? source.path("spiderId").asLong() : null);
+        detail.setImages(readDocumentImages(source));
         detail.setExcluded(isDocumentExcluded(documentId));
         return detail;
+    }
+
+    private List<String> readDocumentImages(JsonNode source) {
+        List<String> images = new ArrayList<>();
+        JsonNode imageNodes = source.path("images");
+        if (imageNodes.isArray()) {
+            for (JsonNode image : imageNodes) {
+                if (image.isTextual() && StringUtils.hasText(image.asText())) {
+                    images.add(image.asText());
+                }
+            }
+        }
+        return images;
     }
 
     public java.util.List<KnowledgeBaseDtos.VectorChunk> getKnowledgeBaseDocumentChunks(

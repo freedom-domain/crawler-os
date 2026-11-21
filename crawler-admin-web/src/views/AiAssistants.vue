@@ -2,17 +2,17 @@
   <el-card class="assistant-page" v-loading="loading">
     <div class="card-header">
       <div>
-        <h2>AI 助手管理</h2>
-        <p>新建和维护可选的 AI 助手，并为助手配置知识库、提示词和状态。</p>
+        <h2>智能体管理</h2>
+        <p>新建和维护可选的智能体，并配置知识库、提示词和状态。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreate">新增助手</el-button>
+      <el-button type="primary" :icon="Plus" @click="openCreate">新增智能体</el-button>
     </div>
 
     <el-form class="assistant-toolbar" :inline="true" @submit.prevent>
       <el-form-item>
         <el-input
           v-model="keyword"
-          placeholder="搜索助手名称、简介或知识库"
+          placeholder="搜索智能体名称、简介或知识库"
           clearable
           @keyup.enter="searchAssistants"
         />
@@ -30,9 +30,9 @@
     </el-form>
 
     <div class="table-scroll-wrapper">
-      <el-table :data="assistants" v-loading="loading" empty-text="暂无 AI 助手" stripe resizable border>
+      <el-table :data="assistants" v-loading="loading" empty-text="暂无智能体" stripe resizable border>
         <el-table-column prop="id" label="ID" min-width="80" resizable />
-        <el-table-column prop="name" label="助手名称" min-width="180" resizable />
+        <el-table-column prop="name" label="智能体名称" min-width="180" resizable />
         <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
         <el-table-column label="知识库" min-width="220" show-overflow-tooltip resizable>
           <template #default="{ row }">
@@ -72,16 +72,16 @@
       @change="loadAssistantPage"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑 AI 助手' : '新增 AI 助手'" width="680px" @closed="resetForm">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑智能体' : '新增智能体'" width="680px" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
-        <el-form-item label="助手名称" prop="name">
-          <el-input v-model="form.name" maxlength="64" placeholder="例如：技术文档助手" />
+        <el-form-item label="智能体名称" prop="name">
+          <el-input v-model="form.name" maxlength="64" placeholder="例如：技术文档智能体" />
         </el-form-item>
         <el-form-item label="欢迎语">
-          <el-input v-model="form.welcomeMessage" maxlength="256" placeholder="例如：你好，我是技术文档助手，有什么可以帮你？" />
+          <el-input v-model="form.welcomeMessage" maxlength="256" placeholder="例如：你好，我是技术文档智能体，有什么可以帮你？" />
         </el-form-item>
-        <el-form-item label="助手简介" prop="description">
-          <el-input v-model="form.description" maxlength="512" placeholder="简要描述助手用途" />
+        <el-form-item label="智能体简介" prop="description">
+          <el-input v-model="form.description" maxlength="512" placeholder="简要描述智能体用途" />
         </el-form-item>
         <el-form-item label="知识库">
           <button type="button" class="knowledge-base-picker" @click="openKnowledgeBaseDialog">
@@ -96,7 +96,7 @@
           </button>
         </el-form-item>
         <el-form-item label="系统提示词">
-          <el-input v-model="form.systemPrompt" type="textarea" :rows="5" maxlength="4000" placeholder="定义助手的角色、回答边界和语气" />
+          <el-input v-model="form.systemPrompt" type="textarea" :rows="5" maxlength="4000" placeholder="定义智能体的角色、回答边界和语气" />
         </el-form-item>
         <div class="form-grid">
           <el-form-item label="排序">
@@ -195,7 +195,7 @@ const form = reactive({
   enabled: true, knowledgeBaseIds: [] as string[], sort: 0
 })
 const rules: FormRules = {
-  name: [{ required: true, message: '请输入助手名称', trigger: 'blur' }]
+  name: [{ required: true, message: '请输入智能体名称', trigger: 'blur' }]
 }
 
 const selectedKnowledgeBaseNames = computed(() => {
@@ -311,7 +311,7 @@ async function saveAssistant() {
 }
 
 async function removeAssistant(row: Assistant) {
-  await ElMessageBox.confirm(`确定删除 AI 助手“${row.name}”？`, '删除助手', { type: 'warning' })
+  await ElMessageBox.confirm(`确定删除智能体“${row.name}”？`, '删除智能体', { type: 'warning' })
   await deleteAssistant(row.id)
   ElMessage.success('删除成功')
   await loadAssistantPage()

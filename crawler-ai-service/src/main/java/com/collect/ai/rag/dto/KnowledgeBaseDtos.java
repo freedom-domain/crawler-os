@@ -28,6 +28,7 @@ public final class KnowledgeBaseDtos {
         private String url;
         private String spiderName;
         private Long spiderId;
+        private List<String> images;
         private boolean excluded;
     }
 

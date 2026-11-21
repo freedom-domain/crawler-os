@@ -91,7 +91,7 @@ public class AiChatHistoryController {
             com.collect.ai.rag.dto.AiAssistantDtos.Response assistant =
                     aiAssistantService.get(assistantId);
             if (!Boolean.TRUE.equals(assistant.getEnabled())) {
-                throw new BizException("AI 助手已停用");
+                throw new BizException("智能体已停用");
             }
         }
         return R.ok(historyService.createConversation(LoginUtils.getUserId(), assistantId));
@@ -150,7 +150,7 @@ public class AiChatHistoryController {
                     aiAssistantService.get(assistantId).getKnowledgeBaseIds();
             if (knowledgeBaseId != null
                     && (allowedKnowledgeBaseIds == null || !allowedKnowledgeBaseIds.contains(knowledgeBaseId))) {
-                throw new BizException("该来源不属于当前 AI 助手的知识库");
+                throw new BizException("该来源不属于当前智能体的知识库");
             }
             if (knowledgeBaseId == null && allowedKnowledgeBaseIds != null
                     && !allowedKnowledgeBaseIds.isEmpty()) {
@@ -310,7 +310,7 @@ public class AiChatHistoryController {
 
     private void requireChatPermission() {
         if (!LoginUtils.hasPermission("ai:chat")) {
-            throw new BizException("无权使用 AI 助手");
+            throw new BizException("无权使用智能体");
         }
     }
 

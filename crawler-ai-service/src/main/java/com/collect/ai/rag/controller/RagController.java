@@ -110,14 +110,14 @@ public class RagController {
         return R.ok();
     }
 
-    @Operation(summary = "读取 AI 助手列表")
+    @Operation(summary = "读取智能体列表")
     @GetMapping("/assistants")
     public R<java.util.List<AiAssistantDtos.Response>> assistants() {
         requireAdmin();
         return R.ok(aiAssistantService.list());
     }
 
-    @Operation(summary = "分页查询 AI 助手")
+    @Operation(summary = "分页查询智能体")
     @GetMapping("/assistants/page")
     public R<IPage<AiAssistantDtos.Response>> assistantPage(
             @RequestParam(defaultValue = "1") long page,
@@ -128,21 +128,21 @@ public class RagController {
         return R.ok(aiAssistantService.page(page, pageSize, keyword, enabled));
     }
 
-    @Operation(summary = "读取 AI 助手详情")
+    @Operation(summary = "读取智能体详情")
     @GetMapping("/assistants/{id}")
     public R<AiAssistantDtos.Response> assistant(@PathVariable Long id) {
         requireAdmin();
         return R.ok(aiAssistantService.get(id));
     }
 
-    @Operation(summary = "创建 AI 助手")
+    @Operation(summary = "创建智能体")
     @PostMapping("/assistants")
     public R<AiAssistantDtos.Response> createAssistant(@RequestBody AiAssistantDtos.Request request) {
         requireAdmin();
         return R.ok(aiAssistantService.create(request));
     }
 
-    @Operation(summary = "更新 AI 助手")
+    @Operation(summary = "更新智能体")
     @PutMapping("/assistants/{id}")
     public R<AiAssistantDtos.Response> updateAssistant(
             @PathVariable Long id, @RequestBody AiAssistantDtos.Request request) {
@@ -150,7 +150,7 @@ public class RagController {
         return R.ok(aiAssistantService.update(id, request));
     }
 
-    @Operation(summary = "删除 AI 助手")
+    @Operation(summary = "删除智能体")
     @DeleteMapping("/assistants/{id}")
     public R<Void> deleteAssistant(@PathVariable Long id) {
         requireAdmin();

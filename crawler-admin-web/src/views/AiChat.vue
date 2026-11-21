@@ -4,7 +4,7 @@
       <div class="sidebar-heading">
         <div class="brand-mark"><el-icon><MagicStick /></el-icon></div>
         <div>
-          <strong>AI 助手</strong>
+          <strong>智能体</strong>
           <span>知识库问答</span>
         </div>
       </div>
@@ -115,22 +115,22 @@
           >
             <el-icon :size="18"><component :is="themeIcon" /></el-icon>
           </button>
-          <el-tooltip v-if="!isStandaloneWindow" content="管理 AI 助手" placement="bottom">
+          <el-tooltip v-if="!isStandaloneWindow" content="管理智能体" placement="bottom">
             <el-button
               class="assistant-manage-button"
               size="small"
               :icon="Setting"
-              aria-label="管理 AI 助手"
+              aria-label="管理智能体"
               @click="openAssistantManagement"
             >
-              管理助手
+              管理智能体
             </el-button>
           </el-tooltip>
           <el-select
             v-model="selectedAssistantId"
             class="assistant-selector"
             size="small"
-            placeholder="选择助手"
+            placeholder="选择智能体"
             popper-class="assistant-select-popper"
             @change="switchAssistant"
             v-if="!effectiveAssistantId"
@@ -475,7 +475,7 @@
       :fullscreen="sourcePreviewFullscreen"
       width="min(1000px, 94vw)"
       append-to-body
-      @closed="closeSourcePreview"
+      @closed="handleSourcePreviewClosed"
     >
       <template #header>
         <div class="source-dialog-header">
@@ -528,7 +528,7 @@
       :fullscreen="sourceOriginalFullscreen"
       width="min(1000px, 94vw)"
       append-to-body
-      @closed="sourceOriginalFullscreen = false"
+      @closed="handleSourceOriginalClosed"
     >
       <template #header>
         <div class="source-dialog-header">
@@ -553,15 +553,25 @@
       >
         <div class="source-preview-meta">
           <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
-          <a
-            v-if="safeSourceUrl(selectedSource.url)"
-            :href="safeSourceUrl(selectedSource.url)"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            打开原文网页
-            <el-icon><Link /></el-icon>
-          </a>
+          <div class="source-preview-actions">
+            <el-button
+              v-if="sourceDocumentImages.length"
+              size="small"
+              @click="openSourceImagePreview"
+            >
+              <el-icon><Picture /></el-icon>
+              预览图片（{{ sourceDocumentImages.length }}）
+            </el-button>
+            <a
+              v-if="safeSourceUrl(selectedSource.url)"
+              :href="safeSourceUrl(selectedSource.url)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              打开原文网页
+              <el-icon><Link /></el-icon>
+            </a>
+          </div>
         </div>
         <el-alert
           v-if="sourceOriginalError"
@@ -570,9 +580,21 @@
           :closable="false"
           show-icon
         />
-        <p v-else>{{ sourceDocumentContent || '暂无原文内容。' }}</p>
+        <div v-if="sourceDocumentImages.length" class="source-image-grid">
+          <el-image
+            v-for="(image, index) in sourceDocumentImages"
+            :key="`${image}-${index}`"
+            :src="sourceImageUrl(image)"
+            fit="contain"
+            class="source-image-preview"
+            @click="openSourceImagePreview"
+          />
+        </div>
+        <p v-if="sourceDocumentContent">{{ sourceDocumentContent }}</p>
+        <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
       </div>
     </el-dialog>
+
   </div>
 </template>
 
@@ -590,7 +612,7 @@ import {
 } from '@/api'
 import {
   ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Moon, Plus,
-  Promotion, Refresh, Setting, Sunny, UserFilled
+  Picture, Promotion, Refresh, Setting, Sunny, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
 
@@ -654,6 +676,7 @@ const sourcePreviewError = ref('')
 const sourceOriginalLoading = ref(false)
 const sourceOriginalError = ref('')
 const sourceDocumentContent = ref('')
+const sourceDocumentImages = ref<string[]>([])
 const sourceChunks = ref<SourceChunk[]>([])
 const selectedSourceChunk = ref<SourceChunk | null>(null)
 let sourcePreviewRequestId = 0
@@ -767,6 +790,12 @@ const openSourcePreview = (source: SourceReference) => {
     .then((response: any) => {
       if (requestId !== sourcePreviewRequestId) return
       sourceChunks.value = response?.data || []
+      if (sourceChunks.value.length === 1) {
+        sourcePreviewLoading.value = false
+        sourcePreviewVisible.value = false
+        void openSourceOriginalPreview()
+        return
+      }
       selectedSourceChunk.value = sourceChunks.value.find(chunk => chunk.chunkId === source.chunkId)
         || sourceChunks.value.find(chunk =>
           source.snippet && (chunk.content.startsWith(source.snippet) || source.snippet.startsWith(chunk.content))
@@ -795,6 +824,7 @@ const openSourceOriginalPreview = async () => {
   sourceOriginalLoading.value = true
   sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
+  sourceDocumentImages.value = []
   sourceOriginalPreviewVisible.value = true
   try {
     const response: any = await getChatSourceDocument(
@@ -802,7 +832,12 @@ const openSourceOriginalPreview = async () => {
     )
     if (requestId !== sourcePreviewRequestId) return
     sourceDocumentContent.value = response?.data?.content || ''
-    if (!sourceDocumentContent.value) sourceOriginalError.value = '原文内容为空'
+    sourceDocumentImages.value = Array.isArray(response?.data?.images)
+      ? response.data.images.filter((image: unknown): image is string => typeof image === 'string' && image.trim().length > 0)
+      : []
+    if (!sourceDocumentContent.value && !sourceDocumentImages.value.length) {
+      sourceOriginalError.value = '原文内容为空'
+    }
   } catch (error) {
     if (requestId !== sourcePreviewRequestId) return
     sourceOriginalError.value = error instanceof Error ? error.message : '读取原文失败'
@@ -821,8 +856,32 @@ const closeSourcePreview = () => {
   sourceOriginalLoading.value = false
   sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
+  sourceDocumentImages.value = []
   sourcePreviewFullscreen.value = false
   sourceOriginalFullscreen.value = false
+}
+const handleSourcePreviewClosed = () => {
+  if (sourceOriginalPreviewVisible.value) return
+  closeSourcePreview()
+}
+const handleSourceOriginalClosed = () => {
+  sourceOriginalFullscreen.value = false
+  if (!sourcePreviewVisible.value) closeSourcePreview()
+}
+const sourceImageUrl = (objectName: string) => {
+  if (!objectName) return ''
+  if (/^https?:\/\//i.test(objectName)) return objectName
+  return `/api/file/image?objectName=${encodeURIComponent(objectName)}`
+}
+const openSourceImagePreview = () => {
+  const source = selectedSource.value
+  if (!source?.id || !sourceDocumentImages.value.length) return
+  const query = new URLSearchParams({
+    id: source.id,
+    title: source.title || '图片预览'
+  })
+  const win = window.open(`/image-preview?${query.toString()}`, '_blank')
+  if (!win) ElMessage.warning('浏览器阻止了新窗口，请允许弹出窗口后重试')
 }
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
@@ -1549,7 +1608,7 @@ onMounted(() => {
     assistantsLoaded.value = true
     await syncRouteAssistant(true)
   }).catch(() => {
-    ElMessage.error('加载 AI 助手失败，请刷新页面重试')
+    ElMessage.error('加载智能体失败，请刷新页面重试')
     loadingConversations.value = false
   })
 })
@@ -1890,8 +1949,11 @@ onActivated(() => {
 .source-dialog-actions :deep(.el-button) { display: inline-flex; width: 48px; height: 48px; margin: 0; padding: 0; line-height: 1; }
 .source-dialog-actions :deep(.el-icon) { font-size: 16px; }
 .source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-preview-actions { display: flex; align-items: center; gap: 12px; }
 .source-preview-meta a { display: inline-flex; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; }
 .source-preview-meta a:hover { text-decoration: underline; }
+.source-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.source-image-preview { width: 100%; height: 180px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); cursor: zoom-in; }
 .source-preview p { max-height: min(65vh, 640px); overflow: auto; margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .source-preview--fullscreen p { width: 100%; height: 100%; max-height: none; min-width: 0; min-height: 0; box-sizing: border-box; }
 

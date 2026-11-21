@@ -74,7 +74,7 @@ public class AiAssistantService {
 
     public AiAssistantDtos.Response get(Long id) {
         AiAssistant assistant = assistantMapper.selectById(id);
-        if (assistant == null) throw new BizException("AI 助手不存在");
+        if (assistant == null) throw new BizException("智能体不存在");
         return toResponse(assistant);
     }
 
@@ -85,7 +85,7 @@ public class AiAssistantService {
         LocalDateTime now = LocalDateTime.now();
         assistant.setCreateTime(now);
         assistant.setUpdateTime(now);
-        if (assistantMapper.insert(assistant) != 1) throw new IllegalStateException("创建 AI 助手失败");
+        if (assistantMapper.insert(assistant) != 1) throw new IllegalStateException("创建智能体失败");
         syncKnowledgeBases(assistant.getId(), request.getKnowledgeBaseIds());
         return toResponse(assistant);
     }
@@ -94,10 +94,10 @@ public class AiAssistantService {
     public AiAssistantDtos.Response update(Long id, AiAssistantDtos.Request request) {
         validate(request);
         AiAssistant assistant = assistantMapper.selectById(id);
-        if (assistant == null) throw new BizException("AI 助手不存在");
+        if (assistant == null) throw new BizException("智能体不存在");
         fromRequest(assistant, request);
         assistant.setUpdateTime(LocalDateTime.now());
-        if (assistantMapper.updateById(assistant) != 1) throw new IllegalStateException("更新 AI 助手失败");
+        if (assistantMapper.updateById(assistant) != 1) throw new IllegalStateException("更新智能体失败");
         syncKnowledgeBases(id, request.getKnowledgeBaseIds());
         return toResponse(assistant);
     }
@@ -105,16 +105,16 @@ public class AiAssistantService {
     @Transactional
     public void delete(Long id) {
         AiAssistant assistant = assistantMapper.selectById(id);
-        if (assistant == null) throw new BizException("AI 助手不存在");
+        if (assistant == null) throw new BizException("智能体不存在");
         assistantKnowledgeBaseMapper.delete(new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
                 .eq(AiAssistantKnowledgeBase::getAssistantId, id));
-        if (assistantMapper.deleteById(id) != 1) throw new IllegalStateException("删除 AI 助手失败");
+        if (assistantMapper.deleteById(id) != 1) throw new IllegalStateException("删除智能体失败");
     }
 
     private void validate(AiAssistantDtos.Request request) {
         if (request == null || !StringUtils.hasText(request.getName()))
-            throw new BizException("助手名称不能为空");
-        if (request.getName().trim().length() > 64) throw new BizException("助手名称不能超过 64 个字符");
+            throw new BizException("智能体名称不能为空");
+        if (request.getName().trim().length() > 64) throw new BizException("智能体名称不能超过 64 个字符");
         if (request.getWelcomeMessage() != null && request.getWelcomeMessage().trim().length() > 256)
             throw new BizException("欢迎语不能超过 256 个字符");
         if (request.getKnowledgeBaseIds() != null) {
@@ -145,7 +145,7 @@ public class AiAssistantService {
             relation.setAssistantId(assistantId);
             relation.setKnowledgeBaseId(knowledgeBaseId);
             if (assistantKnowledgeBaseMapper.insert(relation) != 1)
-                throw new IllegalStateException("保存 AI 助手知识库关联失败");
+                throw new IllegalStateException("保存智能体知识库关联失败");
         }
     }
 
