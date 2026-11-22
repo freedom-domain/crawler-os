@@ -70,7 +70,7 @@ const PUBLIC_PATHS = ['/login', '/image-preview', '/public/search']
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   if (!PUBLIC_PATHS.includes(to.path) && !userStore.token) {
-    next('/login')
+    next({ path: '/login', query: { redirect: to.fullPath } })
   } else {
     next()
   }

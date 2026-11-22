@@ -35,11 +35,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, FormInstance } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -66,9 +67,20 @@ const isTokenValid = (): boolean => {
   }
 }
 
+const getRedirectPath = () => {
+  const redirect = route.query.redirect
+  if (typeof redirect !== 'string' || !redirect.startsWith('/') || redirect.startsWith('//')) {
+    return '/dashboard'
+  }
+  const resolved = router.resolve(redirect)
+  return resolved.matched.length && resolved.path !== '/login'
+    ? resolved.fullPath
+    : '/dashboard'
+}
+
 onMounted(() => {
   if (isTokenValid()) {
-    router.replace('/dashboard')
+    router.replace(getRedirectPath())
   }
 })
 
@@ -78,7 +90,7 @@ const handleLogin = async () => {
   try {
     await userStore.login(form.username, form.password)
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    await router.replace(getRedirectPath())
   } finally {
     loading.value = false
   }

@@ -30,32 +30,51 @@
           <Fold v-if="!collapsed" />
           <Expand v-else />
         </el-icon>
-        <el-tabs
-          v-model="activeTab"
-          type="card"
-          class="app-tabs"
-          @tab-click="handleTabClick"
-        >
-          <el-tab-pane
-            v-for="tab in tabs"
-            :key="tab.key"
-            :name="tab.key"
+        <div class="tab-strip">
+          <button
+            type="button"
+            class="tab-scroll-button"
+            aria-label="向左滚动标签"
+            title="向左滚动标签"
+            :disabled="!canScrollTabsLeft"
+            @click="scrollTabs(-1)"
           >
-            <template #label>
-              <span
-                class="tab-label"
-                :draggable="tab.path !== '/dashboard'"
-                @dragstart="startTabDrag(tab.key, $event)"
-                @dragover.prevent
-                @drop="dropTab(tab.key)"
-                @contextmenu.prevent.stop="openTabMenu(tab.key, $event)"
-              >
-                <span>{{ tab.title }}</span>
-                <button v-if="tab.path !== '/dashboard'" class="tab-close" type="button" @click.stop="closeTab(tab.key)">×</button>
-              </span>
-            </template>
-          </el-tab-pane>
-        </el-tabs>
+            <el-icon><ArrowLeft /></el-icon>
+          </button>
+          <div ref="tabsViewport" class="app-tabs" role="tablist" @scroll="updateTabScrollState">
+            <div
+              v-for="tab in tabs"
+              :key="tab.key"
+              :ref="element => setTabElement(tab.key, element)"
+              class="app-tab"
+              :class="{ 'is-active': tab.path === route.path }"
+              role="tab"
+              :aria-selected="tab.path === route.path"
+              :tabindex="tab.path === route.path ? 0 : -1"
+              :draggable="tab.path !== '/dashboard'"
+              @click="handleTabClick(tab)"
+              @keydown.enter="handleTabClick(tab)"
+              @keydown.space.prevent="handleTabClick(tab)"
+              @dragstart="startTabDrag(tab.key, $event)"
+              @dragover.prevent
+              @drop="dropTab(tab.key)"
+              @contextmenu.prevent.stop="openTabMenu(tab.key, $event)"
+            >
+              <span class="tab-label">{{ tab.title }}</span>
+              <button v-if="tab.path !== '/dashboard'" class="tab-close" type="button" :aria-label="`关闭${tab.title}`" @click.stop="closeTab(tab.key)">×</button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="tab-scroll-button"
+            aria-label="向右滚动标签"
+            title="向右滚动标签"
+            :disabled="!canScrollTabsRight"
+            @click="scrollTabs(1)"
+          >
+            <el-icon><ArrowRight /></el-icon>
+          </button>
+        </div>
         <button type="button" class="theme-switch theme-btn" :title="themeModeTitle" @click="toggleTheme">
           <el-icon :size="18"><component :is="themeIcon" /></el-icon>
         </button>
@@ -101,7 +120,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, defineComponent, h, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, defineComponent, h, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useThemeStore } from '@/stores/theme'
@@ -110,7 +129,7 @@ import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { ElIcon, ElSubMenu, ElMenuItem } from 'element-plus'
 import { confirm } from '@/utils/confirm'
 import { menuIconLibrary } from '@/utils/menuIcons'
-import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon, Sunny, Moon, ChatDotRound, Cpu } from '@element-plus/icons-vue'
+import { Odometer, Connection, List, Search, User, Fold, Expand, UserFilled, ArrowDown, ArrowLeft, ArrowRight, PriceTag, Setting, Operation, Avatar, Lock, Folder, Picture, TrendCharts, Coin, DataLine, Menu as MenuIcon, Sunny, Moon, ChatDotRound, Cpu } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,7 +141,11 @@ const themeModeTitle = computed(() =>
   themeStore.mode === 'light' ? '浅色，点击切换为纯黑' : '纯黑，点击切换为浅色'
 )
 const toggleTheme = () => themeStore.choose(themeStore.mode === 'light' ? 'black' : 'light')
-const collapsed = ref(false)
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'crawler-sidebar-collapsed'
+const collapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true')
+watch(collapsed, value => {
+  localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(value))
+})
 const menuList = ref<any[]>([])
 const visibleMenuList = computed(() => {
   const filterVisible = (items: any[]): any[] => items
@@ -138,6 +161,10 @@ const isMobileViewport = () =>
   (window.matchMedia('(orientation: landscape)').matches && Math.min(window.innerWidth, window.innerHeight) < 768)
 const mobile = ref(isMobileViewport())
 const drawerOpen = ref(false)
+const tabsViewport = ref<HTMLElement | null>(null)
+const tabElements = new Map<string, HTMLElement>()
+const canScrollTabsLeft = ref(false)
+const canScrollTabsRight = ref(false)
 const tabs = ref<Array<{ key: string; path: string; title: string; name?: string }>>([
   { key: '/dashboard', path: '/dashboard', title: '首页', name: 'Dashboard' }
 ])
@@ -145,10 +172,6 @@ const TAB_STORAGE_KEY = 'crawler-open-tabs'
 const MENU_CACHE_TTL = 5 * 60 * 1000
 const draggedTab = ref('')
 const contextMenu = ref({ visible: false, x: 0, y: 0, key: '' })
-const activeTab = computed({
-  get: () => route.path,
-  set: (value: string) => router.push(value)
-})
 const cachedRouteNames = computed(() => tabs.value.map(tab => tab.name).filter(Boolean) as string[])
 
 const restoreTabs = () => {
@@ -235,13 +258,48 @@ const openCurrentTab = () => {
       name: String(current.name)
     })
   }
+  void nextTick(() => {
+    tabElements.get(current.path)?.scrollIntoView({
+      behavior: 'auto',
+      block: 'nearest',
+      inline: 'nearest'
+    })
+    updateTabScrollState()
+  })
 }
 
-watch(() => route.fullPath, openCurrentTab, { immediate: true })
+const updateTabScrollState = () => {
+  const viewport = tabsViewport.value
+  if (!viewport) {
+    canScrollTabsLeft.value = false
+    canScrollTabsRight.value = false
+    return
+  }
+  canScrollTabsLeft.value = viewport.scrollLeft > 1
+  canScrollTabsRight.value = viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1
+}
 
-const handleTabClick = (pane: any) => {
-  const target = tabs.value.find(tab => tab.key === pane.paneName)
-  if (target && target.path !== route.path) router.push(target.path)
+const scrollTabs = (direction: -1 | 1) => {
+  const viewport = tabsViewport.value
+  if (!viewport) return
+  viewport.scrollBy({ left: direction * Math.max(160, viewport.clientWidth * 0.7), behavior: 'smooth' })
+}
+
+const setTabElement = (key: string, element: unknown) => {
+  if (element instanceof HTMLElement) tabElements.set(key, element)
+  else tabElements.delete(key)
+}
+
+watch(() => route.fullPath, openCurrentTab, { immediate: true, flush: 'post' })
+watch(tabs, () => {
+  void nextTick(updateTabScrollState)
+}, { deep: true, flush: 'post' })
+watch(collapsed, () => {
+  void nextTick(updateTabScrollState)
+})
+
+const handleTabClick = (tab: { path: string }) => {
+  if (tab.path !== route.path) router.push(tab.path)
 }
 
 const closeTab = (key: string) => {
@@ -395,11 +453,14 @@ const loadMenu = async () => {
 
 onMounted(() => {
   window.addEventListener('crawler-menu-cache-invalidated', loadMenu)
+  window.addEventListener('resize', updateTabScrollState)
+  void nextTick(updateTabScrollState)
   loadMenu()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('crawler-menu-cache-invalidated', loadMenu)
+  window.removeEventListener('resize', updateTabScrollState)
 })
 
 const handleCommand = async (cmd: string) => {
@@ -491,20 +552,15 @@ const handleCommand = async (cmd: string) => {
 .el-menu--collapse { padding: 14px 10px; }
 .aside.is-collapsed :deep(.el-menu) { width: 72px; }
 .aside.is-collapsed .logo { justify-content: center; padding: 0; }
-.app-tabs { flex: 1 1 auto; min-width: 0; margin: 0 22px 0 28px; overflow: hidden; }
-:deep(.app-tabs .el-tabs__header) { margin: 0; border-bottom: 0; }
-:deep(.app-tabs .el-tabs__nav-wrap) { overflow-x: auto; overflow-y: hidden; }
-:deep(.app-tabs .el-tabs__nav-wrap::after) { display: none; }
-:deep(.app-tabs .el-tabs__nav) { gap: 7px; border: 0; min-width: max-content; }
-:deep(.app-tabs .el-tabs__item) { position: relative; display: inline-flex; align-items: center; justify-content: center; height: 38px; margin-top: 0; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; line-height: normal; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item:first-child) { border-left: 1px solid transparent; }
-:deep(.app-tabs .el-tabs__item.is-active) { color: var(--tab-active-color); border-color: var(--tab-active-border); background: var(--tab-active-bg); box-shadow: 0 0 14px var(--tab-active-glow); font-weight: 700; }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item:first-child.is-active) { border-left-color: var(--tab-active-border); }
-:deep(.app-tabs .el-tabs__item:hover) { color: var(--chrome-text-strong); background: var(--chrome-hover); }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-closable:hover) { padding-left: 14px; padding-right: 14px; }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item.is-active.is-closable) { padding-left: 14px; padding-right: 14px; }
-:deep(.app-tabs.el-tabs--card > .el-tabs__header .el-tabs__item) { transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
-:deep(.app-tabs .el-tabs__active-bar) { display: none; }
+.tab-strip { display: flex; flex: 1 1 auto; align-items: center; min-width: 0; margin: 0 22px 0 28px; }
+.app-tabs { display: flex; flex: 1 1 auto; min-width: 0; gap: 7px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.app-tabs::-webkit-scrollbar { display: none; }
+.tab-scroll-button { display: grid; flex: 0 0 26px; place-items: center; width: 26px; height: 34px; padding: 0; border: 0; border-radius: 7px; color: var(--chrome-icon); background: transparent; cursor: pointer; }
+.tab-scroll-button:hover:not(:disabled) { background: var(--chrome-hover); }
+.tab-scroll-button:disabled { color: var(--chrome-muted); opacity: .35; cursor: default; }
+.app-tab { position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: var(--chrome-muted); background: transparent; font-size: 12px; line-height: normal; cursor: pointer; transition: color .18s ease, background .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.app-tab.is-active { color: var(--tab-active-color); border-color: var(--tab-active-border); background: var(--tab-active-bg); box-shadow: 0 0 14px var(--tab-active-glow); font-weight: 700; }
+.app-tab:hover { color: var(--chrome-text-strong); background: var(--chrome-hover); }
 .tab-label { display: inline-flex; align-items: center; justify-content: center; gap: 7px; line-height: 1; cursor: grab; user-select: none; }
 .tab-label:active { cursor: grabbing; }
 .tab-close { width: 17px; height: 17px; padding: 0; border: 0; border-radius: 50%; color: var(--chrome-muted); background: transparent; font: inherit; font-size: 15px; line-height: 15px; cursor: pointer; transition: color .18s ease, background .18s ease; }
@@ -570,7 +626,7 @@ const handleCommand = async (cmd: string) => {
   .aside.is-open { transform: translateX(0); }
   .header { height: 56px; }
   .collapse-btn { margin: 0 14px; }
-  .app-tabs { margin-left: 14px; margin-right: 12px; }
+  .tab-strip { margin-left: 14px; margin-right: 12px; }
   .user-info { margin-right: 12px; }
   :deep(.el-main) { padding: 14px; }
 }

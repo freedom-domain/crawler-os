@@ -59,8 +59,9 @@ request.interceptors.response.use(
       const userStore = useUserStore()
       userStore.logout()
       if (router.currentRoute.value.path !== '/login') {
+        const redirect = router.currentRoute.value.fullPath
         ElMessage.error(res.msg || '登录已过期，请重新登录')
-        router.push('/login')
+        router.push({ path: '/login', query: { redirect } })
       }
       // 已处理跳转，不再 reject，避免调用方出现未捕获的 promise 错误
       return Promise.resolve(null)
@@ -91,8 +92,9 @@ request.interceptors.response.use(
       userStore.logout()
       // 避免并发请求同时触发多次跳转，且已在登录页时不再重复跳转
       if (router.currentRoute.value.path !== '/login') {
+        const redirect = router.currentRoute.value.fullPath
         ElMessage.error('登录已过期，请重新登录')
-        router.push('/login')
+        router.push({ path: '/login', query: { redirect } })
       }
       // 已处理跳转，不再 reject，避免调用方出现未捕获的 promise 错误
       return Promise.resolve(null)

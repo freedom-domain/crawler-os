@@ -760,7 +760,6 @@ const suggestionError = ref('')
 let suggestionRequestId = 0
 let requestedSuggestionKey = ''
 const conversations = ref<Conversation[]>([])
-const sidebarCollapsed = ref(false)
 const sidebarWidth = ref(224)
 const isResizingSidebar = ref(false)
 const chatPageRef = ref<HTMLElement | null>(null)
@@ -836,6 +835,7 @@ const readChatSelection = () => {
 }
 const savedChatSelection = readChatSelection()
 const savedTopK = Number(savedChatSelection.topK)
+const sidebarCollapsed = ref(savedChatSelection.sidebarCollapsed === true)
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
 const chatModelsLoaded = ref(false)
@@ -1124,11 +1124,12 @@ const saveChatSelection = () => {
     ...current,
     assistantId: selectedAssistantId.value == null ? undefined : String(selectedAssistantId.value),
     chatModelId: selectedChatModelId.value == null ? undefined : String(selectedChatModelId.value),
-    topK: topK.value
+    topK: topK.value,
+    sidebarCollapsed: sidebarCollapsed.value
   }
   localStorage.setItem(CHAT_SELECTION_STORAGE_KEY, JSON.stringify(next))
 }
-watch([selectedAssistantId, selectedChatModelId, topK], saveChatSelection)
+watch([selectedAssistantId, selectedChatModelId, topK, sidebarCollapsed], saveChatSelection)
 const sending = ref(false)
 const cancelingMessageIds = ref(new Set<number>())
 const streamConnections = new Map<number, Promise<void>>()
@@ -2054,21 +2055,23 @@ onActivated(() => {
 .sidebar-heading strong, .sidebar-heading span { display: block; }
 .sidebar-heading strong { color: var(--ink-950); font-size: 15px; font-weight: 700; }
 .sidebar-heading span { margin-top: 3px; color: var(--ink-500); font-size: 11px; }
-.new-chat-button { width: 100%; height: 40px; align-items: center; justify-content: flex-start; gap: 8px; border-radius: 9px; }
+.new-chat-button { width: 100%; height: 40px; align-items: center; justify-content: center; gap: 8px; border-radius: 9px; }
 .new-chat-button :deep(.el-icon) { flex: 0 0 auto; margin: 0; }
 .new-chat-label { display: inline-flex; align-items: center; margin: 0; line-height: 1; }
 .history-heading { display: flex; align-items: center; gap: 8px; margin: 26px 8px 10px; color: var(--ink-500); font-size: 11px; font-weight: 600; }
 .history-heading span { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 9px; background: var(--chrome-hover); color: var(--ink-700); font-size: 10px; }
 .conversation-list { display: flex; min-height: 0; flex-direction: column; gap: 4px; overflow: auto; }
-.conversation-item { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; padding: 10px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-700); text-align: left; cursor: pointer; transition: background .16s, color .16s; }
+.conversation-item { position: relative; display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; padding: 10px 9px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-700); text-align: left; cursor: pointer; transition: background .16s, color .16s; }
 .conversation-item:hover, .conversation-item.is-active { background: var(--tint); color: var(--teal-ink); }
 .conversation-item > .el-icon { flex: 0 0 auto; font-size: 15px; }
 .conversation-title { flex: 1; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-item :deep(.el-tooltip) { min-width: 0; flex: 1; overflow: hidden; }
-.rename-conversation, .delete-conversation { display: grid; flex: 0 0 auto; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: var(--ink-500); opacity: 0; }
+.rename-conversation, .delete-conversation { position: absolute; z-index: 1; top: 50%; display: grid; width: 24px; height: 24px; place-items: center; transform: translateY(-50%); border-radius: 6px; color: var(--ink-700); background: var(--chrome-hover); visibility: hidden; transition: visibility .16s; }
+.rename-conversation { right: 34px; }
+.delete-conversation { right: 7px; }
 .conversation-item:hover .rename-conversation, .conversation-item:hover .delete-conversation,
-.conversation-item.is-active .rename-conversation, .conversation-item.is-active .delete-conversation { opacity: 1; }
-.rename-conversation:hover { background: var(--chrome-hover); color: var(--teal-ink); }
+.conversation-item:focus-within .rename-conversation, .conversation-item:focus-within .delete-conversation { visibility: visible; }
+.rename-conversation:hover { background: var(--teal-ink-strong); color: rgba(255, 255, 255, .65); }
 .delete-conversation:hover { background: var(--ctx-danger-bg); color: var(--ctx-danger-ink); }
 .history-empty { padding: 12px 8px; color: var(--ink-500); font-size: 11px; }
 .history-error { display: grid; gap: 5px; padding: 8px; color: var(--action-danger-ink); font-size: 10px; overflow-wrap: anywhere; }
