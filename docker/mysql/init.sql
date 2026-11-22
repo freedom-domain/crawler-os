@@ -220,6 +220,19 @@ JOIN ai_rag_chat_model model
     ON model.name = CONCAT('默认聊天模型-', config.environment)
 SET config.chat_model_id = model.id;
 
+CREATE TABLE IF NOT EXISTS ai_rag_rerank_model (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(128) NOT NULL,
+    rerank_provider VARCHAR(32) NOT NULL,
+    rerank_base_url VARCHAR(512) NOT NULL,
+    rerank_model VARCHAR(128) NOT NULL,
+    api_key VARCHAR(1024) NOT NULL DEFAULT '',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_rag_rerank_model_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS ai_knowledge_base (
    id BIGINT PRIMARY KEY AUTO_INCREMENT,
    name VARCHAR(64) NOT NULL,
@@ -227,6 +240,7 @@ CREATE TABLE IF NOT EXISTS ai_knowledge_base (
    description VARCHAR(512) NOT NULL DEFAULT '',
    enabled TINYINT(1) NOT NULL DEFAULT 1,
    vector_model_id BIGINT NULL,
+   rerank_model_id BIGINT NULL,
    source_index VARCHAR(255) NOT NULL,
    vector_index VARCHAR(255) NOT NULL,
    vector_field VARCHAR(255) NOT NULL,

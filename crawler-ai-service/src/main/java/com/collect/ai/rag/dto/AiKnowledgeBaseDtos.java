@@ -1,5 +1,6 @@
 package com.collect.ai.rag.dto;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
@@ -16,6 +17,26 @@ public final class AiKnowledgeBaseDtos {
         private Boolean enabled;
         @JsonSerialize(using = ToStringSerializer.class)
         private Long vectorModelId;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long rerankModelId;
+
+        @JsonSetter("rerankModelId")
+        public void setRerankModelId(Object value) {
+            if (value == null) {
+                this.rerankModelId = null;
+                return;
+            }
+            String text = value.toString().trim();
+            if (text.isEmpty()) {
+                this.rerankModelId = null;
+                return;
+            }
+            try {
+                this.rerankModelId = Long.valueOf(text);
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException("rerankModelId 必须是有效的模型 ID");
+            }
+        }
         private String sourceIndex;
         private String vectorIndex;
         private String vectorField;
@@ -34,6 +55,9 @@ public final class AiKnowledgeBaseDtos {
         @JsonSerialize(using = ToStringSerializer.class)
         private Long vectorModelId;
         private String vectorModelName;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long rerankModelId;
+        private String rerankModelName;
         private String sourceIndex;
         private String vectorIndex;
         private String vectorField;

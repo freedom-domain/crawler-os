@@ -3,7 +3,7 @@
     <header class="page-heading">
       <div>
         <h1>知识库管理</h1>
-        <p>新建和维护知识库，配置源索引、向量索引及向量模型。</p>
+        <p>新建和维护知识库，配置向量模型及可选的重排模型。</p>
       </div>
       <div class="heading-actions">
         <el-button type="primary" :icon="Plus" @click="openCreate">新建知识库</el-button>
@@ -47,6 +47,7 @@
           <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip resizable />
           <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
           <el-table-column prop="vectorModelName" label="向量模型" min-width="180" show-overflow-tooltip resizable />
+          <el-table-column prop="rerankModelName" label="重排模型" min-width="180" show-overflow-tooltip resizable />
           <el-table-column label="来源类型" min-width="120" align="center" resizable>
             <template #default="{ row }">
               <el-tag size="small" effect="light">
@@ -148,6 +149,22 @@
         <el-form-item label="向量字段" required>
           <el-input v-model="form.vectorField" placeholder="例如：embedding_bge_m3" />
         </el-form-item>
+        <el-form-item label="重排模型（可选）">
+          <el-select
+            v-model="form.rerankModelId"
+            clearable
+            style="width:100%"
+            placeholder="不选择则不启用重排"
+          >
+            <el-option
+              v-for="model in rerankModels"
+              :key="model.id"
+              :label="`${model.name}（${model.rerankProvider} / ${model.rerankModel}）`"
+              :value="model.id"
+            />
+          </el-select>
+          <small class="field-hint">配置后，检索会先召回候选文档，再由该模型重新排序。</small>
+        </el-form-item>
         <div class="form-grid">
           <el-form-item label="排序">
             <el-input-number v-model="form.sort" :min="0" :max="999" controls-position="right" />
@@ -172,7 +189,7 @@ import { Delete, Edit, FolderOpened, Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBasePage,
-  getVectorModels, updateKnowledgeBase
+  getRerankModels, getVectorModels, updateKnowledgeBase
 } from '@/api'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -189,9 +206,17 @@ interface VectorModel {
   chunkOverlap: number
 }
 
+interface RerankModel {
+  id: string
+  name: string
+  rerankProvider: string
+  rerankModel: string
+}
+
 const knowledgeBases = ref<any[]>([])
 const router = useRouter()
 const vectorModels = ref<VectorModel[]>([])
+const rerankModels = ref<RerankModel[]>([])
 const page = ref(1)
 const pageSize = ref(15)
 const total = ref(0)
@@ -210,6 +235,7 @@ const form = ref({
   description: '',
   enabled: true,
   vectorModelId: '',
+  rerankModelId: '',
   sourceIndex: 'spider_content',
   vectorIndex: 'spider_content_vector',
   vectorField: 'embedding',
@@ -221,8 +247,13 @@ const form = ref({
 async function loadAll() {
   loading.value = true
   try {
-    const [_, vectorResponse] = await Promise.all([fetchKnowledgeBasePage(), getVectorModels()])
+    const [_, vectorResponse, rerankResponse] = await Promise.all([
+      fetchKnowledgeBasePage(),
+      getVectorModels(),
+      getRerankModels()
+    ])
     vectorModels.value = vectorResponse.data || []
+    rerankModels.value = rerankResponse.data || []
   } finally {
     loading.value = false
   }
@@ -294,6 +325,7 @@ function openCreate() {
   editingId.value = ''
   form.value = {
     name: '', description: '', enabled: true, vectorModelId: '',
+    rerankModelId: '',
     sourceIndex: 'spider_content', vectorIndex: 'spider_content_vector',
     vectorField: 'embedding', sourceType: 'ES_INDEX',
     uploadBucket: 'crawler-knowledge', sort: 0
@@ -308,6 +340,7 @@ function openEdit(row: any) {
     description: row.description || '',
     enabled: row.enabled,
     vectorModelId: row.vectorModelId,
+    rerankModelId: row.rerankModelId || '',
     sourceIndex: row.sourceIndex,
     vectorIndex: row.vectorIndex,
     vectorField: row.vectorField,
@@ -327,8 +360,12 @@ async function save() {
   }
   saving.value = true
   try {
-    if (editingId.value) await updateKnowledgeBase(editingId.value, form.value)
-    else await createKnowledgeBase(form.value)
+    const payload = {
+      ...form.value,
+      rerankModelId: form.value.rerankModelId || null
+    }
+    if (editingId.value) await updateKnowledgeBase(editingId.value, payload)
+    else await createKnowledgeBase(payload)
     ElMessage.success('保存成功')
     dialogVisible.value = false
     await loadAll()
@@ -358,6 +395,7 @@ onMounted(loadAll)
 .knowledge-filters :deep(.el-select) { width: 160px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .selected-model-config { width: 100%; margin-top: 12px; }
+.field-hint { display: block; margin-top: 6px; color: var(--el-text-color-secondary); line-height: 1.5; }
 @media (max-width: 680px) {
   .page-heading { flex-direction: column; align-items: stretch; }
   .heading-actions { flex-wrap: wrap; }

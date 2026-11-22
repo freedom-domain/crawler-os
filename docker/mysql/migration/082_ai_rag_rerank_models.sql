@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS ai_rag_rerank_model (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(128) NOT NULL,
+    rerank_provider VARCHAR(32) NOT NULL,
+    rerank_base_url VARCHAR(512) NOT NULL,
+    rerank_model VARCHAR(128) NOT NULL,
+    api_key VARCHAR(1024) NOT NULL DEFAULT '',
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_rag_rerank_model_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

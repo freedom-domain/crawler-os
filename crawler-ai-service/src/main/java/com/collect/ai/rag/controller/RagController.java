@@ -9,6 +9,8 @@ import com.collect.ai.rag.dto.ModelDiscoveryRequest;
 import com.collect.ai.rag.dto.KnowledgeBaseDtos;
 import com.collect.ai.rag.dto.VectorModelRequest;
 import com.collect.ai.rag.dto.VectorModelResponse;
+import com.collect.ai.rag.dto.RerankModelRequest;
+import com.collect.ai.rag.dto.RerankModelResponse;
 import com.collect.ai.rag.dto.AiAssistantDtos;
 import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
 import com.collect.ai.rag.service.AiAssistantService;
@@ -19,6 +21,7 @@ import com.collect.ai.rag.service.RagConfigService;
 import com.collect.ai.rag.service.RagIndexRebuildTaskService;
 import com.collect.ai.rag.service.RagService;
 import com.collect.ai.rag.service.VectorModelService;
+import com.collect.ai.rag.service.RerankModelService;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
 import com.collect.common.security.LoginUtils;
@@ -48,6 +51,7 @@ public class RagController {
     private final RagConfigService ragConfigService;
     private final VectorModelService vectorModelService;
     private final ChatModelService chatModelService;
+    private final RerankModelService rerankModelService;
     private final ModelDiscoveryService modelDiscoveryService;
     private final AiAssistantService aiAssistantService;
     private final AiKnowledgeBaseService aiKnowledgeBaseService;
@@ -311,6 +315,76 @@ public class RagController {
     public R<Void> deleteChatModel(@PathVariable Long id) {
         requireAdmin();
         chatModelService.delete(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "读取重排模型列表")
+    @GetMapping("/rerank-models")
+    public R<java.util.List<RerankModelResponse>> rerankModels() {
+        requireAdmin();
+        return R.ok(rerankModelService.list());
+    }
+
+    @Operation(summary = "分页查询重排模型")
+    @GetMapping("/rerank-models/page")
+    public R<IPage<RerankModelResponse>> rerankModelPage(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "15") long pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String provider,
+            @RequestParam(required = false) String apiKeyStatus) {
+        requireAdmin();
+        return R.ok(rerankModelService.page(page, pageSize, keyword, provider, apiKeyStatus));
+    }
+
+    @Operation(summary = "自动拉取重排模型列表")
+    @PostMapping("/rerank-models/discover")
+    public R<java.util.List<String>> discoverRerankModels(@RequestBody ModelDiscoveryRequest request) {
+        requireAdmin();
+        return R.ok(modelDiscoveryService.discoverRerankModels(request));
+    }
+
+    @Operation(summary = "读取重排模型 API Key")
+    @GetMapping("/rerank-models/{id}/api-key")
+    public R<String> getRerankModelApiKey(@PathVariable Long id, HttpServletResponse response) {
+        requireAdmin();
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(rerankModelService.getApiKey(id));
+    }
+
+    @Operation(summary = "更新重排模型 API Key")
+    @PutMapping("/rerank-models/{id}/api-key")
+    public R<Void> updateRerankModelApiKey(@PathVariable Long id,
+                                           @RequestBody RerankModelRequest request) {
+        requireAdmin();
+        if (request == null) {
+            throw new BizException("API Key 请求不能为空");
+        }
+        rerankModelService.updateApiKey(id, request.getApiKey());
+        return R.ok();
+    }
+
+    @Operation(summary = "创建重排模型")
+    @PostMapping("/rerank-models")
+    public R<RerankModelResponse> createRerankModel(@RequestBody RerankModelRequest request) {
+        requireAdmin();
+        return R.ok(rerankModelService.create(request));
+    }
+
+    @Operation(summary = "更新重排模型")
+    @PutMapping("/rerank-models/{id}")
+    public R<RerankModelResponse> updateRerankModel(@PathVariable Long id,
+                                                    @RequestBody RerankModelRequest request) {
+        requireAdmin();
+        return R.ok(rerankModelService.update(id, request));
+    }
+
+    @Operation(summary = "删除重排模型")
+    @DeleteMapping("/rerank-models/{id}")
+    public R<Void> deleteRerankModel(@PathVariable Long id) {
+        requireAdmin();
+        rerankModelService.delete(id);
         return R.ok();
     }
 

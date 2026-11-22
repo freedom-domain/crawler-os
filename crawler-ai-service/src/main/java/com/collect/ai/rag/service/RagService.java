@@ -5,11 +5,13 @@ import com.collect.ai.entity.AiRagExcludedDocument;
 import com.collect.ai.entity.AiKnowledgeBase;
 import com.collect.ai.entity.AiRagChatModel;
 import com.collect.ai.entity.AiRagVectorModel;
+import com.collect.ai.entity.AiRagRerankModel;
 import com.collect.ai.entity.Spider;
 import com.collect.ai.mapper.AiRagExcludedDocumentMapper;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.mapper.AiRagChatModelMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
+import com.collect.ai.mapper.AiRagRerankModelMapper;
 import com.collect.ai.entity.AiKnowledgeDocument;
 import com.collect.ai.mapper.AiKnowledgeDocumentMapper;
 import com.collect.ai.mapper.SpiderMapper;
@@ -57,6 +59,8 @@ import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -87,7 +91,9 @@ public class RagService {
     private final AiRagExcludedDocumentMapper excludedDocumentMapper;
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiRagVectorModelMapper vectorModelMapper;
+    private final AiRagRerankModelMapper rerankModelMapper;
     private final AiRagChatModelMapper chatModelMapper;
+    private final RerankService rerankService;
     private final AiKnowledgeDocumentMapper knowledgeDocumentMapper;
     private final MinioClient minioClient;
 
@@ -1158,10 +1164,10 @@ public class RagService {
                     .put("content", "智能体信息：\n" + profile);
             if ("ollama".equalsIgnoreCase(rag.getChatProvider())) {
                 body.put("stream", false);
-                body.putObject("options").put("num_ctx", rag.getContextLength()).put("num_predict", 300);
+                body.putObject("options").put("num_ctx", rag.getContextLength()).put("num_predict", 500);
             } else {
                 body.put("temperature", 0.7);
-                body.put("max_tokens", 300);
+                body.put("max_tokens", 500);
             }
 
             String path = "ollama".equalsIgnoreCase(rag.getChatProvider())
@@ -1187,18 +1193,25 @@ public class RagService {
             }
             List<String> result = new ArrayList<>();
             if (json.startsWith("[") || json.startsWith("{")) {
-                JsonNode generated = objectMapper.readTree(json);
-                JsonNode questions = generated.isArray()
-                        ? generated
-                        : firstArray(generated, "questions", "suggested_questions", "suggestions", "items");
-                if (questions.isArray()) {
-                    for (JsonNode question : questions) {
-                        String value = question.isTextual()
-                                ? question.asText()
-                                : firstSuggestedText(question, "question", "text", "content");
-                        addSuggestedQuestion(result, value);
-                        if (result.size() == 3) break;
+                try {
+                    JsonNode generated = objectMapper.readTree(json);
+                    JsonNode questions = generated.isArray()
+                            ? generated
+                            : firstArray(generated, "questions", "suggested_questions", "suggestions", "items");
+                    if (questions.isArray()) {
+                        for (JsonNode question : questions) {
+                            String value = question.isTextual()
+                                    ? question.asText()
+                                    : firstSuggestedText(question, "question", "text", "content");
+                            addSuggestedQuestion(result, value);
+                            if (result.size() == 3) break;
+                        }
                     }
+                } catch (Exception parseException) {
+                    log.warn("解析聊天模型推荐问题JSON失败，尝试提取已生成的完整问题: assistantId={}, model={}",
+                            assistant == null ? null : assistant.getId(),
+                            safeLogValue(rag.getChatModel(), 128));
+                    extractCompleteJsonStrings(json, result);
                 }
             }
             if (result.isEmpty()) {
@@ -1216,7 +1229,9 @@ public class RagService {
                 }
             }
             if (result.isEmpty()) {
-                throw new IllegalStateException("聊天模型未返回有效问题");
+                log.warn("聊天模型未返回有效推荐问题: assistantId={}, model={}",
+                        assistant == null ? null : assistant.getId(), safeLogValue(rag.getChatModel(), 128));
+                return List.of();
             }
             return result;
         } catch (Exception e) {
@@ -1253,6 +1268,18 @@ public class RagService {
             if (value.isTextual()) return value.asText();
         }
         return "";
+    }
+
+    private void extractCompleteJsonStrings(String json, List<String> result) {
+        Matcher matcher = Pattern.compile("\"(?:\\\\.|[^\"\\\\])*\"").matcher(json);
+        while (matcher.find() && result.size() < 3) {
+            try {
+                JsonNode value = objectMapper.readTree(matcher.group());
+                if (value.isTextual()) addSuggestedQuestion(result, value.asText());
+            } catch (Exception ignored) {
+                // Ignore incomplete or malformed JSON string fragments.
+            }
+        }
     }
 
     private void addSuggestedQuestion(List<String> questions, String candidate) {
@@ -1380,6 +1407,12 @@ public class RagService {
                     .findFirst().orElse(null);
             AiRagVectorModel knowledgeVectorModel = knowledgeBase == null
                     ? null : vectorModelMapper.selectById(knowledgeBase.getVectorModelId());
+            AiRagRerankModel rerankModel = knowledgeBase == null || knowledgeBase.getRerankModelId() == null
+                    ? null : rerankModelMapper.selectById(knowledgeBase.getRerankModelId());
+            if (knowledgeBase != null && knowledgeBase.getRerankModelId() != null && rerankModel == null) {
+                throw new BizException("知识库关联的重排模型不存在");
+            }
+            int candidateCount = rerankModel == null ? topK : Math.min(topK * 4, 100);
             int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
                     ? knowledgeVectorModel.getDimensions()
                     : properties.resolveDimensions();
@@ -1397,7 +1430,7 @@ public class RagService {
 
             ObjectNode scriptScore = objectMapper.createObjectNode();
             ObjectNode body = objectMapper.createObjectNode();
-            body.put("size", topK);
+            body.put("size", candidateCount);
             body.set("_source", objectMapper.valueToTree(List.of(
                     "doc_id", "chunk_id", "title", "content", "url", "spiderName")));
             if (filter != null) {
@@ -1423,6 +1456,7 @@ public class RagService {
                             + " " + search.body());
                 }
                 JsonNode root = objectMapper.readTree(search.body());
+                List<RagDtos.SourceReference> candidates = new ArrayList<>();
                 for (JsonNode hit : root.path("hits").path("hits")) {
                     JsonNode source = hit.path("_source");
                     RagDtos.SourceReference ref = new RagDtos.SourceReference();
@@ -1438,8 +1472,24 @@ public class RagService {
                     ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));
                     boolean duplicate = sources.stream()
                             .anyMatch(existing -> existing.getId().equals(ref.getId())
+                                    && existing.getSnippet().equals(ref.getSnippet()))
+                            || candidates.stream().anyMatch(existing -> existing.getId().equals(ref.getId())
                                     && existing.getSnippet().equals(ref.getSnippet()));
-                    if (!duplicate) sources.add(ref);
+                    if (!duplicate) candidates.add(ref);
+                }
+                if (rerankModel != null && !candidates.isEmpty()) {
+                    List<String> documents = candidates.stream()
+                            .map(candidate -> candidate.getTitle() + "\n" + candidate.getSnippet())
+                            .toList();
+                    List<RerankService.Result> ranked = rerankService.rerank(
+                            rerankModel, request.getQuestion(), documents);
+                    for (RerankService.Result result : ranked) {
+                        RagDtos.SourceReference candidate = candidates.get(result.index());
+                        candidate.setScore(result.score());
+                        sources.add(candidate);
+                    }
+                } else {
+                    sources.addAll(candidates);
                 }
             } catch (Exception e) {
                 if (e instanceof IllegalStateException state) throw state;

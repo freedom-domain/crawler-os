@@ -89,6 +89,21 @@ export const updateChatModelApiKey = (id: string, apiKey: string) =>
 export const createChatModel = (data: any) => request.post('/ai/rag/chat-models', data)
 export const updateChatModel = (id: string, data: any) => request.put(`/ai/rag/chat-models/${id}`, data)
 export const deleteChatModel = (id: string) => request.delete(`/ai/rag/chat-models/${id}`)
+export const getRerankModels = () => request.get('/ai/rag/rerank-models')
+export const getRerankModelPage = (params: AiManagementPageParams) =>
+  request.get('/ai/rag/rerank-models/page', { params })
+export const discoverRerankModels = (data: {
+  modelId: string | null
+  provider: string
+  baseUrl: string
+  apiKey: string
+}) => request.post('/ai/rag/rerank-models/discover', data)
+export const getRerankModelApiKey = (id: string) => request.get(`/ai/rag/rerank-models/${id}/api-key`)
+export const updateRerankModelApiKey = (id: string, apiKey: string) =>
+  request.put(`/ai/rag/rerank-models/${id}/api-key`, { apiKey })
+export const createRerankModel = (data: any) => request.post('/ai/rag/rerank-models', data)
+export const updateRerankModel = (id: string, data: any) => request.put(`/ai/rag/rerank-models/${id}`, data)
+export const deleteRerankModel = (id: string) => request.delete(`/ai/rag/rerank-models/${id}`)
 export const syncRagIndex = (knowledgeBaseId?: string) =>
   request.post('/ai/rag/sync', undefined, {
     timeout: 0,

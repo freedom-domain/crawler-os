@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ai.entity.AiKnowledgeBase;
 import com.collect.ai.entity.AiRagVectorModel;
+import com.collect.ai.entity.AiRagRerankModel;
 import com.collect.ai.entity.AiAssistantKnowledgeBase;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
+import com.collect.ai.mapper.AiRagRerankModelMapper;
 import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
 import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
 import com.collect.common.exception.BizException;
@@ -26,6 +28,7 @@ public class AiKnowledgeBaseService {
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiRagVectorModelMapper vectorModelMapper;
+    private final AiRagRerankModelMapper rerankModelMapper;
     private final AiAssistantKnowledgeBaseMapper assistantKnowledgeBaseMapper;
 
     public List<AiKnowledgeBaseDtos.Response> list() {
@@ -117,6 +120,9 @@ public class AiKnowledgeBaseService {
             throw new BizException("知识库名称不能超过 64 个字符");
         if (request.getVectorModelId() == null || vectorModelMapper.selectById(request.getVectorModelId()) == null)
             throw new BizException("请选择有效的向量模型");
+        if (request.getRerankModelId() != null
+                && rerankModelMapper.selectById(request.getRerankModelId()) == null)
+            throw new BizException("请选择有效的重排模型");
         if (!"UPLOAD".equalsIgnoreCase(request.getSourceType())
                 && !StringUtils.hasText(request.getSourceIndex()))
             throw new BizException("请输入源索引名称");
@@ -131,6 +137,7 @@ public class AiKnowledgeBaseService {
         base.setDescription(request.getDescription() == null ? "" : request.getDescription().trim());
         base.setEnabled(request.getEnabled() == null ? Boolean.TRUE : request.getEnabled());
         base.setVectorModelId(request.getVectorModelId());
+        base.setRerankModelId(request.getRerankModelId());
         String sourceType = "UPLOAD".equalsIgnoreCase(request.getSourceType()) ? "UPLOAD" : "ES_INDEX";
         String sourceIndex = request.getSourceIndex();
         if ("UPLOAD".equals(sourceType) && !StringUtils.hasText(sourceIndex)) {
@@ -161,6 +168,11 @@ public class AiKnowledgeBaseService {
         response.setVectorModelId(base.getVectorModelId());
         var model = vectorModelMapper.selectById(base.getVectorModelId());
         response.setVectorModelName(model == null ? "-" : model.getName());
+        response.setRerankModelId(base.getRerankModelId());
+        var rerankModel = base.getRerankModelId() == null
+                ? null
+                : rerankModelMapper.selectById(base.getRerankModelId());
+        response.setRerankModelName(rerankModel == null ? "-" : rerankModel.getName());
         response.setSourceIndex(base.getSourceIndex());
         response.setVectorIndex(base.getVectorIndex());
         response.setVectorField(base.getVectorField());

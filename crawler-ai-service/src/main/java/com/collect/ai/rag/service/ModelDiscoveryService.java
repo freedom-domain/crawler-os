@@ -1,8 +1,10 @@
 package com.collect.ai.rag.service;
 
 import com.collect.ai.entity.AiRagChatModel;
+import com.collect.ai.entity.AiRagRerankModel;
 import com.collect.ai.entity.AiRagVectorModel;
 import com.collect.ai.mapper.AiRagChatModelMapper;
+import com.collect.ai.mapper.AiRagRerankModelMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
 import com.collect.ai.rag.dto.ModelDiscoveryRequest;
 import com.collect.common.exception.BizException;
@@ -36,6 +38,7 @@ public class ModelDiscoveryService {
 
     private final AiRagVectorModelMapper vectorModelMapper;
     private final AiRagChatModelMapper chatModelMapper;
+    private final AiRagRerankModelMapper rerankModelMapper;
     private final ObjectMapper objectMapper;
 
     public List<String> discoverVectorModels(ModelDiscoveryRequest request) {
@@ -58,6 +61,90 @@ public class ModelDiscoveryService {
             apiKey = model.getApiKey();
         }
         return fetchModels(request.getProvider(), request.getBaseUrl(), apiKey);
+    }
+
+    public List<String> discoverRerankModels(ModelDiscoveryRequest request) {
+        validateRerankRequest(request);
+        String apiKey = request.getApiKey();
+        if (!StringUtils.hasText(apiKey) && request.getModelId() != null) {
+            AiRagRerankModel model = rerankModelMapper.selectById(request.getModelId());
+            if (model == null) throw new BizException("重排模型不存在");
+            apiKey = model.getApiKey();
+        }
+        return fetchRerankModels(request.getProvider(), request.getBaseUrl(), apiKey);
+    }
+
+    private List<String> fetchRerankModels(String provider, String baseUrl, String apiKey) {
+        try {
+            URI requestUri = createRerankModelsUri(provider, baseUrl);
+            HttpRequest.Builder request = HttpRequest.newBuilder()
+                    .uri(requestUri)
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Accept", "application/json");
+            if (StringUtils.hasText(apiKey)) {
+                request.header("Authorization", "Bearer " + apiKey.trim());
+            }
+            HttpResponse<java.io.InputStream> response = HTTP_CLIENT.send(
+                    request.GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+            try (java.io.InputStream body = response.body()) {
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    throw new BizException("拉取重排模型列表失败，服务返回 HTTP " + response.statusCode());
+                }
+                byte[] bytes = body.readNBytes(MAX_RESPONSE_BYTES + 1);
+                if (bytes.length > MAX_RESPONSE_BYTES) {
+                    throw new BizException("重排模型列表响应超过允许大小");
+                }
+                return parseModelNames(objectMapper.readTree(new String(bytes, StandardCharsets.UTF_8)), false);
+            }
+        } catch (BizException e) {
+            throw e;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BizException("拉取重排模型列表被中断");
+        } catch (Exception e) {
+            throw new BizException("拉取重排模型列表失败，请检查服务地址、API Key 和提供方是否支持模型列表接口");
+        }
+    }
+
+    private static URI createRerankModelsUri(String provider, String baseUrl) throws Exception {
+        URI baseUri = URI.create(baseUrl.trim());
+        String scheme = baseUri.getScheme();
+        if (!Set.of("http", "https").contains(scheme == null ? "" : scheme.toLowerCase(Locale.ROOT))
+                || !StringUtils.hasText(baseUri.getHost())
+                || baseUri.getUserInfo() != null
+                || baseUri.getQuery() != null
+                || baseUri.getFragment() != null) {
+            throw new BizException("服务地址必须是无凭据、无查询参数的 HTTP 或 HTTPS URL");
+        }
+        String path = baseUri.getPath() == null ? "" : baseUri.getPath().replaceAll("/+$", "");
+        if (path.matches("(?i).*/rerank$")) {
+            path = path.replaceFirst("(?i)/rerank$", "");
+        }
+        String normalizedProvider = provider.trim().toLowerCase(Locale.ROOT);
+        String modelsPath;
+        if (path.matches("(?i).*/models$")) {
+            modelsPath = path;
+        } else if (path.matches("(?i).*/v[0-9]+$")) {
+            modelsPath = path + "/models";
+        } else if ("dashscope".equals(normalizedProvider)) {
+            modelsPath = path + "/api/v1/models";
+        } else {
+            modelsPath = path + "/v1/models";
+        }
+        return new URI(scheme.toLowerCase(Locale.ROOT), null, baseUri.getHost(),
+                baseUri.getPort(), modelsPath, null, null);
+    }
+
+    private static void validateRerankRequest(ModelDiscoveryRequest request) {
+        if (request == null || !StringUtils.hasText(request.getProvider())
+                || !StringUtils.hasText(request.getBaseUrl())) {
+            throw new BizException("重排模型提供方和服务地址不能为空");
+        }
+        if (request.getProvider().trim().length() > 32
+                || request.getBaseUrl().length() > 512
+                || (request.getApiKey() != null && request.getApiKey().length() > 1024)) {
+            throw new BizException("服务提供方、地址或 API Key 长度超出限制");
+        }
     }
 
     private List<String> fetchModels(String provider, String baseUrl, String apiKey) {
@@ -117,12 +204,18 @@ public class ModelDiscoveryService {
 
     private List<String> parseModelNames(JsonNode root, boolean ollama) {
         JsonNode models = root.path(ollama ? "models" : "data");
+        if (!ollama && !models.isArray()) {
+            models = root.path("models");
+        }
         if (!models.isArray()) {
             throw new BizException("模型服务返回的数据格式不受支持");
         }
         Set<String> names = new LinkedHashSet<>();
         for (JsonNode model : models) {
             String name = model.path(ollama ? "name" : "id").asText("").trim();
+            if (name.isEmpty() && !ollama) {
+                name = model.path("name").asText("").trim();
+            }
             if (!name.isEmpty() && name.length() <= 256) names.add(name);
             if (names.size() >= 1000) break;
         }

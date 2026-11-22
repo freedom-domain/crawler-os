@@ -824,11 +824,31 @@ const sourcePreviewUrl = computed(() =>
 )
 let sourcePreviewRequestId = 0
 let sourceSnapshotRequestId = 0
+const CHAT_SELECTION_STORAGE_KEY = 'crawler-ai-chat-selection'
+const readChatSelection = () => {
+  try {
+    const value = JSON.parse(localStorage.getItem(CHAT_SELECTION_STORAGE_KEY) || '{}')
+    return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  } catch {
+    localStorage.removeItem(CHAT_SELECTION_STORAGE_KEY)
+    return {}
+  }
+}
+const savedChatSelection = readChatSelection()
+const savedTopK = Number(savedChatSelection.topK)
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
 const chatModelsLoaded = ref(false)
-const selectedAssistantId = ref<string | number | undefined>(undefined)
-const selectedChatModelId = ref<string | number | undefined>(undefined)
+const selectedAssistantId = ref<string | number | undefined>(
+  typeof savedChatSelection.assistantId === 'string' || typeof savedChatSelection.assistantId === 'number'
+    ? String(savedChatSelection.assistantId)
+    : undefined
+)
+const selectedChatModelId = ref<string | number | undefined>(
+  typeof savedChatSelection.chatModelId === 'string' || typeof savedChatSelection.chatModelId === 'number'
+    ? String(savedChatSelection.chatModelId)
+    : undefined
+)
 const route = useRoute()
 const router = useRouter()
 const themeStore = useThemeStore()
@@ -1096,8 +1116,19 @@ const copyMessage = async (content: string, successMessage = '回答已复制') 
   }
 }
 const draft = ref('')
-const topK = ref(5)
+const topK = ref(Number.isInteger(savedTopK) && savedTopK >= 1 && savedTopK <= 20 ? savedTopK : 5)
 const retrievalOptions = computed(() => [...new Set([3, 5, 8, 10, topK.value])].sort((a, b) => a - b))
+const saveChatSelection = () => {
+  const current = readChatSelection()
+  const next = {
+    ...current,
+    assistantId: selectedAssistantId.value == null ? undefined : String(selectedAssistantId.value),
+    chatModelId: selectedChatModelId.value == null ? undefined : String(selectedChatModelId.value),
+    topK: topK.value
+  }
+  localStorage.setItem(CHAT_SELECTION_STORAGE_KEY, JSON.stringify(next))
+}
+watch([selectedAssistantId, selectedChatModelId, topK], saveChatSelection)
 const sending = ref(false)
 const cancelingMessageIds = ref(new Set<number>())
 const streamConnections = new Map<number, Promise<void>>()
@@ -1863,8 +1894,14 @@ onMounted(() => {
       .filter((model: any) => model.enabled !== false)
       .map((model: any) => ({ ...model, id: String(model.id) }))
     if (chatModels.value.length && selectedChatModelId.value === undefined) {
-      selectedChatModelId.value = (chatModels.value.find((model: any) => model.defaultModel)
-        || chatModels.value[0]).id
+      const savedModel = chatModels.value.find((model: any) => String(model.id) === String(savedChatSelection.chatModelId))
+      selectedChatModelId.value = savedModel?.id
+        || (chatModels.value.find((model: any) => model.defaultModel) || chatModels.value[0]).id
+    } else if (chatModels.value.length
+      && !chatModels.value.some((model: any) => String(model.id) === String(selectedChatModelId.value))) {
+      const savedModel = chatModels.value.find((model: any) => String(model.id) === String(savedChatSelection.chatModelId))
+      selectedChatModelId.value = savedModel?.id
+        || (chatModels.value.find((model: any) => model.defaultModel) || chatModels.value[0]).id
     }
   }).catch(() => {
     ElMessage.error('加载聊天模型失败，请刷新页面重试')
