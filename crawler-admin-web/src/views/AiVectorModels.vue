@@ -6,82 +6,86 @@
       class="models-card"
       :class="{ 'models-card--embedded': embedded }"
     >
-      <div class="card-header">
-        <div>
-          <h2 v-if="!embedded">向量模型管理</h2>
-          <p>管理 Embedding 模型及其检索、分块参数，AI 配置可直接引用。</p>
+      <div class="model-management-panel">
+        <div class="card-header">
+          <div>
+            <h2 v-if="!embedded">向量模型管理</h2>
+            <p>管理 Embedding 模型及其检索、分块参数，AI 配置可直接引用。</p>
+          </div>
+          <div class="header-actions">
+            <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
+            <el-button type="primary" @click="openCreate">新增向量模型</el-button>
+          </div>
         </div>
-        <div class="header-actions">
-          <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
-          <el-button type="primary" @click="openCreate">新增向量模型</el-button>
+
+        <el-form class="model-filters" @submit.prevent>
+          <el-input
+            v-model="searchKeyword"
+            clearable
+            placeholder="搜索配置名称、模型名称或服务地址"
+            @keyup.enter="searchModels"
+          />
+          <el-select v-model="providerFilter" clearable placeholder="全部提供方">
+            <el-option label="Ollama" value="ollama" />
+            <el-option label="OpenAI 兼容" value="openai" />
+          </el-select>
+          <el-select v-model="apiKeyFilter" clearable placeholder="全部 API Key 状态">
+            <el-option label="已配置" value="configured" />
+            <el-option label="未配置" value="unconfigured" />
+          </el-select>
+          <el-button type="primary" @click="searchModels">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-form>
+
+        <div class="model-table-panel">
+          <div class="table-scroll-wrapper model-table-scroll">
+            <el-table :data="models" empty-text="暂无向量模型" stripe resizable border>
+              <el-table-column prop="name" label="配置名称" min-width="240" show-overflow-tooltip resizable />
+              <el-table-column label="提供方" min-width="110" resizable>
+                <template #default="{ row }">
+                  {{ row.embeddingProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="embeddingModel" label="模型名称" min-width="180" show-overflow-tooltip resizable />
+              <el-table-column label="API Key" min-width="100" resizable>
+                <template #default="{ row }">
+                  <el-tag
+                    :type="row.apiKeyConfigured ? 'success' : 'info'"
+                    class="is-clickable"
+                    effect="light"
+                    @click="editApiKey(row)"
+                  >
+                    {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="dimensions" label="维度" min-width="70" resizable />
+              <el-table-column prop="topK" label="Top K" min-width="75" resizable />
+              <el-table-column label="分块（长度 / 重叠）" min-width="140" resizable>
+                <template #default="{ row }">
+                  {{ row.chunkSize }} / {{ row.chunkOverlap }}
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+                <template #default="{ row }">
+                  <TableRowActions
+                    :items="rowActions"
+                    @command="command => handleRowAction(command, row)"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <el-pagination
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 15, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @change="loadModels"
+          />
         </div>
       </div>
-
-      <el-form class="model-filters" @submit.prevent>
-        <el-input
-          v-model="searchKeyword"
-          clearable
-          placeholder="搜索配置名称、模型名称或服务地址"
-          @keyup.enter="searchModels"
-        />
-        <el-select v-model="providerFilter" clearable placeholder="全部提供方">
-          <el-option label="Ollama" value="ollama" />
-          <el-option label="OpenAI 兼容" value="openai" />
-        </el-select>
-        <el-select v-model="apiKeyFilter" clearable placeholder="全部 API Key 状态">
-          <el-option label="已配置" value="configured" />
-          <el-option label="未配置" value="unconfigured" />
-        </el-select>
-        <el-button type="primary" @click="searchModels">查询</el-button>
-        <el-button @click="resetFilters">重置</el-button>
-      </el-form>
-
-      <div class="table-scroll-wrapper model-table-scroll">
-        <el-table :data="models" empty-text="暂无向量模型" stripe resizable border>
-          <el-table-column prop="name" label="配置名称" min-width="130" resizable />
-          <el-table-column label="提供方" min-width="110" resizable>
-            <template #default="{ row }">
-              {{ row.embeddingProvider === 'ollama' ? 'Ollama' : 'OpenAI 兼容' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="embeddingModel" label="模型名称" min-width="180" show-overflow-tooltip resizable />
-          <el-table-column label="API Key" min-width="100" resizable>
-            <template #default="{ row }">
-              <el-tag
-                :type="row.apiKeyConfigured ? 'success' : 'info'"
-                class="is-clickable"
-                effect="light"
-                @click="editApiKey(row)"
-              >
-                {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="dimensions" label="维度" min-width="70" resizable />
-          <el-table-column prop="topK" label="Top K" min-width="75" resizable />
-          <el-table-column label="分块（长度 / 重叠）" min-width="140" resizable>
-            <template #default="{ row }">
-              {{ row.chunkSize }} / {{ row.chunkOverlap }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
-            <template #default="{ row }">
-              <TableRowActions
-                :items="rowActions"
-                @command="command => handleRowAction(command, row)"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[10, 15, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @change="loadModels"
-      />
     </component>
 
     <el-dialog
@@ -465,6 +469,9 @@ onMounted(loadModels)
 .model-filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 200px)) auto auto; gap: 12px; margin: 16px 0; }
 .is-clickable { cursor: pointer; }
 .model-table-scroll :deep(.el-table) { width: 100%; }
+.model-management-panel { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.model-table-panel { padding: 0; }
+.model-table-panel :deep(.el-pagination) { margin-top: 12px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .form-grid :deep(.el-select), .form-grid :deep(.el-input-number) { width: 100%; }
 .model-picker { display: flex; width: 100%; gap: 8px; }

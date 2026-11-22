@@ -288,6 +288,15 @@ public class AiChatHistoryService {
         return conversation.getAssistantId();
     }
 
+    public Long getOwnedConversationAssistantId(Long userId, Long conversationId) {
+        AiChatConversation conversation =
+                conversationMapper.selectOwnedConversationAssistant(userId, conversationId);
+        if (conversation == null) {
+            throw new BizException("未找到对话");
+        }
+        return conversation.getAssistantId();
+    }
+
     private AiChatMessage findAssistantMessage(Long conversationId, Long messageId) {
         AiChatMessage message = messageMapper.selectOne(
                 new LambdaQueryWrapper<AiChatMessage>()

@@ -30,4 +30,13 @@ public interface AiChatConversationMapper extends BaseMapper<AiChatConversation>
     List<AiChatConversation> selectRecentByUserIdAndAssistant(
             @Param("userId") Long userId,
             @Param("assistantId") Long assistantId);
+
+    @Select("""
+            SELECT id, assistant_id
+            FROM ai_chat_conversation
+            WHERE id = #{conversationId} AND user_id = #{userId}
+            """)
+    AiChatConversation selectOwnedConversationAssistant(
+            @Param("userId") Long userId,
+            @Param("conversationId") Long conversationId);
 }

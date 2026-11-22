@@ -29,6 +29,12 @@ public final class AiChatDtos {
     }
 
     @Data
+    public static class SuggestionRequest {
+        private Long assistantId;
+        private Long chatModelId;
+    }
+
+    @Data
     public static class RenameConversationRequest {
         private String title;
     }

@@ -14,4 +14,5 @@ public class ChatModelResponse {
     private String chatModel;
     private int contextLength;
     private boolean apiKeyConfigured;
+    private boolean defaultModel;
 }

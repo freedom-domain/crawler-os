@@ -14,6 +14,7 @@ import com.collect.ai.entity.AiKnowledgeDocument;
 import com.collect.ai.mapper.AiKnowledgeDocumentMapper;
 import com.collect.ai.mapper.SpiderMapper;
 import com.collect.ai.rag.config.RagProperties;
+import com.collect.ai.rag.dto.AiAssistantDtos;
 import com.collect.ai.rag.dto.KnowledgeBaseDtos;
 import com.collect.ai.rag.dto.RagDtos;
 import com.collect.ai.rag.dto.AiKnowledgeDocumentDtos;
@@ -42,6 +43,7 @@ import tools.jackson.databind.node.ObjectNode;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -59,6 +61,10 @@ import java.util.function.Consumer;
 @Service
 @RequiredArgsConstructor
 public class RagService {
+
+    private static final HttpClient ELASTICSEARCH_HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     private static final String NO_RETRIEVED_RECORDS_ANSWER =
             "当前知识库中没有检索到相关记录，请调整问题或先添加相关知识库文档。";
@@ -497,7 +503,8 @@ public class RagService {
         if (knowledgeBaseId == null) return getKnowledgeBaseDocument(documentId);
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
-        JsonNode hit = findSourceDocument(base.getSourceIndex(), documentId);
+        JsonNode hit = findSourceDocument(base.getSourceIndex(), documentId,
+                "title", "content", "url", "spiderName", "spiderId", "images");
         JsonNode source = hit.path("_source");
         KnowledgeBaseDtos.DocumentDetail detail = new KnowledgeBaseDtos.DocumentDetail();
         detail.setId(hit.path("_id").asText());
@@ -516,7 +523,8 @@ public class RagService {
     }
 
     public KnowledgeBaseDtos.DocumentDetail getKnowledgeBaseDocument(String documentId) {
-        JsonNode hit = findSourceDocument(documentId);
+        JsonNode hit = findSourceDocument(properties.getRag().getSourceIndex(), documentId,
+                "title", "content", "url", "spiderName", "spiderId", "images");
         JsonNode source = hit.path("_source");
         KnowledgeBaseDtos.DocumentDetail detail = new KnowledgeBaseDtos.DocumentDetail();
         detail.setId(hit.path("_id").asText());
@@ -555,7 +563,10 @@ public class RagService {
             if (base == null) throw new BizException("知识库不存在");
             vectorIndex = base.getVectorIndex();
         }
-        ObjectNode body = objectMapper.createObjectNode().put("size", 10000);
+        ObjectNode body = objectMapper.createObjectNode()
+                .put("size", 10000)
+                .put("track_total_hits", false);
+        body.putArray("sort").add("_doc");
         body.set("query", objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
         body.set("_source", objectMapper.createArrayNode()
@@ -585,6 +596,54 @@ public class RagService {
             }
             chunks.sort(java.util.Comparator.comparingInt(KnowledgeBaseDtos.VectorChunk::getIndex));
             return chunks;
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("读取文档向量分块失败: " + e.getMessage(), e);
+        }
+    }
+
+    public java.util.List<KnowledgeBaseDtos.VectorChunk> getKnowledgeBaseDocumentChunk(
+            Long knowledgeBaseId, String documentId, String chunkId) {
+        if (knowledgeBaseId == null) {
+            ensureEnabled();
+        }
+        if (!chunkId.startsWith(documentId + ":")
+                || parseChunkIndex(chunkId) == Integer.MAX_VALUE) {
+            throw new BizException("文档分块 ID 不合法");
+        }
+        String vectorIndex;
+        if (knowledgeBaseId == null) {
+            vectorIndex = properties.resolveVectorIndex();
+        } else {
+            AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+            if (base == null) throw new BizException("知识库不存在");
+            vectorIndex = base.getVectorIndex();
+        }
+
+        String encodedChunkId = URLEncoder.encode(chunkId, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        try {
+            HttpResponse<String> response = elasticsearchRequest(
+                    "GET", "/" + vectorIndex + "/_doc/" + encodedChunkId, null);
+            if (response.statusCode() == 404) return java.util.List.of();
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("读取文档向量分块失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode source = root.path("_source");
+            if (!documentId.equals(source.path("doc_id").asText())) {
+                return java.util.List.of();
+            }
+            String content = source.path("content").asText("");
+            KnowledgeBaseDtos.VectorChunk chunk = new KnowledgeBaseDtos.VectorChunk();
+            chunk.setChunkId(source.path("chunk_id").asText(chunkId));
+            chunk.setIndex(parseChunkIndex(chunk.getChunkId()));
+            chunk.setTitle(source.path("title").asText(""));
+            chunk.setContent(content);
+            chunk.setCharacterCount(content.length());
+            chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
+            return java.util.List.of(chunk);
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("读取文档向量分块失败: " + e.getMessage(), e);
@@ -802,24 +861,33 @@ public class RagService {
     }
 
     private JsonNode findSourceDocument(String sourceIndex, String documentId) {
+        return findSourceDocument(sourceIndex, documentId, new String[0]);
+    }
+
+    private JsonNode findSourceDocument(String sourceIndex, String documentId, String... sourceFields) {
         if (documentId == null || documentId.isBlank()) {
             throw new BizException("文档 ID 不能为空");
         }
-        ObjectNode body = objectMapper.createObjectNode().put("size", 1);
-        body.set("query", objectMapper.createObjectNode()
-                .set("term", objectMapper.createObjectNode().put("_id", documentId)));
+        String encodedDocumentId = URLEncoder.encode(documentId, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        String path = "/" + sourceIndex + "/_doc/" + encodedDocumentId;
+        if (sourceFields.length > 0) {
+            path += "?_source_includes=" + String.join(",", sourceFields);
+        }
         try {
-            HttpResponse<String> response = elasticsearchRequest("POST",
-                    "/" + sourceIndex + "/_search", toJson(body));
+            HttpResponse<String> response = elasticsearchRequest("GET", path, null);
+            if (response.statusCode() == 404) {
+                throw new BizException("爬虫源文档不存在或已被移除");
+            }
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("读取爬虫源文档失败: " + response.statusCode()
                         + " " + response.body());
             }
-            JsonNode hits = objectMapper.readTree(response.body()).path("hits").path("hits");
-            if (!hits.isArray() || hits.isEmpty()) {
+            JsonNode hit = objectMapper.readTree(response.body());
+            if (!hit.path("found").asBoolean(false)) {
                 throw new BizException("爬虫源文档不存在或已被移除");
             }
-            return hits.get(0);
+            return hit;
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             if (e instanceof BizException business) throw business;
@@ -900,6 +968,113 @@ public class RagService {
 
     public RagDtos.QueryResponse query(RagDtos.QueryRequest request) {
         return query(request, isLoggedIn(), List.of(), null, null);
+    }
+
+    public List<String> generateSuggestedQuestions(
+            AiAssistantDtos.Response assistant, Long chatModelId) {
+        RagProperties.Rag rag = properties.getRag().copy();
+        if (chatModelId != null) {
+            AiRagChatModel chatModel = chatModelMapper.selectById(chatModelId);
+            if (chatModel == null) throw new BizException("聊天模型不存在");
+            rag.setChatProvider(chatModel.getChatProvider());
+            rag.setChatBaseUrl(chatModel.getChatBaseUrl());
+            rag.setApiKey(chatModel.getApiKey());
+            rag.setChatModel(chatModel.getChatModel());
+            rag.setContextLength(chatModel.getContextLength() == null ? 8192 : chatModel.getContextLength());
+        }
+
+        ObjectNode profile = objectMapper.createObjectNode();
+        if (assistant != null) {
+            profile.put("name", assistant.getName());
+            profile.put("description", assistant.getDescription());
+            profile.put("welcomeMessage", assistant.getWelcomeMessage());
+            profile.put("systemPrompt", assistant.getSystemPrompt());
+            ArrayNode knowledgeBases = profile.putArray("knowledgeBases");
+            if (assistant.getKnowledgeBaseNames() != null) {
+                assistant.getKnowledgeBaseNames().forEach(knowledgeBases::add);
+            }
+            ArrayNode knowledgeSamples = profile.putArray("knowledgeBaseSamples");
+            if (assistant.getKnowledgeBaseIds() != null) {
+                for (Long knowledgeBaseId : assistant.getKnowledgeBaseIds().stream().limit(5).toList()) {
+                    try {
+                        KnowledgeBaseDtos.DocumentPage page =
+                                listKnowledgeBaseDocuments(knowledgeBaseId, 1, 3, null, false);
+                        ObjectNode sample = knowledgeSamples.addObject()
+                                .put("knowledgeBaseId", knowledgeBaseId);
+                        ArrayNode documents = sample.putArray("documents");
+                        if (page.getRecords() != null) {
+                            for (KnowledgeBaseDtos.Document document : page.getRecords()) {
+                                documents.addObject()
+                                        .put("title", document.getTitle())
+                                        .put("snippet", document.getSnippet());
+                            }
+                        }
+                    } catch (RuntimeException e) {
+                        log.warn("读取推荐问题知识库样本失败: assistantId={}, knowledgeBaseId={}",
+                                assistant.getId(), knowledgeBaseId, e);
+                    }
+                }
+            }
+        }
+
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", rag.getChatModel());
+            ArrayNode messages = body.putArray("messages");
+            messages.addObject()
+                    .put("role", "system")
+                    .put("content", "根据用户提供的智能体和知识库信息，生成 3 个适合用户点击提问的简短中文问题。"
+                            + "问题应具体、彼此不同，并贴合智能体用途。只输出合法 JSON 数组，数组元素为字符串；不要输出 Markdown 或解释。");
+            messages.addObject()
+                    .put("role", "user")
+                    .put("content", "智能体信息：\n" + profile);
+            if ("ollama".equalsIgnoreCase(rag.getChatProvider())) {
+                body.put("stream", false);
+                body.putObject("options").put("num_ctx", rag.getContextLength()).put("num_predict", 300);
+            } else {
+                body.put("temperature", 0.7);
+                body.put("max_tokens", 300);
+            }
+
+            String path = "ollama".equalsIgnoreCase(rag.getChatProvider())
+                    ? "/api/chat"
+                    : "/chat/completions";
+            HttpResponse<String> response = openAiRequest(path, body, rag);
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("聊天模型返回错误状态: " + response.statusCode());
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            String content = "ollama".equalsIgnoreCase(rag.getChatProvider())
+                    ? root.path("message").path("content").asText("")
+                    : root.path("choices").path(0).path("message").path("content").asText("");
+            String json = content.trim();
+            int arrayStart = json.indexOf('[');
+            int arrayEnd = json.lastIndexOf(']');
+            if (arrayStart >= 0 && arrayEnd > arrayStart) {
+                json = json.substring(arrayStart, arrayEnd + 1);
+            }
+            JsonNode generated = objectMapper.readTree(json);
+            JsonNode questions = generated.isArray() ? generated : generated.path("questions");
+            List<String> result = new ArrayList<>();
+            if (questions.isArray()) {
+                for (JsonNode question : questions) {
+                    if (!question.isTextual()) continue;
+                    String value = question.asText().trim();
+                    if (!value.isEmpty() && value.length() <= 200 && !result.contains(value)) {
+                        result.add(value);
+                    }
+                    if (result.size() == 3) break;
+                }
+            }
+            if (result.isEmpty()) {
+                throw new IllegalStateException("聊天模型未返回有效问题");
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("生成聊天默认问题失败: assistantId={}, model={}",
+                    assistant == null ? null : assistant.getId(), safeLogValue(rag.getChatModel(), 128), e);
+            throw new IllegalStateException("生成默认问题失败，请稍后重试", e);
+        }
     }
 
     public RagDtos.QueryResponse queryForLoggedInUser(
@@ -1643,8 +1818,7 @@ public class RagService {
                 ? builder.method(method, HttpRequest.BodyPublishers.noBody())
                 : builder.method(method, HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)))
                 .build();
-        return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-                .send(request, HttpResponse.BodyHandlers.ofString());
+        return ELASTICSEARCH_HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private void deleteExistingVectors() {

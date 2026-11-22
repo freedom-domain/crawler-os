@@ -128,6 +128,10 @@ export const chatConversationList = (assistantId?: string | number) =>
     params: assistantId ? { assistantId } : undefined
   })
 export const chatContextWindow = () => request.get('/ai/chat/conversations/context-window', chatRequestConfig)
+export const generateChatSuggestions = (data: {
+  assistantId?: string | number
+  chatModelId?: string | number
+}) => request.post('/ai/chat/conversations/suggestions', data, chatRequestConfig)
 export const chatConversationCreate = (assistantId?: string | number) =>
   request.post('/ai/chat/conversations', undefined, {
     ...chatRequestConfig,
@@ -150,10 +154,15 @@ export const getChatSourceDocument = (
 export const getChatSourceDocumentChunks = (
   conversationId: number,
   documentId: string,
-  knowledgeBaseId?: string
+  knowledgeBaseId?: string,
+  chunkId?: string
 ) => request.get(`/ai/chat/conversations/${conversationId}/source/chunks`, {
   ...chatRequestConfig,
-  params: { documentId, ...(knowledgeBaseId ? { knowledgeBaseId } : {}) }
+  params: {
+    documentId,
+    ...(knowledgeBaseId ? { knowledgeBaseId } : {}),
+    ...(chunkId ? { chunkId } : {})
+  }
 })
 export const clearChatMessages = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)

@@ -230,7 +230,7 @@
       <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
         <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="50" fixed="right" align="center" resizable>
+      <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
         <template #default="{ row }">
           <el-dropdown trigger="click" popper-class="spider-operation-menu" @command="(command: string) => handleCommand(command, row)">
             <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>

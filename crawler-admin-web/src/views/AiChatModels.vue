@@ -6,78 +6,88 @@
       class="models-card"
       :class="{ 'models-card--embedded': embedded }"
     >
-      <div class="card-header">
-        <div>
-          <h2 v-if="!embedded">聊天模型管理</h2>
-          <p>管理聊天模型服务配置和 API Key，AI 配置可直接引用。</p>
+      <div class="model-management-panel">
+        <div class="card-header">
+          <div>
+            <h2 v-if="!embedded">聊天模型管理</h2>
+            <p>管理聊天模型服务配置和 API Key，AI 配置可直接引用。</p>
+          </div>
+          <div class="header-actions">
+            <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
+            <el-button type="primary" @click="openCreate">新增聊天模型</el-button>
+          </div>
         </div>
-        <div class="header-actions">
-          <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
-          <el-button type="primary" @click="openCreate">新增聊天模型</el-button>
+
+        <el-form class="model-filters" @submit.prevent>
+          <el-input
+            v-model="searchKeyword"
+            clearable
+            placeholder="搜索配置名称、模型名称或服务地址"
+            @keyup.enter="searchModels"
+          />
+          <el-select v-model="providerFilter" clearable placeholder="全部提供方">
+            <el-option label="OpenAI 兼容" value="openai" />
+            <el-option label="vLLM" value="vllm" />
+            <el-option label="Ollama" value="ollama" />
+          </el-select>
+          <el-select v-model="apiKeyFilter" clearable placeholder="全部 API Key 状态">
+            <el-option label="已配置" value="configured" />
+            <el-option label="未配置" value="unconfigured" />
+          </el-select>
+          <el-button type="primary" @click="searchModels">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-form>
+
+        <div class="model-table-panel">
+          <div class="table-scroll-wrapper model-table-scroll">
+            <el-table :data="models" empty-text="暂无聊天模型" stripe resizable border>
+              <el-table-column prop="name" label="配置名称" min-width="240" show-overflow-tooltip resizable />
+              <el-table-column prop="chatModel" label="模型名称" min-width="180" show-overflow-tooltip resizable />
+              <el-table-column label="提供方" min-width="110" resizable>
+                <template #default="{ row }">{{ providerLabel(row.chatProvider) }}</template>
+              </el-table-column>
+              <el-table-column label="默认模型" width="100" align="center" resizable>
+                <template #default="{ row }">
+                  <el-tag v-if="row.defaultModel" type="success" effect="light">默认</el-tag>
+                  <span v-else class="text-muted">-</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="上下文长度" min-width="115" resizable>
+                <template #default="{ row }">{{ row.contextLength.toLocaleString() }}</template>
+              </el-table-column>
+              <el-table-column prop="chatBaseUrl" label="API 地址" min-width="180" show-overflow-tooltip resizable />
+              <el-table-column label="API Key" min-width="110" resizable>
+                <template #default="{ row }">
+                  <el-tag
+                    :type="row.apiKeyConfigured ? 'success' : 'info'"
+                    class="is-clickable"
+                    effect="light"
+                    @click="editApiKey(row)"
+                  >
+                    {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+                <template #default="{ row }">
+                  <TableRowActions
+                    :items="rowActions(row)"
+                    @command="command => handleRowAction(command, row)"
+                  />
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <el-pagination
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 15, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @change="loadModels"
+          />
         </div>
       </div>
-
-      <el-form class="model-filters" @submit.prevent>
-        <el-input
-          v-model="searchKeyword"
-          clearable
-          placeholder="搜索配置名称、模型名称或服务地址"
-          @keyup.enter="searchModels"
-        />
-        <el-select v-model="providerFilter" clearable placeholder="全部提供方">
-          <el-option label="OpenAI 兼容" value="openai" />
-          <el-option label="vLLM" value="vllm" />
-          <el-option label="Ollama" value="ollama" />
-        </el-select>
-        <el-select v-model="apiKeyFilter" clearable placeholder="全部 API Key 状态">
-          <el-option label="已配置" value="configured" />
-          <el-option label="未配置" value="unconfigured" />
-        </el-select>
-        <el-button type="primary" @click="searchModels">查询</el-button>
-        <el-button @click="resetFilters">重置</el-button>
-      </el-form>
-
-      <div class="table-scroll-wrapper model-table-scroll">
-        <el-table :data="models" empty-text="暂无聊天模型" stripe resizable border>
-          <el-table-column prop="name" label="配置名称" min-width="130" resizable />
-          <el-table-column label="提供方" min-width="110" resizable>
-            <template #default="{ row }">{{ providerLabel(row.chatProvider) }}</template>
-          </el-table-column>
-          <el-table-column prop="chatModel" label="模型名称" min-width="180" show-overflow-tooltip resizable />
-          <el-table-column label="上下文长度" min-width="115" resizable>
-            <template #default="{ row }">{{ row.contextLength.toLocaleString() }} Token</template>
-          </el-table-column>
-          <el-table-column prop="chatBaseUrl" label="API 地址" min-width="180" show-overflow-tooltip resizable />
-          <el-table-column label="API Key" min-width="110" resizable>
-            <template #default="{ row }">
-              <el-tag
-                :type="row.apiKeyConfigured ? 'success' : 'info'"
-                class="is-clickable"
-                effect="light"
-                @click="editApiKey(row)"
-              >
-                {{ row.apiKeyConfigured ? '已配置' : '未配置' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
-            <template #default="{ row }">
-              <TableRowActions
-                :items="rowActions"
-                @command="command => handleRowAction(command, row)"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <el-pagination
-        v-model:current-page="page"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[10, 15, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @change="loadModels"
-      />
     </component>
 
     <el-dialog
@@ -118,6 +128,12 @@
               controls-position="right"
             />
             <small class="field-hint">Ollama 会用此值设置 num_ctx；其他提供方按此值估算历史消息预算。</small>
+          </el-form-item>
+          <el-form-item label="默认模型">
+            <el-checkbox v-model="form.defaultModel" :disabled="editingId !== null && form.defaultModel">
+              设为默认聊天模型
+            </el-checkbox>
+            <small class="field-hint">设为默认后会替换当前默认模型。</small>
           </el-form-item>
           <el-form-item label="API Key">
             <el-input
@@ -165,7 +181,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Delete, Edit } from '@element-plus/icons-vue'
+import { Delete, Edit, Star } from '@element-plus/icons-vue'
 import {
   createChatModel, deleteChatModel, discoverChatModels, getChatModelApiKey, getChatModelPage, updateChatModel,
   updateChatModelApiKey
@@ -182,6 +198,7 @@ interface ChatModel {
   chatModel: string
   contextLength: number
   apiKeyConfigured: boolean
+  defaultModel: boolean
 }
 
 const emptyModel = () => ({
@@ -190,6 +207,7 @@ const emptyModel = () => ({
   chatBaseUrl: '',
   chatModel: '',
   contextLength: 8192,
+  defaultModel: false,
   apiKey: '',
   clearApiKey: false
 })
@@ -219,7 +237,14 @@ const modelOptions = computed(() => {
   if (form.chatModel && !options.includes(form.chatModel)) options.unshift(form.chatModel)
   return options
 })
-const rowActions: TableRowAction[] = [
+const settingDefaultId = ref<string | null>(null)
+const rowActions = (model: ChatModel): TableRowAction[] => [
+  {
+    command: 'set-default',
+    label: '设为默认',
+    icon: Star,
+    disabled: model.defaultModel || settingDefaultId.value !== null
+  },
   { command: 'edit', label: '编辑', icon: Edit },
   { command: 'delete', label: '删除', icon: Delete, danger: true }
 ]
@@ -381,9 +406,32 @@ const removeModel = async (model: ChatModel) => {
   }
 }
 
+const setDefaultModel = async (model: ChatModel) => {
+  if (model.defaultModel || settingDefaultId.value !== null) return
+  settingDefaultId.value = model.id
+  try {
+    const response = await updateChatModel(model.id, {
+      name: model.name,
+      chatProvider: model.chatProvider,
+      chatBaseUrl: model.chatBaseUrl,
+      chatModel: model.chatModel,
+      contextLength: model.contextLength,
+      defaultModel: true
+    })
+    if (!response) return
+    ElMessage.success(`已将“${model.name}”设为默认聊天模型`)
+    await loadModels()
+  } catch {
+    ElMessage.error('设置默认聊天模型失败')
+  } finally {
+    settingDefaultId.value = null
+  }
+}
+
 const handleRowAction = (command: string, model: ChatModel) => {
   if (command === 'edit') openEdit(model)
   else if (command === 'delete') void removeModel(model)
+  else if (command === 'set-default') void setDefaultModel(model)
 }
 
 const editApiKey = async (model: ChatModel) => {
@@ -440,6 +488,9 @@ onMounted(loadModels)
 .model-filters { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 200px)) auto auto; gap: 12px; margin: 16px 0; }
 .is-clickable { cursor: pointer; }
 .model-table-scroll :deep(.el-table) { width: 100%; }
+.model-management-panel { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.model-table-panel { padding: 0; }
+.model-table-panel :deep(.el-pagination) { margin-top: 12px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
 .model-picker { display: flex; width: 100%; gap: 8px; }
 .model-picker :deep(.el-select) { width: auto; min-width: 0; flex: 1; }

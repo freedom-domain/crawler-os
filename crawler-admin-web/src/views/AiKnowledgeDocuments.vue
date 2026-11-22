@@ -47,27 +47,38 @@
 
     <el-card v-if="selectedBase?.sourceType === 'UPLOAD'" shadow="never" class="uploaded-card">
       <template #header>已上传文档（MinIO）</template>
-      <el-table :data="uploadedDocuments" stripe>
-        <el-table-column prop="title" label="标题" min-width="180" />
-        <el-table-column prop="originalName" label="原始文件名" min-width="220" />
-        <el-table-column prop="fileSize" label="大小" width="120">
-          <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.vectorized ? 'success' : 'warning'">
-              {{ row.vectorized ? '已向量化' : '待处理' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="minioBucket" label="MinIO Bucket" min-width="180" />
-        <el-table-column label="操作" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" :disabled="!row.vectorized"
-              @click="showUploadedDetail(row)">分块详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll-wrapper">
+        <el-table :data="uploadedDocuments" stripe border resizable>
+          <el-table-column prop="title" label="标题" min-width="180" fixed="left" show-overflow-tooltip resizable />
+          <el-table-column prop="originalName" label="原始文件名" min-width="220" show-overflow-tooltip resizable />
+          <el-table-column prop="fileSize" label="大小" width="120" resizable>
+            <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="100" resizable>
+            <template #default="{ row }">
+              <el-tag :type="row.vectorized ? 'success' : 'warning'">
+                {{ row.vectorized ? '已向量化' : '待处理' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="minioBucket" label="MinIO Bucket" min-width="180" resizable />
+          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <el-dropdown trigger="click" popper-class="knowledge-document-operation-menu"
+                @command="(command: string) => command === 'details' && showUploadedDetail(row)">
+                <el-button link size="small" class="action-more-btn">
+                  <el-icon><MoreFilled /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="details" :disabled="!row.vectorized">分块详情</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="document-card">
@@ -78,38 +89,47 @@
         <el-button type="primary" :icon="Search" :loading="loading" @click="applySearch">搜索</el-button>
       </div>
 
-      <el-table :data="documents" v-loading="loading" row-key="id" stripe>
-        <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.title || '无标题' }}</template>
-        </el-table-column>
-        <el-table-column prop="snippet" label="内容摘要" min-width="280" show-overflow-tooltip />
-        <el-table-column prop="spiderName" label="来源" width="150" show-overflow-tooltip />
-        <el-table-column label="收录状态" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.excluded ? 'info' : 'success'" effect="light">
-              {{ row.excluded ? '已排除' : '已收录' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="showDetail(row)">详情</el-button>
-            <el-button link type="primary" :loading="vectorizingId === row.id"
-              :disabled="Boolean(vectorizingId) || rebuilding || !stats.enabled"
-              @click="vectorizeDocument(row)">
-              {{ row.excluded ? '重新纳入' : '重新向量化' }}
-            </el-button>
-            <el-button v-if="!row.excluded" link type="danger"
-              :disabled="Boolean(vectorizingId) || rebuilding" @click="excludeDocument(row)">
-              排除
-            </el-button>
-          </template>
-        </el-table-column>
-        <template #empty><el-empty description="没有找到知识库文档" /></template>
-      </el-table>
+      <div class="table-scroll-wrapper">
+        <el-table :data="documents" v-loading="loading" row-key="id" stripe resizable border>
+          <el-table-column prop="title" label="标题" min-width="180" fixed="left" show-overflow-tooltip resizable>
+            <template #default="{ row }">{{ row.title || '无标题' }}</template>
+          </el-table-column>
+          <el-table-column prop="snippet" label="内容摘要" min-width="280" show-overflow-tooltip resizable />
+          <el-table-column prop="spiderName" label="来源" width="150" show-overflow-tooltip resizable />
+          <el-table-column label="收录状态" width="110" resizable>
+            <template #default="{ row }">
+              <el-tag :type="row.excluded ? 'info' : 'success'" effect="light">
+                {{ row.excluded ? '已排除' : '已收录' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <el-dropdown trigger="click" popper-class="knowledge-document-operation-menu"
+                @command="(command: string) => handleDocumentCommand(command, row)">
+                <el-button link size="small" class="action-more-btn"><el-icon><MoreFilled /></el-icon></el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="detail">文档详情</el-dropdown-item>
+                    <el-dropdown-item command="vectorize"
+                      :disabled="Boolean(vectorizingId) || rebuilding || !stats.enabled">
+                      {{ row.excluded ? '重新纳入' : '重新向量化' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="!row.excluded" command="exclude" divided
+                      :disabled="Boolean(vectorizingId) || rebuilding" class="is-danger">
+                      排除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </template>
+          </el-table-column>
+          <template #empty><el-empty description="没有找到知识库文档" /></template>
+        </el-table>
+      </div>
 
       <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total"
-        :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next"
+        :page-sizes="[10, 15, 20, 50, 100]" layout="total, sizes, prev, pager, next, jumper"
         class="pagination" @change="loadDocuments" />
     </el-card>
 
@@ -152,7 +172,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
+import { MoreFilled, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
 import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
   getKnowledgeBaseDocumentChunks,
@@ -216,6 +236,12 @@ const routeKnowledgeBaseId = computed(() => {
   if (typeof queryId === 'string') return queryId
   return ''
 })
+
+function handleDocumentCommand(command: string, row: KnowledgeDocument) {
+  if (command === 'detail') void showDetail(row)
+  else if (command === 'vectorize') void vectorizeDocument(row)
+  else if (command === 'exclude') void excludeDocument(row)
+}
 
 async function loadStats() {
   statsLoading.value = true
@@ -477,6 +503,13 @@ onMounted(loadAll)
 .index-info { display: flex; gap: 16px; margin-bottom: 12px; color: var(--el-text-color-secondary); font-size: 12px; }
 .filter-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto auto; gap: 12px; margin-bottom: 12px; }
 .pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
+.action-more-btn { font-weight: 700; color: var(--teal); }
+.action-more-btn:hover { color: var(--teal-hover); }
+:global(.knowledge-document-operation-menu .el-dropdown-menu__item.is-danger:not(.is-disabled)) { color: var(--el-color-danger); }
+:global(.knowledge-document-operation-menu .el-dropdown-menu__item.is-danger:not(.is-disabled):hover) {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
 .detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); }
 .document-content { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chunk-list { margin-top: 4px; }

@@ -190,10 +190,15 @@ CREATE TABLE IF NOT EXISTS ai_rag_chat_model (
     chat_base_url VARCHAR(512) NOT NULL,
     chat_model VARCHAR(128) NOT NULL,
     api_key VARCHAR(1024) NOT NULL DEFAULT '',
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
+    default_model_guard TINYINT GENERATED ALWAYS AS (
+        CASE WHEN is_default = 1 THEN 1 ELSE NULL END
+    ) STORED,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_ai_rag_chat_model_name (name)
+    UNIQUE KEY uk_ai_rag_chat_model_name (name),
+    UNIQUE KEY uk_ai_rag_chat_model_default (default_model_guard)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO ai_rag_chat_model (
@@ -201,6 +206,14 @@ INSERT IGNORE INTO ai_rag_chat_model (
 )
 SELECT CONCAT('默认聊天模型-', environment), chat_provider, chat_base_url, chat_model, api_key
 FROM ai_rag_config;
+
+SELECT COALESCE(MAX(CASE WHEN is_default = 1 THEN id END), MIN(id))
+INTO @default_chat_model_id
+FROM ai_rag_chat_model;
+
+UPDATE ai_rag_chat_model
+SET is_default = 1
+WHERE id = @default_chat_model_id;
 
 UPDATE ai_rag_config config
 JOIN ai_rag_chat_model model

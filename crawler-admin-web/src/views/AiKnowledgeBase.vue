@@ -6,7 +6,6 @@
         <p>新建和维护知识库，配置源索引、向量索引及向量模型。</p>
       </div>
       <div class="heading-actions">
-        <el-button :icon="Plus" @click="openDocumentManagement">文档管理</el-button>
         <el-button type="primary" :icon="Plus" @click="openCreate">新建知识库</el-button>
       </div>
     </header>
@@ -48,9 +47,6 @@
           <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip resizable />
           <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
           <el-table-column prop="vectorModelName" label="向量模型" min-width="180" show-overflow-tooltip resizable />
-          <el-table-column prop="sourceIndex" label="源索引" min-width="160" show-overflow-tooltip resizable />
-          <el-table-column prop="vectorIndex" label="向量索引" min-width="160" show-overflow-tooltip resizable />
-          <el-table-column prop="vectorField" label="向量字段" min-width="160" show-overflow-tooltip resizable />
           <el-table-column label="来源类型" min-width="120" align="center" resizable>
             <template #default="{ row }">
               <el-tag size="small" effect="light">
@@ -58,6 +54,9 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="sourceIndex" label="源索引" min-width="160" show-overflow-tooltip resizable />
+          <el-table-column prop="vectorIndex" label="向量索引" min-width="160" show-overflow-tooltip resizable />
+          <el-table-column prop="vectorField" label="向量字段" min-width="160" show-overflow-tooltip resizable />
           <el-table-column label="状态" min-width="100" align="center" resizable>
             <template #default="{ row }">
               <el-tag size="small" :type="row.enabled ? 'success' : 'info'">
@@ -351,7 +350,7 @@ onMounted(loadAll)
 <style scoped>
 .knowledge-page { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
-.page-heading h1 { margin: 0 0 6px; }
+.page-heading h1 { margin: 0 0 6px; font-size: 22px; }
 .page-heading p { margin: 0; color: var(--el-text-color-secondary); }
 .heading-actions { display: flex; align-items: center; gap: 8px; }
 .knowledge-filters { display: flex; flex-wrap: wrap; gap: 0 12px; }

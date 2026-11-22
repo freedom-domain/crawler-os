@@ -83,6 +83,11 @@ public class ChatModelService {
         validate(request);
         ensureUniqueName(request.getName(), null);
         AiRagChatModel model = fromRequest(request);
+        boolean makeDefault = Boolean.TRUE.equals(request.getDefaultModel())
+                || chatModelMapper.selectCount(new LambdaQueryWrapper<AiRagChatModel>()
+                        .eq(AiRagChatModel::getIsDefault, true)) == 0;
+        if (makeDefault) clearDefaultModel(null);
+        model.setIsDefault(makeDefault);
         model.setApiKey(request.getApiKey() == null ? "" : request.getApiKey().trim());
         model.setCreateTime(LocalDateTime.now());
         model.setUpdateTime(model.getCreateTime());
@@ -99,6 +104,10 @@ public class ChatModelService {
         ensureUniqueName(request.getName(), id);
         AiRagChatModel previous = copy(model);
         copyRequest(request, model);
+        if (Boolean.TRUE.equals(request.getDefaultModel())) {
+            clearDefaultModel(id);
+            model.setIsDefault(true);
+        }
         if (Boolean.TRUE.equals(request.getClearApiKey())) {
             model.setApiKey("");
         } else if (StringUtils.hasText(request.getApiKey())) {
@@ -119,7 +128,7 @@ public class ChatModelService {
 
     @Transactional
     public void delete(Long id) {
-        requireModel(id);
+        AiRagChatModel model = requireModel(id);
         Long references = configMapper.selectCount(new LambdaQueryWrapper<AiRagConfig>()
                 .eq(AiRagConfig::getChatModelId, id));
         if (references > 0) {
@@ -127,6 +136,33 @@ public class ChatModelService {
         }
         if (chatModelMapper.deleteById(id) != 1) {
             throw new IllegalStateException("删除聊天模型失败");
+        }
+        if (Boolean.TRUE.equals(model.getIsDefault())) {
+            AiRagChatModel nextDefault = chatModelMapper.selectOne(
+                    new LambdaQueryWrapper<AiRagChatModel>()
+                            .orderByAsc(AiRagChatModel::getId)
+                            .last("LIMIT 1"));
+            if (nextDefault != null) {
+                nextDefault.setIsDefault(true);
+                nextDefault.setUpdateTime(LocalDateTime.now());
+                if (chatModelMapper.updateById(nextDefault) != 1) {
+                    throw new IllegalStateException("重新指定默认聊天模型失败");
+                }
+            }
+        }
+    }
+
+    private void clearDefaultModel(Long exceptId) {
+        LambdaQueryWrapper<AiRagChatModel> query = new LambdaQueryWrapper<AiRagChatModel>()
+                .eq(AiRagChatModel::getIsDefault, true);
+        if (exceptId != null) query.ne(AiRagChatModel::getId, exceptId);
+        List<AiRagChatModel> defaults = chatModelMapper.selectList(query);
+        for (AiRagChatModel model : defaults) {
+            model.setIsDefault(false);
+            model.setUpdateTime(LocalDateTime.now());
+            if (chatModelMapper.updateById(model) != 1) {
+                throw new IllegalStateException("更新默认聊天模型失败");
+            }
         }
     }
 
@@ -205,6 +241,7 @@ public class ChatModelService {
         copy.setChatModel(source.getChatModel());
         copy.setContextLength(source.getContextLength());
         copy.setApiKey(source.getApiKey());
+        copy.setIsDefault(source.getIsDefault());
         copy.setCreateTime(source.getCreateTime());
         copy.setUpdateTime(source.getUpdateTime());
         return copy;
@@ -220,6 +257,7 @@ public class ChatModelService {
         response.setContextLength(model.getContextLength() == null
                 ? DEFAULT_CONTEXT_LENGTH : model.getContextLength());
         response.setApiKeyConfigured(StringUtils.hasText(model.getApiKey()));
+        response.setDefaultModel(Boolean.TRUE.equals(model.getIsDefault()));
         return response;
     }
 

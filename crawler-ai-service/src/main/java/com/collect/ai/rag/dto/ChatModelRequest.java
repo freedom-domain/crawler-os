@@ -11,4 +11,5 @@ public class ChatModelRequest {
     private Integer contextLength;
     private String apiKey;
     private Boolean clearApiKey;
+    private Boolean defaultModel;
 }

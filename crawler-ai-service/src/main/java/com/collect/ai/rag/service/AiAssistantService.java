@@ -78,6 +78,16 @@ public class AiAssistantService {
         return toResponse(assistant);
     }
 
+    public boolean hasKnowledgeBase(Long assistantId, Long knowledgeBaseId) {
+        LambdaQueryWrapper<AiAssistantKnowledgeBase> query =
+                new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
+                        .eq(AiAssistantKnowledgeBase::getAssistantId, assistantId);
+        if (knowledgeBaseId != null) {
+            query.eq(AiAssistantKnowledgeBase::getKnowledgeBaseId, knowledgeBaseId);
+        }
+        return assistantKnowledgeBaseMapper.selectCount(query) > 0;
+    }
+
     @Transactional
     public AiAssistantDtos.Response create(AiAssistantDtos.Request request) {
         validate(request);

@@ -20,6 +20,7 @@ public class AiRagChatModel {
     private String chatModel;
     private Integer contextLength = 8192;
     private String apiKey;
+    private Boolean isDefault;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

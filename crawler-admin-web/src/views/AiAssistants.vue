@@ -1,5 +1,5 @@
 <template>
-  <el-card class="assistant-page" v-loading="loading">
+  <div class="assistant-page" v-loading="loading">
     <div class="card-header">
       <div>
         <h2>智能体管理</h2>
@@ -8,71 +8,73 @@
       <el-button type="primary" :icon="Plus" @click="openCreate">新增智能体</el-button>
     </div>
 
-    <el-form class="assistant-toolbar" :inline="true" @submit.prevent>
-      <el-form-item>
-        <el-input
-          v-model="keyword"
-          placeholder="搜索智能体名称、简介或知识库"
-          clearable
-          @keyup.enter="searchAssistants"
-        />
-      </el-form-item>
-      <el-form-item>
-        <el-select v-model="enabledFilter" placeholder="全部状态" clearable style="width: 130px">
-          <el-option label="已启用" :value="true" />
-          <el-option label="已停用" :value="false" />
-        </el-select>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" :icon="Search" @click="searchAssistants">查询</el-button>
-        <el-button @click="resetFilters">重置</el-button>
-      </el-form-item>
-    </el-form>
+    <div class="assistant-list-panel">
+      <el-form class="assistant-toolbar" :inline="true" @submit.prevent>
+        <el-form-item>
+          <el-input
+            v-model="keyword"
+            placeholder="搜索智能体名称、简介或知识库"
+            clearable
+            @keyup.enter="searchAssistants"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-select v-model="enabledFilter" placeholder="全部状态" clearable style="width: 130px">
+            <el-option label="已启用" :value="true" />
+            <el-option label="已停用" :value="false" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :icon="Search" @click="searchAssistants">查询</el-button>
+          <el-button @click="resetFilters">重置</el-button>
+        </el-form-item>
+      </el-form>
 
-    <div class="table-scroll-wrapper">
-      <el-table :data="assistants" v-loading="loading" empty-text="暂无智能体" stripe resizable border>
-        <el-table-column prop="id" label="ID" min-width="80" resizable />
-        <el-table-column prop="name" label="智能体名称" min-width="180" resizable />
-        <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
-        <el-table-column label="知识库" min-width="220" show-overflow-tooltip resizable>
-          <template #default="{ row }">
-            {{ row.knowledgeBaseNames?.length ? row.knowledgeBaseNames.join('、') : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100" resizable>
-          <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" effect="light">
-              {{ row.enabled ? '已启用' : '已停用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="sort" label="排序" width="80" resizable />
-        <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
-          <template #default="{ row }">{{ formatDateTime(row.createTime) || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
-          <template #default="{ row }">{{ formatDateTime(row.updateTime) || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right" resizable>
-          <template #default="{ row }">
-            <el-button v-if="row.enabled" link type="success" @click="startConversation(row)">开始对话</el-button>
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeAssistant(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll-wrapper">
+        <el-table :data="assistants" v-loading="loading" empty-text="暂无智能体" stripe resizable border>
+          <el-table-column prop="name" label="智能体名称" min-width="180" fixed="left" show-overflow-tooltip resizable />
+          <el-table-column prop="id" label="ID" min-width="80" resizable />
+          <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
+          <el-table-column label="知识库" min-width="220" show-overflow-tooltip resizable>
+            <template #default="{ row }">
+              {{ row.knowledgeBaseNames?.length ? row.knowledgeBaseNames.join('、') : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="100" resizable>
+            <template #default="{ row }">
+              <el-tag :type="row.enabled ? 'success' : 'info'" effect="light">
+                {{ row.enabled ? '已启用' : '已停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="sort" label="排序" width="80" resizable />
+          <el-table-column prop="createTime" label="创建时间" min-width="180" resizable>
+            <template #default="{ row }">{{ formatDateTime(row.createTime) || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="updateTime" label="更新时间" min-width="180" resizable>
+            <template #default="{ row }">{{ formatDateTime(row.updateTime) || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
+            <template #default="{ row }">
+              <TableRowActions
+                :items="rowActions(row)"
+                @command="command => handleRowAction(command, row)"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <el-pagination
+        v-model:current-page="page"
+        v-model:page-size="pageSize"
+        :total="total"
+        :page-sizes="[10, 15, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @change="loadAssistantPage"
+      />
     </div>
 
-    <el-pagination
-      v-model:current-page="page"
-      v-model:page-size="pageSize"
-      :total="total"
-      :page-sizes="[10, 15, 20, 50, 100]"
-      layout="total, sizes, prev, pager, next, jumper"
-      @change="loadAssistantPage"
-    />
-
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑智能体' : '新增智能体'" width="680px" @closed="resetForm">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑智能体' : '新增智能体'" width="680px" top="8vh" class="assistant-edit-dialog" @closed="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
         <el-form-item label="智能体名称" prop="name">
           <el-input v-model="form.name" maxlength="64" placeholder="例如：技术文档智能体" />
@@ -112,7 +114,7 @@
         <el-button type="primary" :loading="saving" @click="saveAssistant">保存</el-button>
       </template>
     </el-dialog>
-  </el-card>
+  </div>
 
   <el-dialog
     v-model="knowledgeBaseDialogVisible"
@@ -153,12 +155,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { ChatDotRound, Delete, Edit, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   createAssistant, deleteAssistant, getAssistantPage, getKnowledgeBases, updateAssistant
 } from '@/api'
 import { formatDateTime } from '@/utils/dateTime'
+import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
 interface Assistant {
   id: string
@@ -204,6 +207,11 @@ const selectedKnowledgeBaseNames = computed(() => {
     .filter((base: any) => selected.has(base.id))
     .map((base: any) => base.name)
 })
+const rowActions = (assistant: Assistant): TableRowAction[] => [
+  { command: 'chat', label: '开始对话', icon: ChatDotRound, disabled: !assistant.enabled },
+  { command: 'edit', label: '编辑', icon: Edit },
+  { command: 'delete', label: '删除', icon: Delete, danger: true }
+]
 
 function searchAssistants() {
   page.value = 1
@@ -280,6 +288,12 @@ function startConversation(row: Assistant) {
   void router.push(`/ai-chat?assistantId=${encodeURIComponent(row.id)}&new=1`)
 }
 
+function handleRowAction(command: string, row: Assistant) {
+  if (command === 'chat' && row.enabled) startConversation(row)
+  else if (command === 'edit') openEdit(row)
+  else if (command === 'delete') void removeAssistant(row)
+}
+
 function openKnowledgeBaseDialog() {
   knowledgeBaseDraftIds.value = [...form.knowledgeBaseIds]
   knowledgeBaseDialogVisible.value = true
@@ -327,6 +341,8 @@ onMounted(loadAll)
 
 <style scoped>
 .assistant-page { margin: 16px; }
+.assistant-list-panel { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.assistant-list-panel :deep(.el-pagination) { margin-top: 12px; }
 .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .card-header h2 { margin:0 0 6px; }
 .card-header p { margin:0; color:var(--el-text-color-secondary); }
@@ -415,6 +431,8 @@ onMounted(loadAll)
 }
 .knowledge-base-option-status { color: var(--ink-500); font-size: 10px; }
 .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+:deep(.assistant-edit-dialog) { max-height: 84vh; display: flex; flex-direction: column; }
+:deep(.assistant-edit-dialog .el-dialog__body) { min-height: 0; overflow-y: auto; }
 :deep(.assistant-chat-dialog .el-dialog__body) { height: calc(92vh - 54px); padding: 0; overflow: hidden; }
 :deep(.assistant-chat-dialog .ai-chat-page) { height: 100%; min-height: 420px; margin: 0; border: 0; border-radius: 0; }
 @media (max-width: 700px) { .card-header { align-items:flex-start; gap:12px; } .form-grid { grid-template-columns:1fr; } }

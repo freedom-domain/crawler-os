@@ -83,6 +83,24 @@ public class AiChatHistoryController {
         return R.ok(aiAssistantService.listEnabled());
     }
 
+    @PostMapping("/suggestions")
+    public R<List<String>> generateSuggestions(
+            @RequestBody(required = false) AiChatDtos.SuggestionRequest request) {
+        requireChatPermission();
+        com.collect.ai.rag.dto.AiAssistantDtos.Response assistant = null;
+        Long chatModelId = null;
+        if (request != null) {
+            chatModelId = request.getChatModelId();
+            if (request.getAssistantId() != null) {
+                assistant = aiAssistantService.get(request.getAssistantId());
+                if (!Boolean.TRUE.equals(assistant.getEnabled())) {
+                    throw new BizException("智能体已停用");
+                }
+            }
+        }
+        return R.ok(ragService.generateSuggestedQuestions(assistant, chatModelId));
+    }
+
     @PostMapping
     public R<AiChatDtos.ConversationResponse> createConversation(
             @RequestParam(required = false) Long assistantId) {
@@ -130,11 +148,16 @@ public class AiChatHistoryController {
             @PathVariable Long conversationId,
             @RequestParam String documentId,
             @RequestParam(required = false) Long knowledgeBaseId,
+            @RequestParam(required = false) String chunkId,
             HttpServletResponse response) {
         requireChatPermission();
         validateSourceAccess(conversationId, documentId, knowledgeBaseId);
         response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         response.setHeader("Pragma", "no-cache");
+        if (chunkId != null && !chunkId.isBlank()) {
+            return R.ok(ragService.getKnowledgeBaseDocumentChunk(
+                    knowledgeBaseId, documentId, chunkId));
+        }
         return R.ok(ragService.getKnowledgeBaseDocumentChunks(knowledgeBaseId, documentId));
     }
 
@@ -143,17 +166,13 @@ public class AiChatHistoryController {
             throw new BizException("来源文档 ID 不能为空");
         }
         Long userId = LoginUtils.getUserId();
-        historyService.requireOwnedConversation(userId, conversationId);
-        Long assistantId = historyService.getAssistantId(userId, conversationId);
+        Long assistantId = historyService.getOwnedConversationAssistantId(userId, conversationId);
         if (assistantId != null) {
-            List<Long> allowedKnowledgeBaseIds =
-                    aiAssistantService.get(assistantId).getKnowledgeBaseIds();
             if (knowledgeBaseId != null
-                    && (allowedKnowledgeBaseIds == null || !allowedKnowledgeBaseIds.contains(knowledgeBaseId))) {
+                    && !aiAssistantService.hasKnowledgeBase(assistantId, knowledgeBaseId)) {
                 throw new BizException("该来源不属于当前智能体的知识库");
             }
-            if (knowledgeBaseId == null && allowedKnowledgeBaseIds != null
-                    && !allowedKnowledgeBaseIds.isEmpty()) {
+            if (knowledgeBaseId == null && aiAssistantService.hasKnowledgeBase(assistantId, null)) {
                 throw new BizException("参考来源缺少知识库信息，请重新提问后查看原文");
             }
         } else if (knowledgeBaseId != null) {

@@ -1,5 +1,5 @@
 <template>
-  <el-card class="ai-models-page">
+  <div class="ai-models-page">
     <div class="page-header">
       <div>
         <h2>模型管理</h2>
@@ -7,14 +7,14 @@
       </div>
     </div>
     <el-tabs :model-value="activeTab" @tab-change="changeTab">
-      <el-tab-pane label="向量模型" name="vector" lazy>
-        <AiVectorModels embedded />
-      </el-tab-pane>
       <el-tab-pane label="大语言模型" name="chat" lazy>
         <AiChatModels embedded />
       </el-tab-pane>
+      <el-tab-pane label="向量模型" name="vector" lazy>
+        <AiVectorModels embedded />
+      </el-tab-pane>
     </el-tabs>
-  </el-card>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -25,7 +25,7 @@ import AiVectorModels from '@/views/AiVectorModels.vue'
 
 const route = useRoute()
 const router = useRouter()
-const activeTab = computed(() => route.query.tab === 'chat' ? 'chat' : 'vector')
+const activeTab = computed(() => route.query.tab === 'vector' ? 'vector' : 'chat')
 
 const changeTab = (tab: string | number) => {
   const query = { ...route.query }
