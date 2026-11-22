@@ -16,6 +16,7 @@ import com.collect.ai.rag.service.AiKnowledgeBaseService;
 import com.collect.ai.rag.service.ChatModelService;
 import com.collect.ai.rag.service.ModelDiscoveryService;
 import com.collect.ai.rag.service.RagConfigService;
+import com.collect.ai.rag.service.RagIndexRebuildTaskService;
 import com.collect.ai.rag.service.RagService;
 import com.collect.ai.rag.service.VectorModelService;
 import com.collect.common.exception.BizException;
@@ -50,6 +51,7 @@ public class RagController {
     private final ModelDiscoveryService modelDiscoveryService;
     private final AiAssistantService aiAssistantService;
     private final AiKnowledgeBaseService aiKnowledgeBaseService;
+    private final RagIndexRebuildTaskService ragIndexRebuildTaskService;
 
     @Operation(summary = "读取知识库上传文档列表")
     @GetMapping("/knowledge-bases/{id}/documents")
@@ -314,10 +316,33 @@ public class RagController {
 
     @Operation(summary = "同步 ES 文档并建立向量索引")
     @PostMapping("/sync")
-    public R<RagDtos.SyncResult> sync(
+    public R<RagDtos.SyncTaskResponse> sync(
             @RequestParam(required = false) Long knowledgeBaseId) {
         requirePermission("search:query");
-        return R.ok(ragService.syncContentIndex(knowledgeBaseId));
+        return R.ok(ragIndexRebuildTaskService.start(knowledgeBaseId));
+    }
+
+    @Operation(summary = "重建向量索引")
+    @PostMapping("/vector-index/rebuild")
+    public R<RagDtos.SyncTaskResponse> rebuildVectorIndex(
+            @RequestParam(required = false) Long knowledgeBaseId) {
+        requireAdmin();
+        return R.ok(ragIndexRebuildTaskService.start(knowledgeBaseId));
+    }
+
+    @Operation(summary = "查询向量索引重建任务状态")
+    @GetMapping("/sync/tasks/{taskId}")
+    public R<RagDtos.SyncTaskResponse> syncTask(@PathVariable String taskId) {
+        requirePermission("search:query");
+        return R.ok(ragIndexRebuildTaskService.get(taskId));
+    }
+
+    @Operation(summary = "读取最新向量索引重建任务")
+    @GetMapping("/sync/tasks/latest")
+    public R<RagDtos.SyncTaskResponse> latestSyncTask(
+            @RequestParam(required = false) Long knowledgeBaseId) {
+        requirePermission("search:query");
+        return R.ok(ragIndexRebuildTaskService.latest(knowledgeBaseId));
     }
 
     @Operation(summary = "读取知识库索引状态")

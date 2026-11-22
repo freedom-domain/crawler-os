@@ -36,6 +36,18 @@ public final class RagDtos {
     }
 
     @Data
+    public static class SyncTaskResponse {
+        private String taskId;
+        private Long knowledgeBaseId;
+        private String status;
+        private String message;
+        private SyncResult result;
+        private Long createdAt;
+        private Long startedAt;
+        private Long completedAt;
+    }
+
+    @Data
     public static class DocumentVectorizationResult {
         private String documentId;
         private long chunks;
