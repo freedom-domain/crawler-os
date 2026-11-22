@@ -161,6 +161,19 @@ public class AiChatHistoryController {
         return R.ok(ragService.getKnowledgeBaseDocumentChunks(knowledgeBaseId, documentId));
     }
 
+    @GetMapping("/{conversationId}/source/chunks/count")
+    public R<Long> getSourceChunkCount(
+            @PathVariable Long conversationId,
+            @RequestParam String documentId,
+            @RequestParam(required = false) Long knowledgeBaseId,
+            HttpServletResponse response) {
+        requireChatPermission();
+        validateSourceAccess(conversationId, documentId, knowledgeBaseId);
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(ragService.getKnowledgeBaseDocumentChunkCount(knowledgeBaseId, documentId));
+    }
+
     private void validateSourceAccess(Long conversationId, String documentId, Long knowledgeBaseId) {
         if (documentId == null || documentId.isBlank()) {
             throw new BizException("来源文档 ID 不能为空");

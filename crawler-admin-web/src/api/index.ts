@@ -164,6 +164,14 @@ export const getChatSourceDocumentChunks = (
     ...(chunkId ? { chunkId } : {})
   }
 })
+export const getChatSourceDocumentChunkCount = (
+  conversationId: number,
+  documentId: string,
+  knowledgeBaseId?: string
+) => request.get(`/ai/chat/conversations/${conversationId}/source/chunks/count`, {
+  ...chatRequestConfig,
+  params: { documentId, ...(knowledgeBaseId ? { knowledgeBaseId } : {}) }
+})
 export const clearChatMessages = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
 export const sendChatMessage = (id: number, data: { question: string; topK: number; chatModelId?: string | number }) =>

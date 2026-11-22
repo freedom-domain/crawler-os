@@ -701,7 +701,8 @@ import DOMPurify from 'dompurify'
 import {
   cancelChatMessage, chatConversationCreate, chatConversationDelete, chatConversationList,
   chatConversationRename, chatMessages, clearChatMessages, generateChatSuggestions, getChatAssistants, getChatModels,
-  getChatSourceDocument, getChatSourceDocumentChunks, resumeChatMessageStream, searchDetail, streamChatMessage
+  getChatSourceDocument, getChatSourceDocumentChunkCount, getChatSourceDocumentChunks,
+  resumeChatMessageStream, searchDetail, streamChatMessage
 } from '@/api'
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
@@ -930,18 +931,20 @@ const openSourcePreview = (source: SourceReference) => {
     sourcePreviewLoading.value = false
     return
   }
-  void getChatSourceDocumentChunks(
-    conversationId, source.id, source.knowledgeBaseId, source.chunkId
-  )
-    .then((response: any) => {
+  void getChatSourceDocumentChunkCount(conversationId, source.id, source.knowledgeBaseId)
+    .then(async (countResponse: any) => {
       if (requestId !== sourcePreviewRequestId) return
-      sourceChunks.value = response?.data || []
-      if (sourceChunks.value.length === 1 && !source.chunkId) {
+      if (Number(countResponse?.data) === 1) {
         sourcePreviewLoading.value = false
         sourcePreviewVisible.value = false
         void openSourceOriginalPreview()
         return
       }
+      const response: any = await getChatSourceDocumentChunks(
+        conversationId, source.id, source.knowledgeBaseId, source.chunkId
+      )
+      if (requestId !== sourcePreviewRequestId) return
+      sourceChunks.value = response?.data || []
       selectedSourceChunk.value = sourceChunks.value.find(chunk => chunk.chunkId === source.chunkId)
         || sourceChunks.value.find(chunk =>
           source.snippet && (chunk.content.startsWith(source.snippet) || source.snippet.startsWith(chunk.content))

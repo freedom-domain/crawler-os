@@ -602,6 +602,34 @@ public class RagService {
         }
     }
 
+    public long getKnowledgeBaseDocumentChunkCount(Long knowledgeBaseId, String documentId) {
+        String vectorIndex;
+        if (knowledgeBaseId == null) {
+            ensureEnabled();
+            vectorIndex = properties.resolveVectorIndex();
+        } else {
+            AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+            if (base == null) throw new BizException("知识库不存在");
+            vectorIndex = base.getVectorIndex();
+        }
+        ObjectNode body = objectMapper.createObjectNode();
+        body.set("query", objectMapper.createObjectNode()
+                .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
+        try {
+            HttpResponse<String> response = elasticsearchRequest(
+                    "POST", "/" + vectorIndex + "/_count", toJson(body));
+            if (response.statusCode() == 404) return 0;
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("读取文档分块数量失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            return objectMapper.readTree(response.body()).path("count").asLong();
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("读取文档分块数量失败: " + e.getMessage(), e);
+        }
+    }
+
     public java.util.List<KnowledgeBaseDtos.VectorChunk> getKnowledgeBaseDocumentChunk(
             Long knowledgeBaseId, String documentId, String chunkId) {
         if (knowledgeBaseId == null) {
