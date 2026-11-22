@@ -78,6 +78,9 @@ public class RagService {
             String answer, long waitDurationMs, Long thinkingDurationMs, long generationDurationMs) {
     }
 
+    private record KnowledgeVectorChunk(String documentId, int chunkIndex, String title, String content) {
+    }
+
     private final RagProperties properties;
     private final ObjectMapper objectMapper;
     private final SpiderMapper spiderMapper;
@@ -105,55 +108,31 @@ public class RagService {
         if (model == null) throw new BizException("知识库向量模型不存在");
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType()) ? base.getId() : null;
         List<JsonNode> documents = fetchContentDocuments(base.getSourceIndex(), ownerKnowledgeBaseId);
+        deleteKnowledgeVectorIndex(base.getVectorIndex());
         ensureKnowledgeVectorIndex(base, model);
-        deleteKnowledgeVectorIndexDocuments(base.getVectorIndex(), model.getEmbeddingModel());
         List<ObjectNode> operations = new ArrayList<>();
+        List<KnowledgeVectorChunk> embeddingBatch = new ArrayList<>(EMBEDDING_BATCH_SIZE);
         long chunks = 0;
+        int chunkSize = model.getChunkSize() == null ? 1500 : Math.max(200, model.getChunkSize());
+        int overlap = model.getChunkOverlap() == null ? 200
+                : Math.max(0, Math.min(model.getChunkOverlap(), chunkSize - 1));
         for (JsonNode document : documents) {
             JsonNode source = document.path("_source");
             String id = document.path("_id").asText();
             String title = source.path("title").asText("");
             String content = source.path("content").asText("");
-            int chunkSize = model.getChunkSize() == null ? 1500 : Math.max(200, model.getChunkSize());
-            int overlap = model.getChunkOverlap() == null ? 200
-                    : Math.max(0, Math.min(model.getChunkOverlap(), chunkSize - 1));
             List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
-            List<ObjectNode> documentOperations = new ArrayList<>(parts.size() * 2);
-            try {
-                for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
-                    List<String> batch = parts.subList(start,
-                            Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
-                    List<List<Double>> embeddings = createEmbeddings(
-                            batch, model, model.getDimensions());
-                    for (int i = 0; i < batch.size(); i++) {
-                        String chunkId = id + ":" + (start + i);
-                        documentOperations.add(objectMapper.createObjectNode()
-                                .set("index", objectMapper.createObjectNode()
-                                        .put("_index", base.getVectorIndex()).put("_id", chunkId)));
-                        ObjectNode row = objectMapper.createObjectNode();
-                        row.put("doc_id", id).put("chunk_id", chunkId)
-                                .put("title", title).put("content", batch.get(i))
-                                .put("url", "").put("spiderName", "上传文档")
-                                .put("knowledgeBaseId", base.getId())
-                                .put("embedding_model", model.getEmbeddingModel());
-                        ArrayNode vector = row.putArray(base.getVectorField());
-                        embeddings.get(i).forEach(vector::add);
-                        documentOperations.add(row);
-                    }
-                }
-            } catch (RuntimeException e) {
-                log.warn("知识库文档向量化失败: knowledgeBaseId={}, documentId={}",
-                        knowledgeBaseId, id, e);
-                continue;
-            }
-            if (!documentOperations.isEmpty()) {
-                operations.addAll(documentOperations);
-                chunks += parts.size();
-                if (operations.size() >= 200) {
-                    bulkOperations(operations, false);
-                    operations.clear();
+            for (int i = 0; i < parts.size(); i++) {
+                embeddingBatch.add(new KnowledgeVectorChunk(id, i, title, parts.get(i)));
+                if (embeddingBatch.size() == EMBEDDING_BATCH_SIZE) {
+                    chunks += indexKnowledgeBaseChunkBatch(
+                            base, model, embeddingBatch, operations);
+                    embeddingBatch.clear();
                 }
             }
+        }
+        if (!embeddingBatch.isEmpty()) {
+            chunks += indexKnowledgeBaseChunkBatch(base, model, embeddingBatch, operations);
         }
         if (!operations.isEmpty()) {
             bulkOperations(operations, false);
@@ -164,6 +143,36 @@ public class RagService {
         result.setChunks(chunks);
         result.setVectorDocuments(chunks);
         return result;
+    }
+
+    private long indexKnowledgeBaseChunkBatch(
+            AiKnowledgeBase base,
+            AiRagVectorModel model,
+            List<KnowledgeVectorChunk> batch,
+            List<ObjectNode> operations) {
+        List<String> texts = batch.stream().map(KnowledgeVectorChunk::content).toList();
+        List<List<Double>> embeddings = createEmbeddings(texts, model, model.getDimensions());
+        for (int i = 0; i < batch.size(); i++) {
+            KnowledgeVectorChunk chunk = batch.get(i);
+            String chunkId = chunk.documentId() + ":" + chunk.chunkIndex();
+            operations.add(objectMapper.createObjectNode()
+                    .set("index", objectMapper.createObjectNode()
+                            .put("_index", base.getVectorIndex()).put("_id", chunkId)));
+            ObjectNode row = objectMapper.createObjectNode();
+            row.put("doc_id", chunk.documentId()).put("chunk_id", chunkId)
+                    .put("title", chunk.title()).put("content", chunk.content())
+                    .put("url", "").put("spiderName", "上传文档")
+                    .put("knowledgeBaseId", base.getId())
+                    .put("embedding_model", model.getEmbeddingModel());
+            ArrayNode vector = row.putArray(base.getVectorField());
+            embeddings.get(i).forEach(vector::add);
+            operations.add(row);
+        }
+        if (operations.size() >= 200) {
+            bulkOperations(operations, false);
+            operations.clear();
+        }
+        return batch.size();
     }
 
     public RagDtos.SyncResult syncContentIndex() {
@@ -890,23 +899,17 @@ public class RagService {
         deleteDocumentVectorsExcept(properties.resolveVectorIndex(), documentId, chunkIds);
     }
 
-    private void deleteKnowledgeVectorIndexDocuments(
-            String vectorIndex, String embeddingModel) {
-        ObjectNode body = objectMapper.createObjectNode()
-                .set("query", objectMapper.createObjectNode()
-                        .set("term", objectMapper.createObjectNode()
-                                .put("embedding_model", embeddingModel)));
+    private void deleteKnowledgeVectorIndex(String vectorIndex) {
         try {
-            HttpResponse<String> response = elasticsearchRequest("POST",
-                    "/" + vectorIndex + "/_delete_by_query?refresh=true&conflicts=proceed",
-                    toJson(body));
+            HttpResponse<String> response = elasticsearchRequest(
+                    "DELETE", "/" + vectorIndex, null);
             if (response.statusCode() >= 300 && response.statusCode() != 404) {
-                throw new IllegalStateException("清理知识库向量失败: " + response.statusCode()
+                throw new IllegalStateException("删除旧知识库向量索引失败: " + response.statusCode()
                         + " " + response.body());
             }
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
-            throw new IllegalStateException("清理知识库向量失败: " + e.getMessage(), e);
+            throw new IllegalStateException("删除旧知识库向量索引失败: " + e.getMessage(), e);
         }
     }
 
