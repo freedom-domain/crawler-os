@@ -1044,26 +1044,47 @@ public class RagService {
                 throw new IllegalStateException("聊天模型返回错误状态: " + response.statusCode());
             }
             JsonNode root = objectMapper.readTree(response.body());
-            String content = "ollama".equalsIgnoreCase(rag.getChatProvider())
-                    ? root.path("message").path("content").asText("")
-                    : root.path("choices").path(0).path("message").path("content").asText("");
+            boolean ollama = "ollama".equalsIgnoreCase(rag.getChatProvider());
+            JsonNode contentNode = ollama
+                    ? root.path("message").path("content")
+                    : root.path("choices").path(0).path("message").path("content");
+            String content = readChatContent(contentNode);
             String json = content.trim();
             int arrayStart = json.indexOf('[');
             int arrayEnd = json.lastIndexOf(']');
             if (arrayStart >= 0 && arrayEnd > arrayStart) {
                 json = json.substring(arrayStart, arrayEnd + 1);
+            } else {
+                json = json.replaceFirst("^```(?:json)?\\s*", "").replaceFirst("\\s*```$", "").trim();
             }
-            JsonNode generated = objectMapper.readTree(json);
-            JsonNode questions = generated.isArray() ? generated : generated.path("questions");
             List<String> result = new ArrayList<>();
-            if (questions.isArray()) {
-                for (JsonNode question : questions) {
-                    if (!question.isTextual()) continue;
-                    String value = question.asText().trim();
-                    if (!value.isEmpty() && value.length() <= 200 && !result.contains(value)) {
-                        result.add(value);
+            if (json.startsWith("[") || json.startsWith("{")) {
+                JsonNode generated = objectMapper.readTree(json);
+                JsonNode questions = generated.isArray()
+                        ? generated
+                        : firstArray(generated, "questions", "suggested_questions", "suggestions", "items");
+                if (questions.isArray()) {
+                    for (JsonNode question : questions) {
+                        String value = question.isTextual()
+                                ? question.asText()
+                                : firstSuggestedText(question, "question", "text", "content");
+                        addSuggestedQuestion(result, value);
+                        if (result.size() == 3) break;
                     }
-                    if (result.size() == 3) break;
+                }
+            }
+            if (result.isEmpty()) {
+                for (String line : content.split("\\R")) {
+                    String trimmedLine = line.trim();
+                    boolean listItem = trimmedLine.matches("^(?:[-*•]\\s*|\\d+[.)、．]\\s*).+");
+                    String value = trimmedLine
+                            .replaceFirst("^(?:[-*•]\\s*|\\d+[.)、．]\\s*)", "")
+                            .replaceAll("^[\"'“”‘’]+|[\"'“”‘’]+$", "")
+                            .trim();
+                    if (listItem || value.contains("?") || value.contains("？")) {
+                        addSuggestedQuestion(result, value);
+                        if (result.size() == 3) break;
+                    }
                 }
             }
             if (result.isEmpty()) {
@@ -1074,6 +1095,42 @@ public class RagService {
             log.warn("生成聊天默认问题失败: assistantId={}, model={}",
                     assistant == null ? null : assistant.getId(), safeLogValue(rag.getChatModel(), 128), e);
             throw new IllegalStateException("生成默认问题失败，请稍后重试", e);
+        }
+    }
+
+    private String readChatContent(JsonNode contentNode) {
+        if (contentNode.isTextual()) return contentNode.asText();
+        if (contentNode.isArray()) {
+            StringBuilder content = new StringBuilder();
+            for (JsonNode part : contentNode) {
+                JsonNode text = part.isTextual() ? part : part.path("text");
+                if (text.isTextual()) content.append(text.asText()).append('\n');
+            }
+            return content.toString();
+        }
+        return contentNode.path("text").asText("");
+    }
+
+    private JsonNode firstArray(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            JsonNode value = node.path(fieldName);
+            if (value.isArray()) return value;
+        }
+        return objectMapper.createArrayNode();
+    }
+
+    private String firstSuggestedText(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            JsonNode value = node.path(fieldName);
+            if (value.isTextual()) return value.asText();
+        }
+        return "";
+    }
+
+    private void addSuggestedQuestion(List<String> questions, String candidate) {
+        String question = candidate.trim();
+        if (!question.isEmpty() && question.length() <= 200 && !questions.contains(question)) {
+            questions.add(question);
         }
     }
 
