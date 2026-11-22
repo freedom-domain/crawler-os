@@ -92,12 +92,12 @@
       aria-label="调整聊天历史栏宽度"
       aria-orientation="vertical"
       :aria-valuemin="160"
-      :aria-valuemax="360"
-      :aria-valuenow="sidebarWidth"
+      :aria-valuemax="sidebarMaxWidth"
+      :aria-valuenow="Math.round(sidebarWidth)"
       tabindex="0"
       @pointerdown="startSidebarResize"
-      @keydown.left.prevent="resizeSidebarByKeyboard(-16)"
-      @keydown.right.prevent="resizeSidebarByKeyboard(16)"
+      @keydown.left.prevent="resizeSidebarByKeyboard(-1)"
+      @keydown.right.prevent="resizeSidebarByKeyboard(1)"
     />
 
     <section class="chat-main">
@@ -760,16 +760,18 @@ let suggestionRequestId = 0
 let requestedSuggestionKey = ''
 const conversations = ref<Conversation[]>([])
 const sidebarCollapsed = ref(false)
-const sidebarWidth = ref(typeof window !== 'undefined' && window.innerWidth <= 800 ? 190 : 224)
+const sidebarWidth = ref(224)
 const isResizingSidebar = ref(false)
 const chatPageRef = ref<HTMLElement | null>(null)
 const chatSidebarRef = ref<HTMLElement | null>(null)
 let sidebarResizeStartX = 0
 let sidebarResizeStartWidth = 0
+const sidebarMaxWidth = computed(() => {
+  const pageWidth = chatPageRef.value?.clientWidth || 1
+  return Math.max(160, pageWidth * 0.45)
+})
 const resizeSidebarTo = (width: number) => {
-  const pageWidth = chatPageRef.value?.clientWidth || 800
-  const maxWidth = Math.min(360, Math.max(160, pageWidth - 320))
-  sidebarWidth.value = Math.max(160, Math.min(maxWidth, width))
+  sidebarWidth.value = Math.max(160, Math.min(sidebarMaxWidth.value, width))
 }
 const resizeSidebar = (event: PointerEvent) => {
   resizeSidebarTo(sidebarResizeStartWidth + event.clientX - sidebarResizeStartX)
@@ -790,7 +792,10 @@ const startSidebarResize = (event: PointerEvent) => {
   window.addEventListener('pointerup', stopSidebarResize)
   window.addEventListener('pointercancel', stopSidebarResize)
 }
-const resizeSidebarByKeyboard = (delta: number) => resizeSidebarTo(sidebarWidth.value + delta)
+const resizeSidebarByKeyboard = (deltaPercent: number) => {
+  const pageWidth = chatPageRef.value?.clientWidth || 1
+  resizeSidebarTo(sidebarWidth.value + pageWidth * deltaPercent / 100)
+}
 const selectedSource = ref<SourceReference | null>(null)
 const sourcePreviewVisible = ref(false)
 const sourcePreviewFullscreen = ref(false)
@@ -2373,8 +2378,25 @@ onActivated(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.retrieval-control :deep(.el-input__wrapper) { padding: 0 7px; box-shadow: none; background: var(--surface-soft); }
-.retrieval-control :deep(.el-input__inner) { height: 25px; font-size: 10px; }
+.retrieval-control :deep(.el-select__wrapper) {
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  box-shadow: 0 0 0 1px var(--chrome-line) inset;
+  transition: background-color .16s ease, box-shadow .16s ease;
+}
+.retrieval-control :deep(.el-select__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--line-strong) inset;
+}
+.retrieval-control :deep(.el-select__wrapper.is-focused) {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--teal) inset, 0 0 0 3px var(--focus-ring);
+}
+.retrieval-control :deep(.el-select__selected-item) {
+  color: var(--ink-700);
+  font-size: 10px;
+}
 .context-usage { display: flex; min-width: 0; align-items: center; justify-content: center; }
 .context-usage-trigger { position: relative; display: grid; width: 44px; height: 44px; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
 .context-usage-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -2439,8 +2461,8 @@ onActivated(() => {
   .retrieval-control { display: grid; grid-column: 1 / -1; grid-row: 1; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1.2fr); min-width: 0; gap: 5px; white-space: nowrap; }
   .retrieval-control :deep(.el-select) { width: 100%; min-width: 0; }
   .send-tools :deep(.chat-model-selector) { width: 144px; flex-basis: 144px; }
-  .retrieval-control :deep(.el-input__wrapper) { min-width: 0; padding: 0 5px; }
-  .retrieval-control :deep(.el-input__inner) { font-size: 9px; }
+  .retrieval-control :deep(.el-select__wrapper) { min-width: 0; padding: 0 5px; }
+  .retrieval-control :deep(.el-select__selected-item) { font-size: 9px; }
   .context-usage { grid-column: 1; grid-row: 2; justify-content: flex-start; }
   .send-tools { grid-column: 2; grid-row: 2; justify-content: flex-end; }
   .reasoning-summary-content { display: flex; width: 100%; box-sizing: border-box; gap: 4px 10px; margin-top: 6px; margin-left: 0; }
