@@ -1731,7 +1731,7 @@ const retryFailedMessage = async (message: ChatMessage) => {
 
 const loadChatSuggestions = async () => {
   if (!assistantsLoaded.value || !chatModelsLoaded.value
-    || loadingConversations.value || activeConversation.value?.messages.length) return
+    || !canGenerateChatSuggestions()) return
   const assistantId = routeSelectedAssistantId.value || selectedAssistantId.value
   const modelId = selectedChatModelId.value
   const requestKey = `${assistantId ?? ''}:${modelId ?? ''}`
@@ -1761,6 +1761,13 @@ const loadChatSuggestions = async () => {
   } finally {
     if (requestId === suggestionRequestId) suggestionsLoading.value = false
   }
+}
+
+const canGenerateChatSuggestions = () => {
+  if (loadingConversations.value || loadingMessages.value) return false
+  const conversation = activeConversation.value
+  if (conversation) return conversation.messagesLoaded && conversation.messages.length === 0
+  return conversations.value.length === 0
 }
 
 const sendSuggestedQuestion = (question: string) => {
@@ -1828,10 +1835,13 @@ watch(
     selectedAssistantId,
     selectedChatModelId,
     loadingConversations,
+    loadingMessages,
+    activeConversationId,
+    () => activeConversation.value?.messagesLoaded,
     () => activeConversation.value?.messages.length
   ],
   () => {
-    if (loadingConversations.value || activeConversation.value?.messages.length) {
+    if (!canGenerateChatSuggestions()) {
       suggestionRequestId++
       requestedSuggestionKey = ''
       suggestionsLoading.value = false
