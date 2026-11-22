@@ -257,8 +257,6 @@ async function loadStats() {
 
 async function loadDocuments() {
   loading.value = true
-  documents.value = []
-  total.value = 0
   try {
     const response: any = await getKnowledgeBaseDocuments({
       knowledgeBaseId: selectedKnowledgeBaseId.value,

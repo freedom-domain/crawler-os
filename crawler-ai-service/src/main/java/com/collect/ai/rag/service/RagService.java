@@ -56,12 +56,17 @@ import java.util.List;
 import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RagService {
 
+    private static final int EMBEDDING_BATCH_SIZE = 16;
+    private static final HttpClient EMBEDDING_HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
     private static final HttpClient ELASTICSEARCH_HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -102,19 +107,58 @@ public class RagService {
         List<JsonNode> documents = fetchContentDocuments(base.getSourceIndex(), ownerKnowledgeBaseId);
         ensureKnowledgeVectorIndex(base, model);
         deleteKnowledgeVectorIndexDocuments(base.getVectorIndex(), model.getEmbeddingModel());
+        List<ObjectNode> operations = new ArrayList<>();
         long chunks = 0;
         for (JsonNode document : documents) {
             JsonNode source = document.path("_source");
             String id = document.path("_id").asText();
+            String title = source.path("title").asText("");
+            String content = source.path("content").asText("");
+            int chunkSize = model.getChunkSize() == null ? 1500 : Math.max(200, model.getChunkSize());
+            int overlap = model.getChunkOverlap() == null ? 200
+                    : Math.max(0, Math.min(model.getChunkOverlap(), chunkSize - 1));
+            List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
+            List<ObjectNode> documentOperations = new ArrayList<>(parts.size() * 2);
             try {
-                RagDtos.DocumentVectorizationResult result =
-                        vectorizeDocument(knowledgeBaseId, id);
-                chunks += result.getChunks();
+                for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
+                    List<String> batch = parts.subList(start,
+                            Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
+                    List<List<Double>> embeddings = createEmbeddings(
+                            batch, model, model.getDimensions());
+                    for (int i = 0; i < batch.size(); i++) {
+                        String chunkId = id + ":" + (start + i);
+                        documentOperations.add(objectMapper.createObjectNode()
+                                .set("index", objectMapper.createObjectNode()
+                                        .put("_index", base.getVectorIndex()).put("_id", chunkId)));
+                        ObjectNode row = objectMapper.createObjectNode();
+                        row.put("doc_id", id).put("chunk_id", chunkId)
+                                .put("title", title).put("content", batch.get(i))
+                                .put("url", "").put("spiderName", "上传文档")
+                                .put("knowledgeBaseId", base.getId())
+                                .put("embedding_model", model.getEmbeddingModel());
+                        ArrayNode vector = row.putArray(base.getVectorField());
+                        embeddings.get(i).forEach(vector::add);
+                        documentOperations.add(row);
+                    }
+                }
             } catch (RuntimeException e) {
                 log.warn("知识库文档向量化失败: knowledgeBaseId={}, documentId={}",
                         knowledgeBaseId, id, e);
+                continue;
+            }
+            if (!documentOperations.isEmpty()) {
+                operations.addAll(documentOperations);
+                chunks += parts.size();
+                if (operations.size() >= 200) {
+                    bulkOperations(operations, false);
+                    operations.clear();
+                }
             }
         }
+        if (!operations.isEmpty()) {
+            bulkOperations(operations, false);
+        }
+        refreshIndex(base.getVectorIndex());
         RagDtos.SyncResult result = new RagDtos.SyncResult();
         result.setSourceDocuments(documents.size());
         result.setChunks(chunks);
@@ -141,38 +185,43 @@ public class RagService {
             String spiderName = source.path("spiderName").asText("");
             long spiderId = source.path("spiderId").asLong(-1);
             List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
-            for (int i = 0; i < parts.size(); i++) {
-                String chunkId = id + ":" + i;
-                List<Double> embedding = createEmbedding(parts.get(i));
-                ObjectNode action = objectMapper.createObjectNode();
-                action.set("index", objectMapper.createObjectNode()
-                        .put("_index", properties.resolveVectorIndex())
-                        .put("_id", chunkId));
-                operations.add(action);
+            for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
+                List<String> batch = parts.subList(start,
+                        Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
+                List<List<Double>> embeddings = createEmbeddings(batch);
+                for (int i = 0; i < batch.size(); i++) {
+                    String chunkId = id + ":" + (start + i);
+                    ObjectNode action = objectMapper.createObjectNode();
+                    action.set("index", objectMapper.createObjectNode()
+                            .put("_index", properties.resolveVectorIndex())
+                            .put("_id", chunkId));
+                    operations.add(action);
 
-                ObjectNode row = objectMapper.createObjectNode();
-                row.put("doc_id", id);
-                row.put("chunk_id", chunkId);
-                row.put("title", title);
-                row.put("content", parts.get(i));
-                row.put("url", url);
-                row.put("spiderName", spiderName);
-                row.put("embedding_model", rag.getEmbeddingModel());
-                if (spiderId >= 0) row.put("spiderId", spiderId);
-                ArrayNode vector = row.putArray(properties.resolveVectorField());
-                embedding.forEach(vector::add);
-                operations.add(row);
-                chunks++;
+                    ObjectNode row = objectMapper.createObjectNode();
+                    row.put("doc_id", id);
+                    row.put("chunk_id", chunkId);
+                    row.put("title", title);
+                    row.put("content", batch.get(i));
+                    row.put("url", url);
+                    row.put("spiderName", spiderName);
+                    row.put("embedding_model", rag.getEmbeddingModel());
+                    if (spiderId >= 0) row.put("spiderId", spiderId);
+                    ArrayNode vector = row.putArray(properties.resolveVectorField());
+                    embeddings.get(i).forEach(vector::add);
+                    operations.add(row);
+                    chunks++;
+                }
                 if (operations.size() >= 200) {
-                    bulkOperations(operations);
+                    bulkOperations(operations, false);
                     operations.clear();
                 }
             }
         }
 
         if (!operations.isEmpty()) {
-            bulkOperations(operations);
+            bulkOperations(operations, false);
         }
+        refreshIndex(properties.resolveVectorIndex());
 
         RagDtos.SyncResult result = new RagDtos.SyncResult();
         result.setSourceDocuments(documents.size());
@@ -304,21 +353,25 @@ public class RagService {
         ensureKnowledgeVectorIndex(base, model);
         List<ObjectNode> operations = new ArrayList<>();
         List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
-        for (int i = 0; i < parts.size(); i++) {
-            String chunkId = sourceDocumentId + ":" + i;
-            List<Double> embedding = createEmbedding(parts.get(i), model, model.getDimensions());
-            operations.add(objectMapper.createObjectNode()
-                    .set("index", objectMapper.createObjectNode()
-                            .put("_index", base.getVectorIndex()).put("_id", chunkId)));
-            ObjectNode row = objectMapper.createObjectNode();
-            row.put("doc_id", sourceDocumentId).put("chunk_id", chunkId)
-                    .put("title", title).put("content", parts.get(i))
-                    .put("url", "").put("spiderName", "上传文档")
-                    .put("knowledgeBaseId", base.getId())
-                    .put("embedding_model", model.getEmbeddingModel());
-            ArrayNode vector = row.putArray(base.getVectorField());
-            embedding.forEach(vector::add);
-            operations.add(row);
+        for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
+            List<String> batch = parts.subList(start,
+                    Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
+            List<List<Double>> embeddings = createEmbeddings(batch, model, model.getDimensions());
+            for (int i = 0; i < batch.size(); i++) {
+                String chunkId = sourceDocumentId + ":" + (start + i);
+                operations.add(objectMapper.createObjectNode()
+                        .set("index", objectMapper.createObjectNode()
+                                .put("_index", base.getVectorIndex()).put("_id", chunkId)));
+                ObjectNode row = objectMapper.createObjectNode();
+                row.put("doc_id", sourceDocumentId).put("chunk_id", chunkId)
+                        .put("title", title).put("content", batch.get(i))
+                        .put("url", "").put("spiderName", "上传文档")
+                        .put("knowledgeBaseId", base.getId())
+                        .put("embedding_model", model.getEmbeddingModel());
+                ArrayNode vector = row.putArray(base.getVectorField());
+                embeddings.get(i).forEach(vector::add);
+                operations.add(row);
+            }
         }
         if (!operations.isEmpty()) bulkOperations(operations);
         return parts.size();
@@ -495,6 +548,47 @@ public class RagService {
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("读取知识库文档失败: " + e.getMessage(), e);
+        }
+    }
+
+    private List<KnowledgeBaseDtos.Document> sampleRandomKnowledgeBaseDocuments(
+            Long knowledgeBaseId, int sampleSize) {
+        if (knowledgeBaseId == null) throw new BizException("请选择知识库");
+        AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+        if (base == null) throw new BizException("知识库不存在");
+
+        List<String> excludedIds = getExcludedDocumentIds(base.getSourceIndex());
+        Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType())
+                ? base.getId() : null;
+        ObjectNode randomQuery = objectMapper.createObjectNode();
+        randomQuery.set("query", sourceDocumentQuery(null, false, excludedIds, ownerKnowledgeBaseId));
+        randomQuery.putObject("random_score");
+        ObjectNode body = objectMapper.createObjectNode().put("size", sampleSize);
+        body.putArray("sort").addObject().put("_score", "desc");
+        body.putArray("_source").add("title").add("content");
+        body.set("query", objectMapper.createObjectNode().set("function_score", randomQuery));
+
+        try {
+            HttpResponse<String> response = elasticsearchRequest(
+                    "POST", "/" + base.getSourceIndex() + "/_search", toJson(body));
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("随机读取知识库文档失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            List<KnowledgeBaseDtos.Document> documents = new ArrayList<>();
+            JsonNode root = objectMapper.readTree(response.body());
+            for (JsonNode hit : root.path("hits").path("hits")) {
+                JsonNode source = hit.path("_source");
+                KnowledgeBaseDtos.Document document = new KnowledgeBaseDtos.Document();
+                document.setId(hit.path("_id").asText());
+                document.setTitle(source.path("title").asText(""));
+                document.setSnippet(snippet(source.path("content").asText(""), 240));
+                documents.add(document);
+            }
+            return documents;
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("随机读取知识库文档失败: " + e.getMessage(), e);
         }
     }
 
@@ -753,28 +847,33 @@ public class RagService {
         List<String> chunks = splitText(text, properties.getRag().getChunkSize(),
                 properties.getRag().getChunkOverlap());
         List<ObjectNode> operations = new ArrayList<>(chunks.size() * 2);
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunkId = documentId + ":" + i;
-            ObjectNode action = objectMapper.createObjectNode();
-            action.set("index", objectMapper.createObjectNode()
-                    .put("_index", properties.resolveVectorIndex())
-                    .put("_id", chunkId));
-            operations.add(action);
+        for (int start = 0; start < chunks.size(); start += EMBEDDING_BATCH_SIZE) {
+            List<String> batch = chunks.subList(start,
+                    Math.min(start + EMBEDDING_BATCH_SIZE, chunks.size()));
+            List<List<Double>> embeddings = createEmbeddings(batch);
+            for (int i = 0; i < batch.size(); i++) {
+                String chunkId = documentId + ":" + (start + i);
+                ObjectNode action = objectMapper.createObjectNode();
+                action.set("index", objectMapper.createObjectNode()
+                        .put("_index", properties.resolveVectorIndex())
+                        .put("_id", chunkId));
+                operations.add(action);
 
-            ObjectNode row = objectMapper.createObjectNode();
-            row.put("doc_id", documentId);
-            row.put("chunk_id", chunkId);
-            row.put("title", title);
-            row.put("content", chunks.get(i));
-            row.put("url", source.path("url").asText(""));
-            row.put("spiderName", source.path("spiderName").asText(""));
-            row.put("embedding_model", properties.getRag().getEmbeddingModel());
-            if (source.path("spiderId").isNumber()) {
-                row.put("spiderId", source.path("spiderId").asLong());
+                ObjectNode row = objectMapper.createObjectNode();
+                row.put("doc_id", documentId);
+                row.put("chunk_id", chunkId);
+                row.put("title", title);
+                row.put("content", batch.get(i));
+                row.put("url", source.path("url").asText(""));
+                row.put("spiderName", source.path("spiderName").asText(""));
+                row.put("embedding_model", properties.getRag().getEmbeddingModel());
+                if (source.path("spiderId").isNumber()) {
+                    row.put("spiderId", source.path("spiderId").asLong());
+                }
+                ArrayNode vector = row.putArray(properties.resolveVectorField());
+                embeddings.get(i).forEach(vector::add);
+                operations.add(row);
             }
-            ArrayNode vector = row.putArray(properties.resolveVectorField());
-            createEmbedding(chunks.get(i)).forEach(vector::add);
-            operations.add(row);
         }
         return operations;
     }
@@ -1025,17 +1124,15 @@ public class RagService {
             if (assistant.getKnowledgeBaseIds() != null) {
                 for (Long knowledgeBaseId : assistant.getKnowledgeBaseIds().stream().limit(5).toList()) {
                     try {
-                        KnowledgeBaseDtos.DocumentPage page =
-                                listKnowledgeBaseDocuments(knowledgeBaseId, 1, 3, null, false);
+                        List<KnowledgeBaseDtos.Document> documents =
+                                sampleRandomKnowledgeBaseDocuments(knowledgeBaseId, 3);
                         ObjectNode sample = knowledgeSamples.addObject()
                                 .put("knowledgeBaseId", knowledgeBaseId);
-                        ArrayNode documents = sample.putArray("documents");
-                        if (page.getRecords() != null) {
-                            for (KnowledgeBaseDtos.Document document : page.getRecords()) {
-                                documents.addObject()
-                                        .put("title", document.getTitle())
-                                        .put("snippet", document.getSnippet());
-                            }
+                        ArrayNode documentSamples = sample.putArray("documents");
+                        for (KnowledgeBaseDtos.Document document : documents) {
+                            documentSamples.addObject()
+                                    .put("title", document.getTitle())
+                                    .put("snippet", document.getSnippet());
                         }
                     } catch (RuntimeException e) {
                         log.warn("读取推荐问题知识库样本失败: assistantId={}, knowledgeBaseId={}",
@@ -1447,6 +1544,95 @@ public class RagService {
         }
     }
 
+    private List<List<Double>> createEmbeddings(
+            List<String> texts, AiRagVectorModel model, int dimensions) {
+        return createEmbeddings(texts, model.getEmbeddingProvider(), model.getEmbeddingModel(),
+                model.getEmbeddingBaseUrl(), model.getApiKey(), dimensions,
+                text -> createEmbedding(text, model, dimensions));
+    }
+
+    private List<List<Double>> createEmbeddings(List<String> texts) {
+        RagProperties.Rag rag = properties.getRag();
+        return createEmbeddings(texts, rag.getEmbeddingProvider(), rag.getEmbeddingModel(),
+                rag.getEmbeddingBaseUrl(), rag.getEmbeddingApiKey(), properties.resolveDimensions(),
+                this::createEmbedding);
+    }
+
+    private List<List<Double>> createEmbeddings(
+            List<String> texts, String provider, String model, String baseUrl,
+            String apiKey, int dimensions, Function<String, List<Double>> singleEmbedding) {
+        if (texts.isEmpty()) return List.of();
+        boolean ollama = "ollama".equalsIgnoreCase(provider);
+        String path = ollama ? "/api/embed" : "/embeddings";
+        try {
+            URI baseUri = URI.create(baseUrl.trim().replaceAll("/$", ""));
+            String normalizedBaseUrl = ollama
+                    ? baseUri.toString().replaceAll("/v1$", "")
+                    : baseUri.toString();
+            ObjectNode body = objectMapper.createObjectNode().put("model", model);
+            body.set("input", objectMapper.valueToTree(texts));
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(normalizedBaseUrl + path))
+                    .timeout(Duration.ofSeconds(120))
+                    .header("Content-Type", "application/json");
+            if (apiKey != null && !apiKey.isBlank()) {
+                builder.header("Authorization", "Bearer " + apiKey);
+            }
+            HttpRequest request = builder.POST(HttpRequest.BodyPublishers
+                            .ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = EMBEDDING_HTTP_CLIENT.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+            if (ollama && (response.statusCode() == 404 || response.statusCode() == 405)) {
+                log.info("Embedding 服务不支持批量接口，回退到逐条请求: model={}", model);
+                return texts.stream().map(singleEmbedding).toList();
+            }
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("调用 Embedding 模型失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode rows = root.path("data").isArray() ? root.path("data")
+                    : root.path("embeddings").isArray() ? root.path("embeddings") : null;
+            List<List<Double>> results = new ArrayList<>(texts.size());
+            for (int i = 0; i < texts.size(); i++) results.add(null);
+            if (rows != null) {
+                int nextIndex = 0;
+                for (JsonNode row : rows) {
+                    JsonNode vector = row.isArray() ? row : row.path("embedding");
+                    int index = row.path("index").isNumber()
+                            ? row.path("index").asInt() : nextIndex;
+                    nextIndex++;
+                    if (index >= 0 && index < results.size()) {
+                        results.set(index, parseEmbeddingVector(vector, dimensions));
+                    }
+                }
+            } else if (texts.size() == 1 && root.path("embedding").isArray()) {
+                results.set(0, parseEmbeddingVector(root.path("embedding"), dimensions));
+            }
+            if (results.stream().anyMatch(java.util.Objects::isNull)) {
+                throw new IllegalStateException("Embedding 模型返回的向量数量与请求数量不一致");
+            }
+            return results;
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("调用 Embedding 模型失败: " + e.getMessage(), e);
+        }
+    }
+
+    private List<Double> parseEmbeddingVector(JsonNode vector, int dimensions) {
+        List<Double> result = new ArrayList<>();
+        if (vector.isArray()) {
+            for (JsonNode value : vector) result.add(value.asDouble());
+        }
+        if (result.isEmpty()) throw new IllegalStateException("Embedding 模型未返回向量");
+        if (result.size() != dimensions) {
+            throw new IllegalStateException("Embedding 向量维度不匹配: 实际 "
+                    + result.size() + "，配置 " + dimensions);
+        }
+        return result;
+    }
+
     private List<Double> createEmbedding(String text, AiRagVectorModel model, int dimensions) {
         try {
             ObjectNode body = objectMapper.createObjectNode();
@@ -1469,9 +1655,8 @@ public class RagService {
             HttpRequest request = builder.POST(HttpRequest.BodyPublishers
                             .ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
                     .build();
-            HttpResponse<String> response = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(10)).build()
-                    .send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = EMBEDDING_HTTP_CLIENT.send(
+                    request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("调用 Embedding 模型失败: " + response.statusCode()
                         + " " + response.body());
@@ -1510,7 +1695,22 @@ public class RagService {
             String path = "ollama".equalsIgnoreCase(rag.getEmbeddingProvider())
                     ? "/api/embeddings"
                     : "/embeddings";
-            HttpResponse<String> response = openAiRequest(path, body);
+            URI uri = URI.create(rag.getEmbeddingBaseUrl().trim().replaceAll("/$", ""));
+            String baseUrl = path.equals("/api/embeddings")
+                    ? uri.toString().replaceAll("/v1$", "")
+                    : uri.toString();
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + path))
+                    .timeout(Duration.ofSeconds(120))
+                    .header("Content-Type", "application/json");
+            if (rag.getEmbeddingApiKey() != null && !rag.getEmbeddingApiKey().isBlank()) {
+                builder.header("Authorization", "Bearer " + rag.getEmbeddingApiKey());
+            }
+            HttpRequest request = builder.POST(HttpRequest.BodyPublishers
+                            .ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = EMBEDDING_HTTP_CLIENT.send(
+                    request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("调用 Embedding 模型失败: " + response.statusCode()
                         + " " + response.body());
@@ -1926,13 +2126,17 @@ public class RagService {
     }
 
     private void bulkOperations(List<ObjectNode> operations) {
+        bulkOperations(operations, true);
+    }
+
+    private void bulkOperations(List<ObjectNode> operations, boolean refresh) {
         StringBuilder bulk = new StringBuilder();
         for (ObjectNode operation : operations) {
             bulk.append(toJson(operation)).append('\n');
         }
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
-                    "/_bulk?refresh=true", bulk.toString());
+                    "/_bulk?refresh=" + refresh, bulk.toString());
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("写入 RAG 向量索引失败: " + response.statusCode()
                         + " " + response.body());
@@ -1954,6 +2158,20 @@ public class RagService {
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("写入 RAG 向量索引失败: " + e.getMessage(), e);
+        }
+    }
+
+    private void refreshIndex(String index) {
+        try {
+            HttpResponse<String> response = elasticsearchRequest(
+                    "POST", "/" + index + "/_refresh", null);
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("刷新向量索引失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("刷新向量索引失败: " + e.getMessage(), e);
         }
     }
 
