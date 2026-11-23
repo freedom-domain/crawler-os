@@ -531,11 +531,12 @@
       </div>
     </section>
 
-    <el-dialog
+    <el-drawer
       v-model="sourcePreviewVisible"
-      class="source-preview-dialog"
-      :fullscreen="sourcePreviewFullscreen"
-      width="min(1000px, 94vw)"
+      class="source-preview-drawer"
+      direction="rtl"
+      :size="sourcePreviewFullscreen ? '100vw' : 'min(720px, 92vw)'"
+      :show-close="false"
       append-to-body
       @closed="handleSourcePreviewClosed"
     >
@@ -551,6 +552,14 @@
             >
               <el-icon><component :is="sourcePreviewFullscreen ? Minus : FullScreen" /></el-icon>
             </el-button>
+            <el-button
+              link
+              aria-label="关闭预览"
+              title="关闭"
+              @click="sourcePreviewVisible = false"
+            >
+              <el-icon><Close /></el-icon>
+            </el-button>
           </div>
         </div>
       </template>
@@ -558,10 +567,14 @@
         v-if="selectedSource"
         v-loading="sourcePreviewLoading"
         class="source-preview"
-        :class="{ 'source-preview--fullscreen': sourcePreviewFullscreen }"
       >
         <div class="source-preview-meta">
-          <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
+          <div class="source-preview-meta-info">
+            <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
+            <el-tag v-if="selectedSourceChunk" size="small" type="primary" effect="plain">
+              第 {{ selectedSourceChunk.index + 1 }} 段
+            </el-tag>
+          </div>
           <span v-if="selectedSourceChunk">{{ selectedSourceChunk.characterCount }} 字符</span>
           <el-button
             v-if="selectedSourceChunk"
@@ -586,13 +599,14 @@
           v-html="renderMarkdown(selectedSourceChunk.content || '该分块内容为空。')"
         />
       </div>
-    </el-dialog>
+    </el-drawer>
 
-    <el-dialog
+    <el-drawer
       v-model="sourceOriginalPreviewVisible"
-      class="source-preview-dialog"
-      :fullscreen="sourceOriginalFullscreen"
-      width="min(1000px, 94vw)"
+      class="source-preview-drawer"
+      direction="rtl"
+      :size="sourceOriginalFullscreen ? '100vw' : 'min(720px, 92vw)'"
+      :show-close="false"
       append-to-body
       @closed="handleSourceOriginalClosed"
     >
@@ -608,6 +622,14 @@
             >
               <el-icon><component :is="sourceOriginalFullscreen ? Minus : FullScreen" /></el-icon>
             </el-button>
+            <el-button
+              link
+              aria-label="关闭预览"
+              title="关闭"
+              @click="sourceOriginalPreviewVisible = false"
+            >
+              <el-icon><Close /></el-icon>
+            </el-button>
           </div>
         </div>
       </template>
@@ -615,7 +637,6 @@
         v-if="selectedSource"
         v-loading="sourceOriginalLoading"
         class="source-preview"
-        :class="{ 'source-preview--fullscreen': sourceOriginalFullscreen }"
       >
         <div class="source-preview-meta">
           <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
@@ -681,7 +702,7 @@
         />
         <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
       </div>
-    </el-dialog>
+    </el-drawer>
 
     <ContentPreviewDialog
       v-model:visible="sourceSnapshotVisible"
@@ -715,7 +736,7 @@ import {
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Moon, Plus,
+  ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Close, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Moon, Plus,
   Document, Picture, Promotion, Refresh, Setting, Sunny, UserFilled
 } from '@element-plus/icons-vue'
 import { confirm } from '@/utils/confirm'
@@ -2347,17 +2368,17 @@ onActivated(() => {
 .source-copy strong { color: var(--ink-900); font-size: 11px; font-weight: 600; }
 .source-copy small { color: var(--ink-500); font-size: 9px; }
 .source-card > .el-icon { color: var(--ink-500); font-size: 13px; }
-.source-preview { display: grid; max-height: min(80vh, 820px); gap: 14px; overflow: auto; }
-.source-preview-dialog:deep(.el-dialog.is-fullscreen) { display: flex; flex-direction: column; }
-.source-preview-dialog:deep(.el-dialog.is-fullscreen .el-dialog__header) { flex: 0 0 auto; }
-.source-preview-dialog:deep(.el-dialog.is-fullscreen .el-dialog__body) { width: 100%; flex: 1; min-height: 0; box-sizing: border-box; overflow: hidden; }
-.source-preview--fullscreen { width: 100%; height: 100%; max-height: none; min-width: 0; min-height: 0; box-sizing: border-box; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
-.source-dialog-header { display: flex; min-width: 0; align-items: center; gap: 16px; padding-right: 100px; }
+.source-preview { display: flex; height: 100%; min-height: 0; flex-direction: column; gap: 14px; overflow: hidden; }
+.source-preview-drawer:deep(.el-drawer) { background: var(--surface); }
+.source-preview-drawer:deep(.el-drawer__header) { position: relative; margin-bottom: 0; padding: 16px 20px 12px; border-bottom: 1px solid var(--chrome-line); }
+.source-preview-drawer:deep(.el-drawer__body) { height: calc(100% - 65px); min-height: 0; padding: 16px 20px 24px; overflow: hidden; }
+.source-dialog-header { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; }
 .source-dialog-title { min-width: 0; overflow: hidden; color: var(--ink-950); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
-.source-dialog-actions { position: absolute; top: 0; right: 48px; display: grid; width: 48px; height: 48px; place-items: center; }
-.source-dialog-actions :deep(.el-button) { display: inline-flex; width: 48px; height: 48px; margin: 0; padding: 0; line-height: 1; }
-.source-dialog-actions :deep(.el-icon) { font-size: 16px; }
+.source-dialog-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0; }
+.source-dialog-actions :deep(.el-button) { display: inline-flex; width: 40px; height: 40px; margin: 0; padding: 0; }
+.source-dialog-actions :deep(.el-button + .el-button) { margin-left: 0; }
 .source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.source-preview-meta-info { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
 .source-preview-actions { display: flex; align-items: center; gap: 12px; }
 .source-url-row { display: flex; min-width: 0; align-items: baseline; gap: 10px; padding: 9px 11px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); }
 .source-url-label { flex: 0 0 auto; color: var(--ink-500); font-size: 11px; font-weight: 600; }
@@ -2375,20 +2396,14 @@ onActivated(() => {
 .source-image-preview { width: 100%; height: 180px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); cursor: zoom-in; }
 .source-preview p { margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
 .source-preview-markdown {
-  max-height: min(65vh, 640px);
+  flex: 1;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
   color: var(--ink-800);
   font-size: 13px;
   line-height: 1.8;
   overflow-wrap: anywhere;
-}
-.source-preview--fullscreen .source-preview-markdown {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  min-width: 0;
-  min-height: 0;
-  box-sizing: border-box;
 }
 .source-preview-markdown :deep(:first-child) { margin-top: 0; }
 .source-preview-markdown :deep(:last-child) { margin-bottom: 0; }
