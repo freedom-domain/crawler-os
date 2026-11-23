@@ -115,6 +115,14 @@ export const syncRagIndex = (knowledgeBaseId?: string) =>
     timeout: 0,
     params: knowledgeBaseId ? { knowledgeBaseId } : undefined
   })
+export const getRagSyncTask = (taskId: string) =>
+  request.get(`/ai/rag/sync/tasks/${encodeURIComponent(taskId)}`)
+export const getLatestRagSyncTask = (knowledgeBaseId?: string) =>
+  request.get('/ai/rag/sync/tasks/latest', {
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
+export const cancelRagSyncTask = (taskId: string) =>
+  request.post(`/ai/rag/sync/tasks/${encodeURIComponent(taskId)}/cancel`)
 export const getKnowledgeBaseStats = (knowledgeBaseId?: string) =>
   request.get('/ai/rag/knowledge/stats', { params: knowledgeBaseId ? { knowledgeBaseId } : undefined })
 export const getKnowledgeBaseDocuments = (params: {

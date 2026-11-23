@@ -18,9 +18,13 @@
         </el-upload>
         <el-button :icon="Refresh" :loading="refreshing" @click="loadAll">刷新</el-button>
         <el-button type="primary" :icon="RefreshRight" :loading="rebuilding"
-          :disabled="Boolean(vectorizingId) || !selectedBase?.enabled" @click="rebuildIndex">
+          :disabled="Boolean(vectorizingId) || rebuilding || !selectedBase?.enabled" @click="rebuildIndex">
           批量重建向量索引
         </el-button>
+        <template v-if="rebuilding">
+          <el-tag type="warning" effect="plain">{{ rebuildTaskMessage || '正在重建' }}</el-tag>
+          <el-button type="danger" plain @click="cancelRebuild">取消重建</el-button>
+        </template>
       </div>
     </header>
 
@@ -151,6 +155,9 @@
                 :name="chunk.chunkId">
                 <template #title>
                   <span>分块 {{ chunk.index + 1 }}</span>
+                  <el-tag v-if="chunk.heading" size="small" type="warning" effect="plain" class="chunk-count">
+                    {{ chunk.heading }}
+                  </el-tag>
                   <el-tag size="small" effect="plain" class="chunk-count">
                     {{ chunk.characterCount }} 字符
                   </el-tag>
@@ -170,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
@@ -181,7 +188,8 @@ import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
   getKnowledgeBaseDocumentChunks,
   getKnowledgeBaseStats, syncRagIndex, vectorizeKnowledgeBaseDocument,
-  getKnowledgeBases, getKnowledgeBaseUploadedDocuments, uploadKnowledgeBaseDocument
+  getKnowledgeBases, getKnowledgeBaseUploadedDocuments, uploadKnowledgeBaseDocument,
+  getRagSyncTask, getLatestRagSyncTask, cancelRagSyncTask
 } from '@/api'
 
 interface KnowledgeDocument {
@@ -211,6 +219,7 @@ interface VectorChunk {
   chunkId: string
   index: number
   title: string
+  heading?: string
   content: string
   characterCount: number
   embeddingModel: string
@@ -371,6 +380,7 @@ async function changeKnowledgeBase() {
   page.value = 1
   await loadKnowledgeDocumentContext()
   await Promise.all([loadStats(), loadDocuments()])
+  void restoreRebuildTask()
 }
 
 function applySearch() {
@@ -496,6 +506,60 @@ async function uploadDocument(options: any) {
   }
 }
 
+const REBUILD_POLL_INTERVAL_MS = 2000
+const rebuildTaskId = ref('')
+const rebuildTaskMessage = ref('')
+let rebuildPollTimer: number | null = null
+
+function stopRebuildPolling() {
+  if (rebuildPollTimer !== null) {
+    window.clearTimeout(rebuildPollTimer)
+    rebuildPollTimer = null
+  }
+}
+
+function resetRebuildState() {
+  stopRebuildPolling()
+  rebuilding.value = false
+  rebuildTaskId.value = ''
+  rebuildTaskMessage.value = ''
+}
+
+async function pollRebuildTask(taskId: string) {
+  let response: any
+  try {
+    response = await getRagSyncTask(taskId)
+  } catch {
+    // 请求拦截器已提示错误；停止轮询并恢复按钮状态
+    resetRebuildState()
+    return
+  }
+  if (!response || !response.data) {
+    resetRebuildState()
+    return
+  }
+  const data = response.data
+  if (data.status === 'PENDING' || data.status === 'RUNNING') {
+    rebuildTaskMessage.value = data.message || '正在重建向量索引'
+    rebuildPollTimer = window.setTimeout(() => {
+      rebuildPollTimer = null
+      void pollRebuildTask(taskId)
+    }, REBUILD_POLL_INTERVAL_MS)
+    return
+  }
+  resetRebuildState()
+  if (data.status === 'COMPLETED') {
+    ElMessage.success(
+      `向量索引 ${selectedBase.value?.vectorIndex || ''} 已构建，知识库重建完成：${data.result?.chunks ?? 0} 个分块`
+    )
+  } else if (data.status === 'CANCELED') {
+    ElMessage.warning(data.message || '向量索引重建已取消')
+  } else {
+    ElMessage.error(data.message || '知识库重建失败，请检查 RAG 配置和向量模型服务')
+  }
+  void loadAll()
+}
+
 async function rebuildIndex() {
   try {
     await ElMessageBox.confirm(
@@ -506,27 +570,73 @@ async function rebuildIndex() {
   } catch {
     return
   }
+  stopRebuildPolling()
   rebuilding.value = true
+  rebuildTaskId.value = ''
+  rebuildTaskMessage.value = '正在提交重建任务'
   try {
     const response: any = await syncRagIndex(selectedKnowledgeBaseId.value)
-    if (!response) return
-    ElMessage.success(
-      `向量索引 ${selectedBase.value?.vectorIndex || ''} 已构建，知识库重建完成：${response.data.chunks} 个分块`
-    )
-    await loadAll()
+    if (!response?.data?.taskId) {
+      resetRebuildState()
+      return
+    }
+    rebuildTaskId.value = response.data.taskId
+    rebuildTaskMessage.value = response.data.message || '等待执行'
+    void pollRebuildTask(rebuildTaskId.value)
   } catch {
-    ElMessage.error('知识库重建失败，请检查 RAG 配置和向量模型服务')
-  } finally {
-    rebuilding.value = false
+    resetRebuildState()
+    // 请求拦截器已提示后端错误信息
+  }
+}
+
+async function cancelRebuild() {
+  if (!rebuildTaskId.value) return
+  try {
+    await ElMessageBox.confirm(
+      '取消会中断重建，向量索引可能处于部分状态，之后可再次重建。确定取消吗？',
+      '取消重建',
+      { type: 'warning', confirmButtonText: '取消重建', cancelButtonText: '继续重建' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const response: any = await cancelRagSyncTask(rebuildTaskId.value)
+    if (response?.data?.message) rebuildTaskMessage.value = response.data.message
+    ElMessage.success(response?.data?.message || '已发送取消请求')
+  } catch {
+    // 请求拦截器已提示后端错误信息
+  }
+}
+
+async function restoreRebuildTask() {
+  resetRebuildState()
+  if (!selectedKnowledgeBaseId.value) return
+  try {
+    const response: any = await getLatestRagSyncTask(selectedKnowledgeBaseId.value)
+    const data = response?.data
+    if (!data || (data.status !== 'PENDING' && data.status !== 'RUNNING')) return
+    rebuilding.value = true
+    rebuildTaskId.value = data.taskId
+    rebuildTaskMessage.value = data.message || '正在重建向量索引'
+    void pollRebuildTask(data.taskId)
+  } catch {
+    // 无重建任务或读取失败：保持空闲状态
   }
 }
 
 watch(routeKnowledgeBaseId, (routeId) => {
   selectedKnowledgeBaseId.value = routeId
   void loadAll()
+  void restoreRebuildTask()
 })
 
-onMounted(loadAll)
+onMounted(async () => {
+  await loadAll()
+  void restoreRebuildTask()
+})
+
+onBeforeUnmount(stopRebuildPolling)
 </script>
 
 <style scoped>

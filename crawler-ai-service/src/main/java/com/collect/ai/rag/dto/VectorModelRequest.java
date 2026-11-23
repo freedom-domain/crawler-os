@@ -12,4 +12,5 @@ public class VectorModelRequest {
     private Boolean clearApiKey;
     private Integer dimensions;
     private Integer topK;
+    private Integer maxTokens;
 }

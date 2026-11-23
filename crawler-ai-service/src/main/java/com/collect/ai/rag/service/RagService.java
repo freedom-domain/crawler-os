@@ -58,6 +58,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.function.BooleanSupplier;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -87,12 +88,23 @@ public class RagService {
     }
 
     private record KnowledgeVectorChunk(
-            String documentId, int chunkIndex, String title, String content,
-            Long strategyId, String strategyName) {
+            String documentId, int chunkIndex, String title, String heading, String content,
+            String parentText, Long strategyId, String strategyName) {
     }
 
-    private record ChunkingResult(List<String> chunks, AiRagChunkStrategy strategy) {
+    /** 父块（small-to-big）最大长度：检索命中子块后，用父块给 LLM 提供更完整上下文 */
+    private static final int PARENT_CHUNK_MAX_LENGTH = 4000;
+
+    private record ChunkingResult(List<String> chunks, AiRagChunkStrategy strategy,
+                                  List<String> headings, List<String> parentTexts) {
     }
+
+    /** 按 Markdown 标题层级切出的文本段，heading 为标题路径（如 "一级 / 二级"） */
+    private record HeadingSection(String heading, String text) {
+    }
+
+    private static final Pattern MARKDOWN_HEADING_PATTERN =
+            Pattern.compile("^(#{1,6})\\s+(.+?)\\s*#*\\s*$");
 
     private final RagProperties properties;
     private final ObjectMapper objectMapper;
@@ -118,7 +130,23 @@ public class RagService {
     @Value("${minio.bucket:crawler-knowledge}")
     private String uploadBucket;
 
+    /** 向量索引重建被取消时抛出（协作式取消） */
+    public static class SyncCancelledException extends RuntimeException {
+        public SyncCancelledException() {
+            super("向量索引重建已取消");
+        }
+    }
+
     public RagDtos.SyncResult syncContentIndex(Long knowledgeBaseId) {
+        return syncContentIndex(knowledgeBaseId, () -> false);
+    }
+
+    /**
+     * 按知识库重建向量索引。
+     * cancelChecker 在分块循环的检查点（每个文档、每批 embedding）被调用，
+     * 返回 true 时抛出 SyncCancelledException 中断重建。
+     */
+    public RagDtos.SyncResult syncContentIndex(Long knowledgeBaseId, BooleanSupplier cancelChecker) {
         if (knowledgeBaseId == null) return syncContentIndex();
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
@@ -134,6 +162,9 @@ public class RagService {
         List<KnowledgeVectorChunk> embeddingBatch = new ArrayList<>(EMBEDDING_BATCH_SIZE);
         long chunks = 0;
         for (JsonNode document : documents) {
+            if (cancelChecker.getAsBoolean()) {
+                throw new SyncCancelledException();
+            }
             JsonNode source = document.path("_source");
             String id = document.path("_id").asText();
             String title = source.path("title").asText("");
@@ -142,9 +173,14 @@ public class RagService {
                     chunkStrategies, model);
             List<String> parts = chunking.chunks();
             for (int i = 0; i < parts.size(); i++) {
-                embeddingBatch.add(new KnowledgeVectorChunk(id, i, title, parts.get(i),
+                embeddingBatch.add(new KnowledgeVectorChunk(id, i, title,
+                        chunking.headings().get(i), parts.get(i),
+                        chunking.parentTexts().get(i),
                         chunking.strategy().getId(), chunking.strategy().getName()));
                 if (embeddingBatch.size() == EMBEDDING_BATCH_SIZE) {
+                    if (cancelChecker.getAsBoolean()) {
+                        throw new SyncCancelledException();
+                    }
                     chunks += indexKnowledgeBaseChunkBatch(
                             base, model, embeddingBatch, operations);
                     embeddingBatch.clear();
@@ -180,7 +216,8 @@ public class RagService {
                             .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
             ObjectNode row = objectMapper.createObjectNode();
             row.put("doc_id", chunk.documentId()).put("chunk_id", chunkId)
-                    .put("title", chunk.title()).put("content", chunk.content())
+                    .put("title", chunk.title()).put("heading", chunk.heading())
+                    .put("content", chunk.content()).put("parent_text", chunk.parentText())
                     .put("url", "").put("spiderName", "上传文档")
                     .put("knowledgeBaseId", base.getId())
                     .put("embedding_model", model.getEmbeddingModel())
@@ -233,7 +270,9 @@ public class RagService {
                     row.put("doc_id", id);
                     row.put("chunk_id", chunkId);
                     row.put("title", title);
+                    row.put("heading", chunking.headings().get(start + i));
                     row.put("content", batch.get(i));
+                    row.put("parent_text", chunking.parentTexts().get(start + i));
                     row.put("url", url);
                     row.put("spiderName", spiderName);
                     row.put("embedding_model", rag.getEmbeddingModel());
@@ -400,7 +439,9 @@ public class RagService {
                                 .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
                 ObjectNode row = objectMapper.createObjectNode();
                 row.put("doc_id", sourceDocumentId).put("chunk_id", chunkId)
-                        .put("title", title).put("content", batch.get(i))
+                        .put("title", title).put("heading", chunking.headings().get(start + i))
+                        .put("content", batch.get(i))
+                        .put("parent_text", chunking.parentTexts().get(start + i))
                         .put("url", "").put("spiderName", "上传文档")
                         .put("knowledgeBaseId", base.getId())
                         .put("embedding_model", model.getEmbeddingModel())
@@ -428,8 +469,12 @@ public class RagService {
         properties.putObject("chunk_id").put("type", "keyword");
         properties.putObject("title").put("type", "text")
                 .put("analyzer", "ik_max_word").put("search_analyzer", "ik_smart");
+        properties.putObject("heading").put("type", "text")
+                .put("analyzer", "ik_max_word").put("search_analyzer", "ik_smart");
         properties.putObject("content").put("type", "text")
                 .put("analyzer", "ik_max_word").put("search_analyzer", "ik_smart");
+        // 父块文本（small-to-big）：不建倒排索引，仅用于检索后补充上下文
+        properties.putObject("parent_text").put("type", "text").put("index", false);
         properties.putObject("url").put("type", "keyword");
         properties.putObject("spiderName").put("type", "keyword");
         properties.putObject("knowledgeBaseId").put("type", "long");
@@ -831,7 +876,7 @@ public class RagService {
         body.set("query", objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
         body.set("_source", objectMapper.createArrayNode()
-                .add("chunk_id").add("title").add("content").add("embedding_model")
+                .add("chunk_id").add("title").add("heading").add("content").add("embedding_model")
                 .add("chunk_strategy_id").add("chunk_strategy_name"));
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
@@ -851,6 +896,7 @@ public class RagService {
                 chunk.setChunkId(chunkId);
                 chunk.setIndex(parseChunkIndex(chunkId));
                 chunk.setTitle(source.path("title").asText(""));
+                chunk.setHeading(source.path("heading").asText(""));
                 chunk.setContent(content);
                 chunk.setCharacterCount(content.length());
                 chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
@@ -928,6 +974,7 @@ public class RagService {
             chunk.setChunkId(source.path("chunk_id").asText(chunkId));
             chunk.setIndex(parseChunkIndex(chunk.getChunkId()));
             chunk.setTitle(source.path("title").asText(""));
+            chunk.setHeading(source.path("heading").asText(""));
             chunk.setContent(content);
             chunk.setCharacterCount(content.length());
             chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
@@ -1032,7 +1079,9 @@ public class RagService {
                 row.put("doc_id", documentId);
                 row.put("chunk_id", chunkId);
                 row.put("title", title);
+                row.put("heading", chunking.headings().get(start + i));
                 row.put("content", batch.get(i));
+                row.put("parent_text", chunking.parentTexts().get(start + i));
                 row.put("url", source.path("url").asText(""));
                 row.put("spiderName", source.path("spiderName").asText(""));
                 row.put("embedding_model", properties.getRag().getEmbeddingModel());
@@ -1616,7 +1665,7 @@ public class RagService {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("size", candidateCount);
             body.set("_source", objectMapper.valueToTree(List.of(
-                    "doc_id", "chunk_id", "title", "content", "url", "spiderName")));
+                    "doc_id", "chunk_id", "title", "heading", "content", "parent_text", "url", "spiderName")));
             ObjectNode searchFilter = filter;
             if (knowledgeBase != null) {
                 ObjectNode knowledgeBaseFilter = objectMapper.createObjectNode();
@@ -1655,12 +1704,19 @@ public class RagService {
                     ref.setChunkId(source.path("chunk_id").asText(""));
                     ref.setKnowledgeBaseId(knowledgeBase == null ? null : knowledgeBase.getId());
                     ref.setTitle(source.path("title").asText(""));
+                    ref.setHeading(source.path("heading").asText(""));
                     ref.setUrl(source.path("url").asText(""));
                     ref.setSpiderName(source.path("spiderName").asText(""));
                     ref.setSourceType(knowledgeBase == null ? "" : knowledgeBase.getSourceType());
                     ref.setScore(hit.path("_score").asDouble(0));
                     String text = source.path("content").asText("");
                     ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));
+                    // small-to-big：命中子块后用父块（章节全文）补充上下文
+                    String parentText = source.path("parent_text").asText("");
+                    if (StringUtils.hasText(parentText) && parentText.length() > text.length()) {
+                        ref.setSnippet(parentText.length() <= 2000
+                                ? parentText : parentText.substring(0, 2000));
+                    }
                     boolean duplicate = sources.stream()
                             .anyMatch(existing -> existing.getId().equals(ref.getId())
                                     && existing.getSnippet().equals(ref.getSnippet()))
@@ -1689,14 +1745,27 @@ public class RagService {
         }
 
         sources.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
-        if (sources.size() > topK) sources = new ArrayList<>(sources.subList(0, topK));
+        // 检索后近似去重：overlap 会产生高度相似的相邻 chunk，
+        // 用字符 bigram Jaccard 相似度过滤，避免近似 chunk 挤占 topK 名额
+        List<RagDtos.SourceReference> deduplicated = new ArrayList<>();
+        for (RagDtos.SourceReference ref : sources) {
+            boolean nearDuplicate = deduplicated.stream()
+                    .anyMatch(existing -> existing.getId().equals(ref.getId())
+                            || jaccardSimilarity(existing.getSnippet(), ref.getSnippet()) > 0.9);
+            if (!nearDuplicate) deduplicated.add(ref);
+        }
+        if (deduplicated.size() > topK) deduplicated = new ArrayList<>(deduplicated.subList(0, topK));
+        sources = deduplicated;
         StringBuilder context = new StringBuilder();
         for (int i = 0; i < sources.size(); i++) {
             RagDtos.SourceReference ref = sources.get(i);
             String text = ref.getSnippet();
             context.append("参考资料 [").append(i + 1).append("]\n")
-                    .append("标题：").append(ref.getTitle()).append("\n")
-                    .append("来源：").append(ref.getUrl()).append("\n")
+                    .append("标题：").append(ref.getTitle()).append("\n");
+            if (StringUtils.hasText(ref.getHeading())) {
+                context.append("章节：").append(ref.getHeading()).append("\n");
+            }
+            context.append("来源：").append(ref.getUrl()).append("\n")
                     .append("内容：").append(text).append("\n\n");
         }
 
@@ -2467,17 +2536,37 @@ public class RagService {
         }
     }
 
+    private static final String SENTENCE_BOUNDARY_CHARS = "。！？!?；;，,.:：、\n\t";
+
     private static List<String> splitText(String text, int chunkSize, int overlap) {
         if (text == null || text.isBlank()) return List.of();
         List<String> chunks = new ArrayList<>();
         int start = 0;
         while (start < text.length()) {
             int end = Math.min(start + chunkSize, text.length());
+            if (end < text.length()) {
+                int boundary = findSentenceBoundary(text, start, end);
+                if (boundary > start) end = boundary;
+            }
             chunks.add(text.substring(start, end).trim());
             if (end == text.length()) break;
-            start = end - overlap;
+            start = Math.max(end - overlap, start + 1);
         }
         return chunks;
+    }
+
+    /**
+     * 从切分位置向前查找最近的句子边界（标点/换行），避免从句子中间硬切。
+     * 返回切分位置（边界字符之后）；找不到合适的边界时返回 -1。
+     */
+    private static int findSentenceBoundary(String text, int start, int end) {
+        int minCut = start + Math.max(1, (end - start) / 2);
+        for (int i = end - 1; i >= minCut; i--) {
+            if (SENTENCE_BOUNDARY_CHARS.indexOf(text.charAt(i)) >= 0) {
+                return i + 1;
+            }
+        }
+        return -1;
     }
 
     private static AiRagVectorModel vectorModelFromProperties(RagProperties.Rag rag) {
@@ -2493,19 +2582,91 @@ public class RagService {
     private ChunkingResult splitText(
             String text, Set<String> documentTypes,
             List<AiRagChunkStrategy> strategies, AiRagVectorModel model) {
-        if (text == null || text.isBlank()) return new ChunkingResult(List.of(), null);
+        if (text == null || text.isBlank()) {
+            return new ChunkingResult(List.of(), null, List.of(), List.of());
+        }
         AiRagChunkStrategy strategy = chunkStrategyService.selectForDocument(
                 text.length(), documentTypes, strategies);
         int chunkSize = strategy.getChunkSize();
-        int overlap = strategy.getChunkOverlap();
-        List<String> chunks = switch (strategy.getStrategyType()) {
-            case ChunkStrategyService.FIXED_CHARACTER -> splitText(text, chunkSize, overlap);
-            case ChunkStrategyService.PARAGRAPH -> splitParagraphs(text, chunkSize, overlap);
-            case ChunkStrategyService.RECURSIVE -> splitRecursively(text, chunkSize, overlap);
-            case ChunkStrategyService.SEMANTIC -> splitSemantically(text, strategy, model);
-            default -> throw new BizException("不支持的分块策略类型: " + strategy.getStrategyType());
-        };
-        return new ChunkingResult(chunks, strategy);
+        int overlap = strategy.getChunkOverlap() == null ? 0 : strategy.getChunkOverlap();
+        // 分块长度不能超过 embedding 模型的最大输入 token（按 1 token ≈ 1 字符保守估算）
+        if (model != null && model.getMaxTokens() != null && model.getMaxTokens() > 0
+                && chunkSize > model.getMaxTokens()) {
+            log.warn("分块策略 [{}] 的分块长度 {} 超过向量模型 [{}] 最大 Token 数 {}，已自动截断",
+                    strategy.getName(), chunkSize, model.getEmbeddingModel(), model.getMaxTokens());
+            chunkSize = model.getMaxTokens();
+            overlap = Math.min(overlap, Math.max(0, chunkSize / 4));
+        }
+        // 按 Markdown 标题层级切段，让每个 chunk 携带章节上下文；
+        // 无标题结构的文档退化为单段（heading 为空）。
+        List<HeadingSection> sections = splitHeadingSections(text);
+        List<String> chunks = new ArrayList<>();
+        List<String> headings = new ArrayList<>();
+        List<String> parentTexts = new ArrayList<>();
+        for (HeadingSection section : sections) {
+            List<String> sectionChunks = switch (strategy.getStrategyType()) {
+                case ChunkStrategyService.FIXED_CHARACTER -> splitText(section.text(), chunkSize, overlap);
+                case ChunkStrategyService.PARAGRAPH -> splitParagraphs(section.text(), chunkSize, overlap);
+                case ChunkStrategyService.RECURSIVE -> splitRecursively(section.text(), chunkSize, overlap);
+                case ChunkStrategyService.SEMANTIC -> splitSemantically(section.text(), strategy, model);
+                default -> throw new BizException("不支持的分块策略类型: " + strategy.getStrategyType());
+            };
+            // 父块 = 所属章节全文（超长时截断），检索命中子块后用它补充上下文
+            String parentText = section.text().length() > PARENT_CHUNK_MAX_LENGTH
+                    ? section.text().substring(0, PARENT_CHUNK_MAX_LENGTH)
+                    : section.text();
+            for (String chunk : sectionChunks) {
+                chunks.add(chunk);
+                headings.add(section.heading());
+                parentTexts.add(parentText);
+            }
+        }
+        return new ChunkingResult(chunks, strategy, headings, parentTexts);
+    }
+
+    /**
+     * 按 Markdown 标题（# ~ ######）把文档切成带章节路径的段落。
+     * 标题行本身并入其所属段落的开头，作为该段所有 chunk 的上下文；
+     * 非 Markdown 文档（无标题行）返回单个空 heading 段落。
+     */
+    private static List<HeadingSection> splitHeadingSections(String text) {
+        List<HeadingSection> sections = new ArrayList<>();
+        String[] lines = text.split("\\R", -1);
+        // 各级标题栈：level -> title
+        java.util.TreeMap<Integer, String> headingStack = new java.util.TreeMap<>();
+        StringBuilder current = new StringBuilder();
+        String currentHeading = "";
+        boolean hasHeading = false;
+        for (String line : lines) {
+            Matcher matcher = MARKDOWN_HEADING_PATTERN.matcher(line);
+            if (matcher.matches()) {
+                if (current.length() > 0) {
+                    sections.add(new HeadingSection(currentHeading, current.toString().trim()));
+                    current.setLength(0);
+                }
+                int level = matcher.group(1).length();
+                headingStack.tailMap(level, true).clear();
+                headingStack.put(level, matcher.group(2).trim());
+                currentHeading = String.join(" / ", headingStack.values());
+                hasHeading = true;
+                current.append(line).append('\n');
+            } else {
+                current.append(line).append('\n');
+            }
+        }
+        if (current.length() > 0) {
+            sections.add(new HeadingSection(currentHeading, current.toString().trim()));
+        }
+        if (!hasHeading) {
+            // 无标题结构：合并为单段，heading 置空
+            StringBuilder merged = new StringBuilder();
+            for (HeadingSection section : sections) {
+                if (merged.length() > 0) merged.append('\n');
+                merged.append(section.text());
+            }
+            return List.of(new HeadingSection("", merged.toString().trim()));
+        }
+        return sections;
     }
 
     private static Set<String> documentTypes(JsonNode source) {
@@ -2590,7 +2751,8 @@ public class RagService {
     }
 
     private static List<String> splitParagraphs(String text, int chunkSize, int overlap) {
-        List<String> paragraphs = java.util.Arrays.stream(text.split("\\R\\s*\\R+"))
+        // 按空行（两个及以上换行，中间可含空白）切分段落
+        List<String> paragraphs = java.util.Arrays.stream(text.split("\\R\\s*\\R"))
                 .map(String::trim)
                 .filter(StringUtils::hasText)
                 .toList();
@@ -2604,7 +2766,8 @@ public class RagService {
     }
 
     private static final List<String> RECURSIVE_SEPARATORS = List.of(
-            "\n\n", "\n", "。", "！", "？", ".", "!", "?", "；", ";", "，", ",", " ");
+            "\n\n", "\n", "。", "！", "？", "……", "...", ".", "!", "?",
+            "；", ";", "：", ":", "，", ",", "、", "\t", " ");
 
     private static void splitRecursively(
             String text, int separatorIndex, int chunkSize, List<String> segments) {
@@ -2655,24 +2818,35 @@ public class RagService {
             }
         }
         List<String> chunks = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
+        List<String> current = new ArrayList<>();
+        int currentLength = 0;
         for (String segment : expanded) {
             if (!current.isEmpty()
-                    && current.length() + segment.length() + separator.length() > chunkSize) {
-                chunks.add(current.toString().trim());
-                String previous = current.toString();
-                int carryLength = Math.min(overlap,
+                    && currentLength + segment.length() + separator.length() > chunkSize) {
+                chunks.add(String.join(separator, current).trim());
+                // 从上一块末尾回带完整 segment 作为重叠，避免从句子/单词中间截断
+                int maxCarry = Math.min(overlap,
                         Math.max(0, chunkSize - segment.length() - separator.length()));
-                current.setLength(0);
-                if (carryLength > 0) {
-                    current.append(previous, previous.length() - carryLength, previous.length())
-                            .append(separator);
+                List<String> carried = new ArrayList<>();
+                int carriedLength = 0;
+                for (int k = current.size() - 1; k >= 0; k--) {
+                    int segmentLength = current.get(k).length()
+                            + (carried.isEmpty() ? 0 : separator.length());
+                    if (carriedLength + segmentLength > maxCarry) break;
+                    carried.add(0, current.get(k));
+                    carriedLength += segmentLength;
                 }
+                current = carried;
+                currentLength = carriedLength;
             }
-            if (!current.isEmpty()) current.append(separator);
-            current.append(segment);
+            if (current.isEmpty()) {
+                currentLength = segment.length();
+            } else {
+                currentLength += separator.length() + segment.length();
+            }
+            current.add(segment);
         }
-        if (!current.isEmpty()) chunks.add(current.toString().trim());
+        if (!current.isEmpty()) chunks.add(String.join(separator, current).trim());
         return chunks;
     }
 
@@ -2689,29 +2863,62 @@ public class RagService {
             }
         }
         if (sentences.isEmpty()) return List.of();
-        List<List<Double>> embeddings = new ArrayList<>(sentences.size());
-        for (int start = 0; start < sentences.size(); start += EMBEDDING_BATCH_SIZE) {
-            embeddings.addAll(createEmbeddings(
-                    sentences.subList(start, Math.min(start + EMBEDDING_BATCH_SIZE, sentences.size())),
-                    model, model.getDimensions()));
-        }
         double threshold = strategy.getSimilarityThreshold() == null
                 ? 0.7 : strategy.getSimilarityThreshold().doubleValue();
+        int minChunkSize = Math.max(1, chunkSize / 4);
+        int overlap = strategy.getChunkOverlap() == null
+                ? 0 : Math.max(0, Math.min(strategy.getChunkOverlap(), chunkSize / 2));
+
+        // 流式分块：按批取 embedding，边算边界边产出 chunk，
+        // 避免一次性持有全文向量，并支持最小块长度与边界重叠。
         List<String> chunks = new ArrayList<>();
-        StringBuilder current = new StringBuilder(sentences.get(0));
-        for (int i = 1; i < sentences.size(); i++) {
-            String sentence = sentences.get(i);
-            boolean sizeLimitReached = current.length() + sentence.length() + 1 > chunkSize;
-            boolean semanticBoundary = cosineSimilarity(embeddings.get(i - 1), embeddings.get(i)) < threshold;
-            if (sizeLimitReached || semanticBoundary) {
-                chunks.add(current.toString());
-                current.setLength(0);
-            } else {
-                current.append(' ');
+        List<String> current = new ArrayList<>();
+        List<List<Double>> currentEmbeddings = new ArrayList<>();
+        int currentLength = 0;
+        for (int start = 0; start < sentences.size(); start += EMBEDDING_BATCH_SIZE) {
+            int end = Math.min(start + EMBEDDING_BATCH_SIZE, sentences.size());
+            List<List<Double>> batchEmbeddings = createEmbeddings(
+                    sentences.subList(start, end), model, model.getDimensions());
+            for (int j = start; j < end; j++) {
+                String sentence = sentences.get(j);
+                List<Double> embedding = batchEmbeddings.get(j - start);
+                if (!current.isEmpty()) {
+                    boolean sizeLimitReached = currentLength + 1 + sentence.length() > chunkSize;
+                    boolean semanticBoundary = cosineSimilarity(
+                            currentEmbeddings.get(currentEmbeddings.size() - 1), embedding)
+                            < threshold;
+                    boolean tooSmall = currentLength < minChunkSize;
+                    if (sizeLimitReached || (semanticBoundary && !tooSmall)) {
+                        chunks.add(String.join(" ", current));
+                        // 从上一块末尾回带完整句子作为重叠，避免边界处上下文丢失
+                        int maxCarry = Math.min(overlap,
+                                Math.max(0, chunkSize - sentence.length() - 1));
+                        List<String> carried = new ArrayList<>();
+                        List<List<Double>> carriedEmbeddings = new ArrayList<>();
+                        int carriedLength = 0;
+                        for (int k = current.size() - 1; k >= 0; k--) {
+                            int sentenceLength = current.get(k).length()
+                                    + (carried.isEmpty() ? 0 : 1);
+                            if (carriedLength + sentenceLength > maxCarry) break;
+                            carried.add(0, current.get(k));
+                            carriedEmbeddings.add(0, currentEmbeddings.get(k));
+                            carriedLength += sentenceLength;
+                        }
+                        current = carried;
+                        currentEmbeddings = carriedEmbeddings;
+                        currentLength = carriedLength;
+                    }
+                }
+                if (current.isEmpty()) {
+                    currentLength = sentence.length();
+                } else {
+                    currentLength += 1 + sentence.length();
+                }
+                current.add(sentence);
+                currentEmbeddings.add(embedding);
             }
-            current.append(sentence);
         }
-        if (!current.isEmpty()) chunks.add(current.toString());
+        if (!current.isEmpty()) chunks.add(String.join(" ", current));
         return chunks;
     }
 
@@ -2729,5 +2936,32 @@ public class RagService {
         }
         if (leftNorm == 0 || rightNorm == 0) return 0;
         return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+    }
+
+    /**
+     * 基于字符 bigram 的 Jaccard 相似度，用于检索后近似 chunk 去重。
+     * 对中文/英文混合文本均有效，无需分词器。
+     */
+    private static double jaccardSimilarity(String left, String right) {
+        if (left == null || right == null) return 0;
+        Set<String> leftGrams = charBigrams(left);
+        Set<String> rightGrams = charBigrams(right);
+        if (leftGrams.isEmpty() || rightGrams.isEmpty()) {
+            return left.equals(right) ? 1 : 0;
+        }
+        Set<String> intersection = new HashSet<>(leftGrams);
+        intersection.retainAll(rightGrams);
+        Set<String> union = new HashSet<>(leftGrams);
+        union.addAll(rightGrams);
+        return (double) intersection.size() / union.size();
+    }
+
+    private static Set<String> charBigrams(String text) {
+        String normalized = text.replaceAll("\\s+", "");
+        Set<String> bigrams = new HashSet<>();
+        for (int i = 0; i + 1 < normalized.length(); i++) {
+            bigrams.add(normalized.substring(i, i + 2));
+        }
+        return bigrams;
     }
 }

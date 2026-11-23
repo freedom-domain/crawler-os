@@ -21,6 +21,8 @@ public class AiRagVectorModel {
     private String apiKey;
     private Integer dimensions;
     private Integer topK;
+    /** 模型最大输入 token 数（可选），用于校验分块长度是否超出模型上下文 */
+    private Integer maxTokens;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

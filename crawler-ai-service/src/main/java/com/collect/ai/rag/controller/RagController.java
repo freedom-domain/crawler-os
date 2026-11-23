@@ -445,7 +445,14 @@ public class RagController {
         return R.ok(ragIndexRebuildTaskService.get(taskId));
     }
 
-    @Operation(summary = "读取最新向量索引重建任务")
+    @Operation(summary = "取消向量索引重建任务")
+    @PostMapping("/sync/tasks/{taskId}/cancel")
+    public R<RagDtos.SyncTaskResponse> cancelSyncTask(@PathVariable String taskId) {
+        requirePermission("search:query");
+        return R.ok(ragIndexRebuildTaskService.cancel(taskId));
+    }
+
+    @Operation(summary = "读取最新向量索引重建任务（无任务时 data 为 null）")
     @GetMapping("/sync/tasks/latest")
     public R<RagDtos.SyncTaskResponse> latestSyncTask(
             @RequestParam(required = false) Long knowledgeBaseId) {

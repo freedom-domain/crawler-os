@@ -47,6 +47,8 @@ public final class KnowledgeBaseDtos {
         private String chunkId;
         private int index;
         private String title;
+        /** 分块所在章节标题（Markdown 标题层级拼接，可为空） */
+        private String heading;
         private String content;
         private int characterCount;
         private String embeddingModel;

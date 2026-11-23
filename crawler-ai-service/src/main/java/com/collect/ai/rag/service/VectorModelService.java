@@ -154,6 +154,7 @@ public class VectorModelService {
         model.setEmbeddingModel(request.getEmbeddingModel().trim());
         model.setDimensions(request.getDimensions());
         model.setTopK(request.getTopK());
+        model.setMaxTokens(request.getMaxTokens());
     }
 
     private static void validate(VectorModelRequest request) {
@@ -186,6 +187,10 @@ public class VectorModelService {
                 || request.getTopK() == null || request.getTopK() < 1 || request.getTopK() > 20) {
             throw new BizException("向量维度或 Top K 不合法");
         }
+        if (request.getMaxTokens() != null
+                && (request.getMaxTokens() < 1 || request.getMaxTokens() > 1048576)) {
+            throw new BizException("最大 Token 数范围为 1–1048576");
+        }
     }
 
     private static AiRagVectorModel copy(AiRagVectorModel source) {
@@ -198,6 +203,7 @@ public class VectorModelService {
         copy.setApiKey(source.getApiKey());
         copy.setDimensions(source.getDimensions());
         copy.setTopK(source.getTopK());
+        copy.setMaxTokens(source.getMaxTokens());
         copy.setCreateTime(source.getCreateTime());
         copy.setUpdateTime(source.getUpdateTime());
         return copy;
@@ -213,6 +219,7 @@ public class VectorModelService {
         response.setApiKeyConfigured(StringUtils.hasText(model.getApiKey()));
         response.setDimensions(model.getDimensions());
         response.setTopK(model.getTopK());
+        response.setMaxTokens(model.getMaxTokens());
         return response;
     }
 

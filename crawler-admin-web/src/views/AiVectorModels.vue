@@ -61,6 +61,11 @@
               </el-table-column>
               <el-table-column prop="dimensions" label="维度" min-width="70" resizable />
               <el-table-column prop="topK" label="Top K" min-width="75" resizable />
+              <el-table-column label="最大 Token" min-width="100" resizable>
+                <template #default="{ row }">
+                  {{ row.maxTokens ?? '未设置' }}
+                </template>
+              </el-table-column>
               <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
                 <template #default="{ row }">
                   <TableRowActions
@@ -136,6 +141,17 @@
               <el-option v-for="value in 20" :key="value" :label="String(value)" :value="value" />
             </el-select>
           </el-form-item>
+          <el-form-item label="最大 Token" prop="maxTokens">
+            <el-input-number
+              v-model="form.maxTokens"
+              :min="1"
+              :max="1048576"
+              :step="512"
+              controls-position="right"
+              placeholder="可选"
+            />
+            <div class="form-tip">模型最大输入 Token 数；分块长度超过该值时会自动截断，留空表示不限制</div>
+          </el-form-item>
         </div>
       </el-form>
       <template #footer>
@@ -187,6 +203,7 @@ interface VectorModel {
   apiKeyConfigured: boolean
   dimensions: number
   topK: number
+  maxTokens?: number
 }
 
 const emptyModel = () => ({
@@ -197,7 +214,8 @@ const emptyModel = () => ({
   apiKey: '',
   clearApiKey: false,
   dimensions: 1024,
-  topK: 5
+  topK: 5,
+  maxTokens: undefined
 })
 
 const models = ref<VectorModel[]>([])
@@ -294,7 +312,8 @@ const openEdit = (model: VectorModel) => {
     apiKey: '',
     clearApiKey: false,
     dimensions: model.dimensions,
-    topK: model.topK
+    topK: model.topK,
+    maxTokens: model.maxTokens ?? undefined
   })
   dialogVisible.value = true
 }
@@ -450,6 +469,7 @@ onMounted(loadModels)
 .model-picker { display: flex; width: 100%; gap: 8px; }
 .model-picker :deep(.el-select) { width: auto; min-width: 0; flex: 1; }
 .form-grid :deep(.el-checkbox) { display: flex; margin-top: 8px; }
+.form-tip { margin-top: 6px; color: var(--ink-500); font-size: 12px; line-height: 1.5; }
 @media (max-width: 680px) {
   .card-header { flex-direction: column; }
   .form-grid { grid-template-columns: 1fr; }

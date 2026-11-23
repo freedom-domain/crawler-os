@@ -54,7 +54,9 @@ public class RagIndexInitializer {
                 String body = """
                         {"settings":{"number_of_shards":1},"mappings":{"properties":{
                         "doc_id":{"type":"keyword"},"chunk_id":{"type":"keyword"},"title":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},
-                        "content":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},"url":{"type":"keyword"},"spiderId":{"type":"long"},
+                        "heading":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},
+                        "content":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},
+                        "parent_text":{"type":"text","index":false},"url":{"type":"keyword"},"spiderId":{"type":"long"},
                         "spiderName":{"type":"keyword"},"knowledgeBaseId":{"type":"long"},"embedding_model":{"type":"keyword"},"%s":{
                         "type":"dense_vector","dims":%d}}}}
                         """.formatted(vectorField, dimensions);

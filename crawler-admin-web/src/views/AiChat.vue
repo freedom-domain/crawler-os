@@ -386,6 +386,7 @@
                   <span class="source-index">{{ String(sourceIndex + 1).padStart(2, '0') }}</span>
                   <span class="source-copy">
                     <strong>{{ source.title || source.url || '未命名来源' }}</strong>
+                    <small v-if="source.heading">章节：{{ source.heading }}</small>
                     <small>来源类型：{{ sourceTypeLabel(source) }}</small>
                   </span>
                   <el-icon><ArrowRight /></el-icon>
@@ -739,6 +740,7 @@ interface SourceReference {
   chunkId?: string
   knowledgeBaseId?: string
   title: string
+  heading?: string
   url: string
   spiderName: string
   sourceType: string

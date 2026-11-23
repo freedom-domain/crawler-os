@@ -137,7 +137,7 @@ public class ChunkStrategyService {
         strategy.setName(request.getName().trim());
         strategy.setStrategyType(type);
         strategy.setChunkSize(request.getChunkSize());
-        strategy.setChunkOverlap(SEMANTIC.equals(type)
+        strategy.setChunkOverlap(request.getChunkOverlap() == null
                 ? 0 : request.getChunkOverlap());
         strategy.setSimilarityThreshold(request.getSimilarityThreshold() == null
                 ? new BigDecimal("0.70") : request.getSimilarityThreshold());
@@ -219,7 +219,11 @@ public class ChunkStrategyService {
         }
         if (!StringUtils.hasText(strategy.getDocumentTypes())) return true;
         if (documentTypes == null || documentTypes.isEmpty()) return false;
-        Set<String> configuredTypes = Set.of(strategy.getDocumentTypes().split(","));
+        // 配置值同样做归一化，容忍历史数据中的空格/大小写差异
+        Set<String> configuredTypes = java.util.Arrays.stream(strategy.getDocumentTypes().split(","))
+                .map(ChunkStrategyService::normalizeDocumentType)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
         return documentTypes.stream().map(ChunkStrategyService::normalizeDocumentType)
                 .anyMatch(configuredTypes::contains);
     }

@@ -60,6 +60,8 @@ public final class RagDtos {
         @JsonSerialize(using = ToStringSerializer.class)
         private Long knowledgeBaseId;
         private String title;
+        /** 分块所在章节标题（Markdown 标题层级拼接，可为空） */
+        private String heading;
         private String url;
         private String spiderName;
         private String sourceType;

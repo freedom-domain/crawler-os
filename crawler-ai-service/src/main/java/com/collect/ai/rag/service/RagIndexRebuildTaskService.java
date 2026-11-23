@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
@@ -21,6 +22,7 @@ public class RagIndexRebuildTaskService {
     private final RagService ragService;
     private final ThreadPoolTaskExecutor ragIndexRebuildExecutor;
     private final Map<String, RagDtos.SyncTaskResponse> tasks = new ConcurrentHashMap<>();
+    private final Map<String, AtomicBoolean> cancelFlags = new ConcurrentHashMap<>();
 
     public RagIndexRebuildTaskService(
             RagService ragService,
@@ -38,7 +40,13 @@ public class RagIndexRebuildTaskService {
             }
         }
         if (tasks.size() >= MAX_TASKS) {
-            tasks.entrySet().removeIf(entry -> isFinished(entry.getValue()));
+            tasks.entrySet().removeIf(entry -> {
+                if (isFinished(entry.getValue())) {
+                    cancelFlags.remove(entry.getKey());
+                    return true;
+                }
+                return false;
+            });
         }
         if (tasks.size() >= MAX_TASKS) {
             throw new BizException("向量索引重建任务过多，请稍后重试");
@@ -52,6 +60,7 @@ public class RagIndexRebuildTaskService {
         task.setMessage("等待执行");
         task.setCreatedAt(now);
         tasks.put(task.getTaskId(), task);
+        cancelFlags.put(task.getTaskId(), new AtomicBoolean(false));
 
         try {
             ragIndexRebuildExecutor.execute(() -> execute(task.getTaskId()));
@@ -72,6 +81,7 @@ public class RagIndexRebuildTaskService {
         return snapshot(task);
     }
 
+    /** 返回该知识库最新的重建任务；无任务时返回 null */
     public RagDtos.SyncTaskResponse latest(Long knowledgeBaseId) {
         RagDtos.SyncTaskResponse latest = null;
         for (RagDtos.SyncTaskResponse task : tasks.values()) {
@@ -82,10 +92,7 @@ public class RagIndexRebuildTaskService {
                 latest = task;
             }
         }
-        if (latest == null) {
-            throw new BizException("暂无向量索引重建任务");
-        }
-        return snapshot(latest);
+        return latest == null ? null : snapshot(latest);
     }
 
     private void execute(String taskId) {
@@ -93,14 +100,31 @@ public class RagIndexRebuildTaskService {
         if (task == null) {
             return;
         }
+        AtomicBoolean cancelled = cancelFlags.get(taskId);
+        if (cancelled != null && cancelled.get()
+                && "PENDING".equals(task.getStatus())) {
+            task.setStatus("CANCELED");
+            task.setMessage("向量索引重建已取消");
+            task.setCompletedAt(System.currentTimeMillis());
+            return;
+        }
         task.setStatus("RUNNING");
         task.setMessage("正在重建向量索引");
         task.setStartedAt(System.currentTimeMillis());
         try {
-            RagDtos.SyncResult result = ragService.syncContentIndex(task.getKnowledgeBaseId());
+            RagDtos.SyncResult result = ragService.syncContentIndex(task.getKnowledgeBaseId(),
+                    () -> cancelled != null && cancelled.get());
+            if (cancelled != null && cancelled.get()) {
+                throw new RagService.SyncCancelledException();
+            }
             task.setStatus("COMPLETED");
             task.setMessage("向量索引重建完成");
             task.setResult(result);
+        } catch (RagService.SyncCancelledException exception) {
+            log.info("向量索引重建已取消: taskId={}, knowledgeBaseId={}",
+                    taskId, task.getKnowledgeBaseId());
+            task.setStatus("CANCELED");
+            task.setMessage("向量索引重建已取消");
         } catch (RuntimeException exception) {
             log.error("向量索引重建失败: taskId={}, knowledgeBaseId={}",
                     taskId, task.getKnowledgeBaseId(), exception);
@@ -109,6 +133,34 @@ public class RagIndexRebuildTaskService {
         } finally {
             task.setCompletedAt(System.currentTimeMillis());
         }
+    }
+
+    /**
+     * 取消任务。PENDING 任务立即标记为 CANCELED；RUNNING 任务在下一个检查点
+     * （每个文档或每批 embedding 前）中断，期间状态保持 RUNNING 并提示正在取消。
+     */
+    public RagDtos.SyncTaskResponse cancel(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            throw new BizException("任务 ID不能为空");
+        }
+        RagDtos.SyncTaskResponse task = tasks.get(taskId);
+        if (task == null) {
+            throw new BizException("向量索引重建任务不存在");
+        }
+        if (!("PENDING".equals(task.getStatus()) || "RUNNING".equals(task.getStatus()))) {
+            throw new BizException("任务已结束，无法取消");
+        }
+        cancelFlags.computeIfAbsent(taskId, id -> new AtomicBoolean(false)).set(true);
+        if ("PENDING".equals(task.getStatus())) {
+            task.setStatus("CANCELED");
+            task.setMessage("向量索引重建已取消");
+            task.setCompletedAt(System.currentTimeMillis());
+        } else {
+            task.setMessage("正在取消向量索引重建");
+        }
+        log.info("向量索引重建取消请求: taskId={}, knowledgeBaseId={}, status={}",
+                taskId, task.getKnowledgeBaseId(), task.getStatus());
+        return snapshot(task);
     }
 
     private void fail(String taskId, String message) {
@@ -127,7 +179,8 @@ public class RagIndexRebuildTaskService {
     }
 
     private static boolean isFinished(RagDtos.SyncTaskResponse task) {
-        return "COMPLETED".equals(task.getStatus()) || "FAILED".equals(task.getStatus());
+        return "COMPLETED".equals(task.getStatus()) || "FAILED".equals(task.getStatus())
+                || "CANCELED".equals(task.getStatus());
     }
 
     private static RagDtos.SyncTaskResponse snapshot(RagDtos.SyncTaskResponse source) {
