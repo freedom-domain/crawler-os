@@ -580,7 +580,11 @@
           :closable="false"
           show-icon
         />
-        <p v-else-if="selectedSourceChunk">{{ selectedSourceChunk.content || '该分块内容为空。' }}</p>
+        <div
+          v-else-if="selectedSourceChunk"
+          class="source-preview-markdown"
+          v-html="renderMarkdown(selectedSourceChunk.content || '该分块内容为空。')"
+        />
       </div>
     </el-dialog>
 
@@ -670,7 +674,11 @@
             class="source-image-preview"
           />
         </div>
-        <p v-if="sourceDocumentContent">{{ sourceDocumentContent }}</p>
+        <div
+          v-if="sourceDocumentContent"
+          class="source-preview-markdown"
+          v-html="renderMarkdown(sourceDocumentContent)"
+        />
         <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
       </div>
     </el-dialog>
@@ -2365,8 +2373,73 @@ onActivated(() => {
 .source-preview-meta a:hover { text-decoration: underline; }
 .source-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .source-image-preview { width: 100%; height: 180px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); cursor: zoom-in; }
-.source-preview p { max-height: min(65vh, 640px); overflow: auto; margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
-.source-preview--fullscreen p { width: 100%; height: 100%; max-height: none; min-width: 0; min-height: 0; box-sizing: border-box; }
+.source-preview p { margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.source-preview-markdown {
+  max-height: min(65vh, 640px);
+  overflow: auto;
+  color: var(--ink-800);
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.source-preview--fullscreen .source-preview-markdown {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+.source-preview-markdown :deep(:first-child) { margin-top: 0; }
+.source-preview-markdown :deep(:last-child) { margin-bottom: 0; }
+.source-preview-markdown :deep(p) { margin: 8px 0 12px; }
+.source-preview-markdown :deep(h1), .source-preview-markdown :deep(h2), .source-preview-markdown :deep(h3),
+.source-preview-markdown :deep(h4), .source-preview-markdown :deep(h5), .source-preview-markdown :deep(h6) {
+  margin: 18px 0 8px;
+  color: var(--ink-950);
+  line-height: 1.45;
+  font-weight: 700;
+}
+.source-preview-markdown :deep(h1) { font-size: 1.75em; }
+.source-preview-markdown :deep(h2) { font-size: 1.45em; }
+.source-preview-markdown :deep(h3) { font-size: 1.25em; }
+.source-preview-markdown :deep(h4), .source-preview-markdown :deep(h5), .source-preview-markdown :deep(h6) { font-size: 1.1em; }
+.source-preview-markdown :deep(ul), .source-preview-markdown :deep(ol) { margin: 8px 0 12px; padding-left: 24px; }
+.source-preview-markdown :deep(li) { margin: 3px 0; }
+.source-preview-markdown :deep(li > p) { margin: 4px 0; }
+.source-preview-markdown :deep(blockquote) {
+  margin: 10px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--teal);
+  color: var(--ink-600);
+}
+.source-preview-markdown :deep(hr) { margin: 16px 0; border: 0; border-top: 1px solid var(--chrome-line); }
+.source-preview-markdown :deep(pre) {
+  overflow-x: auto;
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  line-height: 1.6;
+}
+.source-preview-markdown :deep(pre code) { padding: 0; background: transparent; }
+.source-preview-markdown :deep(code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--surface-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .92em;
+}
+.source-preview-markdown :deep(a) { color: var(--teal-ink); text-decoration: underline; }
+.source-preview-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 10px 0; }
+.source-preview-markdown :deep(th), .source-preview-markdown :deep(td) {
+  min-width: 100px;
+  padding: 6px 10px;
+  border: 1px solid var(--chrome-line);
+  text-align: left;
+}
+.source-preview-markdown :deep(th) { background: var(--surface-soft); }
+.source-preview-markdown :deep(img) { max-width: 100%; height: auto; }
 
 .composer-wrap { width: min(100% - 48px, 900px); margin: 0 auto; padding: 8px 0 16px; }
 .composer { position: relative; padding: 11px 13px 9px; border: 1px solid var(--line-strong); border-radius: 13px; background: var(--surface); box-shadow: 0 5px 18px rgba(var(--teal-shadow-soft-rgb), .06); transition: border-color .18s, box-shadow .18s; }

@@ -301,10 +301,9 @@ public class RagService {
         String title = originalName.replaceFirst("\\.[^.]+$", "");
         String content;
         try (java.io.InputStream input = file.getInputStream()) {
-            BodyContentHandler handler = new BodyContentHandler(-1);
-            AutoDetectParser parser = new AutoDetectParser();
-            parser.parse(input, handler, new Metadata(), new ParseContext());
-            content = handler.toString();
+            content = isMarkdownDocument(originalName, file.getContentType())
+                    ? decodeMarkdown(input)
+                    : extractTextWithTika(input);
         } catch (Exception e) {
             throw new IllegalStateException("文档解析失败: " + e.getMessage(), e);
         }
@@ -2548,6 +2547,46 @@ public class RagService {
             types.add(mimeType);
         }
         return types;
+    }
+
+    private static boolean isMarkdownDocument(String fileName, String contentType) {
+        String name = fileName == null ? "" : fileName.trim().toLowerCase(java.util.Locale.ROOT);
+        if (name.endsWith(".md") || name.endsWith(".markdown")) return true;
+        return StringUtils.hasText(contentType)
+                && contentType.toLowerCase(java.util.Locale.ROOT).contains("markdown");
+    }
+
+    private static String decodeMarkdown(java.io.InputStream input) throws java.io.IOException {
+        byte[] bytes = input.readAllBytes();
+        if (bytes.length >= 2) {
+            if ((bytes[0] & 0xff) == 0xfe && (bytes[1] & 0xff) == 0xff) {
+                byte[] bomRemoved = java.util.Arrays.copyOfRange(bytes, 2, bytes.length);
+                return new String(bomRemoved, java.nio.charset.Charset.forName("UTF-16BE"))
+                        .replace('\u0000', ' ')
+                        .replace("\r\n", "\n");
+            }
+            if ((bytes[0] & 0xff) == 0xff && (bytes[1] & 0xff) == 0xfe) {
+                byte[] bomRemoved = java.util.Arrays.copyOfRange(bytes, 2, bytes.length);
+                return new String(bomRemoved, java.nio.charset.Charset.forName("UTF-16LE"))
+                        .replace('\u0000', ' ')
+                        .replace("\r\n", "\n");
+            }
+        }
+        if (bytes.length >= 3
+                && (bytes[0] & 0xff) == 0xef
+                && (bytes[1] & 0xff) == 0xbb
+                && (bytes[2] & 0xff) == 0xbf) {
+            return new String(bytes, 3, bytes.length - 3, StandardCharsets.UTF_8)
+                    .replace("\r\n", "\n");
+        }
+        return new String(bytes, StandardCharsets.UTF_8).replace("\r\n", "\n");
+    }
+
+    private static String extractTextWithTika(java.io.InputStream input) throws Exception {
+        BodyContentHandler handler = new BodyContentHandler(-1);
+        AutoDetectParser parser = new AutoDetectParser();
+        parser.parse(input, handler, new Metadata(), new ParseContext());
+        return handler.toString();
     }
 
     private static List<String> splitParagraphs(String text, int chunkSize, int overlap) {

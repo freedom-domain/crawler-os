@@ -563,6 +563,56 @@ onMounted(loadAll)
 .detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); }
 .document-content { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .document-markdown { white-space: normal; }
+.document-markdown :deep(:first-child) { margin-top: 0; }
+.document-markdown :deep(:last-child) { margin-bottom: 0; }
+.document-markdown :deep(p) { margin: 8px 0 12px; }
+.document-markdown :deep(h1), .document-markdown :deep(h2), .document-markdown :deep(h3),
+.document-markdown :deep(h4), .document-markdown :deep(h5), .document-markdown :deep(h6) {
+  margin: 18px 0 8px;
+  color: var(--el-text-color-primary);
+  line-height: 1.45;
+  font-weight: 700;
+}
+.document-markdown :deep(h1) { font-size: 1.75em; }
+.document-markdown :deep(h2) { font-size: 1.45em; }
+.document-markdown :deep(h3) { font-size: 1.25em; }
+.document-markdown :deep(h4), .document-markdown :deep(h5), .document-markdown :deep(h6) { font-size: 1.1em; }
+.document-markdown :deep(ul), .document-markdown :deep(ol) { margin: 8px 0 12px; padding-left: 24px; }
+.document-markdown :deep(li) { margin: 3px 0; }
+.document-markdown :deep(li > p) { margin: 4px 0; }
+.document-markdown :deep(blockquote) {
+  margin: 10px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--el-color-primary);
+  color: var(--el-text-color-secondary);
+}
+.document-markdown :deep(hr) { margin: 16px 0; border: 0; border-top: 1px solid var(--el-border-color); }
+.document-markdown :deep(pre) {
+  overflow-x: auto;
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+  line-height: 1.6;
+}
+.document-markdown :deep(pre code) { padding: 0; background: transparent; }
+.document-markdown :deep(code) {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--el-fill-color-light);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: .92em;
+}
+.document-markdown :deep(a) { color: var(--el-color-primary); text-decoration: underline; }
+.document-markdown :deep(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 10px 0; }
+.document-markdown :deep(th), .document-markdown :deep(td) {
+  min-width: 100px;
+  padding: 6px 10px;
+  border: 1px solid var(--el-border-color);
+  text-align: left;
+}
+.document-markdown :deep(th) { background: var(--el-fill-color-light); }
+.document-markdown :deep(img) { max-width: 100%; height: auto; }
 .chunk-list { margin-top: 4px; }
 .chunk-count { margin-left: 8px; }
 .chunk-content { max-height: 320px; overflow: auto; margin: 0; overflow-wrap: anywhere; }
