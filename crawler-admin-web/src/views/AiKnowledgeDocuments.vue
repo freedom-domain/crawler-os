@@ -69,7 +69,7 @@
             <template #default="{ row }">{{ uploadedFileSize(row) }}</template>
           </el-table-column>
           <el-table-column prop="snippet" label="内容摘要" min-width="280" show-overflow-tooltip resizable />
-          <el-table-column label="文档来源" min-width="180" resizable>
+          <el-table-column label="文档来源" min-width="130" resizable>
             <template #default="{ row }">
               <el-tag v-if="isUploadedDocument(row)" type="warning" effect="light">MinIO 上传</el-tag>
               <el-tag v-else type="success" effect="light">爬虫采集</el-tag>

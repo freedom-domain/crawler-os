@@ -1596,7 +1596,10 @@ public class RagService {
             if (knowledgeBase != null && knowledgeBase.getRerankModelId() != null && rerankModel == null) {
                 throw new BizException("知识库关联的重排模型不存在");
             }
-            int candidateCount = rerankModel == null ? topK : Math.min(topK * 4, 100);
+            int candidateCount = rerankModel == null || knowledgeVectorModel == null
+                    || knowledgeVectorModel.getTopK() == null
+                    ? topK
+                    : Math.max(1, Math.min(knowledgeVectorModel.getTopK(), 20));
             int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
                     ? knowledgeVectorModel.getDimensions()
                     : properties.resolveDimensions();
