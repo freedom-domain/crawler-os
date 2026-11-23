@@ -141,10 +141,17 @@ export const getKnowledgeBaseDocumentChunks = (id: string, knowledgeBaseId?: str
   request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/chunks`, {
     params: knowledgeBaseId ? { knowledgeBaseId } : undefined
   })
-export const vectorizeKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
+export const vectorizeKnowledgeBaseDocument = (
+  id: string,
+  knowledgeBaseId?: string,
+  strategyId?: string
+) =>
   request.post(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/vectorize`, undefined, {
     ...{ timeout: 0 },
-    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+    params: {
+      ...(knowledgeBaseId ? { knowledgeBaseId } : {}),
+      ...(strategyId ? { strategyId } : {})
+    }
   })
 export const excludeKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
   request.delete(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`, {

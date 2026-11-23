@@ -504,9 +504,10 @@ public class RagController {
     @PostMapping("/knowledge/documents/{id}/vectorize")
     public R<RagDtos.DocumentVectorizationResult> vectorizeDocument(
             @PathVariable String id,
-            @RequestParam(required = false) Long knowledgeBaseId) {
+            @RequestParam(required = false) Long knowledgeBaseId,
+            @RequestParam(required = false) Long strategyId) {
         requireAdmin();
-        return R.ok(ragService.vectorizeDocument(knowledgeBaseId, id));
+        return R.ok(ragService.vectorizeDocument(knowledgeBaseId, id, strategyId));
     }
 
     @Operation(summary = "从知识库排除文档")

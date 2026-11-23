@@ -173,6 +173,23 @@
         </el-tabs>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="vectorizeDialogVisible" title="重新向量化文档" width="520px">
+      <p class="vectorize-dialog-tip">
+        选择分块策略后开始向量化；不选择则按文档字符数和类型自动匹配策略。
+      </p>
+      <el-select v-model="vectorizeStrategyId" clearable placeholder="自动匹配分块策略"
+        style="width: 100%">
+        <el-option v-for="strategy in chunkStrategies" :key="strategy.id"
+          :label="strategyLabel(strategy)" :value="strategy.id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="vectorizeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="Boolean(vectorizingId)" @click="confirmVectorize">
+          开始向量化
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -187,6 +204,7 @@ import AiChunkStrategyManager from '@/components/AiChunkStrategyManager.vue'
 import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
   getKnowledgeBaseDocumentChunks,
+  getChunkStrategies,
   getKnowledgeBaseStats, syncRagIndex, vectorizeKnowledgeBaseDocument,
   getKnowledgeBases, getKnowledgeBaseUploadedDocuments, uploadKnowledgeBaseDocument,
   getRagSyncTask, getLatestRagSyncTask, cancelRagSyncTask
@@ -240,6 +258,20 @@ function uploadedFileSize(row: KnowledgeDocument) {
   return document ? formatFileSize(document.fileSize) : '-'
 }
 
+const STRATEGY_TYPE_LABELS: Record<string, string> = {
+  FIXED_CHARACTER: '固定字符',
+  PARAGRAPH: '段落',
+  RECURSIVE: '递归',
+  SEMANTIC: '语义'
+}
+
+function strategyLabel(strategy: any) {
+  const type = STRATEGY_TYPE_LABELS[strategy.strategyType] || strategy.strategyType
+  const overlap = strategy.strategyType === 'SEMANTIC' ? '' : ` / 重叠 ${strategy.chunkOverlap}`
+  const suffix = strategy.defaultStrategy ? '（默认）' : ''
+  return `${strategy.name} · ${type} · ${strategy.chunkSize}${overlap}${suffix}`
+}
+
 const emptyStats = () => ({
   sourceIndex: '', vectorIndex: '', sourceDocuments: 0,
   includedDocuments: 0, excludedDocuments: 0, vectorDocuments: 0
@@ -259,6 +291,10 @@ const statsLoading = ref(false)
 const refreshing = ref(false)
 const rebuilding = ref(false)
 const vectorizingId = ref('')
+const vectorizeDialogVisible = ref(false)
+const vectorizeDocumentRow = ref<KnowledgeDocument | null>(null)
+const vectorizeStrategyId = ref<string>('')
+const chunkStrategies = ref<any[]>([])
 const detailVisible = ref(false)
 const detailLoading = ref(false)
 const chunks = ref<VectorChunk[]>([])
@@ -301,8 +337,26 @@ function updateDocumentTabTitle() {
 
 function handleDocumentCommand(command: string, row: KnowledgeDocument) {
   if (command === 'detail') void showDetail(row)
-  else if (command === 'vectorize') void vectorizeDocument(row)
+  else if (command === 'vectorize') void openVectorizeDialog(row)
   else if (command === 'exclude') void excludeDocument(row)
+}
+
+async function openVectorizeDialog(row: KnowledgeDocument) {
+  vectorizeDocumentRow.value = row
+  vectorizeStrategyId.value = ''
+  vectorizeDialogVisible.value = true
+  try {
+    const response: any = await getChunkStrategies()
+    chunkStrategies.value = response?.data || []
+  } catch {
+    chunkStrategies.value = []
+  }
+}
+
+function confirmVectorize() {
+  const row = vectorizeDocumentRow.value
+  vectorizeDialogVisible.value = false
+  if (row) void vectorizeDocument(row, vectorizeStrategyId.value || undefined)
 }
 
 async function loadStats() {
@@ -427,10 +481,12 @@ async function loadDocumentChunks(documentId: string) {
   }
 }
 
-async function vectorizeDocument(row: KnowledgeDocument) {
+async function vectorizeDocument(row: KnowledgeDocument, strategyId?: string) {
   vectorizingId.value = row.id
   try {
-    const response: any = await vectorizeKnowledgeBaseDocument(row.id, selectedKnowledgeBaseId.value)
+    const response: any = await vectorizeKnowledgeBaseDocument(
+      row.id, selectedKnowledgeBaseId.value, strategyId
+    )
     if (!response) return
     ElMessage.success(
       `向量索引 ${selectedBase.value?.vectorIndex || ''} 已更新，文档向量化完成，共生成 ${response.data.chunks} 个分块`
@@ -671,6 +727,7 @@ onBeforeUnmount(stopRebuildPolling)
   background: var(--el-color-danger-light-9);
 }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); }
+.vectorize-dialog-tip { margin: 0 0 14px; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
 .document-content { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .document-markdown { white-space: normal; }
 .document-markdown :deep(:first-child) { margin-top: 0; }
