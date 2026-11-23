@@ -35,7 +35,7 @@ public class VectorModelService {
         return vectorModelMapper.selectList(
                         new LambdaQueryWrapper<AiRagVectorModel>()
                                 .orderByAsc(AiRagVectorModel::getId))
-                .stream().map(VectorModelService::toResponse).toList();
+                .stream().map(this::toResponse).toList();
     }
 
     public IPage<VectorModelResponse> page(long current, long size, String keyword,
@@ -54,7 +54,7 @@ public class VectorModelService {
                     .or().eq(AiRagVectorModel::getApiKey, ""));
         }
         return vectorModelMapper.selectPage(new Page<>(safeCurrent(current), safeSize(size)), query)
-                .convert(VectorModelService::toResponse);
+                .convert(this::toResponse);
     }
 
     public String getApiKey(Long id) {
@@ -79,7 +79,8 @@ public class VectorModelService {
     public VectorModelResponse create(VectorModelRequest request) {
         validate(request);
         ensureUniqueName(request.getName(), null);
-        AiRagVectorModel model = fromRequest(request);
+        AiRagVectorModel model = new AiRagVectorModel();
+        copyRequest(request, model);
         model.setApiKey(StringUtils.hasText(request.getApiKey()) ? request.getApiKey().trim() : "");
         model.setCreateTime(LocalDateTime.now());
         model.setUpdateTime(model.getCreateTime());
@@ -146,21 +147,13 @@ public class VectorModelService {
         }
     }
 
-    private static AiRagVectorModel fromRequest(VectorModelRequest request) {
-        AiRagVectorModel model = new AiRagVectorModel();
-        copyRequest(request, model);
-        return model;
-    }
-
-    private static void copyRequest(VectorModelRequest request, AiRagVectorModel model) {
+    private void copyRequest(VectorModelRequest request, AiRagVectorModel model) {
         model.setName(request.getName().trim());
         model.setEmbeddingProvider(request.getEmbeddingProvider().trim().toLowerCase(Locale.ROOT));
         model.setEmbeddingBaseUrl(request.getEmbeddingBaseUrl().trim());
         model.setEmbeddingModel(request.getEmbeddingModel().trim());
         model.setDimensions(request.getDimensions());
         model.setTopK(request.getTopK());
-        model.setChunkSize(request.getChunkSize());
-        model.setChunkOverlap(request.getChunkOverlap());
     }
 
     private static void validate(VectorModelRequest request) {
@@ -190,12 +183,8 @@ public class VectorModelService {
         }
         if (request.getDimensions() == null || request.getDimensions() < 1
                 || request.getDimensions() > 65536
-                || request.getTopK() == null || request.getTopK() < 1 || request.getTopK() > 20
-                || request.getChunkSize() == null || request.getChunkSize() < 200
-                || request.getChunkSize() > 20000
-                || request.getChunkOverlap() == null || request.getChunkOverlap() < 0
-                || request.getChunkOverlap() >= request.getChunkSize()) {
-            throw new BizException("向量维度、Top K 或分块参数不合法");
+                || request.getTopK() == null || request.getTopK() < 1 || request.getTopK() > 20) {
+            throw new BizException("向量维度或 Top K 不合法");
         }
     }
 
@@ -209,14 +198,12 @@ public class VectorModelService {
         copy.setApiKey(source.getApiKey());
         copy.setDimensions(source.getDimensions());
         copy.setTopK(source.getTopK());
-        copy.setChunkSize(source.getChunkSize());
-        copy.setChunkOverlap(source.getChunkOverlap());
         copy.setCreateTime(source.getCreateTime());
         copy.setUpdateTime(source.getUpdateTime());
         return copy;
     }
 
-    private static VectorModelResponse toResponse(AiRagVectorModel model) {
+    private VectorModelResponse toResponse(AiRagVectorModel model) {
         VectorModelResponse response = new VectorModelResponse();
         response.setId(model.getId());
         response.setName(model.getName());
@@ -226,8 +213,6 @@ public class VectorModelService {
         response.setApiKeyConfigured(StringUtils.hasText(model.getApiKey()));
         response.setDimensions(model.getDimensions());
         response.setTopK(model.getTopK());
-        response.setChunkSize(model.getChunkSize());
-        response.setChunkOverlap(model.getChunkOverlap());
         return response;
     }
 

@@ -37,9 +37,6 @@ public class RagIndexInitializer {
 
     @EventListener(ApplicationReadyEvent.class)
     public void initVectorIndex() {
-        if (!properties.getRag().isEnabled()) {
-            return;
-        }
         try {
             ensureVectorIndex();
         } catch (Exception e) {

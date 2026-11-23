@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AiChunkStrategyManager: typeof import('./src/components/AiChunkStrategyManager.vue')['default']
     ChangePasswordDialog: typeof import('./src/components/ChangePasswordDialog.vue')['default']
     ContentPreviewDialog: typeof import('./src/components/ContentPreviewDialog.vue')['default']
     DcaPerformanceChart: typeof import('./src/components/DcaPerformanceChart.vue')['default']

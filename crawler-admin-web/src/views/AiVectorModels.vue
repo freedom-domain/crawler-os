@@ -10,7 +10,7 @@
         <div class="card-header">
           <div>
             <h2 v-if="!embedded">向量模型管理</h2>
-            <p>管理 Embedding 模型及其检索、分块参数，AI 配置可直接引用。</p>
+            <p>管理供知识库使用的 Embedding 模型及检索参数。</p>
           </div>
           <div class="header-actions">
             <router-link v-if="!embedded" to="/ai-config">返回 AI 配置</router-link>
@@ -61,11 +61,6 @@
               </el-table-column>
               <el-table-column prop="dimensions" label="维度" min-width="70" resizable />
               <el-table-column prop="topK" label="Top K" min-width="75" resizable />
-              <el-table-column label="分块（长度 / 重叠）" min-width="140" resizable>
-                <template #default="{ row }">
-                  {{ row.chunkSize }} / {{ row.chunkOverlap }}
-                </template>
-              </el-table-column>
               <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
                 <template #default="{ row }">
                   <TableRowActions
@@ -141,12 +136,6 @@
               <el-option v-for="value in 20" :key="value" :label="String(value)" :value="value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="分块长度（字符）" prop="chunkSize">
-            <el-input-number v-model="form.chunkSize" :min="200" :max="20000" :step="100" controls-position="right" />
-          </el-form-item>
-          <el-form-item label="分块重叠（字符）" prop="chunkOverlap">
-            <el-input-number v-model="form.chunkOverlap" :min="0" :max="19999" :step="50" controls-position="right" />
-          </el-form-item>
         </div>
       </el-form>
       <template #footer>
@@ -182,8 +171,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Delete, Edit } from '@element-plus/icons-vue'
 import {
-  createVectorModel, deleteVectorModel, discoverVectorModels, getVectorModelApiKey, getVectorModelPage,
-  updateVectorModel, updateVectorModelApiKey
+  createVectorModel, deleteVectorModel, discoverVectorModels, getVectorModelApiKey,
+  getVectorModelPage, updateVectorModel, updateVectorModelApiKey
 } from '@/api'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
 
@@ -198,8 +187,6 @@ interface VectorModel {
   apiKeyConfigured: boolean
   dimensions: number
   topK: number
-  chunkSize: number
-  chunkOverlap: number
 }
 
 const emptyModel = () => ({
@@ -210,9 +197,7 @@ const emptyModel = () => ({
   apiKey: '',
   clearApiKey: false,
   dimensions: 1024,
-  topK: 5,
-  chunkSize: 1500,
-  chunkOverlap: 200
+  topK: 5
 })
 
 const models = ref<VectorModel[]>([])
@@ -261,16 +246,6 @@ const rules: FormRules = {
   embeddingModel: [{ required: true, message: '请输入模型名称', trigger: 'blur' }],
   dimensions: [{ required: true, type: 'number', min: 1, message: '向量维度必须大于 0', trigger: 'change' }],
   topK: [{ required: true, type: 'number', min: 1, max: 20, message: 'Top K 范围为 1–20', trigger: 'change' }],
-  chunkSize: [{ required: true, type: 'number', min: 200, max: 20000, message: '分块长度范围为 200–20000', trigger: 'change' }],
-  chunkOverlap: [{
-    required: true,
-    type: 'number',
-    validator: (_rule, value, callback) => {
-      if (value >= 0 && value < form.chunkSize) callback()
-      else callback(new Error('重叠长度必须小于分块长度'))
-    },
-    trigger: 'change'
-  }]
 }
 
 const loadModels = async () => {
@@ -319,9 +294,7 @@ const openEdit = (model: VectorModel) => {
     apiKey: '',
     clearApiKey: false,
     dimensions: model.dimensions,
-    topK: model.topK,
-    chunkSize: model.chunkSize,
-    chunkOverlap: model.chunkOverlap
+    topK: model.topK
   })
   dialogVisible.value = true
 }

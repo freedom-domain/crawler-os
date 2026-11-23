@@ -71,7 +71,6 @@ public class RagConfigService {
         AiRagConfig config = requireConfig();
         RagConfigResponse response = new RagConfigResponse();
         response.setEnvironment(config.getEnvironment());
-        response.setEnabled(config.getEnabled());
         response.setSourceIndex(properties.resolveSourceIndex());
         response.setEmbeddingProvider(config.getEmbeddingProvider());
         response.setEmbeddingBaseUrl(config.getEmbeddingBaseUrl());
@@ -84,8 +83,6 @@ public class RagConfigService {
         response.setChatModel(config.getChatModel());
         response.setApiKeyConfigured(StringUtils.hasText(config.getApiKey()));
         response.setTopK(config.getTopK());
-        response.setChunkSize(config.getChunkSize());
-        response.setChunkOverlap(config.getChunkOverlap());
         response.setVectorIndexName(properties.resolveVectorIndex());
         response.setVectorIndexPrefix(properties.getRag().getVectorIndexPrefix());
         response.setVectorIndex(properties.resolveVectorIndex());
@@ -105,7 +102,6 @@ public class RagConfigService {
         String previousSourceIndex = previous.getSourceIndex();
         AiRagVectorModel legacyUpdatedModel = null;
         AiRagChatModel legacyUpdatedChatModel = null;
-        if (request.getEnabled() != null) config.setEnabled(request.getEnabled());
         if (request.getVectorModelId() != null) {
             AiRagVectorModel model = vectorModelMapper.selectById(request.getVectorModelId());
             if (model == null) {
@@ -150,12 +146,9 @@ public class RagConfigService {
         }
         if (request.getVectorModelId() == null) {
             if (request.getTopK() != null) config.setTopK(request.getTopK());
-            if (request.getChunkSize() != null) config.setChunkSize(request.getChunkSize());
-            if (request.getChunkOverlap() != null) config.setChunkOverlap(request.getChunkOverlap());
             if (request.getEmbeddingProvider() != null || request.getEmbeddingBaseUrl() != null
                     || request.getEmbeddingModel() != null || request.getDimensions() != null
-                    || request.getTopK() != null || request.getChunkSize() != null
-                    || request.getChunkOverlap() != null) {
+                    || request.getTopK() != null) {
                 legacyUpdatedModel = vectorModelMapper.selectById(config.getVectorModelId());
                 if (legacyUpdatedModel == null) {
                     throw new BizException("RAG 配置引用的向量模型不存在");
@@ -188,9 +181,7 @@ public class RagConfigService {
             if (vectorIndex.equals(properties.resolveSourceIndex())) {
                 throw new BizException("向量索引不能与 ES 源索引相同");
             }
-            if (Boolean.TRUE.equals(config.getEnabled())) {
-                indexInitializer.ensureVectorIndex();
-            }
+            indexInitializer.ensureVectorIndex();
             if (configMapper.updateById(config) != 1) {
                 throw new IllegalStateException("保存 RAG 数据库配置失败");
             }
@@ -222,7 +213,6 @@ public class RagConfigService {
         }
         applyChatModel(config, chatModel);
         RagProperties.Rag rag = new RagProperties.Rag();
-        rag.setEnabled(Boolean.TRUE.equals(config.getEnabled()));
         rag.setSourceIndex(properties.resolveSourceIndex());
         rag.setEmbeddingProvider(config.getEmbeddingProvider());
         rag.setEmbeddingBaseUrl(config.getEmbeddingBaseUrl());
@@ -236,8 +226,6 @@ public class RagConfigService {
                 ? 8192 : chatModel.getContextLength());
         rag.setApiKey(config.getApiKey());
         rag.setTopK(config.getTopK());
-        rag.setChunkSize(config.getChunkSize());
-        rag.setChunkOverlap(config.getChunkOverlap());
         rag.setVectorIndexPrefix(properties.getRag().getVectorIndexPrefix());
         rag.setVectorIndexEnvironment(properties.getRag().getVectorIndexEnvironment());
         properties.replace(rag);
@@ -347,9 +335,7 @@ public class RagConfigService {
             if (vectorIndex.equals(properties.resolveSourceIndex())) {
                 throw new BizException("向量索引不能与 ES 源索引相同");
             }
-            if (Boolean.TRUE.equals(config.getEnabled())) {
-                indexInitializer.ensureVectorIndex();
-            }
+            indexInitializer.ensureVectorIndex();
             if (configMapper.updateById(config) != 1) {
                 throw new IllegalStateException("保存 RAG 数据库配置失败");
             }
@@ -418,8 +404,6 @@ public class RagConfigService {
             model.setEmbeddingModel(config.getEmbeddingModel());
             model.setDimensions(config.getDimensions());
             model.setTopK(config.getTopK());
-            model.setChunkSize(config.getChunkSize());
-            model.setChunkOverlap(config.getChunkOverlap());
             model.setCreateTime(LocalDateTime.now());
             model.setUpdateTime(model.getCreateTime());
             if (vectorModelMapper.insert(model) != 1) {
@@ -439,8 +423,6 @@ public class RagConfigService {
         config.setEmbeddingModel(model.getEmbeddingModel());
         config.setDimensions(model.getDimensions());
         config.setTopK(model.getTopK());
-        config.setChunkSize(model.getChunkSize());
-        config.setChunkOverlap(model.getChunkOverlap());
     }
 
     private static void applyVectorModel(AiRagVectorModel model, AiRagConfig config) {
@@ -449,15 +431,12 @@ public class RagConfigService {
         model.setEmbeddingModel(config.getEmbeddingModel());
         model.setDimensions(config.getDimensions());
         model.setTopK(config.getTopK());
-        model.setChunkSize(config.getChunkSize());
-        model.setChunkOverlap(config.getChunkOverlap());
     }
 
     private AiRagConfig defaultConfig(String env) {
         RagProperties.Rag defaults = new RagProperties.Rag();
         AiRagConfig config = new AiRagConfig();
         config.setEnvironment(env);
-        config.setEnabled(defaults.isEnabled());
         config.setSourceIndex("local".equals(env) ? "spider_content_local" : defaults.getSourceIndex());
         config.setEmbeddingProvider(defaults.getEmbeddingProvider());
         config.setEmbeddingBaseUrl(defaults.getEmbeddingBaseUrl());
@@ -468,8 +447,6 @@ public class RagConfigService {
         config.setChatModel(defaults.getChatModel());
         config.setApiKey(defaults.getApiKey());
         config.setTopK(defaults.getTopK());
-        config.setChunkSize(defaults.getChunkSize());
-        config.setChunkOverlap(defaults.getChunkOverlap());
         config.setVectorIndex(resolveDefaultVectorIndex(env));
         config.setVectorIndexPrefix(defaults.getVectorIndexPrefix());
         config.setCreateTime(LocalDateTime.now());
@@ -494,11 +471,8 @@ public class RagConfigService {
         validateHttpUrl(config.getEmbeddingBaseUrl(), "Embedding 地址");
         validateHttpUrl(config.getChatBaseUrl(), "聊天地址");
         if (config.getDimensions() == null || config.getDimensions() < 1
-                || config.getTopK() == null || config.getTopK() < 1 || config.getTopK() > 20
-                || config.getChunkSize() == null || config.getChunkSize() < 200
-                || config.getChunkOverlap() == null || config.getChunkOverlap() < 0
-                || config.getChunkOverlap() >= config.getChunkSize()) {
-            throw new IllegalArgumentException("向量维度、topK 或分块参数不合法");
+                || config.getTopK() == null || config.getTopK() < 1 || config.getTopK() > 20) {
+            throw new IllegalArgumentException("向量维度或 topK 不合法");
         }
         if (config.getApiKey() != null && config.getApiKey().length() > 1024) {
             throw new IllegalArgumentException("API Key 长度不能超过 1024 个字符");

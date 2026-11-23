@@ -9,6 +9,8 @@ import com.collect.ai.rag.dto.ModelDiscoveryRequest;
 import com.collect.ai.rag.dto.KnowledgeBaseDtos;
 import com.collect.ai.rag.dto.VectorModelRequest;
 import com.collect.ai.rag.dto.VectorModelResponse;
+import com.collect.ai.rag.dto.ChunkStrategyRequest;
+import com.collect.ai.rag.dto.ChunkStrategyResponse;
 import com.collect.ai.rag.dto.RerankModelRequest;
 import com.collect.ai.rag.dto.RerankModelResponse;
 import com.collect.ai.rag.dto.AiAssistantDtos;
@@ -21,6 +23,7 @@ import com.collect.ai.rag.service.RagConfigService;
 import com.collect.ai.rag.service.RagIndexRebuildTaskService;
 import com.collect.ai.rag.service.RagService;
 import com.collect.ai.rag.service.VectorModelService;
+import com.collect.ai.rag.service.ChunkStrategyService;
 import com.collect.ai.rag.service.RerankModelService;
 import com.collect.common.exception.BizException;
 import com.collect.common.result.R;
@@ -50,6 +53,7 @@ public class RagController {
     private final RagService ragService;
     private final RagConfigService ragConfigService;
     private final VectorModelService vectorModelService;
+    private final ChunkStrategyService chunkStrategyService;
     private final ChatModelService chatModelService;
     private final RerankModelService rerankModelService;
     private final ModelDiscoveryService modelDiscoveryService;
@@ -195,6 +199,36 @@ public class RagController {
             @RequestParam(required = false) String apiKeyStatus) {
         requireAdmin();
         return R.ok(vectorModelService.page(page, pageSize, keyword, provider, apiKeyStatus));
+    }
+
+    @Operation(summary = "读取文档分块策略列表")
+    @GetMapping("/chunk-strategies")
+    public R<java.util.List<ChunkStrategyResponse>> chunkStrategies() {
+        requireAdmin();
+        return R.ok(chunkStrategyService.list());
+    }
+
+    @Operation(summary = "创建文档分块策略")
+    @PostMapping("/chunk-strategies")
+    public R<ChunkStrategyResponse> createChunkStrategy(@RequestBody ChunkStrategyRequest request) {
+        requireAdmin();
+        return R.ok(chunkStrategyService.create(request));
+    }
+
+    @Operation(summary = "更新文档分块策略")
+    @PutMapping("/chunk-strategies/{id}")
+    public R<ChunkStrategyResponse> updateChunkStrategy(
+            @PathVariable Long id, @RequestBody ChunkStrategyRequest request) {
+        requireAdmin();
+        return R.ok(chunkStrategyService.update(id, request));
+    }
+
+    @Operation(summary = "删除文档分块策略")
+    @DeleteMapping("/chunk-strategies/{id}")
+    public R<Void> deleteChunkStrategy(@PathVariable Long id) {
+        requireAdmin();
+        chunkStrategyService.delete(id);
+        return R.ok();
     }
 
     @Operation(summary = "读取向量模型 API Key")
@@ -434,10 +468,11 @@ public class RagController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize,
             @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "true") boolean includeExcluded) {
+            @RequestParam(defaultValue = "true") boolean includeExcluded,
+            @RequestParam(required = false) Boolean vectorized) {
         requireAdmin();
         return R.ok(ragService.listKnowledgeBaseDocuments(
-                knowledgeBaseId, page, pageSize, keyword, includeExcluded));
+                knowledgeBaseId, page, pageSize, keyword, includeExcluded, vectorized));
     }
 
     @Operation(summary = "读取知识库文档详情")

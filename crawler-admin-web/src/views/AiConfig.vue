@@ -11,9 +11,6 @@
         <div class="card-heading">
           <div class="card-title-row">
             <h2>AI / RAG 配置</h2>
-            <el-tag :type="form.enabled ? 'success' : 'info'" effect="light">
-              {{ form.enabled ? 'RAG 已启用' : 'RAG 已停用' }}
-            </el-tag>
           </div>
           <p>当前环境：{{ config.environment || '-' }}。修改保存后立即生效。</p>
         </div>
@@ -38,20 +35,6 @@
       >
         <section class="config-section">
           <div class="section-title">
-            <h3>RAG 状态与数据源</h3>
-            <span>控制索引同步和问答功能</span>
-          </div>
-          <div class="form-grid">
-            <el-form-item label="启用 RAG">
-              <el-switch v-model="form.enabled" active-text="启用" inactive-text="停用" />
-            </el-form-item>
-          </div>
-        </section>
-
-        <el-divider />
-
-        <section class="config-section">
-          <div class="section-title">
             <h3>向量模型</h3>
             <span>从已保存的模型配置中选择</span>
           </div>
@@ -70,7 +53,7 @@
               </el-button>
             </el-form-item>
             <el-form-item label="检索与分块参数">
-              <span>Top K {{ selectedVectorModel?.topK ?? config.topK }} · 分块长度 {{ selectedVectorModel?.chunkSize ?? config.chunkSize }} 字符 · 重叠 {{ selectedVectorModel?.chunkOverlap ?? config.chunkOverlap }} 字符</span>
+              <span>Top K {{ selectedVectorModel?.topK ?? config.topK }} · 分块策略按文档字符数和类型自动匹配</span>
             </el-form-item>
           </div>
           <div class="index-preview">
@@ -160,7 +143,6 @@ defineProps<{ embedded?: boolean }>()
 
 interface RagConfig {
   environment: string
-  enabled: boolean
   sourceIndex: string
   embeddingProvider: string
   embeddingBaseUrl: string
@@ -173,8 +155,6 @@ interface RagConfig {
   chatModel: string
   apiKeyConfigured: boolean
   topK: number
-  chunkSize: number
-  chunkOverlap: number
   vectorIndexName: string
   vectorIndexPrefix: string
   vectorIndex: string
@@ -183,7 +163,6 @@ interface RagConfig {
 
 const emptyConfig = (): RagConfig => ({
   environment: '',
-  enabled: false,
   sourceIndex: '',
   embeddingProvider: 'ollama',
   embeddingBaseUrl: '',
@@ -196,8 +175,6 @@ const emptyConfig = (): RagConfig => ({
   chatModel: '',
   apiKeyConfigured: false,
   topK: 5,
-  chunkSize: 1500,
-  chunkOverlap: 200,
   vectorIndexName: '',
   vectorIndexPrefix: '',
   vectorIndex: '',
@@ -209,8 +186,6 @@ interface VectorModel {
   name: string
   embeddingModel: string
   topK: number
-  chunkSize: number
-  chunkOverlap: number
 }
 
 interface ChatModel {
@@ -226,7 +201,6 @@ const config = reactive<RagConfig>(emptyConfig())
 const vectorModels = ref<VectorModel[]>([])
 const chatModels = ref<ChatModel[]>([])
 const form = reactive({
-  enabled: false,
   sourceIndex: '',
   vectorModelId: null as string | null,
   chatModelId: null as string | null,
@@ -261,7 +235,6 @@ const applyConfig = (data: RagConfig) => {
     ? vectorIndexName.slice(vectorIndexPrefixWithSeparator.length)
     : data.embeddingModel.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
   Object.assign(form, {
-    enabled: data.enabled,
     sourceIndex: data.sourceIndex,
     vectorModelId: data.vectorModelId,
     chatModelId: data.chatModelId,
@@ -311,7 +284,6 @@ const saveConfig = async () => {
   if (!await formRef.value?.validate().catch(() => false)) return
   saving.value = true
   const payload: Record<string, unknown> = {
-    enabled: form.enabled,
     vectorModelId: form.vectorModelId,
     chatModelId: form.chatModelId
   }

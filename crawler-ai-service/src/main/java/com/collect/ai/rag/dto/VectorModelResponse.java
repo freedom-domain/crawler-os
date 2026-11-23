@@ -15,6 +15,4 @@ public class VectorModelResponse {
     private boolean apiKeyConfigured;
     private Integer dimensions;
     private Integer topK;
-    private Integer chunkSize;
-    private Integer chunkOverlap;
 }

@@ -74,6 +74,12 @@ export const deleteVectorModel = (id: string) => request.delete(`/ai/rag/vector-
 export const getVectorModelApiKey = (id: string) => request.get(`/ai/rag/vector-models/${id}/api-key`)
 export const updateVectorModelApiKey = (id: string, apiKey: string) =>
   request.put(`/ai/rag/vector-models/${id}/api-key`, { apiKey })
+export const getChunkStrategies = () => request.get('/ai/rag/chunk-strategies')
+export const createChunkStrategy = (data: any) => request.post('/ai/rag/chunk-strategies', data)
+export const updateChunkStrategy = (id: string, data: any) =>
+  request.put(`/ai/rag/chunk-strategies/${id}`, data)
+export const deleteChunkStrategy = (id: string) =>
+  request.delete(`/ai/rag/chunk-strategies/${id}`)
 export const getChatModels = () => request.get('/ai/rag/chat-models')
 export const getChatModelPage = (params: AiManagementPageParams) =>
   request.get('/ai/rag/chat-models/page', { params })
@@ -117,6 +123,7 @@ export const getKnowledgeBaseDocuments = (params: {
   pageSize: number
   keyword: string
   includeExcluded: boolean
+  vectorized?: boolean
 }) => request.get('/ai/rag/knowledge/documents', { params })
 export const getKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
   request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`, {

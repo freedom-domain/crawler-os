@@ -39,8 +39,7 @@ public class AiKnowledgeBaseService {
 
     public List<AiKnowledgeBaseDtos.Response> list() {
         return knowledgeBaseMapper.selectList(new LambdaQueryWrapper<AiKnowledgeBase>()
-                        .orderByAsc(AiKnowledgeBase::getSort)
-                        .orderByAsc(AiKnowledgeBase::getId))
+                        .orderByDesc(AiKnowledgeBase::getId))
                 .stream().map(this::toResponse).toList();
     }
 
@@ -49,8 +48,7 @@ public class AiKnowledgeBaseService {
         LambdaQueryWrapper<AiKnowledgeBase> query = new LambdaQueryWrapper<AiKnowledgeBase>()
                 .eq(StringUtils.hasText(sourceType), AiKnowledgeBase::getSourceType, sourceType)
                 .eq(enabled != null, AiKnowledgeBase::getEnabled, enabled)
-                .orderByAsc(AiKnowledgeBase::getSort)
-                .orderByAsc(AiKnowledgeBase::getId);
+                .orderByDesc(AiKnowledgeBase::getId);
         if (StringUtils.hasText(keyword)) {
             String search = keyword.trim();
             List<Long> modelIds = vectorModelMapper.selectList(
@@ -76,8 +74,7 @@ public class AiKnowledgeBaseService {
     public List<AiKnowledgeBaseDtos.Response> listEnabled() {
         return knowledgeBaseMapper.selectList(new LambdaQueryWrapper<AiKnowledgeBase>()
                         .eq(AiKnowledgeBase::getEnabled, true)
-                        .orderByAsc(AiKnowledgeBase::getSort)
-                        .orderByAsc(AiKnowledgeBase::getId))
+                        .orderByDesc(AiKnowledgeBase::getId))
                 .stream().map(this::toResponse).toList();
     }
 

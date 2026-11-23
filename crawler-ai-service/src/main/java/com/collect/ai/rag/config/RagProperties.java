@@ -28,7 +28,6 @@ public class RagProperties {
 
     @Data
     public static class Rag {
-        private boolean enabled;
         private String sourceIndex = "spider_content";
         private String embeddingProvider = "ollama";
         private String embeddingBaseUrl = "http://192.168.31.2:11434";
@@ -41,14 +40,11 @@ public class RagProperties {
         private int contextLength = 8192;
         private int dimensions = 1024;
         private int topK = 5;
-        private int chunkSize = 1500;
-        private int chunkOverlap = 200;
         private String vectorIndexPrefix = "spider_content_vector";
         private String vectorIndexEnvironment = "";
 
         public Rag copy() {
             Rag copy = new Rag();
-            copy.setEnabled(enabled);
             copy.setSourceIndex(sourceIndex);
             copy.setEmbeddingProvider(embeddingProvider);
             copy.setEmbeddingBaseUrl(embeddingBaseUrl);
@@ -61,8 +57,6 @@ public class RagProperties {
             copy.setContextLength(contextLength);
             copy.setDimensions(dimensions);
             copy.setTopK(topK);
-            copy.setChunkSize(chunkSize);
-            copy.setChunkOverlap(chunkOverlap);
             copy.setVectorIndexPrefix(vectorIndexPrefix);
             copy.setVectorIndexEnvironment(vectorIndexEnvironment);
             return copy;

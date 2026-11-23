@@ -18,6 +18,7 @@ public final class KnowledgeBaseDtos {
         private String spiderName;
         private Long spiderId;
         private boolean excluded;
+        private boolean vectorized;
     }
 
     @Data
@@ -48,11 +49,12 @@ public final class KnowledgeBaseDtos {
         private String content;
         private int characterCount;
         private String embeddingModel;
+        private String chunkStrategyId;
+        private String chunkStrategyName;
     }
 
     @Data
     public static class Stats {
-        private boolean enabled;
         private String sourceIndex;
         private String vectorIndex;
         private long sourceDocuments;

@@ -13,7 +13,6 @@ public class AiRagConfig {
     @TableId
     private String environment;
 
-    private Boolean enabled;
     private String sourceIndex;
     private String embeddingProvider;
     private String embeddingBaseUrl;
@@ -26,8 +25,6 @@ public class AiRagConfig {
     private String chatModel;
     private String apiKey;
     private Integer topK;
-    private Integer chunkSize;
-    private Integer chunkOverlap;
     private String vectorIndex;
     private String vectorIndexPrefix;
     private LocalDateTime createTime;

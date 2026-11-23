@@ -108,7 +108,6 @@ INSERT IGNORE INTO spider_task_creation_guard (id) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS ai_rag_config (
     environment VARCHAR(32) NOT NULL,
-    enabled TINYINT(1) NOT NULL DEFAULT 0,
     source_index VARCHAR(255) NOT NULL,
     embedding_provider VARCHAR(32) NOT NULL DEFAULT 'ollama',
     embedding_base_url VARCHAR(512) NOT NULL,
@@ -142,16 +141,41 @@ CREATE TABLE IF NOT EXISTS ai_rag_excluded_document (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO ai_rag_config (
-    environment, enabled, source_index, embedding_provider, embedding_base_url,
+    environment, source_index, embedding_provider, embedding_base_url,
     embedding_model, dimensions, chat_provider, chat_base_url, chat_model,
     api_key, top_k, chunk_size, chunk_overlap, vector_index, vector_index_prefix, vector_field_prefix
 ) VALUES
-    ('default', 0, 'spider_content', 'ollama', 'http://192.168.31.2:11434',
+    ('default', 'spider_content', 'ollama', 'http://192.168.31.2:11434',
      'bge-m3', 1024, 'openai', 'http://192.168.31.2:8900/v1', 'Qwen3.8-27B',
      '', 5, 1500, 200, 'spider_content_vector_bge_m3', 'spider_content_vector', 'embedding'),
-    ('local', 0, 'spider_content_local', 'ollama', 'http://192.168.31.2:11434',
+    ('local', 'spider_content_local', 'ollama', 'http://192.168.31.2:11434',
      'bge-m3', 1024, 'openai', 'http://192.168.31.2:8900/v1', 'Qwen3.8-27B',
      '', 5, 1500, 200, 'spider_content_vector_local_bge_m3', 'spider_content_vector_local', 'embedding');
+
+CREATE TABLE IF NOT EXISTS ai_rag_chunk_strategy (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(128) NOT NULL,
+    strategy_type VARCHAR(32) NOT NULL,
+    chunk_size INT NOT NULL,
+    chunk_overlap INT NOT NULL DEFAULT 0,
+    similarity_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.700,
+    priority INT NOT NULL DEFAULT 0,
+    min_document_length INT NOT NULL DEFAULT 0,
+    max_document_length INT NULL,
+    document_types VARCHAR(512) NOT NULL DEFAULT '',
+    default_strategy TINYINT(1) NOT NULL DEFAULT 0,
+    create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_ai_rag_chunk_strategy_name (name),
+    KEY idx_ai_rag_chunk_strategy_default (default_strategy),
+    KEY idx_ai_rag_chunk_strategy_priority (priority)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO ai_rag_chunk_strategy (
+    name, strategy_type, chunk_size, chunk_overlap, similarity_threshold, priority,
+    min_document_length, document_types, default_strategy
+) VALUES ('默认固定字符', 'FIXED_CHARACTER', 1500, 200, 0.700, 0, 0, '', 1);
 
 CREATE TABLE IF NOT EXISTS ai_rag_vector_model (
     id BIGINT NOT NULL AUTO_INCREMENT,
@@ -162,8 +186,6 @@ CREATE TABLE IF NOT EXISTS ai_rag_vector_model (
     api_key VARCHAR(1024) NOT NULL DEFAULT '',
     dimensions INT NOT NULL,
     top_k INT NOT NULL,
-    chunk_size INT NOT NULL,
-    chunk_overlap INT NOT NULL,
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -172,10 +194,10 @@ CREATE TABLE IF NOT EXISTS ai_rag_vector_model (
 
 INSERT IGNORE INTO ai_rag_vector_model (
     name, embedding_provider, embedding_base_url, embedding_model,
-    dimensions, top_k, chunk_size, chunk_overlap
+    dimensions, top_k
 )
 SELECT CONCAT('默认向量模型-', environment), embedding_provider, embedding_base_url,
-       embedding_model, dimensions, top_k, chunk_size, chunk_overlap
+       embedding_model, dimensions, top_k
 FROM ai_rag_config;
 
 UPDATE ai_rag_config config

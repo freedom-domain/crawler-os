@@ -21,8 +21,6 @@ public class AiRagVectorModel {
     private String apiKey;
     private Integer dimensions;
     private Integer topK;
-    private Integer chunkSize;
-    private Integer chunkOverlap;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

@@ -235,6 +235,21 @@ const titleForPath = (path: string) => {
   }[path] || String(path).replace('/', ''))
 }
 
+const handleTabTitleUpdate = (event: Event) => {
+  const { path, title } = (event as CustomEvent<{ path?: string; title?: string }>).detail || {}
+  if (!path || !title) return
+  const tab = tabs.value.find(item => item.path === path)
+  if (tab) tab.title = title
+}
+
+const refreshTabTitles = () => {
+  tabs.value.forEach(tab => {
+    if (!tab.title.endsWith(' - 文档管理')) {
+      tab.title = titleForPath(tab.path)
+    }
+  })
+}
+
 const handleMenuSelect = (path: string) => {
   if (!path) return
   const resolved = router.resolve(path)
@@ -426,9 +441,7 @@ const loadMenu = async () => {
     const cached = JSON.parse(sessionStorage.getItem(cacheKey) || 'null')
     if (cached && Array.isArray(cached.data)) {
       menuList.value = cached.data
-      tabs.value.forEach(tab => {
-        tab.title = titleForPath(tab.path)
-      })
+      refreshTabTitles()
       shouldRefresh = Date.now() - Number(cached.cachedAt) > MENU_CACHE_TTL
     }
   } catch {
@@ -443,9 +456,7 @@ const loadMenu = async () => {
       cachedAt: Date.now(),
       data: menuList.value
     }))
-    tabs.value.forEach(tab => {
-      tab.title = titleForPath(tab.path)
-    })
+    refreshTabTitles()
   } catch {
     menuList.value = []
   }
@@ -453,6 +464,7 @@ const loadMenu = async () => {
 
 onMounted(() => {
   window.addEventListener('crawler-menu-cache-invalidated', loadMenu)
+  window.addEventListener('crawler-tab-title-update', handleTabTitleUpdate)
   window.addEventListener('resize', updateTabScrollState)
   void nextTick(updateTabScrollState)
   loadMenu()
@@ -460,6 +472,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('crawler-menu-cache-invalidated', loadMenu)
+  window.removeEventListener('crawler-tab-title-update', handleTabTitleUpdate)
   window.removeEventListener('resize', updateTabScrollState)
 })
 

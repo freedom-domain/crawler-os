@@ -3,7 +3,7 @@
     <header class="page-heading">
       <div>
         <h1>知识库管理</h1>
-        <p>新建和维护知识库，配置向量模型及可选的重排模型。</p>
+        <p>新建和维护知识库、向量模型及可选的重排模型。</p>
       </div>
       <div class="heading-actions">
         <el-button type="primary" :icon="Plus" @click="openCreate">新建知识库</el-button>
@@ -129,15 +129,9 @@
             <el-descriptions-item label="Top K">
               {{ selectedVectorModel.topK }}
             </el-descriptions-item>
-            <el-descriptions-item label="分块长度">
-              {{ selectedVectorModel.chunkSize }} 字符
-            </el-descriptions-item>
-            <el-descriptions-item label="分块重叠">
-              {{ selectedVectorModel.chunkOverlap }} 字符
-            </el-descriptions-item>
           </el-descriptions>
         </el-form-item>
-        <small class="field-hint">向量索引根据该知识库选定的向量模型自动生成。</small>
+        <small class="field-hint">向量索引根据该知识库选定的向量模型自动生成；文档分块策略独立匹配，不随模型变化。</small>
         <el-form-item label="重排模型（可选）">
           <el-select
             v-model="form.rerankModelId"
@@ -217,8 +211,6 @@ interface VectorModel {
   apiKeyConfigured: boolean
   dimensions: number
   topK: number
-  chunkSize: number
-  chunkOverlap: number
 }
 
 interface RerankModel {

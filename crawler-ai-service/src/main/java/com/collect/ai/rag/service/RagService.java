@@ -2,6 +2,7 @@ package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.collect.ai.entity.AiRagExcludedDocument;
+import com.collect.ai.entity.AiRagChunkStrategy;
 import com.collect.ai.entity.AiKnowledgeBase;
 import com.collect.ai.entity.AiRagChatModel;
 import com.collect.ai.entity.AiRagVectorModel;
@@ -56,6 +57,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -82,13 +85,19 @@ public class RagService {
             String answer, long waitDurationMs, Long thinkingDurationMs, long generationDurationMs) {
     }
 
-    private record KnowledgeVectorChunk(String documentId, int chunkIndex, String title, String content) {
+    private record KnowledgeVectorChunk(
+            String documentId, int chunkIndex, String title, String content,
+            Long strategyId, String strategyName) {
+    }
+
+    private record ChunkingResult(List<String> chunks, AiRagChunkStrategy strategy) {
     }
 
     private final RagProperties properties;
     private final ObjectMapper objectMapper;
     private final SpiderMapper spiderMapper;
     private final AiRagExcludedDocumentMapper excludedDocumentMapper;
+    private final ChunkStrategyService chunkStrategyService;
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiRagVectorModelMapper vectorModelMapper;
     private final AiRagRerankModelMapper rerankModelMapper;
@@ -114,30 +123,26 @@ public class RagService {
         if (base == null) throw new BizException("知识库不存在");
         AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
         if (model == null) throw new BizException("知识库向量模型不存在");
+        List<AiRagChunkStrategy> chunkStrategies = chunkStrategyService.all();
         String vectorIndex = resolveKnowledgeVectorIndex(model);
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType()) ? base.getId() : null;
         List<JsonNode> documents = fetchContentDocuments(properties.resolveSourceIndex(), ownerKnowledgeBaseId);
-        List<String> documentIds = documents.stream()
-                .map(document -> document.path("_id").asText(""))
-                .filter(documentId -> !documentId.isBlank())
-                .distinct()
-                .toList();
-        deleteKnowledgeVectors(vectorIndex, base.getId(), documentIds);
         ensureKnowledgeVectorIndex(base, model);
+        deleteKnowledgeVectors(vectorIndex, base.getId());
         List<ObjectNode> operations = new ArrayList<>();
         List<KnowledgeVectorChunk> embeddingBatch = new ArrayList<>(EMBEDDING_BATCH_SIZE);
         long chunks = 0;
-        int chunkSize = model.getChunkSize() == null ? 1500 : Math.max(200, model.getChunkSize());
-        int overlap = model.getChunkOverlap() == null ? 200
-                : Math.max(0, Math.min(model.getChunkOverlap(), chunkSize - 1));
         for (JsonNode document : documents) {
             JsonNode source = document.path("_source");
             String id = document.path("_id").asText();
             String title = source.path("title").asText("");
             String content = source.path("content").asText("");
-            List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
+            ChunkingResult chunking = splitText(documentText(title, content), documentTypes(source),
+                    chunkStrategies, model);
+            List<String> parts = chunking.chunks();
             for (int i = 0; i < parts.size(); i++) {
-                embeddingBatch.add(new KnowledgeVectorChunk(id, i, title, parts.get(i)));
+                embeddingBatch.add(new KnowledgeVectorChunk(id, i, title, parts.get(i),
+                        chunking.strategy().getId(), chunking.strategy().getName()));
                 if (embeddingBatch.size() == EMBEDDING_BATCH_SIZE) {
                     chunks += indexKnowledgeBaseChunkBatch(
                             base, model, embeddingBatch, operations);
@@ -177,7 +182,9 @@ public class RagService {
                     .put("title", chunk.title()).put("content", chunk.content())
                     .put("url", "").put("spiderName", "上传文档")
                     .put("knowledgeBaseId", base.getId())
-                    .put("embedding_model", model.getEmbeddingModel());
+                    .put("embedding_model", model.getEmbeddingModel())
+                    .put("chunk_strategy_id", chunk.strategyId())
+                    .put("chunk_strategy_name", chunk.strategyName());
             ArrayNode vector = row.putArray(properties.resolveVectorField());
             embeddings.get(i).forEach(vector::add);
             operations.add(row);
@@ -190,11 +197,10 @@ public class RagService {
     }
 
     public RagDtos.SyncResult syncContentIndex() {
-        ensureEnabled();
         RagProperties.Rag rag = properties.getRag();
+        AiRagVectorModel chunkModel = vectorModelFromProperties(rag);
+        List<AiRagChunkStrategy> chunkStrategies = chunkStrategyService.all();
         List<JsonNode> documents = fetchContentDocuments();
-        int chunkSize = Math.max(200, rag.getChunkSize());
-        int overlap = Math.max(0, Math.min(rag.getChunkOverlap(), chunkSize - 1));
         deleteExistingVectors();
 
         List<ObjectNode> operations = new ArrayList<>();
@@ -207,7 +213,9 @@ public class RagService {
             String url = source.path("url").asText("");
             String spiderName = source.path("spiderName").asText("");
             long spiderId = source.path("spiderId").asLong(-1);
-            List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
+            ChunkingResult chunking = splitText(documentText(title, content), documentTypes(source),
+                    chunkStrategies, chunkModel);
+            List<String> parts = chunking.chunks();
             for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
                 List<String> batch = parts.subList(start,
                         Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
@@ -228,6 +236,8 @@ public class RagService {
                     row.put("url", url);
                     row.put("spiderName", spiderName);
                     row.put("embedding_model", rag.getEmbeddingModel());
+                    row.put("chunk_strategy_id", chunking.strategy().getId());
+                    row.put("chunk_strategy_name", chunking.strategy().getName());
                     if (spiderId >= 0) row.put("spiderId", spiderId);
                     ArrayNode vector = row.putArray(properties.resolveVectorField());
                     embeddings.get(i).forEach(vector::add);
@@ -318,6 +328,8 @@ public class RagService {
         String sourceDocumentId = "upload_" + java.util.UUID.randomUUID().toString().replace("-", "");
         ObjectNode source = objectMapper.createObjectNode();
         source.put("title", title).put("content", content).put("url", objectName)
+                .put("originalName", originalName)
+                .put("contentType", file.getContentType() == null ? "" : file.getContentType())
                 .put("spiderName", "上传文档").put("knowledgeBaseId", knowledgeBaseId);
         try {
             HttpResponse<String> indexed = elasticsearchRequest("PUT",
@@ -332,7 +344,7 @@ public class RagService {
         AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
         if (model == null) throw new BizException("知识库向量模型不存在");
         try {
-            vectorizeUploadedDocument(base, model, sourceDocumentId, title, content);
+            vectorizeUploadedDocument(base, model, sourceDocumentId, source);
         } catch (RuntimeException e) {
             throw new IllegalStateException("文档向量化失败: " + e.getMessage(), e);
         }
@@ -368,14 +380,15 @@ public class RagService {
     }
 
     private int vectorizeUploadedDocument(
-            AiKnowledgeBase base, AiRagVectorModel model,
-            String sourceDocumentId, String title, String content) {
-        int chunkSize = model.getChunkSize() == null ? 1500 : Math.max(200, model.getChunkSize());
-        int overlap = model.getChunkOverlap() == null ? 200
-                : Math.max(0, Math.min(model.getChunkOverlap(), chunkSize - 1));
+            AiKnowledgeBase base, AiRagVectorModel model, String sourceDocumentId, JsonNode source) {
         ensureKnowledgeVectorIndex(base, model);
+        String title = source.path("title").asText("");
+        String content = source.path("content").asText("");
+        List<AiRagChunkStrategy> chunkStrategies = chunkStrategyService.all();
         List<ObjectNode> operations = new ArrayList<>();
-        List<String> parts = splitText(title + "\n" + content, chunkSize, overlap);
+        ChunkingResult chunking = splitText(documentText(title, content), documentTypes(source),
+                chunkStrategies, model);
+        List<String> parts = chunking.chunks();
         for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
             List<String> batch = parts.subList(start,
                     Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
@@ -390,7 +403,9 @@ public class RagService {
                         .put("title", title).put("content", batch.get(i))
                         .put("url", "").put("spiderName", "上传文档")
                         .put("knowledgeBaseId", base.getId())
-                        .put("embedding_model", model.getEmbeddingModel());
+                        .put("embedding_model", model.getEmbeddingModel())
+                        .put("chunk_strategy_id", chunking.strategy().getId())
+                        .put("chunk_strategy_name", chunking.strategy().getName());
                 ArrayNode vector = row.putArray(properties.resolveVectorField());
                 embeddings.get(i).forEach(vector::add);
                 operations.add(row);
@@ -419,6 +434,8 @@ public class RagService {
         properties.putObject("spiderName").put("type", "keyword");
         properties.putObject("knowledgeBaseId").put("type", "long");
         properties.putObject("embedding_model").put("type", "keyword");
+        properties.putObject("chunk_strategy_id").put("type", "long");
+        properties.putObject("chunk_strategy_name").put("type", "keyword");
         try {
             HttpResponse<String> existing = elasticsearchRequest("HEAD",
                     "/" + vectorIndex, null);
@@ -451,7 +468,6 @@ public class RagService {
         if (model == null) throw new BizException("知识库向量模型不存在");
         ensureKnowledgeVectorIndex(base, model);
         KnowledgeBaseDtos.Stats stats = new KnowledgeBaseDtos.Stats();
-        stats.setEnabled(Boolean.TRUE.equals(base.getEnabled()));
         stats.setSourceIndex(properties.resolveSourceIndex());
         String vectorIndex = resolveKnowledgeVectorIndex(model);
         stats.setVectorIndex(vectorIndex);
@@ -477,7 +493,6 @@ public class RagService {
     public KnowledgeBaseDtos.Stats getKnowledgeBaseStats() {
         RagProperties.Rag rag = properties.getRag();
         KnowledgeBaseDtos.Stats stats = new KnowledgeBaseDtos.Stats();
-        stats.setEnabled(rag.isEnabled());
         stats.setSourceIndex(rag.getSourceIndex());
         stats.setVectorIndex(properties.resolveVectorIndex());
         List<String> excludedIds = getExcludedDocumentIds();
@@ -491,7 +506,8 @@ public class RagService {
     }
 
     public KnowledgeBaseDtos.DocumentPage listKnowledgeBaseDocuments(
-            Long knowledgeBaseId, int page, int pageSize, String keyword, boolean includeExcluded) {
+            Long knowledgeBaseId, int page, int pageSize, String keyword,
+            boolean includeExcluded, Boolean vectorized) {
         if (knowledgeBaseId == null) throw new BizException("请选择知识库");
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
@@ -501,6 +517,30 @@ public class RagService {
         List<String> excludedIds = getExcludedDocumentIds(properties.resolveSourceIndex());
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType()) ? base.getId() : null;
         ObjectNode query = sourceDocumentQuery(keyword, includeExcluded, excludedIds, ownerKnowledgeBaseId);
+        if (vectorized != null) {
+            Set<String> vectorizedDocumentIds = findAllVectorizedDocumentIds(base);
+            if (Boolean.TRUE.equals(vectorized) && vectorizedDocumentIds.isEmpty()) {
+                KnowledgeBaseDtos.DocumentPage emptyPage = new KnowledgeBaseDtos.DocumentPage();
+                emptyPage.setRecords(List.of());
+                emptyPage.setTotal(0);
+                emptyPage.setPage(page);
+                emptyPage.setPageSize(pageSize);
+                return emptyPage;
+            }
+            if (!vectorizedDocumentIds.isEmpty()) {
+                ObjectNode bool = objectMapper.createObjectNode();
+                bool.putArray("filter").add(query);
+                ObjectNode idFilter = objectMapper.createObjectNode().set("terms",
+                        objectMapper.createObjectNode()
+                                .set("_id", objectMapper.valueToTree(vectorizedDocumentIds)));
+                if (Boolean.TRUE.equals(vectorized)) {
+                    bool.withArray("filter").add(idFilter);
+                } else {
+                    bool.putArray("must_not").add(idFilter);
+                }
+                query = objectMapper.createObjectNode().set("bool", bool);
+            }
+        }
         ObjectNode body = objectMapper.createObjectNode()
                 .put("from", (page - 1) * pageSize)
                 .put("size", pageSize);
@@ -532,6 +572,9 @@ public class RagService {
                 document.setExcluded(excludedIds.contains(document.getId()));
                 records.add(document);
             }
+            Set<String> vectorizedDocumentIds = findVectorizedDocumentIds(base, records);
+            records.forEach(document ->
+                    document.setVectorized(vectorizedDocumentIds.contains(document.getId())));
             KnowledgeBaseDtos.DocumentPage result = new KnowledgeBaseDtos.DocumentPage();
             result.setRecords(records);
             result.setTotal(total);
@@ -541,6 +584,85 @@ public class RagService {
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("读取知识库文档失败: " + e.getMessage(), e);
+        }
+    }
+
+    private Set<String> findVectorizedDocumentIds(
+            AiKnowledgeBase base, List<KnowledgeBaseDtos.Document> documents) {
+        if (documents.isEmpty()) return Set.of();
+        AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+
+        ArrayNode documentIds = objectMapper.createArrayNode();
+        documents.forEach(document -> documentIds.add(document.getId()));
+        ObjectNode filters = objectMapper.createObjectNode();
+        filters.putArray("filter")
+                .add(objectMapper.createObjectNode().set("terms",
+                        objectMapper.createObjectNode().set("doc_id", documentIds)))
+                .add(knowledgeBaseOwnerQuery(base.getId()));
+        ObjectNode body = objectMapper.createObjectNode().put("size", 0);
+        body.set("query", objectMapper.createObjectNode().set("bool", filters));
+        body.putObject("aggs").putObject("documents").putObject("terms")
+                .put("field", "doc_id").put("size", documents.size());
+
+        String vectorIndex = resolveKnowledgeVectorIndex(model);
+        try {
+            HttpResponse<String> response = elasticsearchRequest(
+                    "POST", "/" + vectorIndex + "/_search", toJson(body));
+            if (response.statusCode() == 404) return Set.of();
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("读取文档向量状态失败: " + response.statusCode()
+                        + " " + response.body());
+            }
+            JsonNode buckets = objectMapper.readTree(response.body())
+                    .path("aggregations").path("documents").path("buckets");
+            Set<String> vectorizedDocumentIds = new HashSet<>();
+            for (JsonNode bucket : buckets) {
+                vectorizedDocumentIds.add(bucket.path("key").asText());
+            }
+            return vectorizedDocumentIds;
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("读取文档向量状态失败: " + e.getMessage(), e);
+        }
+    }
+
+    private Set<String> findAllVectorizedDocumentIds(AiKnowledgeBase base) {
+        AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        String vectorIndex = resolveKnowledgeVectorIndex(model);
+        Set<String> documentIds = new HashSet<>();
+        ObjectNode body = objectMapper.createObjectNode().put("size", 0);
+        body.putObject("query").set("term",
+                objectMapper.createObjectNode().put("knowledgeBaseId", base.getId()));
+        ObjectNode composite = body.putObject("aggs").putObject("documents")
+                .putObject("composite").put("size", 1000);
+        composite.putArray("sources").addObject()
+                .putObject("document_id").putObject("terms").put("field", "doc_id");
+
+        try {
+            while (true) {
+                HttpResponse<String> response = elasticsearchRequest(
+                        "POST", "/" + vectorIndex + "/_search", toJson(body));
+                if (response.statusCode() == 404) return Set.of();
+                if (response.statusCode() >= 300) {
+                    throw new IllegalStateException("读取文档向量状态失败: " + response.statusCode()
+                            + " " + response.body());
+                }
+                JsonNode aggregations = objectMapper.readTree(response.body())
+                        .path("aggregations").path("documents");
+                JsonNode buckets = aggregations.path("buckets");
+                for (JsonNode bucket : buckets) {
+                    documentIds.add(bucket.path("key").path("document_id").asText());
+                }
+                JsonNode afterKey = aggregations.path("after_key");
+                if (!afterKey.isObject() || buckets.isEmpty()) break;
+                composite.set("after", afterKey.deepCopy());
+            }
+            return documentIds;
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("读取文档向量状态失败: " + e.getMessage(), e);
         }
     }
 
@@ -693,7 +815,6 @@ public class RagService {
             Long knowledgeBaseId, String documentId) {
         String vectorIndex;
         if (knowledgeBaseId == null) {
-            ensureEnabled();
             vectorIndex = properties.resolveVectorIndex();
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
@@ -707,7 +828,8 @@ public class RagService {
         body.set("query", objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
         body.set("_source", objectMapper.createArrayNode()
-                .add("chunk_id").add("title").add("content").add("embedding_model"));
+                .add("chunk_id").add("title").add("content").add("embedding_model")
+                .add("chunk_strategy_id").add("chunk_strategy_name"));
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
                     "/" + vectorIndex + "/_search", toJson(body));
@@ -729,6 +851,8 @@ public class RagService {
                 chunk.setContent(content);
                 chunk.setCharacterCount(content.length());
                 chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
+                chunk.setChunkStrategyId(source.path("chunk_strategy_id").asText(""));
+                chunk.setChunkStrategyName(source.path("chunk_strategy_name").asText(""));
                 chunks.add(chunk);
             }
             chunks.sort(java.util.Comparator.comparingInt(KnowledgeBaseDtos.VectorChunk::getIndex));
@@ -742,7 +866,6 @@ public class RagService {
     public long getKnowledgeBaseDocumentChunkCount(Long knowledgeBaseId, String documentId) {
         String vectorIndex;
         if (knowledgeBaseId == null) {
-            ensureEnabled();
             vectorIndex = properties.resolveVectorIndex();
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
@@ -769,9 +892,6 @@ public class RagService {
 
     public java.util.List<KnowledgeBaseDtos.VectorChunk> getKnowledgeBaseDocumentChunk(
             Long knowledgeBaseId, String documentId, String chunkId) {
-        if (knowledgeBaseId == null) {
-            ensureEnabled();
-        }
         if (!chunkId.startsWith(documentId + ":")
                 || parseChunkIndex(chunkId) == Integer.MAX_VALUE) {
             throw new BizException("文档分块 ID 不合法");
@@ -808,6 +928,8 @@ public class RagService {
             chunk.setContent(content);
             chunk.setCharacterCount(content.length());
             chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
+            chunk.setChunkStrategyId(source.path("chunk_strategy_id").asText(""));
+            chunk.setChunkStrategyName(source.path("chunk_strategy_name").asText(""));
             return java.util.List.of(chunk);
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
@@ -836,8 +958,7 @@ public class RagService {
         if (model == null) throw new BizException("知识库向量模型不存在");
         JsonNode hit = findSourceDocument(properties.resolveSourceIndex(), documentId);
         JsonNode source = hit.path("_source");
-        int chunks = vectorizeUploadedDocument(base, model, documentId,
-                source.path("title").asText(""), source.path("content").asText(""));
+        int chunks = vectorizeUploadedDocument(base, model, documentId, source);
         setDocumentExcluded(properties.resolveSourceIndex(), documentId, false);
         RagDtos.DocumentVectorizationResult result = new RagDtos.DocumentVectorizationResult();
         result.setDocumentId(documentId);
@@ -846,7 +967,6 @@ public class RagService {
     }
 
     public RagDtos.DocumentVectorizationResult vectorizeDocument(String documentId) {
-        ensureEnabled();
         JsonNode hit = findSourceDocument(documentId);
         JsonNode source = hit.path("_source");
         List<ObjectNode> operations = createDocumentVectorOperations(documentId, source);
@@ -884,11 +1004,14 @@ public class RagService {
     }
 
     private List<ObjectNode> createDocumentVectorOperations(String documentId, JsonNode source) {
+        RagProperties.Rag rag = properties.getRag();
+        AiRagVectorModel chunkModel = vectorModelFromProperties(rag);
         String title = source.path("title").asText("");
         String content = source.path("content").asText("");
-        String text = title.isBlank() ? content : title + "\n" + content;
-        List<String> chunks = splitText(text, properties.getRag().getChunkSize(),
-                properties.getRag().getChunkOverlap());
+        String text = documentText(title, content);
+        ChunkingResult chunking = splitText(text, documentTypes(source),
+                chunkStrategyService.all(), chunkModel);
+        List<String> chunks = chunking.chunks();
         List<ObjectNode> operations = new ArrayList<>(chunks.size() * 2);
         for (int start = 0; start < chunks.size(); start += EMBEDDING_BATCH_SIZE) {
             List<String> batch = chunks.subList(start,
@@ -910,6 +1033,8 @@ public class RagService {
                 row.put("url", source.path("url").asText(""));
                 row.put("spiderName", source.path("spiderName").asText(""));
                 row.put("embedding_model", properties.getRag().getEmbeddingModel());
+                row.put("chunk_strategy_id", chunking.strategy().getId());
+                row.put("chunk_strategy_name", chunking.strategy().getName());
                 if (source.path("spiderId").isNumber()) {
                     row.put("spiderId", source.path("spiderId").asLong());
                 }
@@ -954,21 +1079,11 @@ public class RagService {
                 .toList());
     }
 
-    private void deleteKnowledgeVectors(
-            String vectorIndex, Long knowledgeBaseId, List<String> documentIds) {
-        ObjectNode bool = objectMapper.createObjectNode();
-        ArrayNode should = bool.putArray("should");
-        should.add(objectMapper.createObjectNode()
-                .set("term", objectMapper.createObjectNode()
-                        .put("knowledgeBaseId", knowledgeBaseId)));
-        if (!documentIds.isEmpty()) {
-            should.add(objectMapper.createObjectNode()
-                    .set("terms", objectMapper.createObjectNode()
-                            .set("doc_id", objectMapper.valueToTree(documentIds))));
-        }
-        bool.put("minimum_should_match", 1);
+    private void deleteKnowledgeVectors(String vectorIndex, Long knowledgeBaseId) {
         ObjectNode body = objectMapper.createObjectNode()
-                .set("query", objectMapper.createObjectNode().set("bool", bool));
+                .set("query", objectMapper.createObjectNode()
+                        .set("term", objectMapper.createObjectNode()
+                                .put("knowledgeBaseId", knowledgeBaseId)));
         try {
             HttpResponse<String> response = elasticsearchRequest(
                     "POST",
@@ -1385,7 +1500,6 @@ public class RagService {
             List<RagDtos.ChatHistoryMessage> history,
             Consumer<String> tokenConsumer,
             Consumer<String> reasoningConsumer) {
-        ensureEnabled();
         if (request == null || request.getQuestion() == null
                 || request.getQuestion().isBlank()) {
             throw new IllegalArgumentException("question不能为空");
@@ -2317,12 +2431,6 @@ public class RagService {
         return objectMapper.createObjectNode().set("bool", bool);
     }
 
-    private void ensureEnabled() {
-        if (!properties.getRag().isEnabled()) {
-            throw new IllegalStateException("RAG 未启用，请先通过 AI 配置接口启用");
-        }
-    }
-
     private RagDtos.QueryResponse emptyQueryResponse(
             RagProperties.Rag rag,
             Consumer<String> tokenConsumer,
@@ -2356,5 +2464,216 @@ public class RagService {
             start = end - overlap;
         }
         return chunks;
+    }
+
+    private static AiRagVectorModel vectorModelFromProperties(RagProperties.Rag rag) {
+        AiRagVectorModel model = new AiRagVectorModel();
+        model.setEmbeddingProvider(rag.getEmbeddingProvider());
+        model.setEmbeddingBaseUrl(rag.getEmbeddingBaseUrl());
+        model.setApiKey(rag.getEmbeddingApiKey());
+        model.setEmbeddingModel(rag.getEmbeddingModel());
+        model.setDimensions(rag.getDimensions());
+        return model;
+    }
+
+    private ChunkingResult splitText(
+            String text, Set<String> documentTypes,
+            List<AiRagChunkStrategy> strategies, AiRagVectorModel model) {
+        if (text == null || text.isBlank()) return new ChunkingResult(List.of(), null);
+        AiRagChunkStrategy strategy = chunkStrategyService.selectForDocument(
+                text.length(), documentTypes, strategies);
+        int chunkSize = strategy.getChunkSize();
+        int overlap = strategy.getChunkOverlap();
+        List<String> chunks = switch (strategy.getStrategyType()) {
+            case ChunkStrategyService.FIXED_CHARACTER -> splitText(text, chunkSize, overlap);
+            case ChunkStrategyService.PARAGRAPH -> splitParagraphs(text, chunkSize, overlap);
+            case ChunkStrategyService.RECURSIVE -> splitRecursively(text, chunkSize, overlap);
+            case ChunkStrategyService.SEMANTIC -> splitSemantically(text, strategy, model);
+            default -> throw new BizException("不支持的分块策略类型: " + strategy.getStrategyType());
+        };
+        return new ChunkingResult(chunks, strategy);
+    }
+
+    private static Set<String> documentTypes(JsonNode source) {
+        Set<String> types = new HashSet<>();
+        for (String field : List.of(
+                "originalName", "fileName", "filename", "url", "title")) {
+            addFileExtension(types, source.path(field).asText(""));
+        }
+        for (String field : List.of("contentType", "content_type", "fileType", "type")) {
+            String value = source.path(field).asText("").trim().toLowerCase(java.util.Locale.ROOT);
+            if (value.contains(";")) value = value.substring(0, value.indexOf(';')).trim();
+            if (!value.isBlank()) types.add(value);
+            addFileExtension(types, value);
+        }
+        return types;
+    }
+
+    private static String documentText(String title, String content) {
+        return title == null || title.isBlank() ? content : title + "\n" + content;
+    }
+
+    private static void addFileExtension(Set<String> types, String fileName) {
+        if (!StringUtils.hasText(fileName)) return;
+        String path = fileName.trim().split("[?#]", 2)[0];
+        int slash = path.lastIndexOf('/');
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0 && dot < name.length() - 1) {
+            types.add(name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT));
+        }
+    }
+
+    private static Set<String> documentTypes(String fileName, String contentType) {
+        Set<String> types = new HashSet<>();
+        addFileExtension(types, fileName);
+        if (StringUtils.hasText(contentType)) {
+            String mimeType = contentType.split(";", 2)[0].trim()
+                    .toLowerCase(java.util.Locale.ROOT);
+            types.add(mimeType);
+        }
+        return types;
+    }
+
+    private static List<String> splitParagraphs(String text, int chunkSize, int overlap) {
+        List<String> paragraphs = java.util.Arrays.stream(text.split("\\R\\s*\\R+"))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .toList();
+        return packSegments(paragraphs, chunkSize, overlap, "\n\n");
+    }
+
+    private static List<String> splitRecursively(String text, int chunkSize, int overlap) {
+        List<String> segments = new ArrayList<>();
+        splitRecursively(text, 0, chunkSize, segments);
+        return packSegments(segments, chunkSize, overlap);
+    }
+
+    private static final List<String> RECURSIVE_SEPARATORS = List.of(
+            "\n\n", "\n", "。", "！", "？", ".", "!", "?", "；", ";", "，", ",", " ");
+
+    private static void splitRecursively(
+            String text, int separatorIndex, int chunkSize, List<String> segments) {
+        if (text.length() <= chunkSize) {
+            segments.add(text);
+            return;
+        }
+        if (separatorIndex >= RECURSIVE_SEPARATORS.size()) {
+            segments.addAll(splitText(text, chunkSize, 0));
+            return;
+        }
+        List<String> split = splitKeepingSeparator(text, RECURSIVE_SEPARATORS.get(separatorIndex));
+        if (split.size() == 1) {
+            splitRecursively(text, separatorIndex + 1, chunkSize, segments);
+            return;
+        }
+        for (String part : split) {
+            splitRecursively(part, separatorIndex + 1, chunkSize, segments);
+        }
+    }
+
+    private static List<String> splitKeepingSeparator(String text, String separator) {
+        List<String> parts = new ArrayList<>();
+        int start = 0;
+        int position;
+        while ((position = text.indexOf(separator, start)) >= 0) {
+            int end = position + separator.length();
+            parts.add(text.substring(start, end));
+            start = end;
+        }
+        if (start < text.length()) parts.add(text.substring(start));
+        return parts;
+    }
+
+    private static List<String> packSegments(List<String> segments, int chunkSize, int overlap) {
+        return packSegments(segments, chunkSize, overlap, " ");
+    }
+
+    private static List<String> packSegments(
+            List<String> segments, int chunkSize, int overlap, String separator) {
+        List<String> expanded = new ArrayList<>();
+        for (String segment : segments) {
+            String value = segment.trim();
+            if (value.length() > chunkSize) {
+                expanded.addAll(splitText(value, chunkSize, overlap));
+            } else if (!value.isEmpty()) {
+                expanded.add(value);
+            }
+        }
+        List<String> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String segment : expanded) {
+            if (!current.isEmpty()
+                    && current.length() + segment.length() + separator.length() > chunkSize) {
+                chunks.add(current.toString().trim());
+                String previous = current.toString();
+                int carryLength = Math.min(overlap,
+                        Math.max(0, chunkSize - segment.length() - separator.length()));
+                current.setLength(0);
+                if (carryLength > 0) {
+                    current.append(previous, previous.length() - carryLength, previous.length())
+                            .append(separator);
+                }
+            }
+            if (!current.isEmpty()) current.append(separator);
+            current.append(segment);
+        }
+        if (!current.isEmpty()) chunks.add(current.toString().trim());
+        return chunks;
+    }
+
+    private List<String> splitSemantically(
+            String text, AiRagChunkStrategy strategy, AiRagVectorModel model) {
+        int chunkSize = strategy.getChunkSize();
+        List<String> sentences = new ArrayList<>();
+        for (String sentence : text.split("(?<=[。！？!?])\\s*|\\R+")) {
+            String value = sentence.trim();
+            if (value.length() > chunkSize) {
+                sentences.addAll(splitText(value, chunkSize, 0));
+            } else if (!value.isEmpty()) {
+                sentences.add(value);
+            }
+        }
+        if (sentences.isEmpty()) return List.of();
+        List<List<Double>> embeddings = new ArrayList<>(sentences.size());
+        for (int start = 0; start < sentences.size(); start += EMBEDDING_BATCH_SIZE) {
+            embeddings.addAll(createEmbeddings(
+                    sentences.subList(start, Math.min(start + EMBEDDING_BATCH_SIZE, sentences.size())),
+                    model, model.getDimensions()));
+        }
+        double threshold = strategy.getSimilarityThreshold() == null
+                ? 0.7 : strategy.getSimilarityThreshold().doubleValue();
+        List<String> chunks = new ArrayList<>();
+        StringBuilder current = new StringBuilder(sentences.get(0));
+        for (int i = 1; i < sentences.size(); i++) {
+            String sentence = sentences.get(i);
+            boolean sizeLimitReached = current.length() + sentence.length() + 1 > chunkSize;
+            boolean semanticBoundary = cosineSimilarity(embeddings.get(i - 1), embeddings.get(i)) < threshold;
+            if (sizeLimitReached || semanticBoundary) {
+                chunks.add(current.toString());
+                current.setLength(0);
+            } else {
+                current.append(' ');
+            }
+            current.append(sentence);
+        }
+        if (!current.isEmpty()) chunks.add(current.toString());
+        return chunks;
+    }
+
+    private static double cosineSimilarity(List<Double> left, List<Double> right) {
+        double dotProduct = 0;
+        double leftNorm = 0;
+        double rightNorm = 0;
+        int length = Math.min(left.size(), right.size());
+        for (int i = 0; i < length; i++) {
+            double leftValue = left.get(i);
+            double rightValue = right.get(i);
+            dotProduct += leftValue * rightValue;
+            leftNorm += leftValue * leftValue;
+            rightNorm += rightValue * rightValue;
+        }
+        if (leftNorm == 0 || rightNorm == 0) return 0;
+        return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
     }
 }

@@ -6,6 +6,7 @@
         <p>管理当前知识库的文档收录状态、向量索引及文档详情。</p>
       </div>
       <div class="heading-actions">
+        <AiChunkStrategyManager />
         <el-select v-if="!routeKnowledgeBaseId" v-model="selectedKnowledgeBaseId" placeholder="选择知识库"
           class="base-select" popper-class="knowledge-base-select-popper"
           @change="changeKnowledgeBase">
@@ -15,12 +16,9 @@
           :before-upload="beforeUpload" :http-request="uploadDocument">
           <el-button type="primary" :loading="uploading">上传文档</el-button>
         </el-upload>
-        <el-tag :type="stats.enabled ? 'success' : 'info'" effect="light">
-          {{ stats.enabled ? 'RAG 已启用' : 'RAG 已停用' }}
-        </el-tag>
         <el-button :icon="Refresh" :loading="refreshing" @click="loadAll">刷新</el-button>
         <el-button type="primary" :icon="RefreshRight" :loading="rebuilding"
-          :disabled="Boolean(vectorizingId) || !stats.enabled" @click="rebuildIndex">
+          :disabled="Boolean(vectorizingId) || !selectedBase?.enabled" @click="rebuildIndex">
           批量重建向量索引
         </el-button>
       </div>
@@ -45,57 +43,52 @@
       </span>
     </div>
 
-    <el-card v-if="selectedBase?.sourceType === 'UPLOAD'" shadow="never" class="uploaded-card">
-      <template #header>已上传文档（MinIO）</template>
+    <el-card shadow="never" class="document-card">
+      <div class="filter-toolbar">
+        <el-input v-model="keyword" clearable :prefix-icon="Search"
+          placeholder="搜索标题、正文、来源 URL" @keyup.enter="applySearch" />
+        <el-checkbox v-model="includeExcluded" @change="applySearch">显示已排除文档</el-checkbox>
+        <el-select v-model="vectorizedFilter" clearable placeholder="向量化状态" @change="applySearch">
+          <el-option label="已向量化" :value="true" />
+          <el-option label="待处理" :value="false" />
+        </el-select>
+        <el-button type="primary" :icon="Search" :loading="loading" @click="applySearch">搜索</el-button>
+      </div>
+
       <div class="table-scroll-wrapper">
-        <el-table :data="uploadedDocuments" stripe border resizable>
-          <el-table-column prop="title" label="标题" min-width="180" fixed="left" show-overflow-tooltip resizable />
-          <el-table-column prop="originalName" label="原始文件名" min-width="220" show-overflow-tooltip resizable />
-          <el-table-column prop="fileSize" label="大小" width="120" resizable>
-            <template #default="{ row }">{{ formatFileSize(row.fileSize) }}</template>
+        <el-table :data="documents" v-loading="loading" row-key="id" stripe resizable border
+          class="document-list-table">
+          <el-table-column prop="title" label="标题" min-width="180" fixed="left" show-overflow-tooltip resizable>
+            <template #default="{ row }">{{ row.title || '无标题' }}</template>
           </el-table-column>
-          <el-table-column label="状态" width="100" resizable>
+          <el-table-column v-if="selectedBase?.sourceType === 'UPLOAD'" label="原始文件名"
+            min-width="220" show-overflow-tooltip resizable>
+            <template #default="{ row }">{{ uploadedDocumentFor(row)?.originalName || '-' }}</template>
+          </el-table-column>
+          <el-table-column v-if="selectedBase?.sourceType === 'UPLOAD'" label="大小" width="120" resizable>
+            <template #default="{ row }">{{ uploadedFileSize(row) }}</template>
+          </el-table-column>
+          <el-table-column prop="snippet" label="内容摘要" min-width="280" show-overflow-tooltip resizable />
+          <el-table-column label="文档来源" min-width="180" resizable>
+            <template #default="{ row }">
+              <el-tag v-if="isUploadedDocument(row)" type="warning" effect="light">MinIO 上传</el-tag>
+              <el-tag v-else type="success" effect="light">爬虫采集</el-tag>
+              <span v-if="!isUploadedDocument(row) && row.spiderName" class="source-name">
+                {{ row.spiderName }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="向量化状态" width="110" resizable>
             <template #default="{ row }">
               <el-tag :type="row.vectorized ? 'success' : 'warning'">
                 {{ row.vectorized ? '已向量化' : '待处理' }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="minioBucket" label="MinIO Bucket" min-width="180" resizable />
-          <el-table-column label="操作" width="80" fixed="right" align="center" resizable>
-            <template #default="{ row }">
-              <el-dropdown trigger="click" popper-class="knowledge-document-operation-menu"
-                @command="(command: string) => command === 'details' && showUploadedDetail(row)">
-                <el-button link size="small" class="action-more-btn">
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="details" :disabled="!row.vectorized">分块详情</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </template>
+          <el-table-column v-if="selectedBase?.sourceType === 'UPLOAD'" label="MinIO Bucket"
+            min-width="180" show-overflow-tooltip resizable>
+            <template #default="{ row }">{{ uploadedDocumentFor(row)?.minioBucket || '-' }}</template>
           </el-table-column>
-        </el-table>
-      </div>
-    </el-card>
-
-    <el-card shadow="never" class="document-card">
-      <div class="filter-toolbar">
-        <el-input v-model="keyword" clearable :prefix-icon="Search"
-          placeholder="搜索标题、正文、来源 URL" @keyup.enter="applySearch" />
-        <el-checkbox v-model="includeExcluded" @change="applySearch">显示已排除文档</el-checkbox>
-        <el-button type="primary" :icon="Search" :loading="loading" @click="applySearch">搜索</el-button>
-      </div>
-
-      <div class="table-scroll-wrapper">
-        <el-table :data="documents" v-loading="loading" row-key="id" stripe resizable border>
-          <el-table-column prop="title" label="标题" min-width="180" fixed="left" show-overflow-tooltip resizable>
-            <template #default="{ row }">{{ row.title || '无标题' }}</template>
-          </el-table-column>
-          <el-table-column prop="snippet" label="内容摘要" min-width="280" show-overflow-tooltip resizable />
-          <el-table-column prop="spiderName" label="来源" width="150" show-overflow-tooltip resizable />
           <el-table-column label="收录状态" width="110" resizable>
             <template #default="{ row }">
               <el-tag :type="row.excluded ? 'info' : 'success'" effect="light">
@@ -112,7 +105,7 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="detail">文档详情</el-dropdown-item>
                     <el-dropdown-item command="vectorize"
-                      :disabled="Boolean(vectorizingId) || rebuilding || !stats.enabled">
+                      :disabled="Boolean(vectorizingId) || rebuilding || !selectedBase?.enabled">
                       {{ row.excluded ? '重新纳入' : '重新向量化' }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="!row.excluded" command="exclude" divided
@@ -162,6 +155,9 @@
                   <el-tag size="small" effect="plain" class="chunk-count">
                     {{ chunk.characterCount }} 字符
                   </el-tag>
+                  <el-tag v-if="chunk.chunkStrategyName" size="small" type="info" effect="plain">
+                    {{ chunk.chunkStrategyName }}
+                  </el-tag>
                 </template>
                 <pre class="chunk-content">{{ chunk.content }}</pre>
               </el-collapse-item>
@@ -180,6 +176,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
+import AiChunkStrategyManager from '@/components/AiChunkStrategyManager.vue'
 import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
   getKnowledgeBaseDocumentChunks,
@@ -195,6 +192,16 @@ interface KnowledgeDocument {
   spiderName: string
   spiderId: number | null
   excluded: boolean
+  vectorized: boolean
+}
+
+interface UploadedDocument {
+  originalName: string
+  fileSize: number
+  minioBucket: string
+  sourceDocumentId: string
+  vectorized: boolean
+  objectName: string
 }
 
 interface KnowledgeDocumentDetail extends KnowledgeDocument { content: string }
@@ -206,10 +213,25 @@ interface VectorChunk {
   content: string
   characterCount: number
   embeddingModel: string
+  chunkStrategyId: string
+  chunkStrategyName: string
+}
+
+function uploadedDocumentFor(row: KnowledgeDocument) {
+  return uploadedDocumentsBySourceId.value.get(row.id)
+}
+
+function isUploadedDocument(row: KnowledgeDocument) {
+  return selectedBase.value?.sourceType === 'UPLOAD' || Boolean(uploadedDocumentFor(row))
+}
+
+function uploadedFileSize(row: KnowledgeDocument) {
+  const document = uploadedDocumentFor(row)
+  return document ? formatFileSize(document.fileSize) : '-'
 }
 
 const emptyStats = () => ({
-  enabled: false, sourceIndex: '', vectorIndex: '', sourceDocuments: 0,
+  sourceIndex: '', vectorIndex: '', sourceDocuments: 0,
   includedDocuments: 0, excludedDocuments: 0, vectorDocuments: 0
 })
 
@@ -218,6 +240,7 @@ const documents = ref<KnowledgeDocument[]>([])
 const detail = ref<KnowledgeDocumentDetail | null>(null)
 const keyword = ref('')
 const includeExcluded = ref(true)
+const vectorizedFilter = ref<boolean | null>(null)
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -234,7 +257,10 @@ const knowledgeBases = ref<any[]>([])
 const selectedKnowledgeBaseId = ref('')
 const selectedBase = ref<any>(null)
 const uploading = ref(false)
-const uploadedDocuments = ref<any[]>([])
+const uploadedDocuments = ref<UploadedDocument[]>([])
+const uploadedDocumentsBySourceId = computed(() => new Map(
+  uploadedDocuments.value.map(document => [document.sourceDocumentId, document])
+))
 const route = useRoute()
 const routeKnowledgeBaseId = computed(() => {
   const paramId = route.params.knowledgeBaseId
@@ -251,6 +277,16 @@ const markdown = new MarkdownIt({ breaks: true, html: false, linkify: true })
 
 function renderDocumentMarkdown(content: string) {
   return DOMPurify.sanitize(markdown.render(content || '暂无正文内容'))
+}
+
+function updateDocumentTabTitle() {
+  const knowledgeBaseName = selectedBase.value?.name
+  window.dispatchEvent(new CustomEvent('crawler-tab-title-update', {
+    detail: {
+      path: route.path,
+      title: knowledgeBaseName ? `${knowledgeBaseName} - 文档管理` : '知识库文档管理'
+    }
+  }))
 }
 
 function handleDocumentCommand(command: string, row: KnowledgeDocument) {
@@ -277,7 +313,8 @@ async function loadDocuments() {
     const response: any = await getKnowledgeBaseDocuments({
       knowledgeBaseId: selectedKnowledgeBaseId.value,
       page: page.value, pageSize: pageSize.value,
-      keyword: keyword.value, includeExcluded: includeExcluded.value
+      keyword: keyword.value, includeExcluded: includeExcluded.value,
+      vectorized: vectorizedFilter.value ?? undefined
     })
     if (!response) return
     documents.value = response.data.records || []
@@ -316,10 +353,10 @@ async function loadAll() {
     await Promise.all([loadStats(), loadDocuments()])
     if (routeObjectName.value) {
       const document = uploadedDocuments.value.find(
-        (item: any) => item.objectName === `knowledge/${selectedKnowledgeBaseId.value}/${routeObjectName.value}`
+        item => item.objectName === `knowledge/${selectedKnowledgeBaseId.value}/${routeObjectName.value}`
       )
       if (document) {
-        await showUploadedDetail(document)
+        await showDetail(document)
       } else {
         ElMessage.error('找不到对应的知识库上传文档')
       }
@@ -347,34 +384,17 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-async function showDetail(row: KnowledgeDocument) {
+async function showDetail(row: KnowledgeDocument | UploadedDocument) {
   detailVisible.value = true
   detailLoading.value = true
   detail.value = null
+  const documentId = 'sourceDocumentId' in row ? row.sourceDocumentId : row.id
   try {
-    const response: any = await getKnowledgeBaseDocument(row.id, selectedKnowledgeBaseId.value)
+    const response: any = await getKnowledgeBaseDocument(documentId, selectedKnowledgeBaseId.value)
     if (response) detail.value = response.data
-    await loadDocumentChunks(row.id)
+    await loadDocumentChunks(documentId)
   } catch {
     ElMessage.error('读取文档详情失败')
-    detailVisible.value = false
-  } finally {
-    detailLoading.value = false
-  }
-}
-
-async function showUploadedDetail(row: any) {
-  detailVisible.value = true
-  detailLoading.value = true
-  detail.value = null
-  try {
-    const response: any = await getKnowledgeBaseDocument(
-      row.sourceDocumentId, selectedKnowledgeBaseId.value
-    )
-    if (response) detail.value = response.data
-    await loadDocumentChunks(row.sourceDocumentId)
-  } catch {
-    ElMessage.error('读取上传文档详情失败')
     detailVisible.value = false
   } finally {
     detailLoading.value = false
@@ -438,6 +458,7 @@ async function loadKnowledgeDocumentContext() {
   selectedBase.value = knowledgeBases.value.find(
     (base: any) => String(base.id) === String(selectedKnowledgeBaseId.value)
   ) || null
+  updateDocumentTabTitle()
   if (selectedBase.value?.sourceType === 'UPLOAD') {
     const response: any = await getKnowledgeBaseUploadedDocuments(selectedKnowledgeBaseId.value)
     uploadedDocuments.value = response.data || []
@@ -508,7 +529,7 @@ onMounted(loadAll)
 </script>
 
 <style scoped>
-.knowledge-document-page { max-width: 1440px; margin: 0 auto; }
+.knowledge-document-page { width: 100%; max-width: none; margin: 0; }
 .page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
 .page-heading h1 { margin: 0 0 6px; }
 .page-heading p { margin: 0; color: var(--el-text-color-secondary); }
@@ -527,7 +548,9 @@ onMounted(loadAll)
 .stats-grid span { color: var(--el-text-color-secondary); font-size: 12px; }
 .stats-grid strong { font-size: 24px; }
 .index-info { display: flex; gap: 16px; margin-bottom: 12px; color: var(--el-text-color-secondary); font-size: 12px; }
-.filter-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto auto; gap: 12px; margin-bottom: 12px; }
+.source-name { margin-left: 8px; color: var(--el-text-color-secondary); }
+.filter-toolbar { display: grid; grid-template-columns: minmax(240px, 1fr) auto 160px auto; gap: 12px; margin-bottom: 12px; }
+.document-list-table { width: 100%; }
 .pagination { display: flex; justify-content: flex-end; margin-top: 16px; }
 .action-more-btn { font-weight: 700; color: var(--teal); }
 .action-more-btn:hover { color: var(--teal-hover); }
