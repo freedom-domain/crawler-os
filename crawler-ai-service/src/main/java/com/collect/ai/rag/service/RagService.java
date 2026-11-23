@@ -654,8 +654,8 @@ public class RagService {
         ObjectNode filters = objectMapper.createObjectNode();
         filters.putArray("filter")
                 .add(objectMapper.createObjectNode().set("terms",
-                        objectMapper.createObjectNode().set("doc_id", documentIds)))
-                .add(knowledgeBaseOwnerQuery(base.getId()));
+                        objectMapper.createObjectNode().set("doc_id", documentIds)));
+        applyKnowledgeBaseVectorScope(filters, base);
         ObjectNode body = objectMapper.createObjectNode().put("size", 0);
         body.set("query", objectMapper.createObjectNode().set("bool", filters));
         body.putObject("aggs").putObject("documents").putObject("terms")
@@ -689,8 +689,9 @@ public class RagService {
         String vectorIndex = resolveKnowledgeVectorIndex(model);
         Set<String> documentIds = new HashSet<>();
         ObjectNode body = objectMapper.createObjectNode().put("size", 0);
-        body.putObject("query").set("term",
-                objectMapper.createObjectNode().put("knowledgeBaseId", base.getId()));
+        ObjectNode scope = objectMapper.createObjectNode();
+        applyKnowledgeBaseVectorScope(scope, base);
+        body.set("query", objectMapper.createObjectNode().set("bool", scope));
         ObjectNode composite = body.putObject("aggs").putObject("documents")
                 .putObject("composite").put("size", 1000);
         composite.putArray("sources").addObject()
@@ -1354,6 +1355,14 @@ public class RagService {
                 objectMapper.createObjectNode().put("knowledgeBaseId", knowledgeBaseId));
     }
 
+    private void applyKnowledgeBaseVectorScope(ObjectNode bool, AiKnowledgeBase base) {
+        if ("UPLOAD".equalsIgnoreCase(base.getSourceType())) {
+            bool.putArray("filter").add(knowledgeBaseOwnerQuery(base.getId()));
+        } else {
+            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+        }
+    }
+
     /**
      * 知识库与源文档一对一可见：UPLOAD 类型仅可见本知识库上传的文档；
      * ES_INDEX 类型仅可见未归属任何知识库的源文档，其他知识库上传的文档不可见。
@@ -1386,7 +1395,9 @@ public class RagService {
         bool.putArray("filter").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
         if (knowledgeBaseId != null) {
-            bool.putArray("filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
+            AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+            if (base == null) throw new BizException("知识库不存在");
+            applyKnowledgeBaseVectorScope(bool, base);
         }
         return objectMapper.createObjectNode().set("bool", bool);
     }

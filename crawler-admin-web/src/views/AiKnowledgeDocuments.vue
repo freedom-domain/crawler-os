@@ -297,6 +297,7 @@ const vectorizeStrategyId = ref<string>('')
 const chunkStrategies = ref<any[]>([])
 const detailVisible = ref(false)
 const detailLoading = ref(false)
+const detailDocumentId = ref('')
 const chunks = ref<VectorChunk[]>([])
 const chunksLoading = ref(false)
 const knowledgeBases = ref<any[]>([])
@@ -454,9 +455,10 @@ async function showDetail(row: KnowledgeDocument | UploadedDocument) {
   detailLoading.value = true
   detail.value = null
   const documentId = 'sourceDocumentId' in row ? row.sourceDocumentId : row.id
+  detailDocumentId.value = documentId
   try {
     const response: any = await getKnowledgeBaseDocument(documentId, selectedKnowledgeBaseId.value)
-    if (response) detail.value = response.data
+    if (detailDocumentId.value === documentId && response) detail.value = response.data
     await loadDocumentChunks(documentId)
   } catch {
     ElMessage.error('读取文档详情失败')
@@ -473,7 +475,7 @@ async function loadDocumentChunks(documentId: string) {
     const response: any = await getKnowledgeBaseDocumentChunks(
       documentId, selectedKnowledgeBaseId.value
     )
-    chunks.value = response?.data || []
+    if (detailDocumentId.value === documentId) chunks.value = response?.data || []
   } catch {
     ElMessage.error('读取文档向量分块失败')
   } finally {
