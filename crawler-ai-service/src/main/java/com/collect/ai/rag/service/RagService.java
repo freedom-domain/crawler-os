@@ -541,7 +541,7 @@ public class RagService {
         if (!excludedIds.isEmpty()) {
             ObjectNode bool = objectMapper.createObjectNode();
             applyKnowledgeBaseScope(bool, base);
-            bool.putArray("must").add(excludedQuery);
+            appendTo(bool, "must").add(excludedQuery);
             excludedQuery = objectMapper.createObjectNode().set("bool", bool);
         }
         stats.setExcludedDocuments(excludedIds.isEmpty() ? 0
@@ -660,7 +660,8 @@ public class RagService {
         ArrayNode documentIds = objectMapper.createArrayNode();
         documents.forEach(document -> documentIds.add(document.getId()));
         ObjectNode filters = objectMapper.createObjectNode();
-        filters.putArray("filter")
+        // 先限定本页文档，再叠加知识库归属；两者必须同时生效，否则聚合会退化为整个知识库
+        appendTo(filters, "filter")
                 .add(objectMapper.createObjectNode().set("terms",
                         objectMapper.createObjectNode().set("doc_id", documentIds)));
         applyKnowledgeBaseVectorScope(filters, base);
@@ -977,14 +978,14 @@ public class RagService {
         }
         // 分块文档 _id 带知识库前缀，因此按 chunk_id 字段检索而不是直接 GET _id
         ObjectNode bool = objectMapper.createObjectNode();
-        bool.putArray("filter").add(objectMapper.createObjectNode()
+        appendTo(bool, "filter").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
-        bool.putArray("filter").add(objectMapper.createObjectNode()
+        appendTo(bool, "filter").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("chunk_id", chunkId)));
         if (knowledgeBaseId != null) {
-            bool.putArray("filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
+            appendTo(bool, "filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
         } else {
-            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+            appendTo(bool, "must_not").add(knowledgeBaseDocumentExistsQuery());
         }
         ObjectNode body = objectMapper.createObjectNode().put("size", 1);
         body.putArray("sort").add("_doc");
@@ -1216,15 +1217,15 @@ public class RagService {
     private void deleteDocumentVectorsExcept(
             String vectorIndex, String documentId, List<String> chunkIds, Long knowledgeBaseId) {
         ObjectNode bool = objectMapper.createObjectNode();
-        bool.putArray("filter").add(objectMapper.createObjectNode()
+        appendTo(bool, "filter").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
         if (knowledgeBaseId != null) {
-            bool.putArray("filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
+            appendTo(bool, "filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
         } else {
-            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+            appendTo(bool, "must_not").add(knowledgeBaseDocumentExistsQuery());
         }
         if (!chunkIds.isEmpty()) {
-            bool.putArray("must_not").add(objectMapper.createObjectNode()
+            appendTo(bool, "must_not").add(objectMapper.createObjectNode()
                     .set("terms", objectMapper.createObjectNode()
                             .set("chunk_id", objectMapper.valueToTree(chunkIds))));
         }
@@ -1377,11 +1378,11 @@ public class RagService {
         if (keyword != null && !keyword.isBlank()) {
             ObjectNode multiMatch = objectMapper.createObjectNode().put("query", keyword.trim());
             multiMatch.putArray("fields").add("title^3").add("content").add("url").add("spiderName");
-            bool.putArray("must").add(objectMapper.createObjectNode()
+            appendTo(bool, "must").add(objectMapper.createObjectNode()
                     .set("multi_match", multiMatch));
         }
         if (!includeExcluded && !excludedIds.isEmpty()) {
-            bool.putArray("must_not").add(excludedDocumentIdsQuery(excludedIds));
+            appendTo(bool, "must_not").add(excludedDocumentIdsQuery(excludedIds));
         }
         return bool.isEmpty() ? matchAllQuery()
                 : objectMapper.createObjectNode().set("bool", bool);
@@ -1401,8 +1402,20 @@ public class RagService {
         return ownerId.isNumber() && ownerId.asLong() == base.getId();
     }
 
+    /**
+     * 向 bool 查询的子句数组追加条件。
+     *
+     * <p>Jackson 的 {@code putArray(name)} 会覆盖同名字段，重复调用会静默丢掉先前的条件，
+     * 导致查询范围被放大（例如向量状态统计退化为整个知识库、删除向量时误删其他文档），
+     * 因此所有组合查询统一通过本方法追加。
+     */
+    private static ArrayNode appendTo(ObjectNode bool, String key) {
+        JsonNode existing = bool.get(key);
+        return existing instanceof ArrayNode array ? array : bool.putArray(key);
+    }
+
     private void applyKnowledgeBaseVectorScope(ObjectNode bool, AiKnowledgeBase base) {
-        bool.putArray("filter").add(knowledgeBaseOwnerQuery(base.getId()));
+        appendTo(bool, "filter").add(knowledgeBaseOwnerQuery(base.getId()));
     }
 
     /**
@@ -1412,9 +1425,9 @@ public class RagService {
     private void applyKnowledgeBaseScope(ObjectNode bool, AiKnowledgeBase base) {
         if (base == null) return;
         if ("UPLOAD".equalsIgnoreCase(base.getSourceType())) {
-            bool.putArray("filter").add(knowledgeBaseOwnerQuery(base.getId()));
+            appendTo(bool, "filter").add(knowledgeBaseOwnerQuery(base.getId()));
         } else {
-            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+            appendTo(bool, "must_not").add(knowledgeBaseDocumentExistsQuery());
         }
     }
 
@@ -1434,7 +1447,7 @@ public class RagService {
     /** 知识库文档向量分块查询：指定知识库时只返回该知识库写入的分块 */
     private ObjectNode knowledgeBaseDocumentChunkQuery(Long knowledgeBaseId, String documentId) {
         ObjectNode bool = objectMapper.createObjectNode();
-        bool.putArray("filter").add(objectMapper.createObjectNode()
+        appendTo(bool, "filter").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
         if (knowledgeBaseId != null) {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
@@ -1941,15 +1954,15 @@ public class RagService {
                 body.set("query", matchAllQuery());
             } else {
                 ObjectNode activeQuery = objectMapper.createObjectNode();
-                activeQuery.putArray("must").add(matchAllQuery());
+                appendTo(activeQuery, "must").add(matchAllQuery());
                 if (!excludedIds.isEmpty()) {
-                    activeQuery.putArray("must_not").add(excludedDocumentIdsQuery(excludedIds));
+                    appendTo(activeQuery, "must_not").add(excludedDocumentIdsQuery(excludedIds));
                 }
                 if (ownerKnowledgeBaseId != null) {
-                    activeQuery.putArray("filter").add(knowledgeBaseOwnerQuery(ownerKnowledgeBaseId));
+                    appendTo(activeQuery, "filter").add(knowledgeBaseOwnerQuery(ownerKnowledgeBaseId));
                 }
                 if (excludeKnowledgeBaseDocuments) {
-                    activeQuery.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+                    appendTo(activeQuery, "must_not").add(knowledgeBaseDocumentExistsQuery());
                 }
                 body.set("query", objectMapper.createObjectNode().set("bool", activeQuery));
             }
