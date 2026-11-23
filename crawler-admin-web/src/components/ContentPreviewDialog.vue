@@ -37,7 +37,7 @@
         </div>
       </div>
     </template>
-    <div v-loading="loading">
+    <div v-loading="loading" class="preview-content-body" :class="{ 'has-preview-padding': !showSource }">
       <iframe
         v-if="!showSource"
         class="preview-container preview-html"
@@ -148,16 +148,20 @@ defineEmits<{
 }
 .preview-container {
   max-height: 70vh;
+  overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--preview-line);
   border-radius: 4px;
   padding: 16px;
   background: var(--preview-bg);
 }
+.preview-content-body.has-preview-padding {
+  padding: 12px;
+}
 .preview-html {
   display: block;
   width: 100%;
-  height: 70vh;
+  height: calc(70vh - 24px);
   padding: 0;
   background: #fff;
   color: #333;

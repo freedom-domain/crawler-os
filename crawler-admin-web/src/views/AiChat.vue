@@ -444,12 +444,25 @@
           />
           <div class="composer-toolbar">
             <div class="composer-options">
-              <div class="retrieval-control">
-                <span>检索数量</span>
-                <el-select v-model="topK" size="small" aria-label="检索数量">
-                  <el-option v-for="count in retrievalOptions" :key="count" :label="`${count} 条`" :value="count" />
-                </el-select>
-              </div>
+              <el-popover trigger="click" placement="top-start" :width="220" popper-class="retrieval-settings-popover">
+                <template #reference>
+                  <el-button
+                    class="retrieval-settings-trigger"
+                    text
+                    circle
+                    aria-label="编辑检索数量"
+                    :title="`检索数量：${topK} 条`"
+                  >
+                    <el-icon><Setting /></el-icon>
+                  </el-button>
+                </template>
+                <div class="retrieval-settings">
+                  <span>检索数量</span>
+                  <el-select v-model="topK" size="small" aria-label="检索数量">
+                    <el-option v-for="count in retrievalOptions" :key="count" :label="`${count} 条`" :value="count" />
+                  </el-select>
+                </div>
+              </el-popover>
             </div>
             <div
               v-if="contextWindow > 0"
@@ -542,8 +555,19 @@
     >
       <template #header>
         <div class="source-dialog-header">
-          <strong class="source-dialog-title">{{ selectedSource?.title || '参考来源分块预览' }}</strong>
+          <strong class="source-dialog-title">
+            {{ selectedSource?.title || (showingSourceOriginal ? '原文预览' : '参考来源分块预览') }}
+          </strong>
           <div class="source-dialog-actions">
+            <el-button
+              v-if="showingSourceOriginal"
+              link
+              aria-label="返回分块预览"
+              title="返回分块"
+              @click="showingSourceOriginal = false"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+            </el-button>
             <el-button
               link
               :aria-label="sourcePreviewFullscreen ? '还原预览窗口' : '最大化预览窗口'"
@@ -565,142 +589,106 @@
       </template>
       <div
         v-if="selectedSource"
-        v-loading="sourcePreviewLoading"
+        v-loading="showingSourceOriginal ? sourceOriginalLoading : sourcePreviewLoading"
         class="source-preview"
       >
-        <div class="source-preview-meta">
-          <div class="source-preview-meta-info">
-            <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
-            <el-tag v-if="selectedSourceChunk" size="small" type="primary" effect="plain">
-              第 {{ selectedSourceChunk.index + 1 }} 段
-            </el-tag>
-          </div>
-          <span v-if="selectedSourceChunk">{{ selectedSourceChunk.characterCount }} 字符</span>
-          <el-button
-            v-if="selectedSourceChunk"
-            type="primary"
-            link
-            :loading="sourceOriginalLoading"
-            @click="openSourceOriginalPreview"
-          >
-            预览原文
-          </el-button>
-        </div>
-        <el-alert
-          v-if="sourcePreviewError"
-          :title="sourcePreviewError"
-          type="error"
-          :closable="false"
-          show-icon
-        />
-        <div
-          v-else-if="selectedSourceChunk"
-          class="source-preview-markdown"
-          v-html="renderMarkdown(selectedSourceChunk.content || '该分块内容为空。')"
-        />
-      </div>
-    </el-drawer>
-
-    <el-drawer
-      v-model="sourceOriginalPreviewVisible"
-      class="source-preview-drawer"
-      direction="rtl"
-      :size="sourceOriginalFullscreen ? '100vw' : 'min(720px, 92vw)'"
-      :show-close="false"
-      append-to-body
-      @closed="handleSourceOriginalClosed"
-    >
-      <template #header>
-        <div class="source-dialog-header">
-          <strong class="source-dialog-title">{{ selectedSource?.title || '原文预览' }}</strong>
-          <div class="source-dialog-actions">
+        <template v-if="!showingSourceOriginal">
+          <div class="source-preview-meta">
+            <div class="source-preview-meta-info">
+              <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
+              <el-tag v-if="selectedSourceChunk" size="small" type="primary" effect="plain">
+                第 {{ selectedSourceChunk.index + 1 }} 段
+              </el-tag>
+            </div>
+            <span v-if="selectedSourceChunk">{{ selectedSourceChunk.characterCount }} 字符</span>
             <el-button
+              v-if="selectedSourceChunk"
+              type="primary"
               link
-              :aria-label="sourceOriginalFullscreen ? '还原预览窗口' : '最大化预览窗口'"
-              :title="sourceOriginalFullscreen ? '还原' : '最大化'"
-              @click="sourceOriginalFullscreen = !sourceOriginalFullscreen"
+              :loading="sourceOriginalLoading"
+              @click="openSourceOriginalPreview"
             >
-              <el-icon><component :is="sourceOriginalFullscreen ? Minus : FullScreen" /></el-icon>
-            </el-button>
-            <el-button
-              link
-              aria-label="关闭预览"
-              title="关闭"
-              @click="sourceOriginalPreviewVisible = false"
-            >
-              <el-icon><Close /></el-icon>
+              预览原文
             </el-button>
           </div>
-        </div>
-      </template>
-      <div
-        v-if="selectedSource"
-        v-loading="sourceOriginalLoading"
-        class="source-preview"
-      >
-        <div class="source-preview-meta">
-          <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
-          <div class="source-preview-actions">
-            <button
-              v-if="sourceDocumentImages.length"
-              type="button"
-              class="source-image-open-button"
-              @click="openSourceImagePreview"
-            >
-              <el-icon><Picture /></el-icon>
-              <span>图片预览</span>
-              <span class="source-image-count">{{ sourceDocumentImages.length }}</span>
-              <el-icon class="source-image-open-icon"><ArrowRight /></el-icon>
-            </button>
-            <button
-              v-if="selectedSource.sourceType !== 'UPLOAD'"
-              type="button"
-              class="source-image-open-button"
-              @click="openSourceSnapshotPreview"
-            >
-              <el-icon><Document /></el-icon>
-              <span>查看源码和快照</span>
-              <el-icon class="source-image-open-icon"><ArrowRight /></el-icon>
-            </button>
-          </div>
-        </div>
-        <div v-if="sourcePreviewUrl" class="source-url-row">
-          <span class="source-url-label">来源链接</span>
-          <a
-            :href="sourcePreviewUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            :title="sourcePreviewUrl"
-          >
-            {{ sourcePreviewUrl }}
-            <el-icon><Link /></el-icon>
-          </a>
-        </div>
-        <el-alert
-          v-if="sourceOriginalError"
-          :title="sourceOriginalError"
-          type="error"
-          :closable="false"
-          show-icon
-        />
-        <div v-if="sourceDocumentImages.length" class="source-image-grid">
-          <el-image
-            v-for="(image, index) in sourceDocumentImages"
-            :key="`${image}-${index}`"
-            :src="sourceImageUrl(image)"
-            :preview-src-list="sourceDocumentImages.map(sourceImageUrl)"
-            :initial-index="index"
-            fit="contain"
-            preview-teleported
-            class="source-image-preview"
+          <el-alert
+            v-if="sourcePreviewError"
+            :title="sourcePreviewError"
+            type="error"
+            :closable="false"
+            show-icon
           />
-        </div>
-        <div
-          v-if="sourceDocumentContent"
-          class="source-preview-markdown"
-          v-html="renderMarkdown(sourceDocumentContent)"
-        />
-        <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
+          <div
+            v-else-if="selectedSourceChunk"
+            class="source-preview-markdown"
+            v-html="renderMarkdown(selectedSourceChunk.content || '该分块内容为空。')"
+          />
+        </template>
+        <template v-else>
+          <div class="source-preview-meta">
+            <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
+            <div class="source-preview-actions">
+              <button
+                v-if="sourceDocumentImages.length"
+                type="button"
+                class="source-image-open-button"
+                @click="openSourceImagePreview"
+              >
+                <el-icon><Picture /></el-icon>
+                <span>图片预览</span>
+                <span class="source-image-count">{{ sourceDocumentImages.length }}</span>
+                <el-icon class="source-image-open-icon"><ArrowRight /></el-icon>
+              </button>
+              <button
+                v-if="selectedSource.sourceType !== 'UPLOAD'"
+                type="button"
+                class="source-image-open-button"
+                @click="openSourceSnapshotPreview"
+              >
+                <el-icon><Document /></el-icon>
+                <span>查看源码和快照</span>
+                <el-icon class="source-image-open-icon"><ArrowRight /></el-icon>
+              </button>
+            </div>
+          </div>
+          <div v-if="sourcePreviewUrl" class="source-url-row">
+            <span class="source-url-label">来源链接</span>
+            <a
+              :href="sourcePreviewUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="sourcePreviewUrl"
+            >
+              {{ sourcePreviewUrl }}
+              <el-icon><Link /></el-icon>
+            </a>
+          </div>
+          <el-alert
+            v-if="sourceOriginalError"
+            :title="sourceOriginalError"
+            type="error"
+            :closable="false"
+            show-icon
+          />
+          <div v-if="sourceDocumentImages.length" class="source-image-grid">
+            <el-image
+              v-for="(image, index) in sourceDocumentImages"
+              :key="`${image}-${index}`"
+              :src="sourceImageUrl(image)"
+              :preview-src-list="sourceDocumentImages.map(sourceImageUrl)"
+              :initial-index="index"
+              fit="contain"
+              preview-teleported
+              class="source-image-preview"
+            />
+          </div>
+          <div
+            v-if="sourceDocumentContent"
+            class="source-preview-markdown"
+            v-html="renderMarkdown(sourceDocumentContent)"
+          />
+          <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
+        </template>
       </div>
     </el-drawer>
 
@@ -828,8 +816,7 @@ const resizeSidebarByKeyboard = (deltaPercent: number) => {
 const selectedSource = ref<SourceReference | null>(null)
 const sourcePreviewVisible = ref(false)
 const sourcePreviewFullscreen = ref(false)
-const sourceOriginalPreviewVisible = ref(false)
-const sourceOriginalFullscreen = ref(false)
+const showingSourceOriginal = ref(false)
 const sourcePreviewLoading = ref(false)
 const sourcePreviewError = ref('')
 const sourceOriginalLoading = ref(false)
@@ -979,6 +966,7 @@ const openSourcePreview = (source: SourceReference) => {
   const requestId = ++sourcePreviewRequestId
   selectedSource.value = source
   sourcePreviewVisible.value = true
+  showingSourceOriginal.value = false
   sourcePreviewError.value = ''
   sourceChunks.value = []
   selectedSourceChunk.value = null
@@ -994,7 +982,6 @@ const openSourcePreview = (source: SourceReference) => {
       if (requestId !== sourcePreviewRequestId) return
       if (Number(countResponse?.data) === 1) {
         sourcePreviewLoading.value = false
-        sourcePreviewVisible.value = false
         void openSourceOriginalPreview()
         return
       }
@@ -1022,18 +1009,17 @@ const openSourcePreview = (source: SourceReference) => {
 const openSourceOriginalPreview = async () => {
   const source = selectedSource.value
   const conversationId = activeConversationId.value
+  showingSourceOriginal.value = true
+  sourceOriginalError.value = ''
   if (!source || !conversationId) {
     sourceOriginalError.value = '无法确定来源所属对话'
-    sourceOriginalPreviewVisible.value = true
     return
   }
   const requestId = ++sourcePreviewRequestId
   sourceOriginalLoading.value = true
-  sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
   sourceDocumentUrl.value = ''
   sourceDocumentImages.value = []
-  sourceOriginalPreviewVisible.value = true
   try {
     const response: any = await getChatSourceDocument(
       conversationId, source.id, source.knowledgeBaseId
@@ -1061,22 +1047,16 @@ const closeSourcePreview = () => {
   sourcePreviewError.value = ''
   sourceChunks.value = []
   selectedSourceChunk.value = null
-  sourceOriginalPreviewVisible.value = false
+  showingSourceOriginal.value = false
   sourceOriginalLoading.value = false
   sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
   sourceDocumentUrl.value = ''
   sourceDocumentImages.value = []
   sourcePreviewFullscreen.value = false
-  sourceOriginalFullscreen.value = false
 }
 const handleSourcePreviewClosed = () => {
-  if (sourceOriginalPreviewVisible.value) return
   closeSourcePreview()
-}
-const handleSourceOriginalClosed = () => {
-  sourceOriginalFullscreen.value = false
-  if (!sourcePreviewVisible.value) closeSourcePreview()
 }
 const sourceImageUrl = (objectName: string) => {
   if (!objectName) return ''
@@ -2494,14 +2474,17 @@ onActivated(() => {
 .slash-command-copy strong { color: var(--ink-900); font-size: 12px; font-weight: 650; }
 .slash-command-copy small { overflow: hidden; color: var(--ink-500); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .slash-command-option kbd { flex: 0 0 auto; color: var(--ink-500); font-family: inherit; font-size: 10px; }
-.composer :deep(.el-textarea__inner) { min-height: 35px !important; padding: 4px 5px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ink-900); font-size: 12px; line-height: 1.6; }
+.composer :deep(.el-textarea__inner) { min-height: 35px !important; padding: 4px 5px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ink-900); font-size: 14px; line-height: 1.6; }
 .composer :deep(.el-textarea__inner:focus) { box-shadow: none; }
 .composer-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding-top: 7px; }
-.composer-options { display: contents; }
-.retrieval-control, .send-tools { display: flex; align-items: center; gap: 8px; }
-.retrieval-control { color: var(--ink-500); font-size: 10px; }
-.retrieval-control :deep(.el-select) { width: 78px; }
-.send-tools { gap: 6px; }
+.composer-options { display: flex; align-items: center; }
+.retrieval-settings-trigger { width: 32px; height: 32px; margin: 0; color: var(--ink-500); }
+.retrieval-settings-trigger:hover { color: var(--teal-ink); background: var(--tint); }
+.retrieval-settings-trigger :deep(.el-icon) { font-size: 16px; }
+.retrieval-settings { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; color: var(--ink-700); font-size: 12px; }
+.retrieval-settings :deep(.el-select) { width: 100%; }
+.retrieval-settings :deep(.el-select__wrapper) { min-height: 32px; border-radius: 8px; }
+.send-tools { display: flex; align-items: center; gap: 12px; }
 .send-tools :deep(.chat-model-selector) { width: 180px; flex: 0 1 180px; }
 .send-tools :deep(.chat-model-selector .el-select__wrapper) {
   min-height: 32px;
@@ -2530,25 +2513,6 @@ onActivated(() => {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.retrieval-control :deep(.el-select__wrapper) {
-  min-height: 32px;
-  padding: 0 8px;
-  border-radius: 8px;
-  background: var(--surface-soft);
-  box-shadow: 0 0 0 1px var(--chrome-line) inset;
-  transition: background-color .16s ease, box-shadow .16s ease;
-}
-.retrieval-control :deep(.el-select__wrapper:hover) {
-  box-shadow: 0 0 0 1px var(--line-strong) inset;
-}
-.retrieval-control :deep(.el-select__wrapper.is-focused) {
-  background: var(--surface);
-  box-shadow: 0 0 0 1px var(--teal) inset, 0 0 0 3px var(--focus-ring);
-}
-.retrieval-control :deep(.el-select__selected-item) {
-  color: var(--ink-700);
-  font-size: 10px;
 }
 .context-usage { display: flex; min-width: 0; align-items: center; justify-content: center; }
 .context-usage-trigger { position: relative; display: grid; width: 44px; height: 44px; place-items: center; padding: 2px; border: 0; border-radius: 50%; background: transparent; cursor: pointer; }
@@ -2617,14 +2581,10 @@ onActivated(() => {
   .mobile-conversation { max-width: 150px; flex: 0 0 auto; overflow: hidden; padding: 6px 10px; border: 1px solid var(--chrome-line); border-radius: 16px; background: var(--surface); color: var(--ink-700); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .mobile-conversation :deep(.el-tooltip), .mobile-conversation :deep(.el-tooltip__trigger) { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-conversation.is-active { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
-  .composer-toolbar { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
-  .retrieval-control { display: grid; grid-column: 1 / -1; grid-row: 1; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1.2fr); min-width: 0; gap: 5px; white-space: nowrap; }
-  .retrieval-control :deep(.el-select) { width: 100%; min-width: 0; }
+  .composer-toolbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
   .send-tools :deep(.chat-model-selector) { width: 144px; flex-basis: 144px; }
-  .retrieval-control :deep(.el-select__wrapper) { min-width: 0; padding: 0 5px; }
-  .retrieval-control :deep(.el-select__selected-item) { font-size: 9px; }
-  .context-usage { grid-column: 1; grid-row: 2; justify-content: flex-start; }
-  .send-tools { grid-column: 2; grid-row: 2; justify-content: flex-end; }
+  .context-usage { grid-column: 2; grid-row: 1; justify-content: center; }
+  .send-tools { grid-column: 3; grid-row: 1; justify-content: flex-end; }
   .reasoning-summary-content { display: flex; width: 100%; box-sizing: border-box; gap: 4px 10px; margin-top: 6px; margin-left: 0; }
   .reasoning-duration { min-width: 0; overflow-wrap: anywhere; }
   .message-list { padding: 16px 14px; }
@@ -2640,7 +2600,6 @@ onActivated(() => {
   .assistant-manage-button { width: 29px; }
   .mobile-new-chat { padding-right: 6px; padding-left: 6px; }
   .send-tools :deep(.chat-model-selector) { width: 128px; flex-basis: 128px; }
-  .retrieval-control { grid-template-columns: auto minmax(0, .8fr) auto minmax(0, 1.2fr); gap: 4px; font-size: 9px; }
   .composer { padding-right: 9px; padding-left: 9px; }
 }
 </style>
