@@ -58,6 +58,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -486,7 +487,7 @@ public class RagService {
                 : countDocuments(properties.resolveSourceIndex(), excludedQuery));
         stats.setIncludedDocuments(Math.max(0,
                 stats.getSourceDocuments() - stats.getExcludedDocuments()));
-        stats.setVectorDocuments(countVectorDocuments(vectorIndex));
+        stats.setVectorDocuments(countVectorDocuments(vectorIndex, base.getId()));
         return stats;
     }
 
@@ -572,9 +573,12 @@ public class RagService {
                 document.setExcluded(excludedIds.contains(document.getId()));
                 records.add(document);
             }
-            Set<String> vectorizedDocumentIds = findVectorizedDocumentIds(base, records);
-            records.forEach(document ->
-                    document.setVectorized(vectorizedDocumentIds.contains(document.getId())));
+            Map<String, Long> chunkCounts = findVectorChunkCounts(base, records);
+            records.forEach(document -> {
+                long chunkCount = chunkCounts.getOrDefault(document.getId(), 0L);
+                document.setChunkCount(chunkCount);
+                document.setVectorized(chunkCount > 0);
+            });
             KnowledgeBaseDtos.DocumentPage result = new KnowledgeBaseDtos.DocumentPage();
             result.setRecords(records);
             result.setTotal(total);
@@ -587,9 +591,9 @@ public class RagService {
         }
     }
 
-    private Set<String> findVectorizedDocumentIds(
+    private Map<String, Long> findVectorChunkCounts(
             AiKnowledgeBase base, List<KnowledgeBaseDtos.Document> documents) {
-        if (documents.isEmpty()) return Set.of();
+        if (documents.isEmpty()) return Map.of();
         AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
         if (model == null) throw new BizException("知识库向量模型不存在");
 
@@ -609,21 +613,21 @@ public class RagService {
         try {
             HttpResponse<String> response = elasticsearchRequest(
                     "POST", "/" + vectorIndex + "/_search", toJson(body));
-            if (response.statusCode() == 404) return Set.of();
+            if (response.statusCode() == 404) return Map.of();
             if (response.statusCode() >= 300) {
-                throw new IllegalStateException("读取文档向量状态失败: " + response.statusCode()
+                throw new IllegalStateException("读取文档分块数量失败: " + response.statusCode()
                         + " " + response.body());
             }
             JsonNode buckets = objectMapper.readTree(response.body())
                     .path("aggregations").path("documents").path("buckets");
-            Set<String> vectorizedDocumentIds = new HashSet<>();
+            Map<String, Long> chunkCounts = new java.util.HashMap<>();
             for (JsonNode bucket : buckets) {
-                vectorizedDocumentIds.add(bucket.path("key").asText());
+                chunkCounts.put(bucket.path("key").asText(), bucket.path("doc_count").asLong());
             }
-            return vectorizedDocumentIds;
+            return chunkCounts;
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
-            throw new IllegalStateException("读取文档向量状态失败: " + e.getMessage(), e);
+            throw new IllegalStateException("读取文档分块数量失败: " + e.getMessage(), e);
         }
     }
 
@@ -1227,7 +1231,15 @@ public class RagService {
     }
 
     private long countVectorDocuments(String index) {
-        ObjectNode body = objectMapper.createObjectNode().set("query", matchAllQuery());
+        return countVectorDocuments(index, null);
+    }
+
+    private long countVectorDocuments(String index, Long knowledgeBaseId) {
+        ObjectNode query = knowledgeBaseId == null
+                ? matchAllQuery()
+                : objectMapper.createObjectNode().set("term",
+                        objectMapper.createObjectNode().put("knowledgeBaseId", knowledgeBaseId));
+        ObjectNode body = objectMapper.createObjectNode().set("query", query);
         try {
             HttpResponse<String> response = elasticsearchRequest("POST", "/" + index + "/_count", toJson(body));
             if (response.statusCode() == 404) return 0;

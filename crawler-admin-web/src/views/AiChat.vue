@@ -884,6 +884,15 @@ const activeAssistant = computed(() => {
   const assistantId = routeSelectedAssistantId.value || selectedAssistantId.value
   return assistants.value.find((assistant: any) => String(assistant.id) === String(assistantId))
 })
+watch(
+  [isStandaloneWindow, () => activeAssistant.value?.name],
+  ([standalone, assistantName]) => {
+    if (standalone) {
+      document.title = assistantName ? `${assistantName} - CrawlerOS` : '智能体聊天 - CrawlerOS'
+    }
+  },
+  { immediate: true }
+)
 const activeConversationId = ref<number | null>(null)
 const activeConversation = computed(() =>
   conversations.value.find(conversation => conversation.id === activeConversationId.value)
@@ -2169,20 +2178,23 @@ onActivated(() => {
   background: var(--surface);
   box-shadow: var(--shadow-soft);
 }
+:global(.assistant-select-popper .el-select-dropdown__wrap) {
+  max-width: calc(100vw - 24px);
+}
 :global(.assistant-select-popper .el-select-dropdown__list) {
   margin: 0;
 }
 :global(.assistant-select-popper .el-select-dropdown__item) {
+  height: auto;
   min-height: 36px;
   margin: 2px 0;
-  padding: 0 10px;
+  padding: 8px 10px;
   border-radius: 7px;
   color: var(--ink-700);
   font-size: 12px;
-  line-height: 36px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 :global(.assistant-select-popper .el-select-dropdown__item:hover),
 :global(.assistant-select-popper .el-select-dropdown__item.is-hovering) {
@@ -2479,6 +2491,13 @@ onActivated(() => {
 }
 @media (max-width: 600px) {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
+  :global(.assistant-select-popper) {
+    min-width: min(220px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+  }
+  :global(.assistant-select-popper .el-select-dropdown__wrap) {
+    max-height: min(274px, calc(100dvh - 120px));
+  }
   .ai-chat-page.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
   .ai-chat-page.ai-chat-page--standalone { grid-template-columns: minmax(0, 1fr); }
   .chat-sidebar { display: none; }

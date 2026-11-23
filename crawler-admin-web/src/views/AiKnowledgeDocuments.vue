@@ -85,6 +85,9 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column prop="chunkCount" label="分块数量" width="100" align="center" resizable>
+            <template #default="{ row }">{{ row.chunkCount }}</template>
+          </el-table-column>
           <el-table-column v-if="selectedBase?.sourceType === 'UPLOAD'" label="MinIO Bucket"
             min-width="180" show-overflow-tooltip resizable>
             <template #default="{ row }">{{ uploadedDocumentFor(row)?.minioBucket || '-' }}</template>
@@ -138,12 +141,8 @@
         </div>
         <el-tabs>
           <el-tab-pane label="原文内容">
-            <div
-              v-if="detail && routeObjectName && /\.(md|markdown)$/i.test(routeObjectName)"
-              class="document-content document-markdown"
-              v-html="renderDocumentMarkdown(detail.content)"
-            />
-            <pre v-else-if="detail" class="document-content">{{ detail.content || '暂无正文内容' }}</pre>
+            <div v-if="detail" class="document-content document-markdown"
+              v-html="renderDocumentMarkdown(detail.content)" />
           </el-tab-pane>
           <el-tab-pane :label="`向量分块（${chunks.length}）`">
             <el-empty v-if="!chunksLoading && chunks.length === 0" description="暂无向量分块" />
@@ -159,7 +158,8 @@
                     {{ chunk.chunkStrategyName }}
                   </el-tag>
                 </template>
-                <pre class="chunk-content">{{ chunk.content }}</pre>
+                <div class="chunk-content document-markdown"
+                  v-html="renderDocumentMarkdown(chunk.content)" />
               </el-collapse-item>
             </el-collapse>
           </el-tab-pane>
@@ -193,6 +193,7 @@ interface KnowledgeDocument {
   spiderId: number | null
   excluded: boolean
   vectorized: boolean
+  chunkCount: number
 }
 
 interface UploadedDocument {
@@ -564,7 +565,7 @@ onMounted(loadAll)
 .document-markdown { white-space: normal; }
 .chunk-list { margin-top: 4px; }
 .chunk-count { margin-left: 8px; }
-.chunk-content { max-height: 320px; overflow: auto; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chunk-content { max-height: 320px; overflow: auto; margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-toolbar { grid-template-columns: 1fr; }

@@ -250,6 +250,14 @@ const refreshTabTitles = () => {
   })
 }
 
+watch(
+  () => tabs.value.find(tab => tab.path === route.path)?.title || titleForPath(route.path),
+  title => {
+    document.title = title ? `${title} - CrawlerOS` : 'CrawlerOS'
+  },
+  { immediate: true }
+)
+
 const handleMenuSelect = (path: string) => {
   if (!path) return
   const resolved = router.resolve(path)

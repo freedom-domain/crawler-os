@@ -39,8 +39,8 @@ public class ChunkStrategyService {
 
     public List<AiRagChunkStrategy> all() {
         return strategyMapper.selectList(new LambdaQueryWrapper<AiRagChunkStrategy>()
-                .orderByDesc(AiRagChunkStrategy::getDefaultStrategy)
                 .orderByDesc(AiRagChunkStrategy::getPriority)
+                .orderByDesc(AiRagChunkStrategy::getDefaultStrategy)
                 .orderByAsc(AiRagChunkStrategy::getId));
     }
 

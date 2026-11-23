@@ -7,44 +7,46 @@
         <span>进入分块流程后按字符数和文档类型匹配，命中多条时选择优先级较高者；未命中则使用默认策略。</span>
         <el-button type="primary" @click="openCreateStrategy">新增策略</el-button>
       </div>
-      <el-table :data="strategies" stripe border>
-        <el-table-column prop="name" label="策略名称" min-width="180" />
-        <el-table-column label="策略类型" min-width="120">
-          <template #default="{ row }">{{ strategyLabel(row.strategyType) }}</template>
-        </el-table-column>
-        <el-table-column label="最大长度 / 重叠" min-width="150">
-          <template #default="{ row }">
-            {{ row.chunkSize }} / {{ row.strategyType === 'SEMANTIC' ? '-' : row.chunkOverlap }}
-          </template>
-        </el-table-column>
-        <el-table-column label="语义阈值" min-width="100">
-          <template #default="{ row }">
-            {{ row.strategyType === 'SEMANTIC' ? row.similarityThreshold : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="priority" label="优先级" width="90" />
-        <el-table-column label="触发条件" min-width="220">
-          <template #default="{ row }">
-            <span v-if="row.defaultStrategy">未命中时兜底</span>
-            <span v-else>
-              {{ row.minDocumentLength }}–{{ row.maxDocumentLength ?? '不限' }} 字符 ·
-              {{ row.documentTypes || '任意类型' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="默认" width="80">
-          <template #default="{ row }">
-            <el-tag v-if="row.defaultStrategy" type="success">默认</el-tag>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="130" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEditStrategy(row)">编辑</el-button>
-            <el-button link type="danger" :disabled="row.defaultStrategy" @click="removeStrategy(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-scroll-wrapper">
+        <el-table :data="strategies" stripe resizable border>
+          <el-table-column prop="name" label="策略名称" min-width="180" fixed="left" resizable />
+          <el-table-column label="策略类型" min-width="120" resizable>
+            <template #default="{ row }">{{ strategyLabel(row.strategyType) }}</template>
+          </el-table-column>
+          <el-table-column label="最大长度 / 重叠" min-width="150" resizable>
+            <template #default="{ row }">
+              {{ row.chunkSize }} / {{ row.strategyType === 'SEMANTIC' ? '-' : row.chunkOverlap }}
+            </template>
+          </el-table-column>
+          <el-table-column label="语义阈值" min-width="100" resizable>
+            <template #default="{ row }">
+              {{ row.strategyType === 'SEMANTIC' ? row.similarityThreshold : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="priority" label="优先级" width="90" resizable />
+          <el-table-column label="触发条件" min-width="220" resizable>
+            <template #default="{ row }">
+              <span v-if="row.defaultStrategy">未命中时兜底</span>
+              <span v-else>
+                {{ row.minDocumentLength }}–{{ row.maxDocumentLength ?? '不限' }} 字符 ·
+                {{ row.documentTypes || '任意类型' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="默认" width="80" resizable>
+            <template #default="{ row }">
+              <el-tag v-if="row.defaultStrategy" type="success">默认</el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="130" fixed="right" resizable>
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEditStrategy(row)">编辑</el-button>
+              <el-button link type="danger" :disabled="row.defaultStrategy" @click="removeStrategy(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-dialog>
 
     <el-dialog

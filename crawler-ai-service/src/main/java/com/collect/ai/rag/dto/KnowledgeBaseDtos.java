@@ -19,6 +19,7 @@ public final class KnowledgeBaseDtos {
         private Long spiderId;
         private boolean excluded;
         private boolean vectorized;
+        private long chunkCount;
     }
 
     @Data
