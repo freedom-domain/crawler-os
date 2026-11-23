@@ -593,23 +593,28 @@
         class="source-preview"
       >
         <template v-if="!showingSourceOriginal">
-          <div class="source-preview-meta">
+          <div class="source-preview-chunk-toolbar">
             <div class="source-preview-meta-info">
               <el-tag size="small" effect="light">{{ sourceTypeLabel(selectedSource) }}</el-tag>
               <el-tag v-if="selectedSourceChunk" size="small" type="primary" effect="plain">
-                第 {{ selectedSourceChunk.index + 1 }} 段
+                第 {{ selectedSourceChunk.index + 1 }}<template v-if="sourceChunkTotal > 0"> / {{ sourceChunkTotal }}</template> 段
+              </el-tag>
+              <el-tag v-if="selectedSourceChunk" size="small" type="info" effect="plain">
+                {{ selectedSourceChunk.characterCount }} 字符
               </el-tag>
             </div>
-            <span v-if="selectedSourceChunk">{{ selectedSourceChunk.characterCount }} 字符</span>
-            <el-button
-              v-if="selectedSourceChunk"
-              type="primary"
-              link
-              :loading="sourceOriginalLoading"
-              @click="openSourceOriginalPreview"
-            >
-              预览原文
-            </el-button>
+            <div v-if="selectedSourceChunk" class="source-preview-original-row">
+              <el-button
+                class="source-preview-original-button"
+                type="primary"
+                plain
+                :loading="sourceOriginalLoading"
+                @click="openSourceOriginalPreview"
+              >
+                预览原文
+                <el-icon><ArrowRight /></el-icon>
+              </el-button>
+            </div>
           </div>
           <el-alert
             v-if="sourcePreviewError"
@@ -833,6 +838,7 @@ const sourceSnapshotUrl = ref('')
 const sourceSnapshotLocalize = ref(true)
 const sourceSnapshotShowSource = ref(false)
 const sourceChunks = ref<SourceChunk[]>([])
+const sourceChunkTotal = ref(0)
 const selectedSourceChunk = ref<SourceChunk | null>(null)
 const sourcePreviewUrl = computed(() =>
   safeSourceUrl(sourceDocumentUrl.value) || safeSourceUrl(selectedSource.value?.url || '')
@@ -969,6 +975,7 @@ const openSourcePreview = (source: SourceReference) => {
   showingSourceOriginal.value = false
   sourcePreviewError.value = ''
   sourceChunks.value = []
+  sourceChunkTotal.value = 0
   selectedSourceChunk.value = null
   sourcePreviewLoading.value = true
   const conversationId = activeConversationId.value
@@ -980,7 +987,9 @@ const openSourcePreview = (source: SourceReference) => {
   void getChatSourceDocumentChunkCount(conversationId, source.id, source.knowledgeBaseId)
     .then(async (countResponse: any) => {
       if (requestId !== sourcePreviewRequestId) return
-      if (Number(countResponse?.data) === 1) {
+      const total = Number(countResponse?.data) || 0
+      sourceChunkTotal.value = total
+      if (total === 1) {
         sourcePreviewLoading.value = false
         void openSourceOriginalPreview()
         return
@@ -1046,6 +1055,7 @@ const closeSourcePreview = () => {
   sourcePreviewLoading.value = false
   sourcePreviewError.value = ''
   sourceChunks.value = []
+  sourceChunkTotal.value = 0
   selectedSourceChunk.value = null
   showingSourceOriginal.value = false
   sourceOriginalLoading.value = false
@@ -1348,7 +1358,7 @@ const openChatInWindow = () => {
   if (assistantId !== undefined && assistantId !== '') query.assistantId = String(assistantId)
   if (activeConversationId.value !== null) query.conversationId = String(activeConversationId.value)
   const { href } = router.resolve({ name: 'AiChatWindow', query })
-  window.open(href, '_blank', 'popup=yes,width=1280,height=900,resizable=yes,scrollbars=yes,noopener,noreferrer')
+  window.open(href, '_blank', 'noopener,noreferrer')
 }
 
 const openAssistantManagement = () => {
@@ -2348,23 +2358,27 @@ onActivated(() => {
 .source-copy strong { color: var(--ink-900); font-size: 11px; font-weight: 600; }
 .source-copy small { color: var(--ink-500); font-size: 9px; }
 .source-card > .el-icon { color: var(--ink-500); font-size: 13px; }
-.source-preview { display: flex; height: 100%; min-height: 0; flex-direction: column; gap: 14px; overflow: hidden; }
+.source-preview { display: flex; width: 100%; min-width: 0; height: 100%; min-height: 0; flex-direction: column; gap: 10px; overflow: hidden; }
 .source-preview-drawer:deep(.el-drawer) { background: var(--surface); }
-.source-preview-drawer:deep(.el-drawer__header) { position: relative; margin-bottom: 0; padding: 16px 20px 12px; border-bottom: 1px solid var(--chrome-line); }
-.source-preview-drawer:deep(.el-drawer__body) { height: calc(100% - 65px); min-height: 0; padding: 16px 20px 24px; overflow: hidden; }
+:global(.source-preview-drawer .el-drawer__header) { position: relative; margin-bottom: 0 !important; padding: 16px 20px 4px !important; border-bottom: 1px solid var(--chrome-line); }
+:global(.source-preview-drawer .el-drawer__body) { display: flex; flex: 1; height: auto; min-height: 0; padding: 4px 20px 24px !important; overflow: hidden; }
 .source-dialog-header { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; }
-.source-dialog-title { min-width: 0; overflow: hidden; color: var(--ink-950); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.source-dialog-title { min-width: 0; overflow: hidden; color: var(--ink-950); font-size: 16px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
 .source-dialog-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0; }
 .source-dialog-actions :deep(.el-button) { display: inline-flex; width: 40px; height: 40px; margin: 0; padding: 0; }
 .source-dialog-actions :deep(.el-button + .el-button) { margin-left: 0; }
-.source-preview-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.source-preview-meta-info { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
-.source-preview-actions { display: flex; align-items: center; gap: 12px; }
+.source-preview-chunk-toolbar { display: flex; width: 100%; flex: 0 0 auto; box-sizing: border-box; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 0 10px; border-bottom: 1px solid var(--chrome-line); }
+.source-preview-meta-info { display: flex; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px; }
+.source-preview-original-row { display: flex; flex: 0 0 160px; justify-content: flex-end; }
+.source-preview-original-button { width: 160px; min-width: 160px; margin: 0; flex: 0 0 160px; white-space: nowrap; }
+.source-preview-original-button :deep(.el-icon) { margin-left: 3px; }
+.source-preview-meta { display: flex; width: 100%; flex: 0 0 auto; box-sizing: border-box; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--chrome-line); }
+.source-preview-actions { display: flex; min-width: 0; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .source-url-row { display: flex; min-width: 0; align-items: baseline; gap: 10px; padding: 9px 11px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); }
 .source-url-label { flex: 0 0 auto; color: var(--ink-500); font-size: 11px; font-weight: 600; }
 .source-url-row a { display: inline-flex; min-width: 0; align-items: center; gap: 5px; color: var(--teal-ink); font-size: 12px; text-decoration: none; overflow-wrap: anywhere; }
 .source-url-row a:hover { text-decoration: underline; }
-.source-image-open-button { display: inline-flex; height: 32px; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--teal-tint-border); border-radius: 8px; background: var(--teal-tint-bg); color: var(--teal-tint-text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: border-color .16s, background .16s, box-shadow .16s; }
+.source-image-open-button { display: inline-flex; width: 160px; min-width: 160px; height: 36px; flex: 0 0 160px; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 1px solid var(--teal-tint-border); border-radius: 8px; background: var(--teal-tint-bg); color: var(--teal-tint-text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: border-color .16s, background .16s, box-shadow .16s; }
 .source-image-open-button:hover { border-color: var(--teal); background: var(--teal-tint-bg-strong); color: var(--teal-tint-text-strong, var(--teal-tint-text)); box-shadow: 0 0 0 2px var(--focus-ring), 0 3px 10px rgba(var(--teal-shadow-soft-rgb), .12); }
 .source-image-open-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .source-image-count { display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; border-radius: 6px; background: var(--teal-tint-chip); font-size: 10px; }
@@ -2380,6 +2394,9 @@ onActivated(() => {
   min-height: 0;
   max-height: none;
   overflow: auto;
+  box-sizing: border-box;
+  padding: 14px 16px 18px;
+  background: var(--surface);
   color: var(--ink-800);
   font-size: 13px;
   line-height: 1.8;
@@ -2543,6 +2560,15 @@ onActivated(() => {
 }
 @media (max-width: 600px) {
   .ai-chat-page { grid-template-columns: minmax(0, 1fr); height: calc(100dvh - 84px); min-height: 420px; border-radius: 12px; }
+  :global(.source-preview-drawer .el-drawer__header) { padding: 12px 14px 4px !important; }
+  :global(.source-preview-drawer .el-drawer__body) { padding: 4px 14px 16px !important; }
+  .source-dialog-header { gap: 8px; }
+  .source-dialog-title { font-size: 14px; }
+  .source-dialog-actions :deep(.el-button) { width: 36px; height: 36px; }
+  .source-preview-meta { align-items: flex-start; gap: 6px; padding-bottom: 8px; }
+  .source-preview-actions { max-width: calc(100% - 64px); }
+  .source-url-row { display: grid; gap: 4px; padding: 8px 10px; }
+  .source-url-row a { width: 100%; }
   :global(.assistant-select-popper) {
     min-width: min(220px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);

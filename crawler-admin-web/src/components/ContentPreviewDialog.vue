@@ -81,6 +81,12 @@ defineEmits<{
 </script>
 
 <style scoped>
+:global(.content-preview-dialog .el-dialog__header) {
+  padding-bottom: 8px;
+}
+:global(.content-preview-dialog .el-dialog__body) {
+  padding-top: 8px;
+}
 .preview-content-header {
   display: flex;
   flex-direction: column;
