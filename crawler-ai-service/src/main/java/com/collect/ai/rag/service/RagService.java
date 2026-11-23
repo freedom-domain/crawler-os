@@ -438,12 +438,14 @@ public class RagService {
         ChunkingResult chunking = splitText(documentText(title, content), documentTypes(source),
                 chunkStrategies, model, strategyId);
         List<String> parts = chunking.chunks();
+        List<String> chunkIds = new ArrayList<>(parts.size());
         for (int start = 0; start < parts.size(); start += EMBEDDING_BATCH_SIZE) {
             List<String> batch = parts.subList(start,
                     Math.min(start + EMBEDDING_BATCH_SIZE, parts.size()));
             List<List<Double>> embeddings = createEmbeddings(batch, model, model.getDimensions());
             for (int i = 0; i < batch.size(); i++) {
                 String chunkId = sourceDocumentId + ":" + (start + i);
+                chunkIds.add(chunkId);
                 operations.add(objectMapper.createObjectNode()
                         .set("index", objectMapper.createObjectNode()
                                 .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
@@ -462,7 +464,11 @@ public class RagService {
                 operations.add(row);
             }
         }
-        if (!operations.isEmpty()) bulkOperations(operations);
+        if (!operations.isEmpty()) {
+            bulkOperations(operations);
+            deleteDocumentVectorsExcept(
+                    resolveKnowledgeVectorIndex(base), sourceDocumentId, chunkIds);
+        }
         return parts.size();
     }
 
@@ -883,7 +889,8 @@ public class RagService {
         body.putArray("sort").add("_doc");
         body.set("query", knowledgeBaseDocumentChunkQuery(knowledgeBaseId, documentId));
         body.set("_source", objectMapper.createArrayNode()
-                .add("chunk_id").add("title").add("heading").add("content").add("embedding_model")
+                .add("doc_id").add("chunk_id").add("knowledgeBaseId").add("title")
+                .add("heading").add("content").add("embedding_model")
                 .add("chunk_strategy_id").add("chunk_strategy_name"));
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
@@ -897,6 +904,18 @@ public class RagService {
             JsonNode root = objectMapper.readTree(response.body());
             for (JsonNode hit : root.path("hits").path("hits")) {
                 JsonNode source = hit.path("_source");
+                if (!documentId.equals(source.path("doc_id").asText())) continue;
+                if (knowledgeBaseId != null) {
+                    AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+                    if (base != null) {
+                        JsonNode ownerNode = source.path("knowledgeBaseId");
+                        boolean belongsToDocumentKnowledgeBase =
+                                "UPLOAD".equalsIgnoreCase(base.getSourceType())
+                                        ? ownerNode.isNumber() && ownerNode.asLong() == base.getId()
+                                        : !ownerNode.isNumber();
+                        if (!belongsToDocumentKnowledgeBase) continue;
+                    }
+                }
                 String chunkId = source.path("chunk_id").asText(hit.path("_id").asText());
                 String content = source.path("content").asText("");
                 KnowledgeBaseDtos.VectorChunk chunk = new KnowledgeBaseDtos.VectorChunk();
