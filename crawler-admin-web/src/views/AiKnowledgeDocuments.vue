@@ -454,15 +454,21 @@ async function showDetail(row: KnowledgeDocument | UploadedDocument) {
   detailVisible.value = true
   detailLoading.value = true
   detail.value = null
+  chunks.value = []
+  chunksLoading.value = false
   const documentId = 'sourceDocumentId' in row ? row.sourceDocumentId : row.id
   detailDocumentId.value = documentId
   try {
     const response: any = await getKnowledgeBaseDocument(documentId, selectedKnowledgeBaseId.value)
-    if (detailDocumentId.value === documentId && response) detail.value = response.data
-    await loadDocumentChunks(documentId)
+    if (detailDocumentId.value === documentId && response) {
+      detail.value = response.data
+      await loadDocumentChunks(documentId)
+    }
   } catch {
-    ElMessage.error('读取文档详情失败')
-    detailVisible.value = false
+    if (detailDocumentId.value === documentId) {
+      ElMessage.error('读取文档详情失败')
+      detailVisible.value = false
+    }
   } finally {
     detailLoading.value = false
   }
@@ -475,7 +481,12 @@ async function loadDocumentChunks(documentId: string) {
     const response: any = await getKnowledgeBaseDocumentChunks(
       documentId, selectedKnowledgeBaseId.value
     )
-    if (detailDocumentId.value === documentId) chunks.value = response?.data || []
+    if (detailDocumentId.value === documentId) {
+      // 只保留当前文档的分块（chunkId 形如 <文档ID>:<序号>），防止跨文档分块混入
+      chunks.value = (response?.data || []).filter(
+        (chunk: VectorChunk) => String(chunk.chunkId).startsWith(`${documentId}:`)
+      )
+    }
   } catch {
     ElMessage.error('读取文档向量分块失败')
   } finally {

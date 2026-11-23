@@ -217,7 +217,8 @@ public class RagService {
             String chunkId = chunk.documentId() + ":" + chunk.chunkIndex();
             operations.add(objectMapper.createObjectNode()
                     .set("index", objectMapper.createObjectNode()
-                            .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
+                            .put("_index", resolveKnowledgeVectorIndex(model))
+                            .put("_id", knowledgeBaseChunkDocumentId(base.getId(), chunkId))));
             ObjectNode row = objectMapper.createObjectNode();
             row.put("doc_id", chunk.documentId()).put("chunk_id", chunkId)
                     .put("title", chunk.title()).put("heading", chunk.heading())
@@ -448,7 +449,8 @@ public class RagService {
                 chunkIds.add(chunkId);
                 operations.add(objectMapper.createObjectNode()
                         .set("index", objectMapper.createObjectNode()
-                                .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
+                                .put("_index", resolveKnowledgeVectorIndex(model))
+                                .put("_id", knowledgeBaseChunkDocumentId(base.getId(), chunkId))));
                 ObjectNode row = objectMapper.createObjectNode();
                 row.put("doc_id", sourceDocumentId).put("chunk_id", chunkId)
                         .put("title", title).put("heading", chunking.headings().get(start + i))
@@ -467,7 +469,7 @@ public class RagService {
         if (!operations.isEmpty()) {
             bulkOperations(operations);
             deleteDocumentVectorsExcept(
-                    resolveKnowledgeVectorIndex(base), sourceDocumentId, chunkIds);
+                    resolveKnowledgeVectorIndex(base), sourceDocumentId, chunkIds, base.getId());
         }
         return parts.size();
     }
@@ -881,6 +883,7 @@ public class RagService {
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
             if (base == null) throw new BizException("知识库不存在");
+            assertKnowledgeBaseOwnsDocument(base, documentId);
             vectorIndex = resolveKnowledgeVectorIndex(base);
         }
         ObjectNode body = objectMapper.createObjectNode()
@@ -902,20 +905,12 @@ public class RagService {
             }
             java.util.List<KnowledgeBaseDtos.VectorChunk> chunks = new java.util.ArrayList<>();
             JsonNode root = objectMapper.readTree(response.body());
+            AiKnowledgeBase chunkBase = knowledgeBaseId == null
+                    ? null : knowledgeBaseMapper.selectById(knowledgeBaseId);
             for (JsonNode hit : root.path("hits").path("hits")) {
                 JsonNode source = hit.path("_source");
                 if (!documentId.equals(source.path("doc_id").asText())) continue;
-                if (knowledgeBaseId != null) {
-                    AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
-                    if (base != null) {
-                        JsonNode ownerNode = source.path("knowledgeBaseId");
-                        boolean belongsToDocumentKnowledgeBase =
-                                "UPLOAD".equalsIgnoreCase(base.getSourceType())
-                                        ? ownerNode.isNumber() && ownerNode.asLong() == base.getId()
-                                        : !ownerNode.isNumber();
-                        if (!belongsToDocumentKnowledgeBase) continue;
-                    }
-                }
+                if (chunkBase != null && !belongsToKnowledgeBaseVectorChunk(chunkBase, source)) continue;
                 String chunkId = source.path("chunk_id").asText(hit.path("_id").asText());
                 String content = source.path("content").asText("");
                 KnowledgeBaseDtos.VectorChunk chunk = new KnowledgeBaseDtos.VectorChunk();
@@ -945,6 +940,7 @@ public class RagService {
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
             if (base == null) throw new BizException("知识库不存在");
+            assertKnowledgeBaseOwnsDocument(base, documentId);
             vectorIndex = resolveKnowledgeVectorIndex(base);
         }
         ObjectNode body = objectMapper.createObjectNode();
@@ -976,41 +972,52 @@ public class RagService {
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
             if (base == null) throw new BizException("知识库不存在");
+            assertKnowledgeBaseOwnsDocument(base, documentId);
             vectorIndex = resolveKnowledgeVectorIndex(base);
         }
-
-        String encodedChunkId = URLEncoder.encode(chunkId, StandardCharsets.UTF_8)
-                .replace("+", "%20");
+        // 分块文档 _id 带知识库前缀，因此按 chunk_id 字段检索而不是直接 GET _id
+        ObjectNode bool = objectMapper.createObjectNode();
+        bool.putArray("filter").add(objectMapper.createObjectNode()
+                .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
+        bool.putArray("filter").add(objectMapper.createObjectNode()
+                .set("term", objectMapper.createObjectNode().put("chunk_id", chunkId)));
+        if (knowledgeBaseId != null) {
+            bool.putArray("filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
+        } else {
+            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+        }
+        ObjectNode body = objectMapper.createObjectNode().put("size", 1);
+        body.putArray("sort").add("_doc");
+        body.set("query", objectMapper.createObjectNode().set("bool", bool));
+        body.set("_source", objectMapper.createArrayNode()
+                .add("chunk_id").add("title").add("heading").add("content")
+                .add("embedding_model").add("chunk_strategy_id").add("chunk_strategy_name"));
         try {
-            HttpResponse<String> response = elasticsearchRequest(
-                    "GET", "/" + vectorIndex + "/_doc/" + encodedChunkId, null);
+            HttpResponse<String> response = elasticsearchRequest("POST",
+                    "/" + vectorIndex + "/_search", toJson(body));
             if (response.statusCode() == 404) return java.util.List.of();
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("读取文档向量分块失败: " + response.statusCode()
                         + " " + response.body());
             }
             JsonNode root = objectMapper.readTree(response.body());
-            JsonNode source = root.path("_source");
-            if (!documentId.equals(source.path("doc_id").asText())) {
-                return java.util.List.of();
+            for (JsonNode hit : root.path("hits").path("hits")) {
+                JsonNode source = hit.path("_source");
+                String resolvedChunkId = source.path("chunk_id").asText(chunkId);
+                String content = source.path("content").asText("");
+                KnowledgeBaseDtos.VectorChunk chunk = new KnowledgeBaseDtos.VectorChunk();
+                chunk.setChunkId(resolvedChunkId);
+                chunk.setIndex(parseChunkIndex(resolvedChunkId));
+                chunk.setTitle(source.path("title").asText(""));
+                chunk.setHeading(source.path("heading").asText(""));
+                chunk.setContent(content);
+                chunk.setCharacterCount(content.length());
+                chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
+                chunk.setChunkStrategyId(source.path("chunk_strategy_id").asText(""));
+                chunk.setChunkStrategyName(source.path("chunk_strategy_name").asText(""));
+                return java.util.List.of(chunk);
             }
-            JsonNode ownerId = source.path("knowledgeBaseId");
-            if (knowledgeBaseId != null
-                    && (!ownerId.isNumber() || ownerId.asLong() != knowledgeBaseId)) {
-                return java.util.List.of();
-            }
-            String content = source.path("content").asText("");
-            KnowledgeBaseDtos.VectorChunk chunk = new KnowledgeBaseDtos.VectorChunk();
-            chunk.setChunkId(source.path("chunk_id").asText(chunkId));
-            chunk.setIndex(parseChunkIndex(chunk.getChunkId()));
-            chunk.setTitle(source.path("title").asText(""));
-            chunk.setHeading(source.path("heading").asText(""));
-            chunk.setContent(content);
-            chunk.setCharacterCount(content.length());
-            chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
-            chunk.setChunkStrategyId(source.path("chunk_strategy_id").asText(""));
-            chunk.setChunkStrategyName(source.path("chunk_strategy_name").asText(""));
-            return java.util.List.of(chunk);
+            return java.util.List.of();
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("读取文档向量分块失败: " + e.getMessage(), e);
@@ -1087,7 +1094,8 @@ public class RagService {
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
         assertKnowledgeBaseOwnsDocument(base, documentId);
-        deleteDocumentVectorsExcept(resolveKnowledgeVectorIndex(base), documentId, List.of());
+        deleteDocumentVectorsExcept(
+                resolveKnowledgeVectorIndex(base), documentId, List.of(), base.getId());
         setDocumentExcluded(properties.resolveSourceIndex(), documentId, true);
     }
 
@@ -1121,7 +1129,7 @@ public class RagService {
                 ObjectNode action = objectMapper.createObjectNode();
                 action.set("index", objectMapper.createObjectNode()
                         .put("_index", properties.resolveVectorIndex())
-                        .put("_id", chunkId));
+                        .put("_id", knowledgeBaseChunkDocumentId(null, chunkId)));
                 operations.add(action);
 
                 ObjectNode row = objectMapper.createObjectNode();
@@ -1149,14 +1157,19 @@ public class RagService {
 
     private List<String> chunkIds(List<ObjectNode> operations) {
         List<String> chunkIds = new ArrayList<>(operations.size() / 2);
-        for (int i = 0; i < operations.size(); i += 2) {
-            chunkIds.add(operations.get(i).path("index").path("_id").asText());
+        for (int i = 1; i < operations.size(); i += 2) {
+            chunkIds.add(operations.get(i).path("chunk_id").asText());
         }
         return chunkIds;
     }
 
     private void deleteDocumentVectorsExcept(String documentId, List<String> chunkIds) {
-        deleteDocumentVectorsExcept(properties.resolveVectorIndex(), documentId, chunkIds);
+        deleteDocumentVectorsExcept(properties.resolveVectorIndex(), documentId, chunkIds, null);
+    }
+
+    /** 向量分块文档 _id 按知识库命名，避免同一向量索引下不同知识库互相覆盖分块 */
+    private static String knowledgeBaseChunkDocumentId(Long knowledgeBaseId, String chunkId) {
+        return (knowledgeBaseId == null ? "global:" : "kb" + knowledgeBaseId + ":") + chunkId;
     }
 
     private String resolveKnowledgeVectorIndex(AiKnowledgeBase base) {
@@ -1201,10 +1214,15 @@ public class RagService {
     }
 
     private void deleteDocumentVectorsExcept(
-            String vectorIndex, String documentId, List<String> chunkIds) {
+            String vectorIndex, String documentId, List<String> chunkIds, Long knowledgeBaseId) {
         ObjectNode bool = objectMapper.createObjectNode();
         bool.putArray("filter").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode().put("doc_id", documentId)));
+        if (knowledgeBaseId != null) {
+            bool.putArray("filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
+        } else {
+            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+        }
         if (!chunkIds.isEmpty()) {
             bool.putArray("must_not").add(objectMapper.createObjectNode()
                     .set("terms", objectMapper.createObjectNode()
@@ -1374,12 +1392,17 @@ public class RagService {
                 objectMapper.createObjectNode().put("knowledgeBaseId", knowledgeBaseId));
     }
 
+    /**
+     * 向量分块按写入知识库归属：无论 UPLOAD 还是 ES_INDEX 类型，
+     * 分块都带写入时的 knowledgeBaseId，只允许看到本知识库的分块。
+     */
+    private boolean belongsToKnowledgeBaseVectorChunk(AiKnowledgeBase base, JsonNode source) {
+        JsonNode ownerId = source.path("knowledgeBaseId");
+        return ownerId.isNumber() && ownerId.asLong() == base.getId();
+    }
+
     private void applyKnowledgeBaseVectorScope(ObjectNode bool, AiKnowledgeBase base) {
-        if ("UPLOAD".equalsIgnoreCase(base.getSourceType())) {
-            bool.putArray("filter").add(knowledgeBaseOwnerQuery(base.getId()));
-        } else {
-            bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
-        }
+        bool.putArray("filter").add(knowledgeBaseOwnerQuery(base.getId()));
     }
 
     /**
@@ -2529,10 +2552,14 @@ public class RagService {
     }
 
     private void deleteExistingVectors() {
-        ObjectNode body = objectMapper.createObjectNode();
-        body.set("query", objectMapper.createObjectNode()
+        // 只清理未归属知识库的全局分块，不能把知识库写入的分块一起删掉
+        ObjectNode bool = objectMapper.createObjectNode();
+        bool.putArray("must").add(objectMapper.createObjectNode()
                 .set("term", objectMapper.createObjectNode()
                         .put("embedding_model", properties.getRag().getEmbeddingModel())));
+        bool.putArray("must_not").add(knowledgeBaseDocumentExistsQuery());
+        ObjectNode body = objectMapper.createObjectNode()
+                .set("query", objectMapper.createObjectNode().set("bool", bool));
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
                     "/" + properties.resolveVectorIndex() + "/_delete_by_query?refresh=true&conflicts=proceed",
