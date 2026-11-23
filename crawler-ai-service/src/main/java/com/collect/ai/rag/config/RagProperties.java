@@ -3,6 +3,7 @@ package com.collect.ai.rag.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Data
 @Component
@@ -12,6 +13,16 @@ public class RagProperties {
     private volatile Rag rag = new Rag();
 
     public void replace(Rag replacement) {
+        Rag current = rag;
+        if (replacement != null) {
+            if (StringUtils.hasText(current.getSourceIndex())) {
+                replacement.setSourceIndex(current.getSourceIndex());
+            }
+            if (StringUtils.hasText(current.getVectorIndexPrefix())) {
+                replacement.setVectorIndexPrefix(current.getVectorIndexPrefix());
+            }
+            replacement.setVectorIndexEnvironment(current.getVectorIndexEnvironment());
+        }
         this.rag = replacement;
     }
 
@@ -32,9 +43,8 @@ public class RagProperties {
         private int topK = 5;
         private int chunkSize = 1500;
         private int chunkOverlap = 200;
-        private String vectorIndex;
         private String vectorIndexPrefix = "spider_content_vector";
-        private String vectorFieldPrefix = "embedding";
+        private String vectorIndexEnvironment = "";
 
         public Rag copy() {
             Rag copy = new Rag();
@@ -53,24 +63,36 @@ public class RagProperties {
             copy.setTopK(topK);
             copy.setChunkSize(chunkSize);
             copy.setChunkOverlap(chunkOverlap);
-            copy.setVectorIndex(vectorIndex);
             copy.setVectorIndexPrefix(vectorIndexPrefix);
-            copy.setVectorFieldPrefix(vectorFieldPrefix);
+            copy.setVectorIndexEnvironment(vectorIndexEnvironment);
             return copy;
         }
     }
 
     public String resolveVectorIndex() {
+        return resolveVectorIndex(rag.embeddingModel);
+    }
+
+    public String resolveVectorIndex(String embeddingModel) {
         Rag current = rag;
-        if (current.vectorIndex != null && !current.vectorIndex.isBlank()) {
-            return current.vectorIndex.trim();
-        }
-        return current.vectorIndexPrefix + "_" + sanitize(current.embeddingModel);
+        String model = sanitize(embeddingModel);
+        String environment = sanitize(current.vectorIndexEnvironment);
+        String prefix = StringUtils.hasText(current.vectorIndexPrefix)
+                ? current.vectorIndexPrefix.trim()
+                : "spider_content_vector";
+        return prefix + (model.isEmpty() ? "" : "_" + model)
+                + (environment.isEmpty() ? "" : "_" + environment);
+    }
+
+    public String resolveSourceIndex() {
+        Rag current = rag;
+        return StringUtils.hasText(current.sourceIndex)
+                ? current.sourceIndex.trim()
+                : "spider_content";
     }
 
     public String resolveVectorField() {
-        Rag current = rag;
-        return current.vectorFieldPrefix + "_" + sanitize(current.embeddingModel);
+        return "embedding";
     }
 
     public int resolveDimensions() {

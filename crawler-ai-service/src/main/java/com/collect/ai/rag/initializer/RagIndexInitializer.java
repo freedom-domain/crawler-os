@@ -56,9 +56,9 @@ public class RagIndexInitializer {
                 int dimensions = properties.resolveDimensions();
                 String body = """
                         {"settings":{"number_of_shards":1},"mappings":{"properties":{
-                        "doc_id":{"type":"keyword"},"chunk_id":{"type":"keyword"},"title":{"type":"text"},
-                        "content":{"type":"text"},"url":{"type":"keyword"},"spiderId":{"type":"long"},
-                        "spiderName":{"type":"keyword"},"embedding_model":{"type":"keyword"},"%s":{
+                        "doc_id":{"type":"keyword"},"chunk_id":{"type":"keyword"},"title":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},
+                        "content":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},"url":{"type":"keyword"},"spiderId":{"type":"long"},
+                        "spiderName":{"type":"keyword"},"knowledgeBaseId":{"type":"long"},"embedding_model":{"type":"keyword"},"%s":{
                         "type":"dense_vector","dims":%d}}}}
                         """.formatted(vectorField, dimensions);
                 HttpResponse<String> created = elasticsearchRequest("PUT", "/" + index, body);
@@ -129,6 +129,22 @@ public class RagIndexInitializer {
             throw new IllegalStateException("RAG 向量索引维度不匹配: 索引 "
                     + index + " 字段 " + vectorField + " 为 " + actualDimensions
                     + "，当前模型要求 " + dimensions);
+        }
+        JsonNode properties = mappingNode.path("properties");
+        if (properties.path("title").isMissingNode()
+                || properties.path("content").isMissingNode()) {
+            String textMapping = """
+                    {"properties":{
+                    "title":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"},
+                    "content":{"type":"text","analyzer":"ik_max_word","search_analyzer":"ik_smart"}}}
+                    """;
+            HttpResponse<String> updated = elasticsearchRequest("PUT",
+                    "/" + index + "/_mapping", textMapping);
+            if (updated.statusCode() >= 200 && updated.statusCode() < 300) {
+                log.info("已为 RAG 向量索引补充中文分词字段: {}.title, {}.content", index, index);
+            } else {
+                log.warn("补充中文分词字段失败: {} {}", updated.statusCode(), updated.body());
+            }
         }
         log.info("RAG 向量索引配置有效: {}.{} = {}维", index, vectorField, actualDimensions);
     }

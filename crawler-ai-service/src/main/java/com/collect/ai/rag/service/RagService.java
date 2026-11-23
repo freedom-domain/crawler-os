@@ -105,6 +105,8 @@ public class RagService {
 
     @Value("${spring.elasticsearch.password:}")
     private String elasticsearchPassword;
+    @Value("${minio.bucket:crawler-knowledge}")
+    private String uploadBucket;
 
     public RagDtos.SyncResult syncContentIndex(Long knowledgeBaseId) {
         if (knowledgeBaseId == null) return syncContentIndex();
@@ -112,9 +114,15 @@ public class RagService {
         if (base == null) throw new BizException("知识库不存在");
         AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
         if (model == null) throw new BizException("知识库向量模型不存在");
+        String vectorIndex = resolveKnowledgeVectorIndex(model);
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType()) ? base.getId() : null;
-        List<JsonNode> documents = fetchContentDocuments(base.getSourceIndex(), ownerKnowledgeBaseId);
-        deleteKnowledgeVectorIndex(base.getVectorIndex());
+        List<JsonNode> documents = fetchContentDocuments(properties.resolveSourceIndex(), ownerKnowledgeBaseId);
+        List<String> documentIds = documents.stream()
+                .map(document -> document.path("_id").asText(""))
+                .filter(documentId -> !documentId.isBlank())
+                .distinct()
+                .toList();
+        deleteKnowledgeVectors(vectorIndex, base.getId(), documentIds);
         ensureKnowledgeVectorIndex(base, model);
         List<ObjectNode> operations = new ArrayList<>();
         List<KnowledgeVectorChunk> embeddingBatch = new ArrayList<>(EMBEDDING_BATCH_SIZE);
@@ -143,7 +151,7 @@ public class RagService {
         if (!operations.isEmpty()) {
             bulkOperations(operations, false);
         }
-        refreshIndex(base.getVectorIndex());
+        refreshIndex(vectorIndex);
         RagDtos.SyncResult result = new RagDtos.SyncResult();
         result.setSourceDocuments(documents.size());
         result.setChunks(chunks);
@@ -163,14 +171,14 @@ public class RagService {
             String chunkId = chunk.documentId() + ":" + chunk.chunkIndex();
             operations.add(objectMapper.createObjectNode()
                     .set("index", objectMapper.createObjectNode()
-                            .put("_index", base.getVectorIndex()).put("_id", chunkId)));
+                            .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
             ObjectNode row = objectMapper.createObjectNode();
             row.put("doc_id", chunk.documentId()).put("chunk_id", chunkId)
                     .put("title", chunk.title()).put("content", chunk.content())
                     .put("url", "").put("spiderName", "上传文档")
                     .put("knowledgeBaseId", base.getId())
                     .put("embedding_model", model.getEmbeddingModel());
-            ArrayNode vector = row.putArray(base.getVectorField());
+            ArrayNode vector = row.putArray(properties.resolveVectorField());
             embeddings.get(i).forEach(vector::add);
             operations.add(row);
         }
@@ -291,8 +299,8 @@ public class RagService {
         }
         if (!StringUtils.hasText(content)) throw new BizException("文档没有可解析的文本内容");
 
-        String bucket = StringUtils.hasText(base.getUploadBucket())
-                ? base.getUploadBucket() : "crawler-knowledge";
+        String bucket = StringUtils.hasText(uploadBucket)
+                ? uploadBucket.trim().toLowerCase(java.util.Locale.ROOT) : "crawler-knowledge";
         String objectName = "knowledge/" + knowledgeBaseId + "/"
                 + java.util.UUID.randomUUID().toString().replace("-", "") + "_" + originalName;
         try {
@@ -313,7 +321,7 @@ public class RagService {
                 .put("spiderName", "上传文档").put("knowledgeBaseId", knowledgeBaseId);
         try {
             HttpResponse<String> indexed = elasticsearchRequest("PUT",
-                    "/" + base.getSourceIndex() + "/_doc/" + sourceDocumentId, toJson(source));
+                    "/" + properties.resolveSourceIndex() + "/_doc/" + sourceDocumentId, toJson(source));
             if (indexed.statusCode() >= 300)
                 throw new IllegalStateException("写入知识库源索引失败: " + indexed.statusCode());
         } catch (Exception e) {
@@ -376,14 +384,14 @@ public class RagService {
                 String chunkId = sourceDocumentId + ":" + (start + i);
                 operations.add(objectMapper.createObjectNode()
                         .set("index", objectMapper.createObjectNode()
-                                .put("_index", base.getVectorIndex()).put("_id", chunkId)));
+                                .put("_index", resolveKnowledgeVectorIndex(model)).put("_id", chunkId)));
                 ObjectNode row = objectMapper.createObjectNode();
                 row.put("doc_id", sourceDocumentId).put("chunk_id", chunkId)
                         .put("title", title).put("content", batch.get(i))
                         .put("url", "").put("spiderName", "上传文档")
                         .put("knowledgeBaseId", base.getId())
                         .put("embedding_model", model.getEmbeddingModel());
-                ArrayNode vector = row.putArray(base.getVectorField());
+                ArrayNode vector = row.putArray(properties.resolveVectorField());
                 embeddings.get(i).forEach(vector::add);
                 operations.add(row);
             }
@@ -393,22 +401,41 @@ public class RagService {
     }
 
     private void ensureKnowledgeVectorIndex(AiKnowledgeBase base, AiRagVectorModel model) {
+        String vectorIndex = resolveKnowledgeVectorIndex(model);
         ObjectNode mapping = objectMapper.createObjectNode();
         ObjectNode properties = mapping.putObject("mappings").putObject("properties");
-        properties.putObject(base.getVectorField())
+        properties.putObject(this.properties.resolveVectorField())
                 .put("type", "dense_vector")
                 .put("dims", model.getDimensions())
                 .put("index", true)
                 .put("similarity", "cosine");
+        properties.putObject("doc_id").put("type", "keyword");
+        properties.putObject("chunk_id").put("type", "keyword");
+        properties.putObject("title").put("type", "text")
+                .put("analyzer", "ik_max_word").put("search_analyzer", "ik_smart");
+        properties.putObject("content").put("type", "text")
+                .put("analyzer", "ik_max_word").put("search_analyzer", "ik_smart");
+        properties.putObject("url").put("type", "keyword");
+        properties.putObject("spiderName").put("type", "keyword");
+        properties.putObject("knowledgeBaseId").put("type", "long");
+        properties.putObject("embedding_model").put("type", "keyword");
         try {
-            HttpResponse<String> existing = elasticsearchRequest("HEAD", "/" + base.getVectorIndex(), null);
+            HttpResponse<String> existing = elasticsearchRequest("HEAD",
+                    "/" + vectorIndex, null);
             if (existing.statusCode() == 404) {
                 HttpResponse<String> created = elasticsearchRequest("PUT",
-                        "/" + base.getVectorIndex(), toJson(mapping));
+                        "/" + vectorIndex, toJson(mapping));
                 if (created.statusCode() >= 300)
                     throw new IllegalStateException("创建知识库向量索引失败: " + created.statusCode());
             } else if (existing.statusCode() >= 300) {
                 throw new IllegalStateException("检查知识库向量索引失败: " + existing.statusCode());
+            } else {
+                HttpResponse<String> updated = elasticsearchRequest("PUT",
+                        "/" + vectorIndex + "/_mapping",
+                        toJson(mapping.path("mappings")));
+                if (updated.statusCode() >= 300)
+                    throw new IllegalStateException("更新知识库向量索引映射失败: "
+                            + updated.statusCode() + " " + updated.body());
             }
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
@@ -425,11 +452,12 @@ public class RagService {
         ensureKnowledgeVectorIndex(base, model);
         KnowledgeBaseDtos.Stats stats = new KnowledgeBaseDtos.Stats();
         stats.setEnabled(Boolean.TRUE.equals(base.getEnabled()));
-        stats.setSourceIndex(base.getSourceIndex());
-        stats.setVectorIndex(base.getVectorIndex());
-        List<String> excludedIds = getExcludedDocumentIds(base.getSourceIndex());
+        stats.setSourceIndex(properties.resolveSourceIndex());
+        String vectorIndex = resolveKnowledgeVectorIndex(model);
+        stats.setVectorIndex(vectorIndex);
+        List<String> excludedIds = getExcludedDocumentIds(properties.resolveSourceIndex());
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType()) ? base.getId() : null;
-        stats.setSourceDocuments(countDocuments(base.getSourceIndex(),
+        stats.setSourceDocuments(countDocuments(properties.resolveSourceIndex(),
                 sourceDocumentQuery(null, true, List.of(), ownerKnowledgeBaseId)));
         ObjectNode excludedQuery = excludedDocumentIdsQuery(excludedIds);
         if (ownerKnowledgeBaseId != null && !excludedIds.isEmpty()) {
@@ -439,10 +467,10 @@ public class RagService {
             excludedQuery = objectMapper.createObjectNode().set("bool", bool);
         }
         stats.setExcludedDocuments(excludedIds.isEmpty() ? 0
-                : countDocuments(base.getSourceIndex(), excludedQuery));
+                : countDocuments(properties.resolveSourceIndex(), excludedQuery));
         stats.setIncludedDocuments(Math.max(0,
                 stats.getSourceDocuments() - stats.getExcludedDocuments()));
-        stats.setVectorDocuments(countVectorDocuments(base.getVectorIndex()));
+        stats.setVectorDocuments(countVectorDocuments(vectorIndex));
         return stats;
     }
 
@@ -470,7 +498,7 @@ public class RagService {
         if (page < 1 || pageSize < 1 || pageSize > 100 || (long) (page - 1) * pageSize >= 10_000) {
             throw new BizException("分页参数不合法");
         }
-        List<String> excludedIds = getExcludedDocumentIds(base.getSourceIndex());
+        List<String> excludedIds = getExcludedDocumentIds(properties.resolveSourceIndex());
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType()) ? base.getId() : null;
         ObjectNode query = sourceDocumentQuery(keyword, includeExcluded, excludedIds, ownerKnowledgeBaseId);
         ObjectNode body = objectMapper.createObjectNode()
@@ -482,7 +510,7 @@ public class RagService {
         body.set("query", query);
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
-                    "/" + base.getSourceIndex() + "/_search", toJson(body));
+                    "/" + properties.resolveSourceIndex() + "/_search", toJson(body));
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("读取知识库文档失败: " + response.statusCode()
                         + " " + response.body());
@@ -532,7 +560,7 @@ public class RagService {
         body.set("query", query);
         try {
             HttpResponse<String> response = elasticsearchRequest("POST",
-                    "/" + properties.getRag().getSourceIndex() + "/_search", toJson(body));
+                    "/" + properties.resolveSourceIndex() + "/_search", toJson(body));
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("读取知识库文档失败: " + response.statusCode()
                         + " " + response.body());
@@ -572,7 +600,7 @@ public class RagService {
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
 
-        List<String> excludedIds = getExcludedDocumentIds(base.getSourceIndex());
+        List<String> excludedIds = getExcludedDocumentIds(properties.resolveSourceIndex());
         Long ownerKnowledgeBaseId = "UPLOAD".equalsIgnoreCase(base.getSourceType())
                 ? base.getId() : null;
         ObjectNode randomQuery = objectMapper.createObjectNode();
@@ -585,7 +613,7 @@ public class RagService {
 
         try {
             HttpResponse<String> response = elasticsearchRequest(
-                    "POST", "/" + base.getSourceIndex() + "/_search", toJson(body));
+                    "POST", "/" + properties.resolveSourceIndex() + "/_search", toJson(body));
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("随机读取知识库文档失败: " + response.statusCode()
                         + " " + response.body());
@@ -612,7 +640,7 @@ public class RagService {
         if (knowledgeBaseId == null) return getKnowledgeBaseDocument(documentId);
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
-        JsonNode hit = findSourceDocument(base.getSourceIndex(), documentId,
+        JsonNode hit = findSourceDocument(properties.resolveSourceIndex(), documentId,
                 "title", "content", "url", "spiderName", "spiderId", "images");
         JsonNode source = hit.path("_source");
         KnowledgeBaseDtos.DocumentDetail detail = new KnowledgeBaseDtos.DocumentDetail();
@@ -626,13 +654,13 @@ public class RagService {
         detail.setImages(readDocumentImages(source));
         detail.setExcluded(excludedDocumentMapper.selectCount(
                 new LambdaQueryWrapper<AiRagExcludedDocument>()
-                        .eq(AiRagExcludedDocument::getSourceIndex, base.getSourceIndex())
+                        .eq(AiRagExcludedDocument::getSourceIndex, properties.resolveSourceIndex())
                         .eq(AiRagExcludedDocument::getDocumentId, documentId)) > 0);
         return detail;
     }
 
     public KnowledgeBaseDtos.DocumentDetail getKnowledgeBaseDocument(String documentId) {
-        JsonNode hit = findSourceDocument(properties.getRag().getSourceIndex(), documentId,
+        JsonNode hit = findSourceDocument(properties.resolveSourceIndex(), documentId,
                 "title", "content", "url", "spiderName", "spiderId", "images");
         JsonNode source = hit.path("_source");
         KnowledgeBaseDtos.DocumentDetail detail = new KnowledgeBaseDtos.DocumentDetail();
@@ -670,7 +698,7 @@ public class RagService {
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
             if (base == null) throw new BizException("知识库不存在");
-            vectorIndex = base.getVectorIndex();
+            vectorIndex = resolveKnowledgeVectorIndex(base);
         }
         ObjectNode body = objectMapper.createObjectNode()
                 .put("size", 10000)
@@ -719,7 +747,7 @@ public class RagService {
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
             if (base == null) throw new BizException("知识库不存在");
-            vectorIndex = base.getVectorIndex();
+            vectorIndex = resolveKnowledgeVectorIndex(base);
         }
         ObjectNode body = objectMapper.createObjectNode();
         body.set("query", objectMapper.createObjectNode()
@@ -754,7 +782,7 @@ public class RagService {
         } else {
             AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
             if (base == null) throw new BizException("知识库不存在");
-            vectorIndex = base.getVectorIndex();
+            vectorIndex = resolveKnowledgeVectorIndex(base);
         }
 
         String encodedChunkId = URLEncoder.encode(chunkId, StandardCharsets.UTF_8)
@@ -806,11 +834,11 @@ public class RagService {
         if (base == null) throw new BizException("知识库不存在");
         AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
         if (model == null) throw new BizException("知识库向量模型不存在");
-        JsonNode hit = findSourceDocument(base.getSourceIndex(), documentId);
+        JsonNode hit = findSourceDocument(properties.resolveSourceIndex(), documentId);
         JsonNode source = hit.path("_source");
         int chunks = vectorizeUploadedDocument(base, model, documentId,
                 source.path("title").asText(""), source.path("content").asText(""));
-        setDocumentExcluded(base.getSourceIndex(), documentId, false);
+        setDocumentExcluded(properties.resolveSourceIndex(), documentId, false);
         RagDtos.DocumentVectorizationResult result = new RagDtos.DocumentVectorizationResult();
         result.setDocumentId(documentId);
         result.setChunks(chunks);
@@ -844,9 +872,9 @@ public class RagService {
         }
         AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
         if (base == null) throw new BizException("知识库不存在");
-        findSourceDocument(base.getSourceIndex(), documentId);
-        deleteDocumentVectorsExcept(base.getVectorIndex(), documentId, List.of());
-        setDocumentExcluded(base.getSourceIndex(), documentId, true);
+        findSourceDocument(properties.resolveSourceIndex(), documentId);
+        deleteDocumentVectorsExcept(resolveKnowledgeVectorIndex(base), documentId, List.of());
+        setDocumentExcluded(properties.resolveSourceIndex(), documentId, true);
     }
 
     public void excludeKnowledgeBaseDocument(String documentId) {
@@ -905,17 +933,54 @@ public class RagService {
         deleteDocumentVectorsExcept(properties.resolveVectorIndex(), documentId, chunkIds);
     }
 
-    private void deleteKnowledgeVectorIndex(String vectorIndex) {
+    private String resolveKnowledgeVectorIndex(AiKnowledgeBase base) {
+        AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        return resolveKnowledgeVectorIndex(model);
+    }
+
+    private String resolveKnowledgeVectorIndex(AiRagVectorModel model) {
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        return properties.resolveVectorIndex(model.getEmbeddingModel());
+    }
+
+    private String resolveKnowledgeVectorIndexes(List<AiKnowledgeBase> knowledgeBases) {
+        if (knowledgeBases == null || knowledgeBases.isEmpty()) {
+            return properties.resolveVectorIndex();
+        }
+        return String.join(",", knowledgeBases.stream()
+                .map(this::resolveKnowledgeVectorIndex)
+                .distinct()
+                .toList());
+    }
+
+    private void deleteKnowledgeVectors(
+            String vectorIndex, Long knowledgeBaseId, List<String> documentIds) {
+        ObjectNode bool = objectMapper.createObjectNode();
+        ArrayNode should = bool.putArray("should");
+        should.add(objectMapper.createObjectNode()
+                .set("term", objectMapper.createObjectNode()
+                        .put("knowledgeBaseId", knowledgeBaseId)));
+        if (!documentIds.isEmpty()) {
+            should.add(objectMapper.createObjectNode()
+                    .set("terms", objectMapper.createObjectNode()
+                            .set("doc_id", objectMapper.valueToTree(documentIds))));
+        }
+        bool.put("minimum_should_match", 1);
+        ObjectNode body = objectMapper.createObjectNode()
+                .set("query", objectMapper.createObjectNode().set("bool", bool));
         try {
             HttpResponse<String> response = elasticsearchRequest(
-                    "DELETE", "/" + vectorIndex, null);
+                    "POST",
+                    "/" + vectorIndex + "/_delete_by_query?refresh=true&conflicts=proceed",
+                    toJson(body));
             if (response.statusCode() >= 300 && response.statusCode() != 404) {
-                throw new IllegalStateException("删除旧知识库向量索引失败: " + response.statusCode()
+                throw new IllegalStateException("删除知识库旧向量数据失败: " + response.statusCode()
                         + " " + response.body());
             }
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
-            throw new IllegalStateException("删除旧知识库向量索引失败: " + e.getMessage(), e);
+            throw new IllegalStateException("删除知识库旧向量数据失败: " + e.getMessage(), e);
         }
     }
 
@@ -947,7 +1012,7 @@ public class RagService {
     }
 
     private void setDocumentExcluded(String documentId, boolean excluded) {
-        setDocumentExcluded(properties.getRag().getSourceIndex(), documentId, excluded);
+        setDocumentExcluded(properties.resolveSourceIndex(), documentId, excluded);
     }
 
     private void setDocumentExcluded(
@@ -977,12 +1042,12 @@ public class RagService {
 
     private boolean isDocumentExcluded(String documentId) {
         return excludedDocumentMapper.selectCount(new LambdaQueryWrapper<AiRagExcludedDocument>()
-                .eq(AiRagExcludedDocument::getSourceIndex, properties.getRag().getSourceIndex())
+                .eq(AiRagExcludedDocument::getSourceIndex, properties.resolveSourceIndex())
                 .eq(AiRagExcludedDocument::getDocumentId, documentId)) > 0;
     }
 
     private List<String> getExcludedDocumentIds() {
-        return getExcludedDocumentIds(properties.getRag().getSourceIndex());
+        return getExcludedDocumentIds(properties.resolveSourceIndex());
     }
 
     private List<String> getExcludedDocumentIds(String sourceIndex) {
@@ -993,7 +1058,7 @@ public class RagService {
     }
 
     private JsonNode findSourceDocument(String documentId) {
-        return findSourceDocument(properties.getRag().getSourceIndex(), documentId);
+        return findSourceDocument(properties.resolveSourceIndex(), documentId);
     }
 
     private JsonNode findSourceDocument(String sourceIndex, String documentId) {
@@ -1357,11 +1422,11 @@ public class RagService {
                             new LambdaQueryWrapper<Spider>().eq(Spider::getIsPublic, 1))
                     .stream().map(Spider::getId).toList();
             if (publicSpiderIds.isEmpty()) {
-                return emptyQueryResponse(rag, tokenConsumer);
+                return emptyQueryResponse(rag, tokenConsumer, knowledgeBases);
             }
             if (request.getSpiderId() != null
                     && !publicSpiderIds.contains(request.getSpiderId())) {
-                return emptyQueryResponse(rag, tokenConsumer);
+                return emptyQueryResponse(rag, tokenConsumer, knowledgeBases);
             }
             ArrayNode publicValues = objectMapper.createArrayNode();
             publicSpiderIds.forEach(publicValues::add);
@@ -1378,7 +1443,7 @@ public class RagService {
                                     .eq(Spider::getGroup, request.getSpiderGroup()))
                     .stream().map(Spider::getId).toList();
             if (spiderIds.isEmpty()) {
-                return emptyQueryResponse(rag, tokenConsumer);
+                return emptyQueryResponse(rag, tokenConsumer, knowledgeBases);
             }
             ArrayNode values = objectMapper.createArrayNode();
             spiderIds.forEach(values::add);
@@ -1388,25 +1453,18 @@ public class RagService {
         }
 
         List<RagDtos.SourceReference> sources = new ArrayList<>();
-        List<String> searchedTargets = new ArrayList<>();
-        if (knowledgeBases.isEmpty()) {
-            searchedTargets.add(properties.resolveVectorIndex());
-        } else {
-            for (AiKnowledgeBase knowledgeBase : knowledgeBases) {
-                searchedTargets.add(StringUtils.hasText(knowledgeBase.getVectorIndex())
-                        ? knowledgeBase.getVectorIndex()
-                        : properties.resolveVectorIndex());
-            }
-        }
-
-        for (String vectorIndex : searchedTargets.stream().distinct().toList()) {
-            AiKnowledgeBase knowledgeBase = knowledgeBases.stream()
-                    .filter(base -> (StringUtils.hasText(base.getVectorIndex())
-                            ? base.getVectorIndex()
-                            : properties.resolveVectorIndex()).equals(vectorIndex))
-                    .findFirst().orElse(null);
+        List<AiKnowledgeBase> searchTargets = knowledgeBases.isEmpty()
+                ? java.util.Collections.singletonList(null)
+                : knowledgeBases;
+        for (AiKnowledgeBase knowledgeBase : searchTargets) {
             AiRagVectorModel knowledgeVectorModel = knowledgeBase == null
                     ? null : vectorModelMapper.selectById(knowledgeBase.getVectorModelId());
+            if (knowledgeBase != null && knowledgeVectorModel == null) {
+                throw new BizException("知识库向量模型不存在");
+            }
+            String vectorIndex = knowledgeBase == null
+                    ? properties.resolveVectorIndex()
+                    : resolveKnowledgeVectorIndex(knowledgeVectorModel);
             AiRagRerankModel rerankModel = knowledgeBase == null || knowledgeBase.getRerankModelId() == null
                     ? null : rerankModelMapper.selectById(knowledgeBase.getRerankModelId());
             if (knowledgeBase != null && knowledgeBase.getRerankModelId() != null && rerankModel == null) {
@@ -1416,9 +1474,7 @@ public class RagService {
             int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
                     ? knowledgeVectorModel.getDimensions()
                     : properties.resolveDimensions();
-            String vectorField = knowledgeBase != null && StringUtils.hasText(knowledgeBase.getVectorField())
-                    ? knowledgeBase.getVectorField()
-                    : properties.resolveVectorField();
+            String vectorField = properties.resolveVectorField();
             List<Double> queryVector = knowledgeVectorModel == null
                     ? createEmbedding(request.getQuestion())
                     : createEmbedding(request.getQuestion(), knowledgeVectorModel, dimensions);
@@ -1433,9 +1489,16 @@ public class RagService {
             body.put("size", candidateCount);
             body.set("_source", objectMapper.valueToTree(List.of(
                     "doc_id", "chunk_id", "title", "content", "url", "spiderName")));
-            if (filter != null) {
+            ObjectNode searchFilter = filter;
+            if (knowledgeBase != null) {
+                ObjectNode knowledgeBaseFilter = objectMapper.createObjectNode();
+                knowledgeBaseFilter.putObject("term")
+                        .put("knowledgeBaseId", knowledgeBase.getId());
+                searchFilter = combineFilters(searchFilter, knowledgeBaseFilter);
+            }
+            if (searchFilter != null) {
                 ObjectNode boolQuery = objectMapper.createObjectNode();
-                boolQuery.set("filter", objectMapper.createArrayNode().add(filter));
+                boolQuery.set("filter", objectMapper.createArrayNode().add(searchFilter));
                 ObjectNode filteredQuery = objectMapper.createObjectNode();
                 filteredQuery.set("bool", boolQuery);
                 scriptScore.set("query", filteredQuery);
@@ -1510,7 +1573,7 @@ public class RagService {
         }
 
         if (sources.isEmpty()) {
-            return emptyQueryResponse(rag, tokenConsumer);
+            return emptyQueryResponse(rag, tokenConsumer, knowledgeBases);
         }
 
         StreamingChatResult streamingResult = tokenConsumer == null ? null
@@ -1528,13 +1591,13 @@ public class RagService {
         }
         response.setSources(sources);
         response.setModel(rag.getChatModel());
-        response.setVectorIndex(properties.resolveVectorIndex());
+        response.setVectorIndex(resolveKnowledgeVectorIndexes(knowledgeBases));
         response.setVectorField(properties.resolveVectorField());
         return response;
     }
 
     private List<JsonNode> fetchContentDocuments() throws IllegalStateException {
-        return fetchContentDocuments(properties.getRag().getSourceIndex());
+        return fetchContentDocuments(properties.resolveSourceIndex());
     }
 
     private List<JsonNode> fetchContentDocuments(String sourceIndex) throws IllegalStateException {
@@ -2261,13 +2324,15 @@ public class RagService {
     }
 
     private RagDtos.QueryResponse emptyQueryResponse(
-            RagProperties.Rag rag, Consumer<String> tokenConsumer) {
+            RagProperties.Rag rag,
+            Consumer<String> tokenConsumer,
+            List<AiKnowledgeBase> knowledgeBases) {
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(NO_RETRIEVED_RECORDS_ANSWER);
         if (tokenConsumer != null) tokenConsumer.accept(NO_RETRIEVED_RECORDS_ANSWER);
         response.setSources(List.of());
         response.setModel(rag.getChatModel());
-        response.setVectorIndex(properties.resolveVectorIndex());
+        response.setVectorIndex(resolveKnowledgeVectorIndexes(knowledgeBases));
         response.setVectorField(properties.resolveVectorField());
         return response;
     }

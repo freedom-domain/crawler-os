@@ -12,3 +12,13 @@ spring:
     uris: ${ES_URLS:http://192.168.31.2:9200}
     username: ${ES_USER:elastic}
     password: ${ES_PASSWORD:Elastic_dnw7WH}
+
+minio:
+  bucket: ${MINIO_BUCKET:crawler-knowledge-local}
+
+app:
+  ai:
+    rag:
+      source-index: ${RAG_SOURCE_INDEX:spider_content_local}
+      vector-index-prefix: ${RAG_VECTOR_INDEX_PREFIX:spider_content_vector}
+      vector-index-environment: ${RAG_VECTOR_INDEX_ENVIRONMENT:local}

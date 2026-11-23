@@ -14,6 +14,7 @@ import com.collect.ai.rag.initializer.RagIndexInitializer;
 import com.collect.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,9 @@ public class RagConfigService {
     private final RagIndexInitializer indexInitializer;
     private final Environment environment;
 
+    @Value("${minio.bucket:crawler-knowledge}")
+    private String uploadBucket;
+
     @jakarta.annotation.PostConstruct
     public void load() {
         String env = resolveEnvironment();
@@ -68,7 +72,7 @@ public class RagConfigService {
         RagConfigResponse response = new RagConfigResponse();
         response.setEnvironment(config.getEnvironment());
         response.setEnabled(config.getEnabled());
-        response.setSourceIndex(config.getSourceIndex());
+        response.setSourceIndex(properties.resolveSourceIndex());
         response.setEmbeddingProvider(config.getEmbeddingProvider());
         response.setEmbeddingBaseUrl(config.getEmbeddingBaseUrl());
         response.setEmbeddingModel(config.getEmbeddingModel());
@@ -82,11 +86,11 @@ public class RagConfigService {
         response.setTopK(config.getTopK());
         response.setChunkSize(config.getChunkSize());
         response.setChunkOverlap(config.getChunkOverlap());
-        response.setVectorIndexName(config.getVectorIndex());
-        response.setVectorIndexPrefix(config.getVectorIndexPrefix());
-        response.setVectorFieldPrefix(config.getVectorFieldPrefix());
+        response.setVectorIndexName(properties.resolveVectorIndex());
+        response.setVectorIndexPrefix(properties.getRag().getVectorIndexPrefix());
         response.setVectorIndex(properties.resolveVectorIndex());
         response.setVectorField(properties.resolveVectorField());
+        response.setUploadBucket(uploadBucket);
         return response;
     }
 
@@ -102,7 +106,6 @@ public class RagConfigService {
         AiRagVectorModel legacyUpdatedModel = null;
         AiRagChatModel legacyUpdatedChatModel = null;
         if (request.getEnabled() != null) config.setEnabled(request.getEnabled());
-        if (request.getSourceIndex() != null) config.setSourceIndex(request.getSourceIndex().trim());
         if (request.getVectorModelId() != null) {
             AiRagVectorModel model = vectorModelMapper.selectById(request.getVectorModelId());
             if (model == null) {
@@ -160,12 +163,6 @@ public class RagConfigService {
                 applyVectorModel(legacyUpdatedModel, config);
             }
         }
-        if (request.getVectorIndex() != null) config.setVectorIndex(
-                request.getVectorIndex().trim());
-        if (request.getVectorIndexPrefix() != null) config.setVectorIndexPrefix(
-                request.getVectorIndexPrefix().trim());
-        if (request.getVectorFieldPrefix() != null) config.setVectorFieldPrefix(
-                request.getVectorFieldPrefix().trim());
 
         try {
             validate(config);
@@ -188,7 +185,7 @@ public class RagConfigService {
         apply(config);
         try {
             String vectorIndex = properties.resolveVectorIndex();
-            if (vectorIndex.equals(config.getSourceIndex())) {
+            if (vectorIndex.equals(properties.resolveSourceIndex())) {
                 throw new BizException("向量索引不能与 ES 源索引相同");
             }
             if (Boolean.TRUE.equals(config.getEnabled())) {
@@ -226,7 +223,7 @@ public class RagConfigService {
         applyChatModel(config, chatModel);
         RagProperties.Rag rag = new RagProperties.Rag();
         rag.setEnabled(Boolean.TRUE.equals(config.getEnabled()));
-        rag.setSourceIndex(config.getSourceIndex());
+        rag.setSourceIndex(properties.resolveSourceIndex());
         rag.setEmbeddingProvider(config.getEmbeddingProvider());
         rag.setEmbeddingBaseUrl(config.getEmbeddingBaseUrl());
         rag.setEmbeddingModel(config.getEmbeddingModel());
@@ -241,9 +238,8 @@ public class RagConfigService {
         rag.setTopK(config.getTopK());
         rag.setChunkSize(config.getChunkSize());
         rag.setChunkOverlap(config.getChunkOverlap());
-        rag.setVectorIndex(config.getVectorIndex());
-        rag.setVectorIndexPrefix(config.getVectorIndexPrefix());
-        rag.setVectorFieldPrefix(config.getVectorFieldPrefix());
+        rag.setVectorIndexPrefix(properties.getRag().getVectorIndexPrefix());
+        rag.setVectorIndexEnvironment(properties.getRag().getVectorIndexEnvironment());
         properties.replace(rag);
     }
 
@@ -348,7 +344,7 @@ public class RagConfigService {
         apply(config);
         try {
             String vectorIndex = properties.resolveVectorIndex();
-            if (vectorIndex.equals(config.getSourceIndex())) {
+            if (vectorIndex.equals(properties.resolveSourceIndex())) {
                 throw new BizException("向量索引不能与 ES 源索引相同");
             }
             if (Boolean.TRUE.equals(config.getEnabled())) {
@@ -393,7 +389,7 @@ public class RagConfigService {
         return configMapper.selectList(new LambdaQueryWrapper<AiRagConfig>()
                         .ne(AiRagConfig::getEnvironment, resolveEnvironment()))
                 .stream()
-                .anyMatch(config -> index.equals(config.getSourceIndex())
+                        .anyMatch(config -> index.equals(properties.resolveSourceIndex())
                         || index.equals(resolveVectorIndex(config)));
     }
 
@@ -474,30 +470,22 @@ public class RagConfigService {
         config.setTopK(defaults.getTopK());
         config.setChunkSize(defaults.getChunkSize());
         config.setChunkOverlap(defaults.getChunkOverlap());
-        config.setVectorIndex("local".equals(env)
-                ? "spider_content_vector_local_bge_m3" : "spider_content_vector_bge_m3");
-        config.setVectorIndexPrefix("local".equals(env)
-                ? "spider_content_vector_local" : defaults.getVectorIndexPrefix());
-        config.setVectorFieldPrefix(defaults.getVectorFieldPrefix());
+        config.setVectorIndex(resolveDefaultVectorIndex(env));
+        config.setVectorIndexPrefix(defaults.getVectorIndexPrefix());
         config.setCreateTime(LocalDateTime.now());
         config.setUpdateTime(LocalDateTime.now());
         return config;
     }
 
+    private String resolveDefaultVectorIndex(String env) {
+        String environmentSuffix = "local".equals(env) ? "_local" : "";
+        return properties.getRag().getVectorIndexPrefix() + environmentSuffix;
+    }
+
     private void validate(AiRagConfig config) {
-        if (!StringUtils.hasText(config.getSourceIndex())
-                || !StringUtils.hasText(config.getEmbeddingModel())
-                || !StringUtils.hasText(config.getChatModel())
-                || !StringUtils.hasText(config.getVectorIndexPrefix())
-                || !StringUtils.hasText(config.getVectorFieldPrefix())) {
-            throw new IllegalArgumentException("索引、模型和向量字段配置不能为空");
-        }
-        if (StringUtils.hasText(config.getVectorIndex())
-                && !config.getVectorIndex().matches("[a-z0-9][a-z0-9._-]*")) {
-            throw new IllegalArgumentException("向量索引名称不合法");
-        }
-        if (!config.getSourceIndex().matches("[a-z0-9][a-z0-9._-]*")) {
-            throw new IllegalArgumentException("ES 源索引名称不合法");
+        if (!StringUtils.hasText(config.getEmbeddingModel())
+                || !StringUtils.hasText(config.getChatModel())) {
+            throw new IllegalArgumentException("模型配置不能为空");
         }
         if (!EMBEDDING_PROVIDERS.contains(config.getEmbeddingProvider())
                 || !CHAT_PROVIDERS.contains(config.getChatProvider())) {
@@ -514,10 +502,6 @@ public class RagConfigService {
         }
         if (config.getApiKey() != null && config.getApiKey().length() > 1024) {
             throw new IllegalArgumentException("API Key 长度不能超过 1024 个字符");
-        }
-        if (!config.getVectorIndexPrefix().matches("[a-z0-9_-]+")
-                || !config.getVectorFieldPrefix().matches("[a-zA-Z0-9_-]+")) {
-            throw new IllegalArgumentException("向量索引和字段前缀仅允许字母、数字、下划线和连字符");
         }
     }
 

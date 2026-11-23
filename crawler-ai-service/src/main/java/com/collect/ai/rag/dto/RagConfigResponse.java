@@ -26,7 +26,7 @@ public class RagConfigResponse {
     private Integer chunkOverlap;
     private String vectorIndexName;
     private String vectorIndexPrefix;
-    private String vectorFieldPrefix;
     private String vectorIndex;
     private String vectorField;
+    private String uploadBucket;
 }

@@ -145,7 +145,12 @@
         </div>
         <el-tabs>
           <el-tab-pane label="原文内容">
-            <pre v-if="detail" class="document-content">{{ detail.content || '暂无正文内容' }}</pre>
+            <div
+              v-if="detail && routeObjectName && /\.(md|markdown)$/i.test(routeObjectName)"
+              class="document-content document-markdown"
+              v-html="renderDocumentMarkdown(detail.content)"
+            />
+            <pre v-else-if="detail" class="document-content">{{ detail.content || '暂无正文内容' }}</pre>
           </el-tab-pane>
           <el-tab-pane :label="`向量分块（${chunks.length}）`">
             <el-empty v-if="!chunksLoading && chunks.length === 0" description="暂无向量分块" />
@@ -173,6 +178,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MoreFilled, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
   getKnowledgeBaseDocumentChunks,
@@ -236,6 +243,15 @@ const routeKnowledgeBaseId = computed(() => {
   if (typeof queryId === 'string') return queryId
   return ''
 })
+const routeObjectName = computed(() => {
+  const objectName = route.params.objectName
+  return typeof objectName === 'string' ? objectName : ''
+})
+const markdown = new MarkdownIt({ breaks: true, html: false, linkify: true })
+
+function renderDocumentMarkdown(content: string) {
+  return DOMPurify.sanitize(markdown.render(content || '暂无正文内容'))
+}
 
 function handleDocumentCommand(command: string, row: KnowledgeDocument) {
   if (command === 'detail') void showDetail(row)
@@ -298,6 +314,16 @@ async function loadAll() {
     }
     await loadKnowledgeDocumentContext()
     await Promise.all([loadStats(), loadDocuments()])
+    if (routeObjectName.value) {
+      const document = uploadedDocuments.value.find(
+        (item: any) => item.objectName === `knowledge/${selectedKnowledgeBaseId.value}/${routeObjectName.value}`
+      )
+      if (document) {
+        await showUploadedDetail(document)
+      } else {
+        ElMessage.error('找不到对应的知识库上传文档')
+      }
+    }
   } finally {
     refreshing.value = false
   }
@@ -339,18 +365,20 @@ async function showDetail(row: KnowledgeDocument) {
 
 async function showUploadedDetail(row: any) {
   detailVisible.value = true
-  detailLoading.value = false
-  detail.value = {
-    id: row.sourceDocumentId,
-    title: row.title,
-    content: '',
-    url: '',
-    spiderName: '上传文档',
-    spiderId: null,
-    excluded: false,
-    snippet: ''
+  detailLoading.value = true
+  detail.value = null
+  try {
+    const response: any = await getKnowledgeBaseDocument(
+      row.sourceDocumentId, selectedKnowledgeBaseId.value
+    )
+    if (response) detail.value = response.data
+    await loadDocumentChunks(row.sourceDocumentId)
+  } catch {
+    ElMessage.error('读取上传文档详情失败')
+    detailVisible.value = false
+  } finally {
+    detailLoading.value = false
   }
-  await loadDocumentChunks(row.sourceDocumentId)
 }
 
 async function loadDocumentChunks(documentId: string) {
@@ -510,6 +538,7 @@ onMounted(loadAll)
 }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); }
 .document-content { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.document-markdown { white-space: normal; }
 .chunk-list { margin-top: 4px; }
 .chunk-count { margin-left: 8px; }
 .chunk-content { max-height: 320px; overflow: auto; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }

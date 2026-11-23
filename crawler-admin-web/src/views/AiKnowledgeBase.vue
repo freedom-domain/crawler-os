@@ -55,9 +55,6 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="sourceIndex" label="源索引" min-width="160" show-overflow-tooltip resizable />
-          <el-table-column prop="vectorIndex" label="向量索引" min-width="160" show-overflow-tooltip resizable />
-          <el-table-column prop="vectorField" label="向量字段" min-width="160" show-overflow-tooltip resizable />
           <el-table-column label="状态" min-width="100" align="center" resizable>
             <template #default="{ row }">
               <el-tag size="small" :type="row.enabled ? 'success' : 'info'">
@@ -86,7 +83,7 @@
       />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑知识库' : '新建知识库'" width="680px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑知识库' : '新建知识库'" width="680px" top="5vh">
       <el-form :model="form" label-position="top">
         <el-form-item label="知识库名称" required>
           <el-input v-model="form.name" maxlength="64" placeholder="例如：产品文档知识库" />
@@ -100,11 +97,8 @@
             <el-option label="直接上传文档" value="UPLOAD" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="form.sourceType === 'ES_INDEX'" label="源索引" required>
-          <el-input v-model="form.sourceIndex" placeholder="例如：spider_content" />
-        </el-form-item>
         <el-form-item v-if="form.sourceType === 'UPLOAD'" label="MinIO Bucket">
-          <el-input v-model="form.uploadBucket" placeholder="crawler-knowledge" />
+          <el-input :model-value="fixedConfig.uploadBucket" disabled />
         </el-form-item>
         <el-form-item label="向量模型" required>
           <el-select v-model="form.vectorModelId" style="width:100%" placeholder="请选择向量模型">
@@ -143,12 +137,7 @@
             </el-descriptions-item>
           </el-descriptions>
         </el-form-item>
-        <el-form-item label="向量索引" required>
-          <el-input v-model="form.vectorIndex" placeholder="例如：product_docs_vector" />
-        </el-form-item>
-        <el-form-item label="向量字段" required>
-          <el-input v-model="form.vectorField" placeholder="例如：embedding_bge_m3" />
-        </el-form-item>
+        <small class="field-hint">向量索引根据该知识库选定的向量模型自动生成。</small>
         <el-form-item label="重排模型（可选）">
           <el-select
             v-model="form.rerankModelId"
@@ -163,7 +152,33 @@
               :value="model.id"
             />
           </el-select>
+          <el-descriptions
+            v-if="selectedRerankModel"
+            :column="2"
+            border
+            size="small"
+            class="selected-model-config"
+          >
+            <el-descriptions-item label="服务提供方">
+              {{ selectedRerankModel.rerankProvider }}
+            </el-descriptions-item>
+            <el-descriptions-item label="模型名称">
+              {{ selectedRerankModel.rerankModel }}
+            </el-descriptions-item>
+            <el-descriptions-item label="服务地址">
+              {{ selectedRerankModel.rerankBaseUrl }}
+            </el-descriptions-item>
+            <el-descriptions-item label="API Key">
+              {{ selectedRerankModel.apiKeyConfigured ? '已配置' : '未配置' }}
+            </el-descriptions-item>
+          </el-descriptions>
           <small class="field-hint">配置后，检索会先召回候选文档，再由该模型重新排序。</small>
+        </el-form-item>
+        <el-form-item label="固定配置">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="源索引">{{ fixedConfig.sourceIndex || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="向量字段">{{ fixedConfig.vectorField || '-' }}</el-descriptions-item>
+          </el-descriptions>
         </el-form-item>
         <div class="form-grid">
           <el-form-item label="排序">
@@ -188,7 +203,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, FolderOpened, Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
-  createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBasePage,
+  createKnowledgeBase, deleteKnowledgeBase, getKnowledgeBasePage, getRagConfig,
   getRerankModels, getVectorModels, updateKnowledgeBase
 } from '@/api'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -210,13 +225,26 @@ interface RerankModel {
   id: string
   name: string
   rerankProvider: string
+  rerankBaseUrl: string
   rerankModel: string
+  apiKeyConfigured: boolean
+}
+
+interface FixedConfig {
+  sourceIndex: string
+  vectorField: string
+  uploadBucket: string
 }
 
 const knowledgeBases = ref<any[]>([])
 const router = useRouter()
 const vectorModels = ref<VectorModel[]>([])
 const rerankModels = ref<RerankModel[]>([])
+const fixedConfig = ref<FixedConfig>({
+  sourceIndex: '',
+  vectorField: '',
+  uploadBucket: ''
+})
 const page = ref(1)
 const pageSize = ref(15)
 const total = ref(0)
@@ -225,6 +253,9 @@ const sourceTypeFilter = ref('')
 const enabledFilter = ref<boolean | null>(null)
 const selectedVectorModel = computed(() =>
   vectorModels.value.find(model => model.id === form.value.vectorModelId)
+)
+const selectedRerankModel = computed(() =>
+  rerankModels.value.find(model => model.id === form.value.rerankModelId)
 )
 const loading = ref(false)
 const saving = ref(false)
@@ -236,24 +267,29 @@ const form = ref({
   enabled: true,
   vectorModelId: '',
   rerankModelId: '',
-  sourceIndex: 'spider_content',
-  vectorIndex: 'spider_content_vector',
-  vectorField: 'embedding',
+  sourceIndex: '',
+  vectorField: '',
   sourceType: 'ES_INDEX',
-  uploadBucket: 'crawler-knowledge',
+  uploadBucket: '',
   sort: 0
 })
 
 async function loadAll() {
   loading.value = true
   try {
-    const [_, vectorResponse, rerankResponse] = await Promise.all([
+    const [_, vectorResponse, rerankResponse, configResponse] = await Promise.all([
       fetchKnowledgeBasePage(),
       getVectorModels(),
-      getRerankModels()
+      getRerankModels(),
+      getRagConfig()
     ])
     vectorModels.value = vectorResponse.data || []
     rerankModels.value = rerankResponse.data || []
+    fixedConfig.value = {
+      sourceIndex: configResponse.data.sourceIndex || '',
+      vectorField: configResponse.data.vectorField || '',
+      uploadBucket: configResponse.data.uploadBucket || ''
+    }
   } finally {
     loading.value = false
   }
@@ -326,9 +362,10 @@ function openCreate() {
   form.value = {
     name: '', description: '', enabled: true, vectorModelId: '',
     rerankModelId: '',
-    sourceIndex: 'spider_content', vectorIndex: 'spider_content_vector',
-    vectorField: 'embedding', sourceType: 'ES_INDEX',
-    uploadBucket: 'crawler-knowledge', sort: 0
+    sourceIndex: fixedConfig.value.sourceIndex,
+    vectorField: fixedConfig.value.vectorField,
+    sourceType: 'ES_INDEX',
+    uploadBucket: fixedConfig.value.uploadBucket, sort: 0
   }
   dialogVisible.value = true
 }
@@ -341,11 +378,10 @@ function openEdit(row: any) {
     enabled: row.enabled,
     vectorModelId: row.vectorModelId,
     rerankModelId: row.rerankModelId || '',
-    sourceIndex: row.sourceIndex,
-    vectorIndex: row.vectorIndex,
-    vectorField: row.vectorField,
+    sourceIndex: fixedConfig.value.sourceIndex,
+    vectorField: fixedConfig.value.vectorField,
     sourceType: row.sourceType || 'ES_INDEX',
-    uploadBucket: row.uploadBucket || 'crawler-knowledge',
+    uploadBucket: fixedConfig.value.uploadBucket,
     sort: row.sort
   }
   dialogVisible.value = true
@@ -353,9 +389,7 @@ function openEdit(row: any) {
 
 async function save() {
   if (!form.value.name.trim()) return ElMessage.warning('请输入知识库名称')
-  if (!form.value.vectorModelId
-      || (form.value.sourceType === 'ES_INDEX' && !form.value.sourceIndex.trim())
-      || !form.value.vectorIndex.trim() || !form.value.vectorField.trim()) {
+  if (!form.value.vectorModelId) {
     return ElMessage.warning('请完整填写向量模型和索引配置')
   }
   saving.value = true

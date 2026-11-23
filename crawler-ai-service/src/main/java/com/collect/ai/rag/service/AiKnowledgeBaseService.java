@@ -12,8 +12,10 @@ import com.collect.ai.mapper.AiRagVectorModelMapper;
 import com.collect.ai.mapper.AiRagRerankModelMapper;
 import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
 import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
+import com.collect.ai.rag.config.RagProperties;
 import com.collect.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -30,6 +32,10 @@ public class AiKnowledgeBaseService {
     private final AiRagVectorModelMapper vectorModelMapper;
     private final AiRagRerankModelMapper rerankModelMapper;
     private final AiAssistantKnowledgeBaseMapper assistantKnowledgeBaseMapper;
+    private final RagProperties ragProperties;
+
+    @Value("${minio.bucket:crawler-knowledge}")
+    private String uploadBucket;
 
     public List<AiKnowledgeBaseDtos.Response> list() {
         return knowledgeBaseMapper.selectList(new LambdaQueryWrapper<AiKnowledgeBase>()
@@ -123,13 +129,6 @@ public class AiKnowledgeBaseService {
         if (request.getRerankModelId() != null
                 && rerankModelMapper.selectById(request.getRerankModelId()) == null)
             throw new BizException("请选择有效的重排模型");
-        if (!"UPLOAD".equalsIgnoreCase(request.getSourceType())
-                && !StringUtils.hasText(request.getSourceIndex()))
-            throw new BizException("请输入源索引名称");
-        if (!StringUtils.hasText(request.getVectorIndex()))
-            throw new BizException("请输入向量索引名称");
-        if (!StringUtils.hasText(request.getVectorField()))
-            throw new BizException("请输入向量字段名称");
     }
 
     private AiKnowledgeBase fromRequest(AiKnowledgeBase base, AiKnowledgeBaseDtos.Request request) {
@@ -139,17 +138,18 @@ public class AiKnowledgeBaseService {
         base.setVectorModelId(request.getVectorModelId());
         base.setRerankModelId(request.getRerankModelId());
         String sourceType = "UPLOAD".equalsIgnoreCase(request.getSourceType()) ? "UPLOAD" : "ES_INDEX";
-        String sourceIndex = request.getSourceIndex();
-        if ("UPLOAD".equals(sourceType) && !StringUtils.hasText(sourceIndex)) {
-            sourceIndex = "spider_content";
+        base.setSourceIndex(normalizeIndex(ragProperties.resolveSourceIndex()));
+        AiRagVectorModel model = vectorModelMapper.selectById(request.getVectorModelId());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        String normalizedVectorIndex = normalizeIndex(
+                ragProperties.resolveVectorIndex(model.getEmbeddingModel()));
+        if (!StringUtils.hasText(normalizedVectorIndex)) {
+            throw new BizException("向量索引不能为空");
         }
-        base.setSourceIndex(normalizeIndex(sourceIndex));
-        base.setVectorIndex(normalizeIndex(request.getVectorIndex()));
-        base.setVectorField(normalizeIndex(request.getVectorField()));
+        base.setVectorIndex(normalizedVectorIndex);
+        base.setVectorField(normalizeIndex(ragProperties.resolveVectorField()));
         base.setSourceType(sourceType);
-        base.setUploadBucket(StringUtils.hasText(request.getUploadBucket())
-                ? request.getUploadBucket().trim().toLowerCase(Locale.ROOT)
-                : "crawler-knowledge");
+        base.setUploadBucket(normalizeBucket(uploadBucket));
         base.setSort(request.getSort() == null ? 0 : request.getSort());
         return base;
     }
@@ -157,6 +157,12 @@ public class AiKnowledgeBaseService {
     private static String normalizeIndex(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9_-]", "_").replaceAll("^[_-]+|[_-]+$", "");
+    }
+
+    private static String normalizeBucket(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9.-]", "-").replaceAll("^[-.]+|[-.]+$", "");
+        return StringUtils.hasText(normalized) ? normalized : "crawler-knowledge";
     }
 
     private AiKnowledgeBaseDtos.Response toResponse(AiKnowledgeBase base) {
@@ -167,15 +173,16 @@ public class AiKnowledgeBaseService {
         response.setEnabled(base.getEnabled());
         response.setVectorModelId(base.getVectorModelId());
         var model = vectorModelMapper.selectById(base.getVectorModelId());
-        response.setVectorModelName(model == null ? "-" : model.getName());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        response.setVectorModelName(model.getName());
         response.setRerankModelId(base.getRerankModelId());
         var rerankModel = base.getRerankModelId() == null
                 ? null
                 : rerankModelMapper.selectById(base.getRerankModelId());
         response.setRerankModelName(rerankModel == null ? "-" : rerankModel.getName());
-        response.setSourceIndex(base.getSourceIndex());
-        response.setVectorIndex(base.getVectorIndex());
-        response.setVectorField(base.getVectorField());
+        response.setSourceIndex(ragProperties.resolveSourceIndex());
+        response.setVectorIndex(ragProperties.resolveVectorIndex(model.getEmbeddingModel()));
+        response.setVectorField(ragProperties.resolveVectorField());
         response.setSourceType(base.getSourceType());
         response.setUploadBucket(base.getUploadBucket());
         response.setSort(base.getSort());

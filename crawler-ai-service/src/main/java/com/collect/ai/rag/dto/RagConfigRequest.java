@@ -5,7 +5,6 @@ import lombok.Data;
 @Data
 public class RagConfigRequest {
     private Boolean enabled;
-    private String sourceIndex;
     private String embeddingProvider;
     private String embeddingBaseUrl;
     private String embeddingModel;
@@ -22,5 +21,4 @@ public class RagConfigRequest {
     private Integer chunkOverlap;
     private String vectorIndex;
     private String vectorIndexPrefix;
-    private String vectorFieldPrefix;
 }

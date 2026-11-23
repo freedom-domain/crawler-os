@@ -30,7 +30,6 @@ public class AiRagConfig {
     private Integer chunkOverlap;
     private String vectorIndex;
     private String vectorIndexPrefix;
-    private String vectorFieldPrefix;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

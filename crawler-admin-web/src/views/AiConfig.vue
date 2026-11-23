@@ -45,9 +45,6 @@
             <el-form-item label="启用 RAG">
               <el-switch v-model="form.enabled" active-text="启用" inactive-text="停用" />
             </el-form-item>
-            <el-form-item label="ES 源索引" prop="sourceIndex">
-              <el-input v-model="form.sourceIndex" placeholder="spider_content" />
-            </el-form-item>
           </div>
         </section>
 
@@ -75,19 +72,9 @@
             <el-form-item label="检索与分块参数">
               <span>Top K {{ selectedVectorModel?.topK ?? config.topK }} · 分块长度 {{ selectedVectorModel?.chunkSize ?? config.chunkSize }} 字符 · 重叠 {{ selectedVectorModel?.chunkOverlap ?? config.chunkOverlap }} 字符</span>
             </el-form-item>
-            <el-form-item label="向量索引前缀" prop="vectorIndexPrefix">
-              <el-input v-model="form.vectorIndexPrefix" />
-            </el-form-item>
-            <el-form-item label="向量索引名称" prop="vectorIndexSuffix">
-              <el-input v-model="form.vectorIndexSuffix" placeholder="例如 bge_m3">
-                <template #prepend>{{ form.vectorIndexPrefix }}_</template>
-              </el-input>
-            </el-form-item>
-            <el-form-item label="向量字段前缀" prop="vectorFieldPrefix">
-              <el-input v-model="form.vectorFieldPrefix" />
-            </el-form-item>
           </div>
           <div class="index-preview">
+            <span>源索引</span><code>{{ config.sourceIndex || '配置文件' }}</code>
             <span>向量索引</span><code>{{ config.vectorIndex || '保存后计算' }}</code>
             <span>向量字段</span><code>{{ config.vectorField || '保存后计算' }}</code>
           </div>
@@ -190,7 +177,6 @@ interface RagConfig {
   chunkOverlap: number
   vectorIndexName: string
   vectorIndexPrefix: string
-  vectorFieldPrefix: string
   vectorIndex: string
   vectorField: string
 }
@@ -214,7 +200,6 @@ const emptyConfig = (): RagConfig => ({
   chunkOverlap: 200,
   vectorIndexName: '',
   vectorIndexPrefix: '',
-  vectorFieldPrefix: '',
   vectorIndex: '',
   vectorField: ''
 })
@@ -246,8 +231,7 @@ const form = reactive({
   vectorModelId: null as string | null,
   chatModelId: null as string | null,
   vectorIndexSuffix: '',
-  vectorIndexPrefix: '',
-  vectorFieldPrefix: ''
+  vectorIndexPrefix: ''
 })
 const selectedVectorModel = computed(() =>
   vectorModels.value.find(model => model.id === form.vectorModelId)
@@ -262,12 +246,10 @@ const vectorManagerVisible = ref(false)
 const chatManagerVisible = ref(false)
 
 const rules: FormRules = {
-  sourceIndex: [{ required: true, message: '请输入 ES 源索引', trigger: 'blur' }, { pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称格式不合法', trigger: 'blur' }],
   vectorModelId: [{ required: true, message: '请选择向量模型', trigger: 'change' }],
   chatModelId: [{ required: true, message: '请选择聊天模型', trigger: 'change' }],
   vectorIndexSuffix: [{ required: true, pattern: /^[a-z0-9][a-z0-9._-]*$/, message: '索引名称后缀仅支持小写字母、数字、点、下划线和连字符', trigger: 'blur' }],
-  vectorIndexPrefix: [{ required: true, pattern: /^[a-z0-9_-]+$/, message: '仅支持小写字母、数字、下划线和连字符', trigger: 'blur' }],
-  vectorFieldPrefix: [{ required: true, pattern: /^[a-zA-Z0-9_-]+$/, message: '仅支持字母、数字、下划线和连字符', trigger: 'blur' }]
+  vectorIndexPrefix: [{ required: true, pattern: /^[a-z0-9_-]+$/, message: '仅支持小写字母、数字、下划线和连字符', trigger: 'blur' }]
 }
 
 const applyConfig = (data: RagConfig) => {
@@ -284,8 +266,7 @@ const applyConfig = (data: RagConfig) => {
     vectorModelId: data.vectorModelId,
     chatModelId: data.chatModelId,
     vectorIndexSuffix,
-    vectorIndexPrefix,
-    vectorFieldPrefix: data.vectorFieldPrefix
+    vectorIndexPrefix
   })
 }
 
@@ -331,12 +312,8 @@ const saveConfig = async () => {
   saving.value = true
   const payload: Record<string, unknown> = {
     enabled: form.enabled,
-    sourceIndex: form.sourceIndex,
     vectorModelId: form.vectorModelId,
-    chatModelId: form.chatModelId,
-    vectorIndex: `${form.vectorIndexPrefix}_${form.vectorIndexSuffix}`,
-    vectorIndexPrefix: form.vectorIndexPrefix,
-    vectorFieldPrefix: form.vectorFieldPrefix
+    chatModelId: form.chatModelId
   }
   try {
     const response: any = await updateRagConfig(payload)

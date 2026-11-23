@@ -50,6 +50,7 @@ const router = createRouter({
         { path: 'ai-config', redirect: '/ai-knowledge' },
         { path: 'ai-knowledge', name: 'AiKnowledgeBase', component: () => import('@/views/AiKnowledgeBase.vue') },
         { path: 'ai-knowledge-documents', name: 'AiKnowledgeDocuments', component: () => import('@/views/AiKnowledgeDocuments.vue') },
+        { path: 'ai-knowledge-documents/knowledge/:knowledgeBaseId/:objectName(.*)', name: 'AiKnowledgeDocumentFile', component: () => import('@/views/AiKnowledgeDocuments.vue') },
         { path: 'ai-knowledge-documents/:knowledgeBaseId', name: 'AiKnowledgeDocumentsById', component: () => import('@/views/AiKnowledgeDocuments.vue') },
         { path: 'ai-models', name: 'AiModels', component: () => import('@/views/AiModels.vue') },
         { path: 'ai-vector-models', redirect: '/ai-models?tab=vector' },
