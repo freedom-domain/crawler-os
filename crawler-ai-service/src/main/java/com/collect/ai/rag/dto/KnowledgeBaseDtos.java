@@ -42,6 +42,14 @@ public final class KnowledgeBaseDtos {
         private int pageSize;
     }
 
+    /** 按字符偏移分页的文档原文页 */
+    @Data
+    public static class DocumentContentPage {
+        private String content;
+        private int totalLength;
+        private boolean hasMore;
+    }
+
     @Data
     public static class VectorChunk {
         private String chunkId;

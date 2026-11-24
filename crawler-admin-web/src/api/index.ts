@@ -145,14 +145,40 @@ export const getKnowledgeBaseDocuments = (params: {
   includeExcluded: boolean
   vectorized?: boolean
 }) => request.get('/ai/rag/knowledge/documents', { params })
-export const getKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string) =>
+export const getKnowledgeBaseDocument = (id: string, knowledgeBaseId?: string, withContent = true) =>
   request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}`, {
-    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+    params: {
+      ...(knowledgeBaseId ? { knowledgeBaseId } : {}),
+      ...(withContent ? {} : { content: false })
+    }
+  })
+/** 按字符偏移分页读取文档原文（服务端切片，页尾对齐换行） */
+export const getKnowledgeBaseDocumentContent = (
+  id: string,
+  offset: number,
+  limit = 50000,
+  knowledgeBaseId?: string
+) =>
+  request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/content`, {
+    params: {
+      offset,
+      limit,
+      ...(knowledgeBaseId ? { knowledgeBaseId } : {})
+    }
   })
 export const getKnowledgeBaseDocumentChunks = (id: string, knowledgeBaseId?: string) =>
   request.get(`/ai/rag/knowledge/documents/${encodeURIComponent(id)}/chunks`, {
     params: knowledgeBaseId ? { knowledgeBaseId } : undefined
   })
+export const getKnowledgeBaseDocumentChunk = (
+  id: string,
+  chunkId: string,
+  knowledgeBaseId?: string
+) =>
+  request.get(
+    `/ai/rag/knowledge/documents/${encodeURIComponent(id)}/chunks/${encodeURIComponent(chunkId)}`,
+    { params: knowledgeBaseId ? { knowledgeBaseId } : undefined }
+  )
 export const vectorizeKnowledgeBaseDocument = (
   id: string,
   knowledgeBaseId?: string,

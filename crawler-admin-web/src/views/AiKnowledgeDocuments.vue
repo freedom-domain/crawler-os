@@ -177,12 +177,26 @@
         </div>
         <el-tabs>
           <el-tab-pane label="原文内容">
-            <div v-if="detail" class="document-content document-markdown"
-              v-html="renderDocumentMarkdown(detail.content)" />
+            <div class="original-pane">
+              <div class="document-content" v-loading="originalLoading && originalHtml === ''"
+                @scroll="onOriginalScroll">
+                <div v-if="originalHtml" class="document-markdown" v-html="originalHtml" />
+                <el-empty v-else-if="originalTotalLength === 0 && !originalLoading && !originalError"
+                  description="暂无正文内容" />
+                <el-empty v-else-if="originalError" :description="originalError" />
+              </div>
+              <div v-if="originalTotalLength > 0" class="original-footer">
+                <span>{{ originalContent.length }} / {{ originalTotalLength }} 字符</span>
+                <span v-if="originalError" class="original-error">加载失败，滚动到底部自动重试</span>
+                <span v-else-if="originalContent.length < originalTotalLength">向下滚动自动加载</span>
+              </div>
+            </div>
           </el-tab-pane>
           <el-tab-pane :label="`向量分块（${chunks.length}）`">
             <el-empty v-if="!chunksLoading && chunks.length === 0" description="暂无向量分块" />
-            <el-collapse v-else v-loading="chunksLoading" class="chunk-list">
+            <!-- element-plus 2.14 的 collapse 只 emit change（携带激活 name 数组），无 expand/active-change -->
+            <el-collapse v-else v-loading="chunksLoading" class="chunk-list"
+              @change="onChunksActiveChange">
               <el-collapse-item v-for="chunk in chunks" :key="chunk.chunkId"
                 :name="chunk.chunkId">
                 <template #title>
@@ -197,8 +211,13 @@
                     {{ chunk.chunkStrategyName }}
                   </el-tag>
                 </template>
-                <div class="chunk-content document-markdown"
-                  v-html="renderDocumentMarkdown(chunk.content)" />
+                <div class="chunk-content" v-loading="chunk.contentLoading">
+                  <div v-if="chunk.content != null" class="document-markdown"
+                    v-html="renderDocumentMarkdown(chunk.content)" />
+                  <div v-else-if="!chunk.contentLoading" class="chunk-content-hint">
+                    内容加载失败，请折叠后重新展开
+                  </div>
+                </div>
               </el-collapse-item>
             </el-collapse>
           </el-tab-pane>
@@ -235,7 +254,8 @@ import DOMPurify from 'dompurify'
 import AiChunkStrategyManager from '@/components/AiChunkStrategyManager.vue'
 import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
-  getKnowledgeBaseDocumentChunks,
+  getKnowledgeBaseDocumentChunk, getKnowledgeBaseDocumentChunks,
+  getKnowledgeBaseDocumentContent,
   getChunkStrategies,
   getKnowledgeBaseStats, syncRagIndex, syncRagIndexIncremental, vectorizeKnowledgeBaseDocument,
   clearKnowledgeVectorIndex,
@@ -272,7 +292,9 @@ interface VectorChunk {
   index: number
   title: string
   heading?: string
-  content: string
+  /** 分块正文：列表接口不返回，展开时按需加载 */
+  content: string | null
+  contentLoading?: boolean
   characterCount: number
   embeddingModel: string
   chunkStrategyId: string
@@ -492,12 +514,20 @@ async function showDetail(row: KnowledgeDocument | UploadedDocument) {
   detail.value = null
   chunks.value = []
   chunksLoading.value = false
+  originalContent.value = ''
+  originalHtml.value = ''
+  originalTotalLength.value = 0
+  originalError.value = ''
   const documentId = 'sourceDocumentId' in row ? row.sourceDocumentId : row.id
   detailDocumentId.value = documentId
   try {
-    const response: any = await getKnowledgeBaseDocument(documentId, selectedKnowledgeBaseId.value)
+    // 原文正文不再随详情返回，改由 /content 接口按字符偏移分页加载
+    const response: any = await getKnowledgeBaseDocument(
+      documentId, selectedKnowledgeBaseId.value, false
+    )
     if (detailDocumentId.value === documentId && response) {
       detail.value = response.data
+      void loadOriginalContent(true)
       await loadDocumentChunks(documentId)
     }
   } catch {
@@ -528,6 +558,94 @@ async function loadDocumentChunks(documentId: string) {
   } finally {
     chunksLoading.value = false
   }
+}
+
+/** el-collapse-item 无 expand 事件，由父级 change 事件统一触发（值为当前激活 name 数组，accordion 模式为单个 name） */
+function onChunksActiveChange(activeNames: string | (string | number)[]) {
+  const active = Array.isArray(activeNames) ? activeNames : [activeNames]
+  for (const name of active) {
+    const chunk = chunks.value.find(item => item.chunkId === String(name))
+    if (chunk) void loadChunkContent(chunk)
+  }
+}
+
+const chunkContentLoading = new Set<string>()
+
+/** 展开分块时自动加载正文（列表接口不返回 content），成功后缓存不再重复请求；失败自动重试 2 次 */
+async function loadChunkContent(chunk: VectorChunk) {
+  if (chunk.content != null || chunkContentLoading.has(chunk.chunkId)) return
+  chunkContentLoading.add(chunk.chunkId)
+  const documentId = detailDocumentId.value
+  chunk.contentLoading = true
+  const fetchOnce = async () => {
+    try {
+      const response: any = await getKnowledgeBaseDocumentChunk(
+        documentId, chunk.chunkId, selectedKnowledgeBaseId.value
+      )
+      if (detailDocumentId.value === documentId && response?.data) {
+        chunk.content = response.data.content ?? null
+      }
+    } catch {
+      // 继续重试
+    }
+  }
+  await fetchOnce()
+  for (let i = 1; i <= 2 && chunk.content == null && detailDocumentId.value === documentId; i++) {
+    await new Promise(resolve => setTimeout(resolve, 800))
+    await fetchOnce()
+  }
+  chunk.contentLoading = false
+  chunkContentLoading.delete(chunk.chunkId)
+}
+
+const originalContent = ref('')
+const originalHtml = ref('')
+const originalTotalLength = ref(0)
+const originalLoading = ref(false)
+const originalError = ref('')
+
+/** 按字符偏移分页加载原文（服务端切片、页尾对齐换行），只渲染新增片段并追加，避免整篇重渲染 */
+async function loadOriginalContent(reset = false) {
+  if (originalLoading.value) return
+  const documentId = detailDocumentId.value
+  if (!documentId) return
+  if (reset) {
+    originalContent.value = ''
+    originalHtml.value = ''
+    originalTotalLength.value = 0
+    originalError.value = ''
+  }
+  originalLoading.value = true
+  try {
+    const response: any = await getKnowledgeBaseDocumentContent(
+      documentId, originalContent.value.length, 50000, selectedKnowledgeBaseId.value
+    )
+    if (detailDocumentId.value !== documentId) return
+    const data = response?.data
+    if (!data) {
+      originalError.value = '原文加载失败'
+      return
+    }
+    originalTotalLength.value = data.totalLength ?? 0
+    if (data.content) {
+      originalContent.value += data.content
+      originalHtml.value += DOMPurify.sanitize(markdown.render(data.content))
+      originalError.value = ''
+    }
+  } catch {
+    if (detailDocumentId.value === documentId) originalError.value = '原文加载失败'
+  } finally {
+    if (detailDocumentId.value === documentId) originalLoading.value = false
+  }
+}
+
+function onOriginalScroll(event: Event) {
+  const el = event.target as HTMLElement
+  const hasMore = originalTotalLength.value > 0
+    && originalContent.value.length < originalTotalLength.value
+  if (!hasMore || originalLoading.value) return
+  originalError.value = ''
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) void loadOriginalContent(false)
 }
 
 async function vectorizeDocument(row: KnowledgeDocument, strategyId?: string) {
@@ -968,6 +1086,17 @@ onBeforeUnmount(() => {
 .detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); flex-shrink: 0; margin-bottom: 12px; }
 .vectorize-dialog-tip { margin: 0 0 14px; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
 .document-content { height: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.original-pane { height: 100%; display: flex; flex-direction: column; }
+.original-pane .document-content { height: auto; flex: 1; min-height: 0; }
+.original-footer {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.original-error { color: var(--el-color-danger); }
 .document-markdown { white-space: normal; }
 .document-markdown :deep(:first-child) { margin-top: 0; }
 .document-markdown :deep(:last-child) { margin-bottom: 0; }
@@ -1022,6 +1151,7 @@ onBeforeUnmount(() => {
 .chunk-list { margin-top: 4px; height: 100%; overflow-y: auto; }
 .chunk-count { margin-left: 8px; }
 .chunk-content { max-height: 320px; overflow: auto; margin: 0; overflow-wrap: anywhere; }
+.chunk-content-hint { color: var(--el-text-color-secondary); font-size: 13px; }
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filter-toolbar { grid-template-columns: 1fr; }

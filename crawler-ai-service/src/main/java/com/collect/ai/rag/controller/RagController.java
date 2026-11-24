@@ -511,18 +511,44 @@ public class RagController {
     @GetMapping("/knowledge/documents/{id}")
     public R<KnowledgeBaseDtos.DocumentDetail> knowledgeBaseDocument(
             @PathVariable String id,
-            @RequestParam(required = false) Long knowledgeBaseId) {
+            @RequestParam(required = false) Long knowledgeBaseId,
+            @RequestParam(required = false, defaultValue = "true") boolean content) {
         requireAdmin();
-        return R.ok(ragService.getKnowledgeBaseDocument(knowledgeBaseId, id));
+        KnowledgeBaseDtos.DocumentDetail detail = ragService.getKnowledgeBaseDocument(knowledgeBaseId, id);
+        // 原文正文改由 /content 分页接口按字符偏移加载，列表场景不带正文
+        if (!content) detail.setContent("");
+        return R.ok(detail);
     }
 
-    @Operation(summary = "读取知识库文档向量分块详情")
+    @Operation(summary = "按字符偏移分页读取知识库文档原文")
+    @GetMapping("/knowledge/documents/{id}/content")
+    public R<KnowledgeBaseDtos.DocumentContentPage> knowledgeBaseDocumentContent(
+            @PathVariable String id,
+            @RequestParam(required = false) Long knowledgeBaseId,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "50000") int limit) {
+        requireAdmin();
+        return R.ok(ragService.getKnowledgeBaseDocumentContent(knowledgeBaseId, id, offset, limit));
+    }
+
+    @Operation(summary = "读取知识库文档向量分块列表（不含分块正文）")
     @GetMapping("/knowledge/documents/{id}/chunks")
     public R<java.util.List<KnowledgeBaseDtos.VectorChunk>> knowledgeBaseDocumentChunks(
             @PathVariable String id,
             @RequestParam(required = false) Long knowledgeBaseId) {
         requireAdmin();
-        return R.ok(ragService.getKnowledgeBaseDocumentChunks(knowledgeBaseId, id));
+        return R.ok(ragService.getKnowledgeBaseDocumentChunks(knowledgeBaseId, id, false));
+    }
+
+    @Operation(summary = "读取知识库文档单个向量分块正文")
+    @GetMapping("/knowledge/documents/{id}/chunks/{chunkId}")
+    public R<KnowledgeBaseDtos.VectorChunk> knowledgeBaseDocumentChunk(
+            @PathVariable String id,
+            @PathVariable String chunkId,
+            @RequestParam(required = false) Long knowledgeBaseId) {
+        requireAdmin();
+        return R.ok(ragService.getKnowledgeBaseDocumentChunk(knowledgeBaseId, id, chunkId)
+                .stream().findFirst().orElse(null));
     }
 
     @Operation(summary = "重新向量化单篇知识库文档")

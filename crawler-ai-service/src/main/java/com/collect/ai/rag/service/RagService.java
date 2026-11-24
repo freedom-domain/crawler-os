@@ -984,6 +984,38 @@ public class RagService {
         return detail;
     }
 
+    /**
+     * 按字符偏移分页读取文档原文。
+     * ES 的 text 字段不支持子串读取，服务端整篇取出后切片：
+     * 页尾对齐换行（最多回退 1000 字符，避免切断 Markdown 语法），且不切开代理对（emoji）。
+     */
+    public KnowledgeBaseDtos.DocumentContentPage getKnowledgeBaseDocumentContent(
+            Long knowledgeBaseId, String documentId, int offset, int limit) {
+        if (limit <= 0) limit = 50000;
+        if (limit > 200000) limit = 200000;
+        if (offset < 0) offset = 0;
+        if (knowledgeBaseId != null) {
+            AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+            if (base == null) throw new BizException("知识库不存在");
+            assertKnowledgeBaseOwnsDocument(base, documentId);
+        }
+        JsonNode hit = findSourceDocument(properties.resolveSourceIndex(), documentId, "content");
+        String content = hit.path("_source").path("content").asText("");
+        int total = content.length();
+        int end = Math.min(total, offset + limit);
+        if (end < total) {
+            int searchFrom = Math.max(offset, end - 1000);
+            int newline = content.lastIndexOf('\n', end - 1);
+            if (newline >= searchFrom) end = newline + 1;
+        }
+        if (end < total && Character.isHighSurrogate(content.charAt(end - 1))) end--;
+        KnowledgeBaseDtos.DocumentContentPage page = new KnowledgeBaseDtos.DocumentContentPage();
+        page.setContent(content.substring(Math.min(offset, total), end));
+        page.setTotalLength(total);
+        page.setHasMore(end < total);
+        return page;
+    }
+
     private List<String> readDocumentImages(JsonNode source) {
         List<String> images = new ArrayList<>();
         JsonNode imageNodes = source.path("images");
@@ -997,8 +1029,14 @@ public class RagService {
         return images;
     }
 
+    /** 聊天侧来源分块预览仍需在列表中携带正文，保持 includeContent=true */
     public java.util.List<KnowledgeBaseDtos.VectorChunk> getKnowledgeBaseDocumentChunks(
             Long knowledgeBaseId, String documentId) {
+        return getKnowledgeBaseDocumentChunks(knowledgeBaseId, documentId, true);
+    }
+
+    public java.util.List<KnowledgeBaseDtos.VectorChunk> getKnowledgeBaseDocumentChunks(
+            Long knowledgeBaseId, String documentId, boolean includeContent) {
         String vectorIndex;
         if (knowledgeBaseId == null) {
             vectorIndex = properties.resolveVectorIndex();
@@ -1034,13 +1072,14 @@ public class RagService {
                 if (!documentId.equals(source.path("doc_id").asText())) continue;
                 if (chunkBase != null && !belongsToKnowledgeBaseVectorChunk(chunkBase, source)) continue;
                 String chunkId = source.path("chunk_id").asText(hit.path("_id").asText());
+                // includeContent=false 时列表不返回分块正文（文档详情前端展开后经单分块接口按需加载）
                 String content = source.path("content").asText("");
                 KnowledgeBaseDtos.VectorChunk chunk = new KnowledgeBaseDtos.VectorChunk();
                 chunk.setChunkId(chunkId);
                 chunk.setIndex(parseChunkIndex(chunkId));
                 chunk.setTitle(source.path("title").asText(""));
                 chunk.setHeading(source.path("heading").asText(""));
-                chunk.setContent(content);
+                if (includeContent) chunk.setContent(content);
                 chunk.setCharacterCount(content.length());
                 chunk.setEmbeddingModel(source.path("embedding_model").asText(""));
                 chunk.setChunkStrategyId(source.path("chunk_strategy_id").asText(""));
