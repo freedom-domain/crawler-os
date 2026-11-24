@@ -438,6 +438,14 @@ public class RagController {
         return R.ok(ragIndexRebuildTaskService.start(knowledgeBaseId));
     }
 
+    @Operation(summary = "增量同步内容索引新增文档（只向量化新文档，任务异步执行）")
+    @PostMapping("/sync/incremental")
+    public R<RagDtos.SyncTaskResponse> syncIncremental(
+            @RequestParam(required = false) Long knowledgeBaseId) {
+        requireAdmin();
+        return R.ok(ragIndexRebuildTaskService.start(knowledgeBaseId, true));
+    }
+
     @Operation(summary = "查询向量索引重建任务状态")
     @GetMapping("/sync/tasks/{taskId}")
     public R<RagDtos.SyncTaskResponse> syncTask(@PathVariable String taskId) {

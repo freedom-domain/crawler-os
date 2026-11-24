@@ -39,6 +39,8 @@ public final class RagDtos {
     public static class SyncTaskResponse {
         private String taskId;
         private Long knowledgeBaseId;
+        /** 任务模式：FULL=全量重建，INCREMENTAL=增量同步新文档 */
+        private String mode;
         private String status;
         private String message;
         private SyncResult result;

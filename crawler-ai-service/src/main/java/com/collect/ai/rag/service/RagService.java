@@ -162,6 +162,63 @@ public class RagService {
                 ownerKnowledgeBaseId, !uploadKnowledgeBase);
         ensureKnowledgeVectorIndex(base, model);
         deleteKnowledgeVectors(vectorIndex, base.getId());
+        long chunks = indexKnowledgeBaseDocuments(base, model, documents,
+                chunkStrategies, cancelChecker);
+        refreshIndex(vectorIndex);
+        RagDtos.SyncResult result = new RagDtos.SyncResult();
+        result.setSourceDocuments(documents.size());
+        result.setChunks(chunks);
+        result.setVectorDocuments(chunks);
+        return result;
+    }
+
+    /**
+     * 增量向量化：内容索引新增的文档中，只挑出尚未写入该知识库向量索引的文档，
+     * 分块、生成 embedding 并写入知识库向量索引；已向量化文档不重复处理，
+     * 源索引中被删除的旧向量不清理（由全量重建负责）。
+     */
+    public RagDtos.SyncResult syncNewContentDocuments(Long knowledgeBaseId, BooleanSupplier cancelChecker) {
+        if (knowledgeBaseId == null) throw new BizException("请选择知识库");
+        AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+        if (base == null) throw new BizException("知识库不存在");
+        return syncNewContentDocuments(base, cancelChecker);
+    }
+
+    public RagDtos.SyncResult syncNewContentDocuments(AiKnowledgeBase base, BooleanSupplier cancelChecker) {
+        if (base == null) throw new BizException("知识库不存在");
+        if ("UPLOAD".equalsIgnoreCase(base.getSourceType())) {
+            throw new BizException("上传知识库不支持增量同步，请使用批量重建");
+        }
+        AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        List<AiRagChunkStrategy> chunkStrategies = chunkStrategyService.all();
+        String sourceIndex = properties.resolveSourceIndex();
+        String vectorIndex = resolveKnowledgeVectorIndex(model);
+        ensureKnowledgeVectorIndex(base, model);
+        Set<String> vectorized = findAllVectorizedDocumentIds(base);
+        // 与全量重建相同的过滤：排除已排除文档 + 已归属其他知识库的上传文档
+        List<String> newDocumentIds = fetchContentDocuments(sourceIndex, null, true, false).stream()
+                .map(document -> document.path("_id").asText())
+                .filter(id -> !id.isBlank() && !vectorized.contains(id))
+                .toList();
+        RagDtos.SyncResult result = new RagDtos.SyncResult();
+        if (newDocumentIds.isEmpty()) {
+            return result;
+        }
+        List<JsonNode> documents = fetchSourceDocumentsByIds(sourceIndex, newDocumentIds);
+        long chunks = indexKnowledgeBaseDocuments(base, model, documents,
+                chunkStrategies, cancelChecker);
+        refreshIndex(vectorIndex);
+        result.setSourceDocuments(documents.size());
+        result.setChunks(chunks);
+        result.setVectorDocuments(chunks);
+        return result;
+    }
+
+    /** 把源文档逐篇分块、embedding 并写入知识库向量索引，返回写入分块数 */
+    private long indexKnowledgeBaseDocuments(AiKnowledgeBase base, AiRagVectorModel model,
+            List<JsonNode> documents, List<AiRagChunkStrategy> chunkStrategies,
+            BooleanSupplier cancelChecker) {
         List<ObjectNode> operations = new ArrayList<>();
         List<KnowledgeVectorChunk> embeddingBatch = new ArrayList<>(EMBEDDING_BATCH_SIZE);
         long chunks = 0;
@@ -197,12 +254,7 @@ public class RagService {
         if (!operations.isEmpty()) {
             bulkOperations(operations, false);
         }
-        refreshIndex(vectorIndex);
-        RagDtos.SyncResult result = new RagDtos.SyncResult();
-        result.setSourceDocuments(documents.size());
-        result.setChunks(chunks);
-        result.setVectorDocuments(chunks);
-        return result;
+        return chunks;
     }
 
     private long indexKnowledgeBaseChunkBatch(
@@ -1944,9 +1996,18 @@ public class RagService {
 
     private List<JsonNode> fetchContentDocuments(String sourceIndex, Long ownerKnowledgeBaseId,
             boolean excludeKnowledgeBaseDocuments) throws IllegalStateException {
+        return fetchContentDocuments(sourceIndex, ownerKnowledgeBaseId,
+                excludeKnowledgeBaseDocuments, true);
+    }
+
+    /** includeSource=false 时只取 _id（增量同步定位新文档，减少 scroll 传输量） */
+    private List<JsonNode> fetchContentDocuments(String sourceIndex, Long ownerKnowledgeBaseId,
+            boolean excludeKnowledgeBaseDocuments, boolean includeSource)
+            throws IllegalStateException {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("size", 1000);
+            body.put("_source", includeSource);
             body.set("sort", objectMapper.createArrayNode().add("_doc"));
             List<String> excludedIds = getExcludedDocumentIds(sourceIndex);
             if (excludedIds.isEmpty() && ownerKnowledgeBaseId == null
@@ -2000,6 +2061,36 @@ public class RagService {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("读取 ES 源文档失败: " + e.getMessage(), e);
         }
+    }
+
+    /** 按 _id 批量拉取源文档全文（mget，每批 500），返回结构与 search hit 一致 */
+    private List<JsonNode> fetchSourceDocumentsByIds(String sourceIndex, List<String> ids) {
+        if (ids.isEmpty()) return List.of();
+        List<JsonNode> documents = new ArrayList<>();
+        for (int start = 0; start < ids.size(); start += 500) {
+            List<String> batch = ids.subList(start, Math.min(start + 500, ids.size()));
+            ArrayNode idArray = objectMapper.createArrayNode();
+            batch.forEach(idArray::add);
+            ObjectNode body = objectMapper.createObjectNode().set("ids", idArray);
+            try {
+                HttpResponse<String> response = elasticsearchRequest("POST",
+                        "/" + sourceIndex + "/_mget", toJson(body));
+                if (response.statusCode() >= 300) {
+                    throw new IllegalStateException("读取 ES 源文档失败: " + response.statusCode()
+                            + " " + response.body());
+                }
+                JsonNode root = objectMapper.readTree(response.body());
+                for (JsonNode document : root.path("docs")) {
+                    if (document.path("found").asBoolean(false)) {
+                        documents.add(document);
+                    }
+                }
+            } catch (Exception e) {
+                if (e instanceof IllegalStateException state) throw state;
+                throw new IllegalStateException("读取 ES 源文档失败: " + e.getMessage(), e);
+            }
+        }
+        return documents;
     }
 
     private List<List<Double>> createEmbeddings(

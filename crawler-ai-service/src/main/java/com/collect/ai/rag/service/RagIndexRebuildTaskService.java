@@ -33,6 +33,11 @@ public class RagIndexRebuildTaskService {
     }
 
     public synchronized RagDtos.SyncTaskResponse start(Long knowledgeBaseId) {
+        return start(knowledgeBaseId, false);
+    }
+
+    /** incremental=true 时只向量化内容索引新增的文档，否则全量重建 */
+    public synchronized RagDtos.SyncTaskResponse start(Long knowledgeBaseId, boolean incremental) {
         for (RagDtos.SyncTaskResponse task : tasks.values()) {
             if (equalsKnowledgeBase(task.getKnowledgeBaseId(), knowledgeBaseId)
                     && ("PENDING".equals(task.getStatus()) || "RUNNING".equals(task.getStatus()))) {
@@ -56,6 +61,7 @@ public class RagIndexRebuildTaskService {
         RagDtos.SyncTaskResponse task = new RagDtos.SyncTaskResponse();
         task.setTaskId(UUID.randomUUID().toString());
         task.setKnowledgeBaseId(knowledgeBaseId);
+        task.setMode(incremental ? "INCREMENTAL" : "FULL");
         task.setStatus("PENDING");
         task.setMessage("等待执行");
         task.setCreatedAt(now);
@@ -108,28 +114,34 @@ public class RagIndexRebuildTaskService {
             task.setCompletedAt(System.currentTimeMillis());
             return;
         }
+        boolean incremental = "INCREMENTAL".equals(task.getMode());
         task.setStatus("RUNNING");
-        task.setMessage("正在重建向量索引");
+        task.setMessage(incremental ? "正在增量同步新文档" : "正在重建向量索引");
         task.setStartedAt(System.currentTimeMillis());
         try {
-            RagDtos.SyncResult result = ragService.syncContentIndex(task.getKnowledgeBaseId(),
-                    () -> cancelled != null && cancelled.get());
+            RagDtos.SyncResult result = incremental
+                    ? ragService.syncNewContentDocuments(task.getKnowledgeBaseId(),
+                            () -> cancelled != null && cancelled.get())
+                    : ragService.syncContentIndex(task.getKnowledgeBaseId(),
+                            () -> cancelled != null && cancelled.get());
             if (cancelled != null && cancelled.get()) {
                 throw new RagService.SyncCancelledException();
             }
             task.setStatus("COMPLETED");
-            task.setMessage("向量索引重建完成");
+            task.setMessage(incremental ? "增量同步完成" : "向量索引重建完成");
             task.setResult(result);
         } catch (RagService.SyncCancelledException exception) {
             log.info("向量索引重建已取消: taskId={}, knowledgeBaseId={}",
                     taskId, task.getKnowledgeBaseId());
             task.setStatus("CANCELED");
-            task.setMessage("向量索引重建已取消");
+            task.setMessage(incremental ? "增量同步已取消" : "向量索引重建已取消");
         } catch (RuntimeException exception) {
             log.error("向量索引重建失败: taskId={}, knowledgeBaseId={}",
                     taskId, task.getKnowledgeBaseId(), exception);
             task.setStatus("FAILED");
-            task.setMessage(exception.getMessage() == null ? "向量索引重建失败" : exception.getMessage());
+            task.setMessage(exception.getMessage() == null
+                    ? (incremental ? "增量同步失败" : "向量索引重建失败")
+                    : exception.getMessage());
         } finally {
             task.setCompletedAt(System.currentTimeMillis());
         }
@@ -150,13 +162,14 @@ public class RagIndexRebuildTaskService {
         if (!("PENDING".equals(task.getStatus()) || "RUNNING".equals(task.getStatus()))) {
             throw new BizException("任务已结束，无法取消");
         }
+        boolean incremental = "INCREMENTAL".equals(task.getMode());
         cancelFlags.computeIfAbsent(taskId, id -> new AtomicBoolean(false)).set(true);
         if ("PENDING".equals(task.getStatus())) {
             task.setStatus("CANCELED");
-            task.setMessage("向量索引重建已取消");
+            task.setMessage(incremental ? "增量同步已取消" : "向量索引重建已取消");
             task.setCompletedAt(System.currentTimeMillis());
         } else {
-            task.setMessage("正在取消向量索引重建");
+            task.setMessage(incremental ? "正在取消增量同步" : "正在取消向量索引重建");
         }
         log.info("向量索引重建取消请求: taskId={}, knowledgeBaseId={}, status={}",
                 taskId, task.getKnowledgeBaseId(), task.getStatus());
@@ -187,6 +200,7 @@ public class RagIndexRebuildTaskService {
         RagDtos.SyncTaskResponse copy = new RagDtos.SyncTaskResponse();
         copy.setTaskId(source.getTaskId());
         copy.setKnowledgeBaseId(source.getKnowledgeBaseId());
+        copy.setMode(source.getMode());
         copy.setStatus(source.getStatus());
         copy.setMessage(source.getMessage());
         copy.setCreatedAt(source.getCreatedAt());

@@ -115,6 +115,11 @@ export const syncRagIndex = (knowledgeBaseId?: string) =>
     timeout: 0,
     params: knowledgeBaseId ? { knowledgeBaseId } : undefined
   })
+export const syncRagIndexIncremental = (knowledgeBaseId?: string) =>
+  request.post('/ai/rag/sync/incremental', undefined, {
+    timeout: 0,
+    params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
 export const getRagSyncTask = (taskId: string) =>
   request.get(`/ai/rag/sync/tasks/${encodeURIComponent(taskId)}`)
 export const getLatestRagSyncTask = (knowledgeBaseId?: string) =>

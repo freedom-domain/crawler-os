@@ -50,6 +50,10 @@ app:
       source-index: ${RAG_SOURCE_INDEX:spider_content}
       vector-index-prefix: ${RAG_VECTOR_INDEX_PREFIX:spider_content_vector}
       vector-index-environment: ${RAG_VECTOR_INDEX_ENVIRONMENT:}
+      # 内容索引新增文档后，定时向来源是该索引的知识库增量写入向量（默认开启，5 分钟一次）
+      incremental-sync:
+        enabled: ${RAG_INCREMENTAL_SYNC_ENABLED:true}
+        interval-ms: ${RAG_INCREMENTAL_SYNC_INTERVAL_MS:300000}
 
 logging:
   level:

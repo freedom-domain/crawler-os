@@ -18,12 +18,23 @@
         </el-upload>
         <el-button :icon="Refresh" :loading="refreshing" @click="loadAll">刷新</el-button>
         <el-button type="primary" :icon="RefreshRight" :loading="rebuilding"
-          :disabled="Boolean(vectorizingId) || rebuilding || !selectedBase?.enabled" @click="rebuildIndex">
+          :disabled="Boolean(vectorizingId) || rebuilding || syncing || !selectedBase?.enabled"
+          @click="rebuildIndex">
           批量重建向量索引
+        </el-button>
+        <el-button v-if="selectedBase?.sourceType === 'ES_INDEX'" type="success" :icon="RefreshRight"
+          :loading="syncing"
+          :disabled="Boolean(vectorizingId) || rebuilding || syncing || !selectedBase?.enabled"
+          @click="syncNewContent">
+          增量同步向量索引
         </el-button>
         <template v-if="rebuilding">
           <el-tag type="warning" effect="plain">{{ rebuildTaskMessage || '正在重建' }}</el-tag>
           <el-button type="danger" plain @click="cancelRebuild">取消重建</el-button>
+        </template>
+        <template v-if="syncing">
+          <el-tag type="success" effect="plain">{{ syncTaskMessage || '正在增量同步' }}</el-tag>
+          <el-button type="danger" plain @click="cancelSync">取消同步</el-button>
         </template>
       </div>
     </header>
@@ -112,11 +123,11 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="detail">文档详情</el-dropdown-item>
                     <el-dropdown-item command="vectorize"
-                      :disabled="Boolean(vectorizingId) || rebuilding || !selectedBase?.enabled">
+                      :disabled="Boolean(vectorizingId) || rebuilding || syncing || !selectedBase?.enabled">
                       {{ row.excluded ? '重新纳入' : '重新向量化' }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="!row.excluded" command="exclude" divided
-                      :disabled="Boolean(vectorizingId) || rebuilding" class="is-danger">
+                      :disabled="Boolean(vectorizingId) || rebuilding || syncing" class="is-danger">
                       排除
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -205,7 +216,7 @@ import {
   excludeKnowledgeBaseDocument, getKnowledgeBaseDocument, getKnowledgeBaseDocuments,
   getKnowledgeBaseDocumentChunks,
   getChunkStrategies,
-  getKnowledgeBaseStats, syncRagIndex, vectorizeKnowledgeBaseDocument,
+  getKnowledgeBaseStats, syncRagIndex, syncRagIndexIncremental, vectorizeKnowledgeBaseDocument,
   getKnowledgeBases, getKnowledgeBaseUploadedDocuments, uploadKnowledgeBaseDocument,
   getRagSyncTask, getLatestRagSyncTask, cancelRagSyncTask
 } from '@/api'
@@ -680,17 +691,130 @@ async function cancelRebuild() {
 
 async function restoreRebuildTask() {
   resetRebuildState()
+  resetSyncState()
   if (!selectedKnowledgeBaseId.value) return
   try {
     const response: any = await getLatestRagSyncTask(selectedKnowledgeBaseId.value)
     const data = response?.data
     if (!data || (data.status !== 'PENDING' && data.status !== 'RUNNING')) return
-    rebuilding.value = true
-    rebuildTaskId.value = data.taskId
-    rebuildTaskMessage.value = data.message || '正在重建向量索引'
-    void pollRebuildTask(data.taskId)
+    if (data.mode === 'INCREMENTAL') {
+      syncing.value = true
+      syncTaskId.value = data.taskId
+      syncTaskMessage.value = data.message || '正在增量同步'
+      void pollSyncTask(data.taskId)
+    } else {
+      rebuilding.value = true
+      rebuildTaskId.value = data.taskId
+      rebuildTaskMessage.value = data.message || '正在重建向量索引'
+      void pollRebuildTask(data.taskId)
+    }
   } catch {
     // 无重建任务或读取失败：保持空闲状态
+  }
+}
+
+// ===================== 增量同步（内容索引新增文档） =====================
+const SYNC_POLL_INTERVAL_MS = 2000
+const syncing = ref(false)
+const syncTaskId = ref('')
+const syncTaskMessage = ref('')
+let syncPollTimer: number | null = null
+
+function stopSyncPolling() {
+  if (syncPollTimer !== null) {
+    window.clearTimeout(syncPollTimer)
+    syncPollTimer = null
+  }
+}
+
+function resetSyncState() {
+  stopSyncPolling()
+  syncing.value = false
+  syncTaskId.value = ''
+  syncTaskMessage.value = ''
+}
+
+async function pollSyncTask(taskId: string) {
+  let response: any
+  try {
+    response = await getRagSyncTask(taskId)
+  } catch {
+    // 请求拦截器已提示错误；停止轮询并恢复按钮状态
+    resetSyncState()
+    return
+  }
+  if (!response || !response.data) {
+    resetSyncState()
+    return
+  }
+  const data = response.data
+  if (data.status === 'PENDING' || data.status === 'RUNNING') {
+    syncTaskMessage.value = data.message || '正在增量同步向量索引'
+    syncPollTimer = window.setTimeout(() => {
+      syncPollTimer = null
+      void pollSyncTask(taskId)
+    }, SYNC_POLL_INTERVAL_MS)
+    return
+  }
+  resetSyncState()
+  if (data.status === 'COMPLETED') {
+    ElMessage.success(
+      `增量同步完成：新增 ${data.result?.sourceDocuments ?? 0} 篇文档、${data.result?.chunks ?? 0} 个分块`
+    )
+  } else if (data.status === 'CANCELED') {
+    ElMessage.warning(data.message || '向量索引增量同步已取消')
+  } else {
+    ElMessage.error(data.message || '向量索引增量同步失败，请检查 RAG 配置和向量模型服务')
+  }
+  void loadAll()
+}
+
+async function syncNewContent() {
+  try {
+    await ElMessageBox.confirm(
+      '仅向量化内容索引中新增且尚未收录的文档，已向量化文档不会被重复处理。',
+      '增量同步知识库',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  stopSyncPolling()
+  syncing.value = true
+  syncTaskId.value = ''
+  syncTaskMessage.value = '正在提交增量同步任务'
+  try {
+    const response: any = await syncRagIndexIncremental(selectedKnowledgeBaseId.value)
+    if (!response?.data?.taskId) {
+      resetSyncState()
+      return
+    }
+    syncTaskId.value = response.data.taskId
+    syncTaskMessage.value = response.data.message || '等待执行'
+    void pollSyncTask(syncTaskId.value)
+  } catch {
+    resetSyncState()
+    // 请求拦截器已提示后端错误信息
+  }
+}
+
+async function cancelSync() {
+  if (!syncTaskId.value) return
+  try {
+    await ElMessageBox.confirm(
+      '取消会中断增量同步，已写入的分块会保留，未处理的文档可稍后再次同步。确定取消吗？',
+      '取消增量同步',
+      { type: 'warning', confirmButtonText: '取消同步', cancelButtonText: '继续同步' }
+    )
+  } catch {
+    return
+  }
+  try {
+    const response: any = await cancelRagSyncTask(syncTaskId.value)
+    if (response?.data?.message) syncTaskMessage.value = response.data.message
+    ElMessage.success(response?.data?.message || '已发送取消请求')
+  } catch {
+    // 请求拦截器已提示后端错误信息
   }
 }
 
@@ -705,7 +829,10 @@ onMounted(async () => {
   void restoreRebuildTask()
 })
 
-onBeforeUnmount(stopRebuildPolling)
+onBeforeUnmount(() => {
+  stopRebuildPolling()
+  stopSyncPolling()
+})
 </script>
 
 <style scoped>
