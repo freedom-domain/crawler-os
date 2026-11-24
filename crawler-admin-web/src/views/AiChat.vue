@@ -536,7 +536,7 @@
                 @click="handleComposerEnter"
               >
                 <el-icon v-if="!sending"><Promotion /></el-icon>
-                <span>发送</span>
+                <span class="send-button-text">发送</span>
               </el-button>
             </div>
           </div>
@@ -2205,6 +2205,15 @@ onActivated(() => {
 :global(.assistant-select-popper .el-select-dropdown__list) {
   margin: 0;
 }
+:global(.chat-model-select-popper) {
+  min-width: 220px;
+  max-width: calc(100vw - 40px);
+}
+:global(.chat-model-select-popper .el-select-dropdown__item) {
+  white-space: normal;
+  word-break: break-all;
+  line-height: 1.5;
+}
 :global(.assistant-select-popper .el-select-dropdown__item) {
   height: auto;
   min-height: 36px;
@@ -2556,6 +2565,17 @@ onActivated(() => {
   .chat-sidebar { padding: 18px 10px 12px; }
   .message-list { padding-right: 22px; padding-left: 22px; }
   .composer-wrap { width: calc(100% - 36px); }
+  /* 过渡宽度同样用弹性布局：模型选择框占满发送按钮之外的剩余宽度，不再定宽 180px 显得过窄 */
+  .composer-toolbar { display: flex; align-items: center; gap: 8px; }
+  .composer-options { flex: 0 0 auto; }
+  .context-usage { flex: 0 0 auto; justify-content: center; }
+  .send-tools { flex: 1 1 auto; min-width: 0; gap: 8px; justify-content: flex-end; }
+  .send-tools :deep(.chat-model-selector) { width: auto; flex: 1 1 0; min-width: 96px; }
+  /* 头部改两行布局：智能体下拉框整行展示，不再定宽 220px 显得过窄 */
+  .chat-header { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 15px; }
+  .chat-heading { min-width: 0; }
+  .header-actions { width: 100%; min-width: 0; gap: 6px; }
+  .assistant-selector { width: auto; min-width: 0; flex: 1 1 110px; }
 }
 @media (min-width: 801px) and (max-width: 1100px) {
   .ai-chat-page { height: calc(100vh - 112px); }
@@ -2584,13 +2604,9 @@ onActivated(() => {
   .sidebar-resize-handle { display: none; }
   .sidebar-collapsed .chat-main { grid-column: 1; }
   .sidebar-toggle { display: none; }
-  .chat-header { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 12px 15px; }
-  .chat-heading { min-width: 0; }
-  .header-actions { width: 100%; min-width: 0; gap: 6px; }
   .assistant-manage-button :deep(.el-icon),
   .standalone-chat-button :deep(.el-icon) { font-size: 14px; }
   .collapsed-new-chat { display: none; }
-  .assistant-selector { width: auto; min-width: 0; flex: 1 1 110px; }
   .assistant-description { margin-bottom: 6px; font-size: 10px; }
   .model-badge { display: none; }
   .mobile-new-chat {
@@ -2609,10 +2625,14 @@ onActivated(() => {
   .mobile-conversation { max-width: 150px; flex: 0 0 auto; overflow: hidden; padding: 6px 10px; border: 1px solid var(--chrome-line); border-radius: 16px; background: var(--surface); color: var(--ink-700); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .mobile-conversation :deep(.el-tooltip), .mobile-conversation :deep(.el-tooltip__trigger) { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mobile-conversation.is-active { border-color: var(--teal); background: var(--tint); color: var(--teal-ink); }
-  .composer-toolbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
-  .send-tools :deep(.chat-model-selector) { width: 144px; flex-basis: 144px; }
-  .context-usage { grid-column: 2; grid-row: 1; justify-content: center; }
-  .send-tools { grid-column: 3; grid-row: 1; justify-content: flex-end; }
+  .composer-toolbar { gap: 6px; }
+  .send-tools { gap: 6px; }
+  .send-tools :deep(.chat-model-selector .el-select__placeholder),
+  .send-tools :deep(.chat-model-selector .el-select__selected-item) { font-size: 12px; }
+  /* 发送/中断按钮只留图标，把宽度让给模型选择框 */
+  .send-button { width: 36px; padding: 0; }
+  .send-button .el-icon { margin-right: 0; }
+  .send-button-text { display: none; }
   .reasoning-summary-content { display: flex; width: 100%; box-sizing: border-box; gap: 4px 10px; margin-top: 6px; margin-left: 0; }
   .reasoning-duration { min-width: 0; overflow-wrap: anywhere; }
   .message-list { padding: 16px 14px; }
@@ -2627,7 +2647,6 @@ onActivated(() => {
   .header-actions { gap: 4px; }
   .assistant-manage-button { width: 29px; }
   .mobile-new-chat { padding-right: 6px; padding-left: 6px; }
-  .send-tools :deep(.chat-model-selector) { width: 128px; flex-basis: 128px; }
   .composer { padding-right: 9px; padding-left: 9px; }
 }
 </style>
