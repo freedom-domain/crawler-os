@@ -65,6 +65,7 @@
             <el-option label="按段落" value="PARAGRAPH" />
             <el-option label="递归分隔符" value="RECURSIVE" />
             <el-option label="语义分块" value="SEMANTIC" />
+            <el-option label="代码结构" value="AST" />
           </el-select>
         </el-form-item>
         <el-form-item label="最大分块长度（字符）" prop="chunkSize">
@@ -265,7 +266,8 @@ const strategyLabel = (type: string) => ({
   FIXED_CHARACTER: '固定字符',
   PARAGRAPH: '按段落',
   RECURSIVE: '递归分隔符',
-  SEMANTIC: '语义分块'
+  SEMANTIC: '语义分块',
+  AST: '代码结构'
 }[type] || type)
 
 const loadStrategies = async () => {

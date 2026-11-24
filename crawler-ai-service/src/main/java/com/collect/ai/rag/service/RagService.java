@@ -17,6 +17,8 @@ import com.collect.ai.mapper.AiRagRerankModelMapper;
 import com.collect.ai.entity.AiKnowledgeDocument;
 import com.collect.ai.mapper.AiKnowledgeDocumentMapper;
 import com.collect.ai.mapper.SpiderMapper;
+import com.collect.ai.rag.chunk.AstChunker;
+import com.collect.ai.rag.chunk.SemanticChunker;
 import com.collect.ai.rag.config.RagProperties;
 import com.collect.ai.rag.dto.AiAssistantDtos;
 import com.collect.ai.rag.dto.KnowledgeBaseDtos;
@@ -2862,39 +2864,6 @@ public class RagService {
         }
     }
 
-    private static final String SENTENCE_BOUNDARY_CHARS = "。！？!?；;，,.:：、\n\t";
-
-    private static List<String> splitText(String text, int chunkSize, int overlap) {
-        if (text == null || text.isBlank()) return List.of();
-        List<String> chunks = new ArrayList<>();
-        int start = 0;
-        while (start < text.length()) {
-            int end = Math.min(start + chunkSize, text.length());
-            if (end < text.length()) {
-                int boundary = findSentenceBoundary(text, start, end);
-                if (boundary > start) end = boundary;
-            }
-            chunks.add(text.substring(start, end).trim());
-            if (end == text.length()) break;
-            start = Math.max(end - overlap, start + 1);
-        }
-        return chunks;
-    }
-
-    /**
-     * 从切分位置向前查找最近的句子边界（标点/换行），避免从句子中间硬切。
-     * 返回切分位置（边界字符之后）；找不到合适的边界时返回 -1。
-     */
-    private static int findSentenceBoundary(String text, int start, int end) {
-        int minCut = start + Math.max(1, (end - start) / 2);
-        for (int i = end - 1; i >= minCut; i--) {
-            if (SENTENCE_BOUNDARY_CHARS.indexOf(text.charAt(i)) >= 0) {
-                return i + 1;
-            }
-        }
-        return -1;
-    }
-
     private static AiRagVectorModel vectorModelFromProperties(RagProperties.Rag rag) {
         AiRagVectorModel model = new AiRagVectorModel();
         model.setEmbeddingProvider(rag.getEmbeddingProvider());
@@ -2936,13 +2905,32 @@ public class RagService {
         }
         // 按 Markdown 标题层级切段，让每个 chunk 携带章节上下文；
         // 无标题结构的文档退化为单段（heading 为空）。
-        List<HeadingSection> sections = splitHeadingSections(text);
+        // AST 策略跳过标题分段：代码中的注释行（Python "# xxx"、C++ 等）
+        // 会被误判为 Markdown 标题，直接把全文交给结构分块器。
+        boolean ast = ChunkStrategyService.AST.equals(strategy.getStrategyType());
+        List<HeadingSection> sections = ast
+                ? List.of(new HeadingSection("", text))
+                : splitHeadingSections(text);
         List<String> chunks = new ArrayList<>();
         List<String> headings = new ArrayList<>();
         List<String> parentTexts = new ArrayList<>();
         for (HeadingSection section : sections) {
+            if (ast) {
+                // AST：按声明边界（类/方法/函数）切分，package/import 前言作为上下文头；
+                // 超长声明被切行时，父块 = 该声明完整文本（small-to-big）
+                AstChunker.Result result = AstChunker.chunk(section.text(), chunkSize, overlap);
+                chunks.addAll(result.chunks());
+                for (int i = 0; i < result.chunks().size(); i++) {
+                    headings.add(section.heading());
+                    String parent = result.parents().get(i);
+                    parentTexts.add(parent.length() > PARENT_CHUNK_MAX_LENGTH
+                            ? parent.substring(0, PARENT_CHUNK_MAX_LENGTH)
+                            : parent);
+                }
+                continue;
+            }
             List<String> sectionChunks = switch (strategy.getStrategyType()) {
-                case ChunkStrategyService.FIXED_CHARACTER -> splitText(section.text(), chunkSize, overlap);
+                case ChunkStrategyService.FIXED_CHARACTER -> SemanticChunker.hardSplit(section.text(), chunkSize, overlap);
                 case ChunkStrategyService.PARAGRAPH -> splitParagraphs(section.text(), chunkSize, overlap);
                 case ChunkStrategyService.RECURSIVE -> splitRecursively(section.text(), chunkSize, overlap);
                 case ChunkStrategyService.SEMANTIC -> splitSemantically(section.text(), strategy, model);
@@ -3113,7 +3101,7 @@ public class RagService {
             return;
         }
         if (separatorIndex >= RECURSIVE_SEPARATORS.size()) {
-            segments.addAll(splitText(text, chunkSize, 0));
+            segments.addAll(SemanticChunker.hardSplit(text, chunkSize, 0));
             return;
         }
         List<String> split = splitKeepingSeparator(text, RECURSIVE_SEPARATORS.get(separatorIndex));
@@ -3149,7 +3137,7 @@ public class RagService {
         for (String segment : segments) {
             String value = segment.trim();
             if (value.length() > chunkSize) {
-                expanded.addAll(splitText(value, chunkSize, overlap));
+                expanded.addAll(SemanticChunker.hardSplit(value, chunkSize, overlap));
             } else if (!value.isEmpty()) {
                 expanded.add(value);
             }
@@ -3190,13 +3178,13 @@ public class RagService {
     private List<String> splitSemantically(
             String text, AiRagChunkStrategy strategy, AiRagVectorModel model) {
         int chunkSize = strategy.getChunkSize();
+        // 切句：超长句硬切到 chunkSize 以内
         List<String> sentences = new ArrayList<>();
-        for (String sentence : text.split("(?<=[。！？!?])\\s*|\\R+")) {
-            String value = sentence.trim();
-            if (value.length() > chunkSize) {
-                sentences.addAll(splitText(value, chunkSize, 0));
-            } else if (!value.isEmpty()) {
-                sentences.add(value);
+        for (String sentence : SemanticChunker.splitSentences(text)) {
+            if (sentence.length() > chunkSize) {
+                sentences.addAll(SemanticChunker.hardSplit(sentence, chunkSize, 0));
+            } else {
+                sentences.add(sentence);
             }
         }
         if (sentences.isEmpty()) return List.of();
@@ -3206,73 +3194,25 @@ public class RagService {
         int overlap = strategy.getChunkOverlap() == null
                 ? 0 : Math.max(0, Math.min(strategy.getChunkOverlap(), chunkSize / 2));
 
-        // 流式分块：按批取 embedding，边算边界边产出 chunk，
-        // 避免一次性持有全文向量，并支持最小块长度与边界重叠。
-        List<String> chunks = new ArrayList<>();
-        List<String> current = new ArrayList<>();
-        List<List<Double>> currentEmbeddings = new ArrayList<>();
-        int currentLength = 0;
-        for (int start = 0; start < sentences.size(); start += EMBEDDING_BATCH_SIZE) {
-            int end = Math.min(start + EMBEDDING_BATCH_SIZE, sentences.size());
-            List<List<Double>> batchEmbeddings = createEmbeddings(
-                    sentences.subList(start, end), model, model.getDimensions());
-            for (int j = start; j < end; j++) {
-                String sentence = sentences.get(j);
-                List<Double> embedding = batchEmbeddings.get(j - start);
-                if (!current.isEmpty()) {
-                    boolean sizeLimitReached = currentLength + 1 + sentence.length() > chunkSize;
-                    boolean semanticBoundary = cosineSimilarity(
-                            currentEmbeddings.get(currentEmbeddings.size() - 1), embedding)
-                            < threshold;
-                    boolean tooSmall = currentLength < minChunkSize;
-                    if (sizeLimitReached || (semanticBoundary && !tooSmall)) {
-                        chunks.add(String.join(" ", current));
-                        // 从上一块末尾回带完整句子作为重叠，避免边界处上下文丢失
-                        int maxCarry = Math.min(overlap,
-                                Math.max(0, chunkSize - sentence.length() - 1));
-                        List<String> carried = new ArrayList<>();
-                        List<List<Double>> carriedEmbeddings = new ArrayList<>();
-                        int carriedLength = 0;
-                        for (int k = current.size() - 1; k >= 0; k--) {
-                            int sentenceLength = current.get(k).length()
-                                    + (carried.isEmpty() ? 0 : 1);
-                            if (carriedLength + sentenceLength > maxCarry) break;
-                            carried.add(0, current.get(k));
-                            carriedEmbeddings.add(0, currentEmbeddings.get(k));
-                            carriedLength += sentenceLength;
-                        }
-                        current = carried;
-                        currentEmbeddings = carriedEmbeddings;
-                        currentLength = carriedLength;
-                    }
-                }
-                if (current.isEmpty()) {
-                    currentLength = sentence.length();
-                } else {
-                    currentLength += 1 + sentence.length();
-                }
-                current.add(sentence);
-                currentEmbeddings.add(embedding);
-            }
-        }
-        if (!current.isEmpty()) chunks.add(String.join(" ", current));
-        return chunks;
-    }
+        // 语义单元：贪心打包到 minChunkSize 字符，embedding 调用量从"每句一次"
+        // 降到"每单元一次"（约 1/8），边界检测改为单元粒度。
+        List<String> units = SemanticChunker.packUnits(sentences, minChunkSize);
 
-    private static double cosineSimilarity(List<Double> left, List<Double> right) {
-        double dotProduct = 0;
-        double leftNorm = 0;
-        double rightNorm = 0;
-        int length = Math.min(left.size(), right.size());
-        for (int i = 0; i < length; i++) {
-            double leftValue = left.get(i);
-            double rightValue = right.get(i);
-            dotProduct += leftValue * rightValue;
-            leftNorm += leftValue * leftValue;
-            rightNorm += rightValue * rightValue;
+        // 流式分块：按批取 embedding，边算边界边产出 chunk，
+        // 避免一次性持有全文向量；重叠按整单元回带。
+        List<String> chunks = new ArrayList<>();
+        SemanticChunker.CarryState state = SemanticChunker.CarryState.empty();
+        for (int start = 0; start < units.size(); start += EMBEDDING_BATCH_SIZE) {
+            int end = Math.min(start + EMBEDDING_BATCH_SIZE, units.size());
+            List<String> unitBatch = units.subList(start, end);
+            List<List<Double>> batchEmbeddings = createEmbeddings(unitBatch, model, model.getDimensions());
+            SemanticChunker.AdvanceResult result = SemanticChunker.advance(
+                    state, unitBatch, batchEmbeddings, chunkSize, minChunkSize, overlap, threshold);
+            chunks.addAll(result.chunks());
+            state = result.state();
         }
-        if (leftNorm == 0 || rightNorm == 0) return 0;
-        return dotProduct / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+        chunks.addAll(SemanticChunker.finish(state));
+        return chunks;
     }
 
     /**

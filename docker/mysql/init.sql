@@ -177,6 +177,13 @@ INSERT IGNORE INTO ai_rag_chunk_strategy (
     min_document_length, document_types, default_strategy
 ) VALUES ('默认固定字符', 'FIXED_CHARACTER', 1500, 200, 0.700, 0, 0, '', 1);
 
+-- 代码结构分块：按声明边界切分代码文件，package/import 前言作为上下文头
+INSERT IGNORE INTO ai_rag_chunk_strategy (
+    name, strategy_type, chunk_size, chunk_overlap, similarity_threshold, priority,
+    min_document_length, max_document_length, document_types, default_strategy
+) VALUES ('代码分块', 'AST', 1500, 150, 0.700, 10, 0, NULL,
+    'java,py,ts,tsx,js,jsx,go,rs,c,cpp,h,cs,sql,xml,yml,yaml,json,sh,properties,cfg', 0);
+
 CREATE TABLE IF NOT EXISTS ai_rag_vector_model (
     id BIGINT NOT NULL AUTO_INCREMENT,
     name VARCHAR(128) NOT NULL,

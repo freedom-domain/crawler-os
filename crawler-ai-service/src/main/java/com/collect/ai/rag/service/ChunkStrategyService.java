@@ -26,9 +26,10 @@ public class ChunkStrategyService {
     public static final String PARAGRAPH = "PARAGRAPH";
     public static final String RECURSIVE = "RECURSIVE";
     public static final String SEMANTIC = "SEMANTIC";
+    public static final String AST = "AST";
 
     private static final Set<String> STRATEGY_TYPES =
-            Set.of(FIXED_CHARACTER, PARAGRAPH, RECURSIVE, SEMANTIC);
+            Set.of(FIXED_CHARACTER, PARAGRAPH, RECURSIVE, SEMANTIC, AST);
 
     private final AiRagChunkStrategyMapper strategyMapper;
 
