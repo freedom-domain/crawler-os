@@ -1,6 +1,6 @@
 <template>
   <div>
-    <el-button @click="openManager">分块策略管理</el-button>
+    <el-button v-if="showTrigger" @click="openManager">分块策略管理</el-button>
 
     <el-dialog v-model="managerVisible" title="文档分块策略" width="min(1100px, 94vw)">
       <div class="strategy-header">
@@ -157,6 +157,9 @@ import {
   createChunkStrategy, deleteChunkStrategy, getChunkStrategies, updateChunkStrategy
 } from '@/api'
 
+// showTrigger 为 false 时不渲染触发按钮，仅保留弹窗，由父组件通过 open() 打开
+withDefaults(defineProps<{ showTrigger?: boolean }>(), { showTrigger: true })
+
 interface ChunkStrategy {
   id: string
   name: string
@@ -278,6 +281,8 @@ const openManager = async () => {
   managerVisible.value = true
   await loadStrategies()
 }
+
+defineExpose({ open: openManager })
 
 const openCreateStrategy = () => {
   editingStrategyId.value = null

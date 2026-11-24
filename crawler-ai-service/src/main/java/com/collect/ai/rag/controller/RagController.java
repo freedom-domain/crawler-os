@@ -77,6 +77,15 @@ public class RagController {
         return R.ok(ragService.uploadKnowledgeDocument(id, file));
     }
 
+    @Operation(summary = "删除知识库上传文档（MinIO 文件、向量分块、源文档记录）")
+    @DeleteMapping("/knowledge-bases/{id}/documents/{documentId}")
+    public R<Void> deleteKnowledgeDocument(
+            @PathVariable Long id, @PathVariable String documentId) {
+        requireAdmin();
+        ragService.deleteKnowledgeDocument(id, documentId);
+        return R.ok();
+    }
+
     @Operation(summary = "读取知识库列表")
     @GetMapping("/knowledge-bases")
     public R<java.util.List<AiKnowledgeBaseDtos.Response>> knowledgeBases() {
@@ -436,6 +445,14 @@ public class RagController {
             @RequestParam(required = false) Long knowledgeBaseId) {
         requireAdmin();
         return R.ok(ragIndexRebuildTaskService.start(knowledgeBaseId));
+    }
+
+    @Operation(summary = "清除知识库全部文档的向量索引（保留源文档）")
+    @PostMapping("/vector-index/clear")
+    public R<Void> clearVectorIndex(@RequestParam Long knowledgeBaseId) {
+        requireAdmin();
+        ragService.clearKnowledgeVectorIndex(knowledgeBaseId);
+        return R.ok();
     }
 
     @Operation(summary = "增量同步内容索引新增文档（只向量化新文档，任务异步执行）")

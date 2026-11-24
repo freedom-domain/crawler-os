@@ -25,6 +25,7 @@ public final class AiChatDtos {
     public static class SendMessageRequest {
         private String question;
         private Integer topK;
+        private Integer recallTopK;
         private Long chatModelId;
     }
 

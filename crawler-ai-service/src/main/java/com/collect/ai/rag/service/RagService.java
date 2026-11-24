@@ -1,6 +1,7 @@
 package com.collect.ai.rag.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.collect.ai.entity.AiRagExcludedDocument;
 import com.collect.ai.entity.AiRagChunkStrategy;
 import com.collect.ai.entity.AiKnowledgeBase;
@@ -34,6 +35,8 @@ import io.minio.BucketExistsArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import io.minio.errors.ErrorResponseException;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
@@ -475,6 +478,71 @@ public class RagService {
         return response;
     }
 
+    /** 彻底删除上传文档：MinIO 原始文件、向量分块、源文档记录及排除状态，不可恢复 */
+    public void deleteKnowledgeDocument(Long knowledgeBaseId, String sourceDocumentId) {
+        if (knowledgeBaseId == null) throw new BizException("请选择知识库");
+        AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+        if (base == null) throw new BizException("知识库不存在");
+        if (!"UPLOAD".equalsIgnoreCase(base.getSourceType()))
+            throw new BizException("仅上传类型知识库的文档支持删除");
+        if (!StringUtils.hasText(sourceDocumentId)) throw new BizException("文档 ID 不能为空");
+        AiKnowledgeDocument record = knowledgeDocumentMapper.selectOne(
+                new LambdaQueryWrapper<AiKnowledgeDocument>()
+                        .eq(AiKnowledgeDocument::getKnowledgeBaseId, knowledgeBaseId)
+                        .eq(AiKnowledgeDocument::getSourceDocumentId, sourceDocumentId));
+        if (record == null) throw new BizException("找不到对应的知识库上传文档");
+
+        // 先删 MinIO 文件：失败则整体报错保留数据可重试；文件已不存在时忽略
+        String bucket = StringUtils.hasText(record.getMinioBucket())
+                ? record.getMinioBucket() : uploadBucket;
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(bucket).object(record.getObjectName()).build());
+        } catch (ErrorResponseException e) {
+            String code = e.errorResponse() == null ? "" : e.errorResponse().code();
+            if (!"NoSuchKey".equals(code) && !"NoSuchBucket".equals(code)) {
+                throw new IllegalStateException("删除 MinIO 文件失败: " + e.getMessage(), e);
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("删除 MinIO 文件失败: " + e.getMessage(), e);
+        }
+
+        deleteDocumentVectorsExcept(
+                resolveKnowledgeVectorIndex(base), sourceDocumentId, List.of(), base.getId());
+        try {
+            String encodedId = URLEncoder.encode(sourceDocumentId, StandardCharsets.UTF_8)
+                    .replace("+", "%20");
+            HttpResponse<String> response = elasticsearchRequest("DELETE",
+                    "/" + properties.resolveSourceIndex() + "/_doc/" + encodedId + "?refresh=true", null);
+            if (response.statusCode() >= 300 && response.statusCode() != 404)
+                throw new IllegalStateException("删除知识库源文档失败: " + response.statusCode());
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("删除知识库源文档失败: " + e.getMessage(), e);
+        }
+        excludedDocumentMapper.delete(new LambdaQueryWrapper<AiRagExcludedDocument>()
+                .eq(AiRagExcludedDocument::getSourceIndex, properties.resolveSourceIndex())
+                .eq(AiRagExcludedDocument::getDocumentId, sourceDocumentId));
+        if (knowledgeDocumentMapper.deleteById(record.getId()) != 1)
+            throw new IllegalStateException("删除上传文档记录失败");
+    }
+
+    /** 清除知识库全部文档的向量分块：源文档与 MinIO 文件保留，之后可通过重建或重新向量化恢复 */
+    public void clearKnowledgeVectorIndex(Long knowledgeBaseId) {
+        if (knowledgeBaseId == null) throw new BizException("请选择知识库");
+        AiKnowledgeBase base = knowledgeBaseMapper.selectById(knowledgeBaseId);
+        if (base == null) throw new BizException("知识库不存在");
+        AiRagVectorModel model = vectorModelMapper.selectById(base.getVectorModelId());
+        if (model == null) throw new BizException("知识库向量模型不存在");
+        // 索引不存在时 _delete_by_query 返回 404，deleteKnowledgeVectors 已按成功处理
+        deleteKnowledgeVectors(resolveKnowledgeVectorIndex(model), base.getId());
+        // 上传文档记录回写为未向量化，保持列表向量状态一致
+        knowledgeDocumentMapper.update(null, new LambdaUpdateWrapper<AiKnowledgeDocument>()
+                .eq(AiKnowledgeDocument::getKnowledgeBaseId, knowledgeBaseId)
+                .set(AiKnowledgeDocument::getVectorized, false)
+                .set(AiKnowledgeDocument::getUpdateTime, LocalDateTime.now()));
+    }
+
     private int vectorizeUploadedDocument(
             AiKnowledgeBase base, AiRagVectorModel model, String sourceDocumentId, JsonNode source) {
         return vectorizeUploadedDocument(base, model, sourceDocumentId, source, null);
@@ -526,6 +594,11 @@ public class RagService {
         return parts.size();
     }
 
+    /**
+     * 确保知识库向量索引可用。
+     * 仅当索引不存在（404）时按完整 mapping 初始化创建；
+     * 索引已存在则直接复用，禁止删除重建或变更既有映射。
+     */
     private void ensureKnowledgeVectorIndex(AiKnowledgeBase base, AiRagVectorModel model) {
         String vectorIndex = resolveKnowledgeVectorIndex(model);
         ObjectNode mapping = objectMapper.createObjectNode();
@@ -561,14 +634,8 @@ public class RagService {
                     throw new IllegalStateException("创建知识库向量索引失败: " + created.statusCode());
             } else if (existing.statusCode() >= 300) {
                 throw new IllegalStateException("检查知识库向量索引失败: " + existing.statusCode());
-            } else {
-                HttpResponse<String> updated = elasticsearchRequest("PUT",
-                        "/" + vectorIndex + "/_mapping",
-                        toJson(mapping.path("mappings")));
-                if (updated.statusCode() >= 300)
-                    throw new IllegalStateException("更新知识库向量索引映射失败: "
-                            + updated.statusCode() + " " + updated.body());
             }
+            // 索引已存在则直接复用，不重复初始化映射
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("初始化知识库向量索引失败: " + e.getMessage(), e);
@@ -1832,10 +1899,13 @@ public class RagService {
             if (knowledgeBase != null && knowledgeBase.getRerankModelId() != null && rerankModel == null) {
                 throw new BizException("知识库关联的重排模型不存在");
             }
-            int candidateCount = rerankModel == null || knowledgeVectorModel == null
+            int configuredCandidateCount = rerankModel == null || knowledgeVectorModel == null
                     || knowledgeVectorModel.getTopK() == null
                     ? topK
                     : Math.max(1, Math.min(knowledgeVectorModel.getTopK(), 20));
+            int candidateCount = request.getRecallTopK() == null
+                    ? configuredCandidateCount
+                    : Math.max(1, Math.min(request.getRecallTopK(), 20));
             int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
                     ? knowledgeVectorModel.getDimensions()
                     : properties.resolveDimensions();
@@ -1877,6 +1947,18 @@ public class RagService {
             body.set("query", query);
 
             try {
+                ObjectNode logBody = body.deepCopy();
+                JsonNode logParams = logBody.at("/query/script_score/script/params");
+                if (!(logParams instanceof ObjectNode params)) {
+                    throw new IllegalStateException("向量检索请求参数结构无效");
+                }
+                params.put("query_vector", "[omitted; dimensions=" + queryVector.size() + "]");
+                log.info("发送向量索引检索请求: method=POST, index={}, vectorField={}, dimensions={}, "
+                                + "candidateCount={}, knowledgeBaseId={}, body={}",
+                        safeLogValue(vectorIndex, 128), vectorField, dimensions,
+                        candidateCount, knowledgeBase == null ? null : knowledgeBase.getId(),
+                        toJson(logBody));
+                long searchStartNanos = System.nanoTime();
                 HttpResponse<String> search = elasticsearchRequest("POST",
                         "/" + vectorIndex + "/_search", toJson(body));
                 if (search.statusCode() >= 300) {
@@ -1884,6 +1966,10 @@ public class RagService {
                             + " " + search.body());
                 }
                 JsonNode root = objectMapper.readTree(search.body());
+                log.info("向量索引检索请求完成: index={}, status={}, returned={}, elapsedMs={}",
+                        safeLogValue(vectorIndex, 128), search.statusCode(),
+                        root.path("hits").path("hits").size(),
+                        Duration.ofNanos(System.nanoTime() - searchStartNanos).toMillis());
                 List<RagDtos.SourceReference> candidates = new ArrayList<>();
                 for (JsonNode hit : root.path("hits").path("hits")) {
                     JsonNode source = hit.path("_source");

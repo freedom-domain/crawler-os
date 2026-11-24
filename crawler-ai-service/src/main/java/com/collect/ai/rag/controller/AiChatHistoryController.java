@@ -215,6 +215,7 @@ public class AiChatHistoryController {
         RagDtos.QueryRequest query = new RagDtos.QueryRequest();
         query.setQuestion(request.getQuestion().trim());
         query.setTopK(request.getTopK());
+        query.setRecallTopK(request.getRecallTopK());
         query.setChatModelId(request.getChatModelId());
         Long assistantId = historyService.getAssistantId(userId, conversationId);
         if (assistantId != null) {
@@ -251,6 +252,7 @@ public class AiChatHistoryController {
         RagDtos.QueryRequest query = new RagDtos.QueryRequest();
         query.setQuestion(request.getQuestion().trim());
         query.setTopK(request.getTopK());
+        query.setRecallTopK(request.getRecallTopK());
         query.setChatModelId(request.getChatModelId());
         Long streamingAssistantId = historyService.getAssistantId(userId, conversationId);
         if (streamingAssistantId != null) {

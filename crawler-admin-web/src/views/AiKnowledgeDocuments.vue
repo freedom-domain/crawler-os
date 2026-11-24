@@ -6,7 +6,7 @@
         <p>管理当前知识库的文档收录状态、向量索引及文档详情。</p>
       </div>
       <div class="heading-actions">
-        <AiChunkStrategyManager />
+        <AiChunkStrategyManager ref="chunkStrategyManagerRef" :show-trigger="false" />
         <el-select v-if="!routeKnowledgeBaseId" v-model="selectedKnowledgeBaseId" placeholder="选择知识库"
           class="base-select" popper-class="knowledge-base-select-popper"
           @change="changeKnowledgeBase">
@@ -17,17 +17,29 @@
           <el-button type="primary" :loading="uploading">上传文档</el-button>
         </el-upload>
         <el-button :icon="Refresh" :loading="refreshing" @click="loadAll">刷新</el-button>
-        <el-button type="primary" :icon="RefreshRight" :loading="rebuilding"
-          :disabled="Boolean(vectorizingId) || rebuilding || syncing || !selectedBase?.enabled"
-          @click="rebuildIndex">
-          批量重建向量索引
-        </el-button>
-        <el-button v-if="selectedBase?.sourceType === 'ES_INDEX'" type="success" :icon="RefreshRight"
-          :loading="syncing"
-          :disabled="Boolean(vectorizingId) || rebuilding || syncing || !selectedBase?.enabled"
-          @click="syncNewContent">
-          增量同步向量索引
-        </el-button>
+        <el-dropdown trigger="click" popper-class="knowledge-index-dropdown" @command="handleIndexCommand">
+          <el-button type="primary">
+            索引与策略<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="rebuild" :icon="RefreshRight" :disabled="indexActionDisabled">
+                批量重建向量索引
+              </el-dropdown-item>
+              <el-dropdown-item v-if="selectedBase?.sourceType === 'ES_INDEX'" command="sync"
+                :icon="RefreshRight" divided :disabled="indexActionDisabled">
+                增量同步向量索引
+              </el-dropdown-item>
+              <el-dropdown-item command="strategy" :icon="Operation" divided>
+                分块策略管理
+              </el-dropdown-item>
+              <el-dropdown-item command="clear" :icon="Delete" divided class="is-danger"
+                :disabled="indexActionDisabled">
+                清除向量索引
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <template v-if="rebuilding">
           <el-tag type="warning" effect="plain">{{ rebuildTaskMessage || '正在重建' }}</el-tag>
           <el-button type="danger" plain @click="cancelRebuild">取消重建</el-button>
@@ -123,12 +135,20 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="detail">文档详情</el-dropdown-item>
                     <el-dropdown-item command="vectorize"
-                      :disabled="Boolean(vectorizingId) || rebuilding || syncing || !selectedBase?.enabled">
+                      :disabled="Boolean(vectorizingId) || Boolean(deletingId) || Boolean(clearingIndex)
+                        || rebuilding || syncing || !selectedBase?.enabled">
                       {{ row.excluded ? '重新纳入' : '重新向量化' }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="!row.excluded" command="exclude" divided
-                      :disabled="Boolean(vectorizingId) || rebuilding || syncing" class="is-danger">
+                      :disabled="Boolean(vectorizingId) || Boolean(deletingId) || Boolean(clearingIndex)
+                        || rebuilding || syncing" class="is-danger">
                       排除
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="isUploadedDocument(row)" command="delete" divided
+                      :disabled="Boolean(vectorizingId) || Boolean(deletingId) || Boolean(clearingIndex)
+                        || rebuilding || syncing"
+                      class="is-danger">
+                      删除文档
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -144,7 +164,8 @@
         class="pagination" @change="loadDocuments" />
     </el-card>
 
-    <el-dialog v-model="detailVisible" :title="detail?.title || '文档详情'" width="min(900px, 94vw)">
+    <el-drawer v-model="detailVisible" :title="detail?.title || '文档详情'"
+      size="min(900px, 94vw)" direction="rtl" append-to-body class="document-detail-drawer">
       <div v-loading="detailLoading" class="detail-content">
         <div v-if="detail" class="detail-meta">
           <span>文档 ID：{{ detail.id }}</span>
@@ -183,7 +204,7 @@
           </el-tab-pane>
         </el-tabs>
       </div>
-    </el-dialog>
+    </el-drawer>
 
     <el-dialog v-model="vectorizeDialogVisible" title="重新向量化文档" width="520px">
       <p class="vectorize-dialog-tip">
@@ -208,7 +229,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MoreFilled, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, MoreFilled, Operation, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import AiChunkStrategyManager from '@/components/AiChunkStrategyManager.vue'
@@ -217,7 +238,9 @@ import {
   getKnowledgeBaseDocumentChunks,
   getChunkStrategies,
   getKnowledgeBaseStats, syncRagIndex, syncRagIndexIncremental, vectorizeKnowledgeBaseDocument,
+  clearKnowledgeVectorIndex,
   getKnowledgeBases, getKnowledgeBaseUploadedDocuments, uploadKnowledgeBaseDocument,
+  deleteKnowledgeBaseUploadedDocument,
   getRagSyncTask, getLatestRagSyncTask, cancelRagSyncTask
 } from '@/api'
 
@@ -302,6 +325,7 @@ const statsLoading = ref(false)
 const refreshing = ref(false)
 const rebuilding = ref(false)
 const vectorizingId = ref('')
+const deletingId = ref('')
 const vectorizeDialogVisible = ref(false)
 const vectorizeDocumentRow = ref<KnowledgeDocument | null>(null)
 const vectorizeStrategyId = ref<string>('')
@@ -351,6 +375,7 @@ function handleDocumentCommand(command: string, row: KnowledgeDocument) {
   if (command === 'detail') void showDetail(row)
   else if (command === 'vectorize') void openVectorizeDialog(row)
   else if (command === 'exclude') void excludeDocument(row)
+  else if (command === 'delete') void deleteDocument(row)
 }
 
 async function openVectorizeDialog(row: KnowledgeDocument) {
@@ -520,6 +545,29 @@ async function vectorizeDocument(row: KnowledgeDocument, strategyId?: string) {
     ElMessage.error('文档向量化失败，请检查向量模型服务')
   } finally {
     vectorizingId.value = ''
+  }
+}
+
+async function deleteDocument(row: KnowledgeDocument) {
+  try {
+    await ElMessageBox.confirm(
+      '将删除该上传文档的原始文件（MinIO）、向量分块和源文档记录，删除后不可恢复。确定删除吗？',
+      '删除上传文档',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  deletingId.value = row.id
+  try {
+    await deleteKnowledgeBaseUploadedDocument(selectedKnowledgeBaseId.value, row.id)
+    if (detailDocumentId.value === row.id) detailVisible.value = false
+    ElMessage.success('上传文档已删除')
+    await loadAll()
+  } catch {
+    ElMessage.error('删除上传文档失败，请稍后重试')
+  } finally {
+    deletingId.value = ''
   }
 }
 
@@ -713,6 +761,32 @@ async function restoreRebuildTask() {
   }
 }
 
+// ===================== 清除向量索引 =====================
+const clearingIndex = ref(false)
+
+async function clearVectorIndex() {
+  if (!selectedKnowledgeBaseId.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将删除知识库“${selectedBase.value?.name || ''}”全部文档的向量分块，源文档与上传文件保留，之后可通过“批量重建向量索引”或“重新向量化”恢复。确定清除吗？`,
+      '清除向量索引',
+      { type: 'warning', confirmButtonText: '清除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  clearingIndex.value = true
+  try {
+    await clearKnowledgeVectorIndex(selectedKnowledgeBaseId.value)
+    ElMessage.success('知识库向量索引已清除')
+    await loadAll()
+  } catch {
+    ElMessage.error('清除向量索引失败，请检查 ES 连接和知识库配置')
+  } finally {
+    clearingIndex.value = false
+  }
+}
+
 // ===================== 增量同步（内容索引新增文档） =====================
 const SYNC_POLL_INTERVAL_MS = 2000
 const syncing = ref(false)
@@ -818,6 +892,20 @@ async function cancelSync() {
   }
 }
 
+// ===================== 头部“索引与策略”下拉菜单 =====================
+const chunkStrategyManagerRef = ref<InstanceType<typeof AiChunkStrategyManager> | null>(null)
+const indexActionDisabled = computed(
+  () => Boolean(vectorizingId.value) || Boolean(deletingId.value) || clearingIndex.value
+    || rebuilding.value || syncing.value || !selectedBase.value?.enabled
+)
+
+function handleIndexCommand(command: string) {
+  if (command === 'rebuild') void rebuildIndex()
+  else if (command === 'sync') void syncNewContent()
+  else if (command === 'strategy') chunkStrategyManagerRef.value?.open()
+  else if (command === 'clear') void clearVectorIndex()
+}
+
 watch(routeKnowledgeBaseId, (routeId) => {
   selectedKnowledgeBaseId.value = routeId
   void loadAll()
@@ -866,9 +954,20 @@ onBeforeUnmount(() => {
   color: var(--el-color-danger);
   background: var(--el-color-danger-light-9);
 }
-.detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); }
+:global(.document-detail-drawer .el-drawer__header) { margin-bottom: 16px; }
+:global(.document-detail-drawer .el-drawer__body) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: 0;
+}
+.detail-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.detail-content :deep(.el-tabs) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.detail-content :deep(.el-tabs__content) { flex: 1; min-height: 0; }
+.detail-content :deep(.el-tab-pane) { height: 100%; }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--el-text-color-secondary); flex-shrink: 0; margin-bottom: 12px; }
 .vectorize-dialog-tip { margin: 0 0 14px; color: var(--el-text-color-secondary); font-size: 13px; line-height: 1.6; }
-.document-content { max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.document-content { height: 100%; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .document-markdown { white-space: normal; }
 .document-markdown :deep(:first-child) { margin-top: 0; }
 .document-markdown :deep(:last-child) { margin-bottom: 0; }
@@ -920,7 +1019,7 @@ onBeforeUnmount(() => {
 }
 .document-markdown :deep(th) { background: var(--el-fill-color-light); }
 .document-markdown :deep(img) { max-width: 100%; height: auto; }
-.chunk-list { margin-top: 4px; }
+.chunk-list { margin-top: 4px; height: 100%; overflow-y: auto; }
 .chunk-count { margin-left: 8px; }
 .chunk-content { max-height: 320px; overflow: auto; margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 900px) {

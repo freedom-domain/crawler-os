@@ -59,6 +59,8 @@ export const uploadKnowledgeBaseDocument = (id: string, file: File) => {
     timeout: 0
   })
 }
+export const deleteKnowledgeBaseUploadedDocument = (id: string, documentId: string) =>
+  request.delete(`/ai/rag/knowledge-bases/${id}/documents/${encodeURIComponent(documentId)}`)
 export const getVectorModels = () => request.get('/ai/rag/vector-models')
 export const getVectorModelPage = (params: AiManagementPageParams) =>
   request.get('/ai/rag/vector-models/page', { params })
@@ -119,6 +121,11 @@ export const syncRagIndexIncremental = (knowledgeBaseId?: string) =>
   request.post('/ai/rag/sync/incremental', undefined, {
     timeout: 0,
     params: knowledgeBaseId ? { knowledgeBaseId } : undefined
+  })
+export const clearKnowledgeVectorIndex = (knowledgeBaseId: string) =>
+  request.post('/ai/rag/vector-index/clear', undefined, {
+    timeout: 0,
+    params: { knowledgeBaseId }
   })
 export const getRagSyncTask = (taskId: string) =>
   request.get(`/ai/rag/sync/tasks/${encodeURIComponent(taskId)}`)
@@ -216,9 +223,19 @@ export const getChatSourceDocumentChunkCount = (
 })
 export const clearChatMessages = (id: number) =>
   request.delete(`/ai/chat/conversations/${id}/messages`, chatRequestConfig)
-export const sendChatMessage = (id: number, data: { question: string; topK: number; chatModelId?: string | number }) =>
+export const sendChatMessage = (id: number, data: {
+  question: string
+  topK: number
+  recallTopK: number
+  chatModelId?: string | number
+}) =>
   request.post(`/ai/chat/conversations/${id}/messages`, data, chatRequestConfig)
-export const streamChatMessage = (id: number, data: { question: string; topK: number; chatModelId?: string | number }) => {
+export const streamChatMessage = (id: number, data: {
+  question: string
+  topK: number
+  recallTopK: number
+  chatModelId?: string | number
+}) => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
   const token = useUserStore().token
   if (token) headers.Authorization = `Bearer ${token}`

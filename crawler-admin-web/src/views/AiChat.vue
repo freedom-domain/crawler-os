@@ -445,22 +445,26 @@
           />
           <div class="composer-toolbar">
             <div class="composer-options">
-              <el-popover trigger="click" placement="top-start" :width="220" popper-class="retrieval-settings-popover">
+              <el-popover trigger="click" placement="top-start" :width="240" popper-class="retrieval-settings-popover">
                 <template #reference>
                   <el-button
                     class="retrieval-settings-trigger"
                     text
                     circle
-                    aria-label="编辑检索数量"
-                    :title="`检索数量：${topK} 条`"
+                    aria-label="编辑召回和返回数量"
+                    :title="`召回 TOP K：${recallTopK} 条；返回数量：${topK} 条`"
                   >
                     <el-icon><Setting /></el-icon>
                   </el-button>
                 </template>
                 <div class="retrieval-settings">
-                  <span>检索数量</span>
-                  <el-select v-model="topK" size="small" aria-label="检索数量">
-                    <el-option v-for="count in retrievalOptions" :key="count" :label="`${count} 条`" :value="count" />
+                  <span>召回 TOP K</span>
+                  <el-select v-model="recallTopK" size="small" aria-label="召回 TOP K">
+                    <el-option v-for="count in recallOptions" :key="count" :label="`${count} 条`" :value="count" />
+                  </el-select>
+                  <span>返回数量</span>
+                  <el-select v-model="topK" size="small" aria-label="返回数量">
+                    <el-option v-for="count in returnOptions" :key="count" :label="`${count} 条`" :value="count" />
                   </el-select>
                 </div>
               </el-popover>
@@ -859,6 +863,7 @@ const readChatSelection = () => {
 }
 const savedChatSelection = readChatSelection()
 const savedTopK = Number(savedChatSelection.topK)
+const savedRecallTopK = Number(savedChatSelection.recallTopK)
 const sidebarCollapsed = ref(savedChatSelection.sidebarCollapsed === true)
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
@@ -1147,7 +1152,13 @@ const copyMessage = async (content: string, successMessage = '回答已复制') 
 }
 const draft = ref('')
 const topK = ref(Number.isInteger(savedTopK) && savedTopK >= 1 && savedTopK <= 20 ? savedTopK : 5)
-const retrievalOptions = computed(() => [...new Set([3, 5, 8, 10, topK.value])].sort((a, b) => a - b))
+const recallTopK = ref(
+  Number.isInteger(savedRecallTopK) && savedRecallTopK >= 1 && savedRecallTopK <= 20
+    ? savedRecallTopK
+    : 5
+)
+const returnOptions = computed(() => [...new Set([3, 5, 8, 10, topK.value])].sort((a, b) => a - b))
+const recallOptions = computed(() => [...new Set([3, 5, 8, 10, 20, recallTopK.value])].sort((a, b) => a - b))
 const saveChatSelection = () => {
   const current = readChatSelection()
   const next = {
@@ -1155,11 +1166,12 @@ const saveChatSelection = () => {
     assistantId: selectedAssistantId.value == null ? undefined : String(selectedAssistantId.value),
     chatModelId: selectedChatModelId.value == null ? undefined : String(selectedChatModelId.value),
     topK: topK.value,
+    recallTopK: recallTopK.value,
     sidebarCollapsed: sidebarCollapsed.value
   }
   localStorage.setItem(CHAT_SELECTION_STORAGE_KEY, JSON.stringify(next))
 }
-watch([selectedAssistantId, selectedChatModelId, topK, sidebarCollapsed], saveChatSelection)
+watch([selectedAssistantId, selectedChatModelId, topK, recallTopK, sidebarCollapsed], saveChatSelection)
 const sending = ref(false)
 const cancelingMessageIds = ref(new Set<number>())
 const streamConnections = new Map<number, Promise<void>>()
@@ -1171,7 +1183,7 @@ const slashCommands = [
   { name: 'new', command: '/new', description: '开始一个新对话', usage: 'Enter', icon: Plus },
   { name: 'clear', command: '/clear', description: '清空当前对话消息', usage: 'Enter', icon: Delete },
   { name: 'retry', command: '/retry', description: '重新发送上一个问题', usage: 'Enter', icon: Refresh },
-  { name: 'topk', command: '/topk <数量>', description: '设置检索数量（1–20）', usage: '1–20', icon: Cpu }
+  { name: 'topk', command: '/topk <数量>', description: '设置返回数量（1–20）', usage: '1–20', icon: Cpu }
 ]
 const visibleSlashCommands = computed(() => {
   const match = draft.value.match(/^\/([^\s]*)/)
@@ -1511,7 +1523,7 @@ const runSlashCommand = async (name: string, argument = '') => {
     case 'help':
       draft.value = ''
       slashCommandsDismissed.value = true
-      ElMessage.info('可用命令：/new 新对话、/clear 清空当前对话、/retry 重试上一个问题、/topk 1–20 设置检索数量。')
+      ElMessage.info('可用命令：/new 新对话、/clear 清空当前对话、/retry 重试上一个问题、/topk 1–20 设置返回数量。')
       return
     case 'new':
       draft.value = ''
@@ -1569,7 +1581,7 @@ const runSlashCommand = async (name: string, argument = '') => {
       topK.value = value
       draft.value = ''
       slashCommandsDismissed.value = true
-      ElMessage.success(`检索数量已设置为 ${value}`)
+      ElMessage.success(`返回数量已设置为 ${value}`)
       return
     }
     default:
@@ -1870,6 +1882,7 @@ const sendMessage = async (questionOverride?: string) => {
     const response = await streamChatMessage(conversation.id, {
       question,
       topK: topK.value,
+      recallTopK: recallTopK.value,
       chatModelId: selectedChatModelId.value
     })
     responseMessage.id = Number(response.headers.get('X-Chat-Message-Id')) || undefined

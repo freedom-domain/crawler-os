@@ -15,6 +15,7 @@ public final class RagDtos {
     public static class QueryRequest {
         private String question;
         private Integer topK;
+        private Integer recallTopK;
         private Long spiderId;
         private String spiderGroup;
         private Long knowledgeBaseId;

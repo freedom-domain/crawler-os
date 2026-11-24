@@ -4,8 +4,6 @@ import com.collect.ai.rag.config.RagProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -18,6 +16,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 
+/**
+ * RAG 向量索引初始化器。
+ *
+ * <p>应用启动（重启）时不创建向量索引、不向其中写入任何数据；
+ * 索引仅在需要时按需初始化：更新 RAG 配置（{@link com.collect.ai.rag.service.RagConfigService}）
+ * 或知识库向量化首次写入前（{@link com.collect.ai.rag.service.RagService}）。</p>
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -34,15 +39,6 @@ public class RagIndexInitializer {
 
     @Value("${spring.elasticsearch.password:}")
     private String elasticsearchPassword;
-
-    @EventListener(ApplicationReadyEvent.class)
-    public void initVectorIndex() {
-        try {
-            ensureVectorIndex();
-        } catch (Exception e) {
-            log.error("初始化 RAG 向量索引失败: {}", e.getMessage(), e);
-        }
-    }
 
     public void ensureVectorIndex() {
         String index = properties.resolveVectorIndex();

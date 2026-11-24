@@ -96,7 +96,28 @@ Kafka 任务 topic 按环境隔离：默认环境使用 `spider_task_topic-defau
 ./scripts/build-local.sh -pl crawler-gateway -am
 ```
 
-本地运行后端（需 JDK 21）：
+本地运行后端（需 JDK 21）。每个服务配有独立的 Maven 启动脚本：脚本自动检查 Maven 使用的
+JDK 版本（需 21+）、构建该模块及其依赖（crawler-common）到本地仓库，再以 `spring-boot:run`
+启动，默认激活 `local` profile，并带上与 Docker 入口一致的
+`-Dnacos.logging.default.config.enabled=false`：
+
+```bash
+./scripts/run-gateway.sh    # API 网关 (8080)
+./scripts/run-user.sh       # 用户/角色/权限 (8081)
+./scripts/run-spider.sh     # 爬虫/任务/调度 (8082)
+./scripts/run-search.sh     # 数据搜索 (8083)
+./scripts/run-file.sh       # 文件管理 (8084)
+./scripts/run-finance.sh    # 模拟投资/基金行情 (8085)
+./scripts/run-ip.sh         # Cloudflare IP 管理 (8086)
+./scripts/run-ai.sh         # AI/RAG (8087)
+./scripts/run-worker.sh     # 爬虫执行集群 (8090)
+```
+
+脚本支持的环境变量与参数：`SPRING_PROFILES=default` 切换 profile、`SKIP_BUILD=1` 跳过构建
+步骤、`-h` 查看帮助；其余参数（如 `-Dserver.port=9080`）原样透传给 Maven。worker 首次运行前
+需安装 Playwright 浏览器内核：`mvn com.microsoft.playwright:playwright:1.51.0:install`。
+
+也可以直接用 Maven 启动（需先确保依赖已构建安装）：
 
 ```bash
 # 依次启动（每个模块独立端口）
