@@ -35,11 +35,17 @@ public class RerankService {
 
     private final ObjectMapper objectMapper;
 
-    public List<Result> rerank(AiRagRerankModel model, String query, List<String> documents) {
+    /**
+     * 重排全部候选文档，仅返回相关度最高的前 topN 条（重排 API 的 top_n/top_k）。
+     * topN <= 0 时返回全部候选。
+     */
+    public List<Result> rerank(AiRagRerankModel model, String query, List<String> documents, int topN) {
         if (model == null || !StringUtils.hasText(model.getRerankBaseUrl())
                 || !StringUtils.hasText(model.getRerankModel())) {
             throw new BizException("重排模型配置不完整");
         }
+        int limit = topN <= 0 ? documents.size()
+                : Math.max(1, Math.min(topN, documents.size()));
         String provider = model.getRerankProvider() == null
                 ? "" : model.getRerankProvider().trim().toLowerCase(Locale.ROOT);
         URI endpoint = null;
@@ -53,15 +59,15 @@ public class RerankService {
                 input.set("documents", objectMapper.valueToTree(documents));
                 ObjectNode parameters = body.putObject("parameters");
                 parameters.put("return_documents", false);
-                parameters.put("top_n", documents.size());
+                parameters.put("top_n", limit);
             } else {
                 body.put("model", model.getRerankModel());
                 body.put("query", query);
                 body.set("documents", objectMapper.valueToTree(documents));
-                body.put("top_n", documents.size());
+                body.put("top_n", limit);
                 if ("voyage".equals(provider)) {
                     body.remove("top_n");
-                    body.put("top_k", documents.size());
+                    body.put("top_k", limit);
                 }
             }
 
@@ -111,15 +117,14 @@ public class RerankService {
                 throw new IllegalStateException("重排服务未返回任何结果");
             }
 
-            List<Result> orderedResults = new ArrayList<>(documents.size());
-            orderedResults.addAll(ranked);
-            for (int i = 0; i < documents.size(); i++) {
-                if (!seen.contains(i)) orderedResults.add(new Result(i, 0.0));
-            }
+            // top_n < documents.size() 时 API 只返回前 N 条，未返回的不属于"未打分"，不再补 0 分；
+            // 按分数降序（稳定排序，同分保持 API 返回顺序）
+            ranked.sort(java.util.Comparator.comparingDouble(Result::score).reversed());
+            if (ranked.size() > limit) ranked = new ArrayList<>(ranked.subList(0, limit));
             log.info("重排模型调用成功 provider={} model={} endpoint={} candidates={} ranked={} durationMs={}",
                     provider, model.getRerankModel(), endpoint, documents.size(), ranked.size(),
                     Duration.ofNanos(System.nanoTime() - startTime).toMillis());
-            return orderedResults;
+            return ranked;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("重排模型调用被中断 provider={} model={} endpoint={} durationMs={}",

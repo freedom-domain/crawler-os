@@ -725,9 +725,9 @@ async function loadKnowledgeDocumentContext() {
 }
 
 function beforeUpload(file: File) {
-  const allowed = /\.(txt|md|markdown|pdf|doc|docx|xls|xlsx|ppt|pptx|csv|rtf)$/i
+  const allowed = /\.(txt|md|markdown|pdf|doc|docx|xls|xlsx|ppt|pptx|csv|rtf|epub)$/i
   if (!allowed.test(file.name)) {
-    ElMessage.error('仅支持 TXT、Markdown、PDF、Word、Excel、PPT、CSV、RTF 文档')
+    ElMessage.error('仅支持 TXT、Markdown、PDF、Word、Excel、PPT、CSV、RTF、EPUB 文档')
     return false
   }
   if (file.size > 50 * 1024 * 1024) {

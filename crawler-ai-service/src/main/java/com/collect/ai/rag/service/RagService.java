@@ -404,7 +404,7 @@ public class RagService {
         try (java.io.InputStream input = file.getInputStream()) {
             content = isMarkdownDocument(originalName, file.getContentType())
                     ? decodeMarkdown(input)
-                    : extractTextWithTika(input);
+                    : extractTextWithTika(input, originalName);
         } catch (Exception e) {
             throw new IllegalStateException("文档解析失败: " + e.getMessage(), e);
         }
@@ -1947,6 +1947,8 @@ public class RagService {
             int candidateCount = request.getRecallTopK() == null
                     ? configuredCandidateCount
                     : Math.max(1, Math.min(request.getRecallTopK(), 20));
+            // 重排返回以聊天窗口的返回数量为主：召回池不得小于返回数量，保证重排有足够候选
+            int recallPoolSize = Math.max(candidateCount, topK);
             int dimensions = knowledgeVectorModel != null && knowledgeVectorModel.getDimensions() != null
                     ? knowledgeVectorModel.getDimensions()
                     : properties.resolveDimensions();
@@ -1962,7 +1964,7 @@ public class RagService {
 
             ObjectNode scriptScore = objectMapper.createObjectNode();
             ObjectNode body = objectMapper.createObjectNode();
-            body.put("size", candidateCount);
+            body.put("size", recallPoolSize);
             body.set("_source", objectMapper.valueToTree(List.of(
                     "doc_id", "chunk_id", "title", "heading", "content", "parent_text", "url", "spiderName")));
             ObjectNode searchFilter = filter;
@@ -1995,9 +1997,9 @@ public class RagService {
                 }
                 params.put("query_vector", "[omitted; dimensions=" + queryVector.size() + "]");
                 log.info("发送向量索引检索请求: method=POST, index={}, vectorField={}, dimensions={}, "
-                                + "candidateCount={}, knowledgeBaseId={}, body={}",
+                                + "candidateCount={}, returnTopK={}, knowledgeBaseId={}, body={}",
                         safeLogValue(vectorIndex, 128), vectorField, dimensions,
-                        candidateCount, knowledgeBase == null ? null : knowledgeBase.getId(),
+                        recallPoolSize, topK, knowledgeBase == null ? null : knowledgeBase.getId(),
                         toJson(logBody));
                 long searchStartNanos = System.nanoTime();
                 HttpResponse<String> search = elasticsearchRequest("POST",
@@ -2040,11 +2042,12 @@ public class RagService {
                     if (!duplicate) candidates.add(ref);
                 }
                 if (rerankModel != null && !candidates.isEmpty()) {
+                    // 全部召回候选进重排，由重排 API 按 top_n = 返回数量返回最优的 topK 条
                     List<String> documents = candidates.stream()
                             .map(candidate -> candidate.getTitle() + "\n" + candidate.getSnippet())
                             .toList();
                     List<RerankService.Result> ranked = rerankService.rerank(
-                            rerankModel, request.getQuestion(), documents);
+                            rerankModel, request.getQuestion(), documents, topK);
                     for (RerankService.Result result : ranked) {
                         RagDtos.SourceReference candidate = candidates.get(result.index());
                         candidate.setScore(result.score());
@@ -3107,10 +3110,15 @@ public class RagService {
         return new String(bytes, StandardCharsets.UTF_8).replace("\r\n", "\n");
     }
 
-    private static String extractTextWithTika(java.io.InputStream input) throws Exception {
+    private static String extractTextWithTika(java.io.InputStream input, String fileName) throws Exception {
         BodyContentHandler handler = new BodyContentHandler(-1);
+        Metadata metadata = new Metadata();
+        // 标准 EPUB 包可凭 mimetype 条目自动检测；扩展名为 .epub 时预置 Content-Type 兜底非标准包
+        if (fileName != null && fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".epub")) {
+            metadata.set(Metadata.CONTENT_TYPE, "application/epub+zip");
+        }
         AutoDetectParser parser = new AutoDetectParser();
-        parser.parse(input, handler, new Metadata(), new ParseContext());
+        parser.parse(input, handler, metadata, new ParseContext());
         return handler.toString();
     }
 
