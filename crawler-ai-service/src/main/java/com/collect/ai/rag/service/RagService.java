@@ -63,6 +63,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.Map;
 import java.util.Set;
@@ -2015,25 +2016,8 @@ public class RagService {
                         Duration.ofNanos(System.nanoTime() - searchStartNanos).toMillis());
                 List<RagDtos.SourceReference> candidates = new ArrayList<>();
                 for (JsonNode hit : root.path("hits").path("hits")) {
-                    JsonNode source = hit.path("_source");
-                    RagDtos.SourceReference ref = new RagDtos.SourceReference();
-                    ref.setId(source.path("doc_id").asText());
-                    ref.setChunkId(source.path("chunk_id").asText(""));
-                    ref.setKnowledgeBaseId(knowledgeBase == null ? null : knowledgeBase.getId());
-                    ref.setTitle(source.path("title").asText(""));
-                    ref.setHeading(source.path("heading").asText(""));
-                    ref.setUrl(source.path("url").asText(""));
-                    ref.setSpiderName(source.path("spiderName").asText(""));
-                    ref.setSourceType(knowledgeBase == null ? "" : knowledgeBase.getSourceType());
-                    ref.setScore(hit.path("_score").asDouble(0));
-                    String text = source.path("content").asText("");
-                    ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));
-                    // small-to-big：命中子块后用父块（章节全文）补充上下文
-                    String parentText = source.path("parent_text").asText("");
-                    if (StringUtils.hasText(parentText) && parentText.length() > text.length()) {
-                        ref.setSnippet(parentText.length() <= 2000
-                                ? parentText : parentText.substring(0, 2000));
-                    }
+                    RagDtos.SourceReference ref = toSourceReference(
+                            hit.path("_source"), knowledgeBase, hit.path("_score").asDouble(0));
                     boolean duplicate = sources.stream()
                             .anyMatch(existing -> existing.getId().equals(ref.getId())
                                     && existing.getSnippet().equals(ref.getSnippet()))
@@ -2041,6 +2025,10 @@ public class RagService {
                                     && existing.getSnippet().equals(ref.getSnippet()));
                     if (!duplicate) candidates.add(ref);
                 }
+                // 混合召回：IK 全文检索后与向量召回做 RRF 融合
+                List<RagDtos.SourceReference> fullTextCandidates = searchFullTextCandidates(
+                        vectorIndex, request.getQuestion(), recallPoolSize, knowledgeBase, filter);
+                candidates = fuseRrfCandidates(candidates, fullTextCandidates);
                 if (rerankModel != null && !candidates.isEmpty()) {
                     // 全部召回候选进重排，由重排 API 按 top_n = 返回数量返回最优的 topK 条
                     List<String> documents = candidates.stream()
@@ -2882,6 +2870,108 @@ public class RagService {
         filters.add(existing);
         filters.add(additional);
         return objectMapper.createObjectNode().set("bool", bool);
+    }
+
+    /** 将 ES _source 转为召回候选（id=doc_id；small-to-big 用父块扩展摘要） */
+    private RagDtos.SourceReference toSourceReference(JsonNode source, AiKnowledgeBase knowledgeBase, double score) {
+        RagDtos.SourceReference ref = new RagDtos.SourceReference();
+        ref.setId(source.path("doc_id").asText());
+        ref.setChunkId(source.path("chunk_id").asText(""));
+        ref.setKnowledgeBaseId(knowledgeBase == null ? null : knowledgeBase.getId());
+        ref.setTitle(source.path("title").asText(""));
+        ref.setHeading(source.path("heading").asText(""));
+        ref.setUrl(source.path("url").asText(""));
+        ref.setSpiderName(source.path("spiderName").asText(""));
+        ref.setSourceType(knowledgeBase == null ? "" : knowledgeBase.getSourceType());
+        ref.setScore(score);
+        String text = source.path("content").asText("");
+        ref.setSnippet(text.length() <= 500 ? text : text.substring(0, 500));
+        // small-to-big：命中子块后用父块（章节全文）补充上下文
+        String parentText = source.path("parent_text").asText("");
+        if (StringUtils.hasText(parentText) && parentText.length() > text.length()) {
+            ref.setSnippet(parentText.length() <= 2000
+                    ? parentText : parentText.substring(0, 2000));
+        }
+        return ref;
+    }
+
+    /**
+     * 全文召回：IK 分词匹配 heading/title/content（权重 heading^3 > title^2 > content），
+     * 与向量召回相同的 size 与范围过滤；失败时返回空列表，退化为纯向量召回。
+     */
+    private List<RagDtos.SourceReference> searchFullTextCandidates(String vectorIndex, String question, int size,
+            AiKnowledgeBase knowledgeBase, ObjectNode spiderFilter) {
+        if (!StringUtils.hasText(question)) return List.of();
+        try {
+            ObjectNode multiMatch = objectMapper.createObjectNode();
+            multiMatch.put("query", question);
+            multiMatch.put("type", "best_fields");
+            multiMatch.set("fields", objectMapper.valueToTree(List.of("heading^3", "title^2", "content")));
+            ObjectNode boolQuery = objectMapper.createObjectNode();
+            boolQuery.set("must", objectMapper.createArrayNode()
+                    .add(objectMapper.createObjectNode().set("multi_match", multiMatch)));
+            ObjectNode searchFilter = spiderFilter;
+            if (knowledgeBase != null) {
+                ObjectNode kbFilter = objectMapper.createObjectNode();
+                kbFilter.putObject("term").put("knowledgeBaseId", knowledgeBase.getId());
+                searchFilter = combineFilters(searchFilter, kbFilter);
+            }
+            if (searchFilter != null) {
+                boolQuery.set("filter", objectMapper.createArrayNode().add(searchFilter));
+            }
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("size", size);
+            body.set("_source", objectMapper.valueToTree(List.of(
+                    "doc_id", "chunk_id", "title", "heading", "content", "parent_text", "url", "spiderName")));
+            body.set("query", objectMapper.createObjectNode().set("bool", boolQuery));
+            HttpResponse<String> search = elasticsearchRequest("POST",
+                    "/" + vectorIndex + "/_search", toJson(body));
+            if (search.statusCode() >= 300) {
+                throw new IllegalStateException("全文检索失败: " + search.statusCode() + " " + search.body());
+            }
+            JsonNode root = objectMapper.readTree(search.body());
+            List<RagDtos.SourceReference> refs = new ArrayList<>();
+            for (JsonNode hit : root.path("hits").path("hits")) {
+                refs.add(toSourceReference(hit.path("_source"), knowledgeBase, hit.path("_score").asDouble(0)));
+            }
+            log.info("全文索引检索请求完成: index={}, size={}, knowledgeBaseId={}, returned={}",
+                    safeLogValue(vectorIndex, 128), size,
+                    knowledgeBase == null ? null : knowledgeBase.getId(), refs.size());
+            return refs;
+        } catch (Exception e) {
+            log.warn("全文召回失败，退化为纯向量召回: index={}, error={}",
+                    safeLogValue(vectorIndex, 128), e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
+     * RRF（Reciprocal Rank Fusion）融合向量召回与全文召回：
+     * score(d) = Σ 1/(k + rank)，rank 从 1 开始，k=60；同一 doc 两路都命中时分数相加，
+     * 融合分写回 score（无重排时下游按 score 排序即保持 RRF 顺序），同分保持向量召回顺序（稳定排序）。
+     */
+    private List<RagDtos.SourceReference> fuseRrfCandidates(List<RagDtos.SourceReference> vectorCandidates,
+            List<RagDtos.SourceReference> fullTextCandidates) {
+        if (fullTextCandidates.isEmpty()) return vectorCandidates;
+        if (vectorCandidates.isEmpty()) return fullTextCandidates;
+        Map<String, Double> scores = new LinkedHashMap<>();
+        Map<String, RagDtos.SourceReference> byId = new LinkedHashMap<>();
+        addRrfScores(scores, byId, vectorCandidates);
+        addRrfScores(scores, byId, fullTextCandidates);
+        List<RagDtos.SourceReference> fused = new ArrayList<>(byId.values());
+        fused.forEach(ref -> ref.setScore(scores.get(ref.getId())));
+        fused.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
+        return fused;
+    }
+
+    private static void addRrfScores(Map<String, Double> scores, Map<String, RagDtos.SourceReference> byId,
+            List<RagDtos.SourceReference> candidates) {
+        final int k = 60;
+        for (int rank = 0; rank < candidates.size(); rank++) {
+            RagDtos.SourceReference ref = candidates.get(rank);
+            byId.putIfAbsent(ref.getId(), ref);
+            scores.merge(ref.getId(), 1.0 / (k + rank + 1), Double::sum);
+        }
     }
 
     private RagDtos.QueryResponse emptyQueryResponse(
