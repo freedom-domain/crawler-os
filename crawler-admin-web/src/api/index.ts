@@ -221,10 +221,31 @@ export const chatMessages = (id: number) =>
 export const getChatSourceDocument = (
   conversationId: number,
   documentId: string,
-  knowledgeBaseId?: string
+  knowledgeBaseId?: string,
+  withContent = true
 ) => request.get(`/ai/chat/conversations/${conversationId}/source`, {
   ...chatRequestConfig,
-  params: { documentId, ...(knowledgeBaseId ? { knowledgeBaseId } : {}) }
+  params: {
+    documentId,
+    ...(knowledgeBaseId ? { knowledgeBaseId } : {}),
+    ...(withContent ? {} : { content: false })
+  }
+})
+/** 按字符偏移分页读取聊天来源文档原文（与文档详情 /content 接口一致：服务端切片，页尾对齐换行） */
+export const getChatSourceDocumentContent = (
+  conversationId: number,
+  documentId: string,
+  offset: number,
+  limit = 50000,
+  knowledgeBaseId?: string
+) => request.get(`/ai/chat/conversations/${conversationId}/source/content`, {
+  ...chatRequestConfig,
+  params: {
+    documentId,
+    offset,
+    limit,
+    ...(knowledgeBaseId ? { knowledgeBaseId } : {})
+  }
 })
 export const getChatSourceDocumentChunks = (
   conversationId: number,

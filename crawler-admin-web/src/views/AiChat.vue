@@ -594,7 +594,9 @@
       </template>
       <div
         v-if="selectedSource"
-        v-loading="showingSourceOriginal ? sourceOriginalLoading : sourcePreviewLoading"
+        v-loading="showingSourceOriginal
+          ? ((sourceOriginalLoading || sourceOriginalContentLoading) && !sourceDocumentHtml)
+          : sourcePreviewLoading"
         class="source-preview"
       >
         <template v-if="!showingSourceOriginal">
@@ -680,6 +682,13 @@
             :closable="false"
             show-icon
           />
+          <!-- 首段加载失败时正文区为空、无滚动容器可触发重试，提供手动重试入口 -->
+          <el-button
+            v-if="sourceOriginalError && !sourceDocumentHtml && !sourceOriginalContentLoading"
+            link
+            type="primary"
+            @click="void loadSourceOriginalContent()"
+          >重试加载</el-button>
           <div v-if="sourceDocumentImages.length" class="source-image-grid">
             <el-image
               v-for="(image, index) in sourceDocumentImages"
@@ -692,12 +701,28 @@
               class="source-image-preview"
             />
           </div>
+          <!-- 原文按字符偏移分页加载（与文档详情原文一致）：只渲染新增片段并追加，滚动到底部自动加载 -->
           <div
-            v-if="sourceDocumentContent"
+            v-if="sourceDocumentHtml"
             class="source-preview-markdown"
-            v-html="renderMarkdown(sourceDocumentContent)"
-          />
-          <p v-else-if="!sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
+            @scroll="onSourceOriginalScroll"
+          >
+            <div class="source-original-body" v-html="sourceDocumentHtml" />
+            <!-- 续载动画：滚动触发加载下一段时，在滚动区底部显示 -->
+            <div v-if="sourceOriginalContentLoading" class="source-original-loading">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <span>加载中…</span>
+            </div>
+          </div>
+          <p v-else-if="!sourceOriginalLoading && !sourceOriginalContentLoading
+            && !sourceDocumentImages.length && !sourceOriginalError">暂无原文内容。</p>
+          <div v-if="sourceDocumentTotalLength > 0" class="source-original-footer">
+            <span>{{ sourceDocumentContent.length }} / {{ sourceDocumentTotalLength }} 字符</span>
+            <span v-if="sourceOriginalError" class="source-original-error">加载失败，滚动到底部自动重试</span>
+            <span v-else-if="sourceDocumentContent.length < sourceDocumentTotalLength">
+              {{ sourceOriginalContentLoading ? '正在加载下一段…' : '向下滚动自动加载' }}
+            </span>
+          </div>
         </template>
       </div>
     </el-drawer>
@@ -729,6 +754,7 @@ import {
   cancelChatMessage, chatConversationCreate, chatConversationDelete, chatConversationList,
   chatConversationRename, chatMessages, clearChatMessages, generateChatSuggestions, getChatAssistants, getChatModels,
   getChatSourceDocument, getChatSourceDocumentChunkCount, getChatSourceDocumentChunks,
+  getChatSourceDocumentContent,
   resumeChatMessageStream, searchDetail, streamChatMessage
 } from '@/api'
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
@@ -831,8 +857,13 @@ const showingSourceOriginal = ref(false)
 const sourcePreviewLoading = ref(false)
 const sourcePreviewError = ref('')
 const sourceOriginalLoading = ref(false)
+const sourceOriginalContentLoading = ref(false)
 const sourceOriginalError = ref('')
+/** 已加载的原文正文（原始 Markdown，用于计算下一段 offset） */
 const sourceDocumentContent = ref('')
+/** 已加载原文的渲染结果（只追加新增片段，避免整篇重渲染，与文档详情一致） */
+const sourceDocumentHtml = ref('')
+const sourceDocumentTotalLength = ref(0)
 const sourceDocumentUrl = ref('')
 const sourceDocumentImages = ref<string[]>([])
 const sourceSnapshotVisible = ref(false)
@@ -1022,6 +1053,50 @@ const openSourcePreview = (source: SourceReference) => {
       if (requestId === sourcePreviewRequestId) sourcePreviewLoading.value = false
     })
 }
+/** 按字符偏移分页加载来源原文（与文档详情原文一致：服务端切片、页尾对齐换行），只渲染新增片段并追加 */
+const loadSourceOriginalContent = async (reset = false) => {
+  if (sourceOriginalContentLoading.value) return
+  const source = selectedSource.value
+  const conversationId = activeConversationId.value
+  if (!source || !conversationId) return
+  const requestId = sourcePreviewRequestId
+  if (reset) {
+    sourceDocumentContent.value = ''
+    sourceDocumentHtml.value = ''
+    sourceDocumentTotalLength.value = 0
+    sourceOriginalError.value = ''
+  }
+  sourceOriginalContentLoading.value = true
+  try {
+    const response: any = await getChatSourceDocumentContent(
+      conversationId, source.id, sourceDocumentContent.value.length, 50000, source.knowledgeBaseId
+    )
+    if (requestId !== sourcePreviewRequestId) return
+    const data = response?.data
+    if (!data) {
+      sourceOriginalError.value = '原文加载失败'
+      return
+    }
+    sourceDocumentTotalLength.value = data.totalLength ?? 0
+    if (data.content) {
+      sourceDocumentContent.value += data.content
+      sourceDocumentHtml.value += DOMPurify.sanitize(markdown.render(data.content))
+      sourceOriginalError.value = ''
+    }
+  } catch {
+    if (requestId === sourcePreviewRequestId) sourceOriginalError.value = '原文加载失败'
+  } finally {
+    if (requestId === sourcePreviewRequestId) sourceOriginalContentLoading.value = false
+  }
+}
+const onSourceOriginalScroll = (event: Event) => {
+  const el = event.target as HTMLElement
+  const hasMore = sourceDocumentTotalLength.value > 0
+    && sourceDocumentContent.value.length < sourceDocumentTotalLength.value
+  if (!hasMore || sourceOriginalContentLoading.value) return
+  sourceOriginalError.value = ''
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) void loadSourceOriginalContent()
+}
 const openSourceOriginalPreview = async () => {
   const source = selectedSource.value
   const conversationId = activeConversationId.value
@@ -1034,27 +1109,31 @@ const openSourceOriginalPreview = async () => {
   const requestId = ++sourcePreviewRequestId
   sourceOriginalLoading.value = true
   sourceDocumentContent.value = ''
+  sourceDocumentHtml.value = ''
+  sourceDocumentTotalLength.value = 0
   sourceDocumentUrl.value = ''
   sourceDocumentImages.value = []
   try {
+    // 元数据（链接、图片）不随正文返回；校验失败时直接透出具体原因，不再请求正文
     const response: any = await getChatSourceDocument(
-      conversationId, source.id, source.knowledgeBaseId
+      conversationId, source.id, source.knowledgeBaseId, false
     )
     if (requestId !== sourcePreviewRequestId) return
-    sourceDocumentContent.value = response?.data?.content || ''
     sourceDocumentUrl.value = response?.data?.url || ''
     sourceDocumentImages.value = Array.isArray(response?.data?.images)
       ? response.data.images.filter((image: unknown): image is string => typeof image === 'string' && image.trim().length > 0)
       : []
-    if (!sourceDocumentContent.value && !sourceDocumentImages.value.length) {
-      sourceOriginalError.value = '原文内容为空'
-    }
   } catch (error) {
-    if (requestId !== sourcePreviewRequestId) return
-    sourceOriginalError.value = error instanceof Error ? error.message : '读取原文失败'
+    if (requestId === sourcePreviewRequestId) {
+      sourceOriginalError.value = error instanceof Error ? error.message : '读取原文失败'
+    }
+    return
   } finally {
     if (requestId === sourcePreviewRequestId) sourceOriginalLoading.value = false
   }
+  if (requestId !== sourcePreviewRequestId) return
+  // 原文正文改由 /source/content 按字符偏移分页加载（与文档详情原文一致）
+  await loadSourceOriginalContent(true)
 }
 const closeSourcePreview = () => {
   sourcePreviewRequestId++
@@ -1066,8 +1145,11 @@ const closeSourcePreview = () => {
   selectedSourceChunk.value = null
   showingSourceOriginal.value = false
   sourceOriginalLoading.value = false
+  sourceOriginalContentLoading.value = false
   sourceOriginalError.value = ''
   sourceDocumentContent.value = ''
+  sourceDocumentHtml.value = ''
+  sourceDocumentTotalLength.value = 0
   sourceDocumentUrl.value = ''
   sourceDocumentImages.value = []
   sourcePreviewFullscreen.value = false
@@ -2413,6 +2495,26 @@ onActivated(() => {
 .source-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
 .source-image-preview { width: 100%; height: 180px; border: 1px solid var(--chrome-line); border-radius: 8px; background: var(--surface-soft); cursor: zoom-in; }
 .source-preview p { margin: 0; color: var(--ink-800); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.source-original-footer {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.source-original-footer .source-original-error { color: var(--el-color-danger); }
+/* 续载动画：滚动加载下一段时在滚动区底部居中显示 */
+.source-original-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 0 4px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.source-original-loading .el-icon { font-size: 14px; }
 .source-preview-markdown {
   flex: 1;
   min-height: 0;

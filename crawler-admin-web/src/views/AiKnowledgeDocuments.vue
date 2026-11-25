@@ -184,11 +184,18 @@
                 <el-empty v-else-if="originalTotalLength === 0 && !originalLoading && !originalError"
                   description="暂无正文内容" />
                 <el-empty v-else-if="originalError" :description="originalError" />
+                <!-- 续载动画：滚动触发加载下一段时，在滚动区底部显示 -->
+                <div v-if="originalLoading && originalHtml" class="original-loading">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  <span>加载中…</span>
+                </div>
               </div>
               <div v-if="originalTotalLength > 0" class="original-footer">
                 <span>{{ originalContent.length }} / {{ originalTotalLength }} 字符</span>
                 <span v-if="originalError" class="original-error">加载失败，滚动到底部自动重试</span>
-                <span v-else-if="originalContent.length < originalTotalLength">向下滚动自动加载</span>
+                <span v-else-if="originalContent.length < originalTotalLength">
+                  {{ originalLoading ? '正在加载下一段…' : '向下滚动自动加载' }}
+                </span>
               </div>
             </div>
           </el-tab-pane>
@@ -211,10 +218,18 @@
                     {{ chunk.chunkStrategyName }}
                   </el-tag>
                 </template>
-                <div class="chunk-content" v-loading="chunk.contentLoading">
-                  <div v-if="chunk.content != null" class="document-markdown"
-                    v-html="renderDocumentMarkdown(chunk.content)" />
-                  <div v-else-if="!chunk.contentLoading" class="chunk-content-hint">
+                <div class="chunk-content"
+                  :class="{ 'is-loading': chunk.contentLoading, 'is-animating': chunk.contentAnimating }"
+                  v-loading="chunk.contentLoading">
+                  <!-- 正文按需请求：加载完成挂载时播放高度生长 + 淡入动画（appear 覆盖首帧已挂载的情况，缓存内容再次展开不受影响） -->
+                  <Transition name="chunk-grow" appear @after-enter="chunk.contentAnimating = false">
+                    <div v-if="chunk.content != null" class="chunk-grow">
+                      <div class="chunk-grow-inner">
+                        <div class="document-markdown" v-html="renderDocumentMarkdown(chunk.content)" />
+                      </div>
+                    </div>
+                  </Transition>
+                  <div v-if="chunk.content == null && !chunk.contentLoading" class="chunk-content-hint">
                     内容加载失败，请折叠后重新展开
                   </div>
                 </div>
@@ -248,7 +263,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, Delete, MoreFilled, Operation, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Delete, Loading, MoreFilled, Operation, Refresh, RefreshRight, Search } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import AiChunkStrategyManager from '@/components/AiChunkStrategyManager.vue'
@@ -295,6 +310,8 @@ interface VectorChunk {
   /** 分块正文：列表接口不返回，展开时按需加载 */
   content: string | null
   contentLoading?: boolean
+  /** 正文到位后出现动画进行中（动画期间保持加载区高度，避免面板先塌缩再撑开） */
+  contentAnimating?: boolean
   characterCount: number
   embeddingModel: string
   chunkStrategyId: string
@@ -583,7 +600,10 @@ async function loadChunkContent(chunk: VectorChunk) {
         documentId, chunk.chunkId, selectedKnowledgeBaseId.value
       )
       if (detailDocumentId.value === documentId && response?.data) {
-        chunk.content = response.data.content ?? null
+        const content = response.data.content ?? null
+        chunk.content = content
+        // 正文到位后保持加载区高度直到出现动画结束，避免面板先塌缩再撑开
+        if (content != null) chunk.contentAnimating = true
       }
     } catch {
       // 继续重试
@@ -1097,6 +1117,17 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 .original-error { color: var(--el-color-danger); }
+/* 续载动画：滚动加载下一段时在滚动区底部居中显示 */
+.original-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 0 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.original-loading .el-icon { font-size: 14px; }
 .document-markdown { white-space: normal; }
 .document-markdown :deep(:first-child) { margin-top: 0; }
 .document-markdown :deep(:last-child) { margin-bottom: 0; }
@@ -1150,7 +1181,15 @@ onBeforeUnmount(() => {
 .document-markdown :deep(img) { max-width: 100%; height: auto; }
 .chunk-list { margin-top: 4px; height: 100%; overflow-y: auto; }
 .chunk-count { margin-left: 8px; }
-.chunk-content { max-height: 320px; overflow: auto; margin: 0; overflow-wrap: anywhere; }
+.chunk-content { max-height: 320px; overflow: auto; margin: 0; overflow-wrap: anywhere; transition: min-height 0.3s ease; }
+/* 展开需要请求正文时：先展开出固定高度的加载区，让 loading 动画可见（v-loading 会把目标设为 relative 并居中 spinner）；
+   正文出现动画期间（is-animating，@after-enter 清除）保持同高度，结束后再平滑收回到内容实际高度 */
+.chunk-content.is-loading, .chunk-content.is-animating { min-height: 140px; }
+/* 正文到位后高度由 0fr 生长到 1fr（内容实际高度），配合淡入，避免高度突变 */
+.chunk-grow { display: grid; grid-template-rows: 1fr; }
+.chunk-grow-inner { min-height: 0; overflow: hidden; }
+.chunk-grow-enter-from { grid-template-rows: 0fr; opacity: 0; }
+.chunk-grow-enter-active { transition: grid-template-rows 0.4s ease, opacity 0.3s ease; }
 .chunk-content-hint { color: var(--el-text-color-secondary); font-size: 13px; }
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

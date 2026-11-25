@@ -135,12 +135,31 @@ public class AiChatHistoryController {
             @PathVariable Long conversationId,
             @RequestParam String documentId,
             @RequestParam(required = false) Long knowledgeBaseId,
+            @RequestParam(required = false, defaultValue = "true") boolean content,
             HttpServletResponse response) {
         requireChatPermission();
         validateSourceAccess(conversationId, documentId, knowledgeBaseId);
         response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
         response.setHeader("Pragma", "no-cache");
-        return R.ok(ragService.getKnowledgeBaseDocument(knowledgeBaseId, documentId));
+        KnowledgeBaseDtos.DocumentDetail detail = ragService.getKnowledgeBaseDocument(knowledgeBaseId, documentId);
+        // 原文正文改由 /source/content 分页接口按字符偏移加载，预览场景不带全文
+        if (!content) detail.setContent("");
+        return R.ok(detail);
+    }
+
+    @GetMapping("/{conversationId}/source/content")
+    public R<KnowledgeBaseDtos.DocumentContentPage> getSourceDocumentContent(
+            @PathVariable Long conversationId,
+            @RequestParam String documentId,
+            @RequestParam(required = false) Long knowledgeBaseId,
+            @RequestParam(defaultValue = "0") int offset,
+            @RequestParam(defaultValue = "50000") int limit,
+            HttpServletResponse response) {
+        requireChatPermission();
+        validateSourceAccess(conversationId, documentId, knowledgeBaseId);
+        response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+        response.setHeader("Pragma", "no-cache");
+        return R.ok(ragService.getKnowledgeBaseDocumentContent(knowledgeBaseId, documentId, offset, limit));
     }
 
     @GetMapping("/{conversationId}/source/chunks")
