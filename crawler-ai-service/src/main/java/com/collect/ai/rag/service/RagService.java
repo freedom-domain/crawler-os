@@ -1927,6 +1927,8 @@ public class RagService {
         List<AiKnowledgeBase> searchTargets = knowledgeBases.isEmpty()
                 ? java.util.Collections.singletonList(null)
                 : knowledgeBases;
+        // 语义召回：召回前用 chat 模型把问题改写为语义变体（结合近期对话），失败时退化为无语义召回
+        List<String> semanticQueries = rewriteQuestionForRecall(request.getQuestion(), history, rag);
         for (AiKnowledgeBase knowledgeBase : searchTargets) {
             AiRagVectorModel knowledgeVectorModel = knowledgeBase == null
                     ? null : vectorModelMapper.selectById(knowledgeBase.getVectorModelId());
@@ -1957,92 +1959,51 @@ public class RagService {
             List<Double> queryVector = knowledgeVectorModel == null
                     ? createEmbedding(request.getQuestion())
                     : createEmbedding(request.getQuestion(), knowledgeVectorModel, dimensions);
-            ObjectNode script = objectMapper.createObjectNode();
-            script.put("source",
-                    "cosineSimilarity(params.query_vector, '" + vectorField + "') + 1.0");
-            script.set("params", objectMapper.createObjectNode()
-                    .set("query_vector", objectMapper.valueToTree(queryVector)));
-
-            ObjectNode scriptScore = objectMapper.createObjectNode();
-            ObjectNode body = objectMapper.createObjectNode();
-            body.put("size", recallPoolSize);
-            body.set("_source", objectMapper.valueToTree(List.of(
-                    "doc_id", "chunk_id", "title", "heading", "content", "parent_text", "url", "spiderName")));
-            ObjectNode searchFilter = filter;
-            if (knowledgeBase != null) {
-                ObjectNode knowledgeBaseFilter = objectMapper.createObjectNode();
-                knowledgeBaseFilter.putObject("term")
-                        .put("knowledgeBaseId", knowledgeBase.getId());
-                searchFilter = combineFilters(searchFilter, knowledgeBaseFilter);
+            // 语义召回：改写变体用当前召回模型逐一向量化，失败跳过该变体
+            List<List<Double>> semanticVectors = new ArrayList<>();
+            for (String semanticQuery : semanticQueries) {
+                try {
+                    semanticVectors.add(knowledgeVectorModel == null
+                            ? createEmbedding(semanticQuery)
+                            : createEmbedding(semanticQuery, knowledgeVectorModel, dimensions));
+                } catch (Exception e) {
+                    log.warn("语义召回变体向量化失败，跳过该变体: query={}, error={}",
+                            semanticQuery, e.getMessage());
+                }
             }
-            if (searchFilter != null) {
-                ObjectNode boolQuery = objectMapper.createObjectNode();
-                boolQuery.set("filter", objectMapper.createArrayNode().add(searchFilter));
-                ObjectNode filteredQuery = objectMapper.createObjectNode();
-                filteredQuery.set("bool", boolQuery);
-                scriptScore.set("query", filteredQuery);
-            } else {
-                scriptScore.set("query", objectMapper.createObjectNode()
-                        .set("match_all", objectMapper.createObjectNode()));
-            }
-            scriptScore.set("script", script);
-            ObjectNode query = objectMapper.createObjectNode();
-            query.set("script_score", scriptScore);
-            body.set("query", query);
-
             try {
-                ObjectNode logBody = body.deepCopy();
-                JsonNode logParams = logBody.at("/query/script_score/script/params");
-                if (!(logParams instanceof ObjectNode params)) {
-                    throw new IllegalStateException("向量检索请求参数结构无效");
+                List<RagDtos.SourceReference> candidates = searchVectorCandidates(vectorIndex, vectorField,
+                        queryVector, dimensions, recallPoolSize, knowledgeBase, filter);
+                // 多路召回列表：原始向量 + 各语义变体向量 + 全文，联合 RRF 融合
+                List<List<RagDtos.SourceReference>> recallLists = new ArrayList<>();
+                recallLists.add(candidates);
+                for (List<Double> semanticVector : semanticVectors) {
+                    try {
+                        recallLists.add(searchVectorCandidates(vectorIndex, vectorField,
+                                semanticVector, dimensions, recallPoolSize, knowledgeBase, filter));
+                    } catch (Exception e) {
+                        log.warn("语义召回向量检索失败，跳过该变体: index={}, error={}",
+                                safeLogValue(vectorIndex, 128), e.getMessage());
+                    }
                 }
-                params.put("query_vector", "[omitted; dimensions=" + queryVector.size() + "]");
-                log.info("发送向量索引检索请求: method=POST, index={}, vectorField={}, dimensions={}, "
-                                + "candidateCount={}, returnTopK={}, knowledgeBaseId={}, body={}",
-                        safeLogValue(vectorIndex, 128), vectorField, dimensions,
-                        recallPoolSize, topK, knowledgeBase == null ? null : knowledgeBase.getId(),
-                        toJson(logBody));
-                long searchStartNanos = System.nanoTime();
-                HttpResponse<String> search = elasticsearchRequest("POST",
-                        "/" + vectorIndex + "/_search", toJson(body));
-                if (search.statusCode() >= 300) {
-                    throw new IllegalStateException("RAG 向量检索失败: " + search.statusCode()
-                            + " " + search.body());
-                }
-                JsonNode root = objectMapper.readTree(search.body());
-                log.info("向量索引检索请求完成: index={}, status={}, returned={}, elapsedMs={}",
-                        safeLogValue(vectorIndex, 128), search.statusCode(),
-                        root.path("hits").path("hits").size(),
-                        Duration.ofNanos(System.nanoTime() - searchStartNanos).toMillis());
-                List<RagDtos.SourceReference> candidates = new ArrayList<>();
-                for (JsonNode hit : root.path("hits").path("hits")) {
-                    RagDtos.SourceReference ref = toSourceReference(
-                            hit.path("_source"), knowledgeBase, hit.path("_score").asDouble(0));
-                    boolean duplicate = sources.stream()
-                            .anyMatch(existing -> existing.getId().equals(ref.getId())
-                                    && existing.getSnippet().equals(ref.getSnippet()))
-                            || candidates.stream().anyMatch(existing -> existing.getId().equals(ref.getId())
-                                    && existing.getSnippet().equals(ref.getSnippet()));
-                    if (!duplicate) candidates.add(ref);
-                }
-                // 混合召回：IK 全文检索后与向量召回做 RRF 融合
-                List<RagDtos.SourceReference> fullTextCandidates = searchFullTextCandidates(
-                        vectorIndex, request.getQuestion(), recallPoolSize, knowledgeBase, filter);
-                candidates = fuseRrfCandidates(candidates, fullTextCandidates);
-                if (rerankModel != null && !candidates.isEmpty()) {
+                // 混合召回：IK 全文检索路并入联合 RRF 融合
+                recallLists.add(searchFullTextCandidates(
+                        vectorIndex, request.getQuestion(), recallPoolSize, knowledgeBase, filter));
+                List<RagDtos.SourceReference> fused = fuseRrfCandidates(recallLists);
+                if (rerankModel != null && !fused.isEmpty()) {
                     // 全部召回候选进重排，由重排 API 按 top_n = 返回数量返回最优的 topK 条
-                    List<String> documents = candidates.stream()
+                    List<String> documents = fused.stream()
                             .map(candidate -> candidate.getTitle() + "\n" + candidate.getSnippet())
                             .toList();
                     List<RerankService.Result> ranked = rerankService.rerank(
                             rerankModel, request.getQuestion(), documents, topK);
                     for (RerankService.Result result : ranked) {
-                        RagDtos.SourceReference candidate = candidates.get(result.index());
+                        RagDtos.SourceReference candidate = fused.get(result.index());
                         candidate.setScore(result.score());
                         sources.add(candidate);
                     }
                 } else {
-                    sources.addAll(candidates);
+                    sources.addAll(fused);
                 }
             } catch (Exception e) {
                 if (e instanceof IllegalStateException state) throw state;
@@ -2411,6 +2372,77 @@ public class RagService {
         } catch (Exception e) {
             if (e instanceof IllegalStateException state) throw state;
             throw new IllegalStateException("调用 Embedding 模型失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 语义召回改写：用 chat 模型把用户问题改写为 2 个语义变体（结合最近 4 轮对话上下文，
+     * 保留原意、补充同义/换表述），供多路向量召回；无 chat 模型或调用/解析失败返回空列表（退化为无语义召回）。
+     */
+    private List<String> rewriteQuestionForRecall(String question, List<RagDtos.ChatHistoryMessage> history,
+            RagProperties.Rag rag) {
+        if (!StringUtils.hasText(question) || !StringUtils.hasText(rag.getChatModel())) return List.of();
+        try {
+            ObjectNode body = objectMapper.createObjectNode();
+            body.put("model", rag.getChatModel());
+            ArrayNode messages = body.putArray("messages");
+            messages.addObject()
+                    .put("role", "system")
+                    .put("content", "你是知识库检索查询改写助手。请把用户的问题（结合最近的对话）改写为 2 条用于检索相关文档的"
+                            + "语义等价查询：保留原意，补充同义词或换一种表述，不要添加原问题没有的事实，每条不超过 30 字。"
+                            + "只输出改写后的 2 条查询，每条一行，不要编号、项目符号和解释。");
+            if (history != null && !history.isEmpty()) {
+                int from = Math.max(0, history.size() - 4);
+                for (int i = from; i < history.size(); i++) {
+                    RagDtos.ChatHistoryMessage item = history.get(i);
+                    if (item == null || item.getContent() == null || item.getContent().isBlank()) continue;
+                    if (!"user".equals(item.getRole()) && !"assistant".equals(item.getRole())) continue;
+                    messages.addObject().put("role", item.getRole()).put("content", item.getContent());
+                }
+            }
+            messages.addObject().put("role", "user").put("content", question);
+            boolean ollama = "ollama".equalsIgnoreCase(rag.getChatProvider());
+            if (ollama) {
+                body.put("stream", false);
+                body.putObject("options").put("num_ctx", rag.getContextLength()).put("num_predict", 160);
+            } else {
+                body.put("temperature", 0.2);
+                body.put("max_tokens", 160);
+            }
+            HttpResponse<String> response = openAiRequest(ollama ? "/api/chat" : "/chat/completions", body, rag);
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException("查询改写调用失败: " + response.statusCode() + " " + response.body());
+            }
+            JsonNode root = objectMapper.readTree(response.body());
+            JsonNode choices = root.path("choices");
+            String content = ollama
+                    ? root.path("message").path("content").asText("")
+                    : choices.isArray() && !choices.isEmpty()
+                        ? choices.get(0).path("message").path("content").asText("")
+                        : "";
+            List<String> variants = new ArrayList<>();
+            for (String line : content.split("\\r?\\n")) {
+                String cleaned = line.trim()
+                        .replaceFirst("^[0-9]+[\\.)、]\\s*", "")
+                        .replace("“", "").replace("”", "").replace("\"", "").trim();
+                if (cleaned.isEmpty() || cleaned.equalsIgnoreCase(question)
+                        || jaccardSimilarity(question, cleaned) > 0.85) continue;
+                boolean duplicate = variants.stream()
+                        .anyMatch(v -> v.equalsIgnoreCase(cleaned) || jaccardSimilarity(v, cleaned) > 0.85);
+                if (duplicate) continue;
+                variants.add(cleaned);
+                if (variants.size() == 2) break;
+            }
+            if (variants.isEmpty()) {
+                log.info("语义召回：查询改写未得到有效变体，跳过语义召回: question={}", safeLogValue(question, 128));
+            } else {
+                log.info("语义召回：查询改写完成: question={}, variants={}", safeLogValue(question, 128), variants);
+            }
+            return variants;
+        } catch (Exception e) {
+            log.warn("语义召回：查询改写失败，退化为无语义召回: question={}, error={}",
+                    safeLogValue(question, 128), e.getMessage());
+            return List.of();
         }
     }
 
@@ -2895,6 +2927,71 @@ public class RagService {
         return ref;
     }
 
+    /** 向量召回：cosine 相似度 script_score 检索，size = 召回池；不做跨路去重（由 RRF/最终去重处理） */
+    private List<RagDtos.SourceReference> searchVectorCandidates(String vectorIndex, String vectorField,
+            List<Double> queryVector, int dimensions, int size,
+            AiKnowledgeBase knowledgeBase, ObjectNode spiderFilter) throws Exception {
+        ObjectNode script = objectMapper.createObjectNode();
+        script.put("source",
+                "cosineSimilarity(params.query_vector, '" + vectorField + "') + 1.0");
+        script.set("params", objectMapper.createObjectNode()
+                .set("query_vector", objectMapper.valueToTree(queryVector)));
+        ObjectNode scriptScore = objectMapper.createObjectNode();
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("size", size);
+        body.set("_source", objectMapper.valueToTree(List.of(
+                "doc_id", "chunk_id", "title", "heading", "content", "parent_text", "url", "spiderName")));
+        ObjectNode searchFilter = spiderFilter;
+        if (knowledgeBase != null) {
+            ObjectNode knowledgeBaseFilter = objectMapper.createObjectNode();
+            knowledgeBaseFilter.putObject("term")
+                    .put("knowledgeBaseId", knowledgeBase.getId());
+            searchFilter = combineFilters(searchFilter, knowledgeBaseFilter);
+        }
+        if (searchFilter != null) {
+            ObjectNode boolQuery = objectMapper.createObjectNode();
+            boolQuery.set("filter", objectMapper.createArrayNode().add(searchFilter));
+            ObjectNode filteredQuery = objectMapper.createObjectNode();
+            filteredQuery.set("bool", boolQuery);
+            scriptScore.set("query", filteredQuery);
+        } else {
+            scriptScore.set("query", objectMapper.createObjectNode()
+                    .set("match_all", objectMapper.createObjectNode()));
+        }
+        scriptScore.set("script", script);
+        ObjectNode query = objectMapper.createObjectNode();
+        query.set("script_score", scriptScore);
+        body.set("query", query);
+        ObjectNode logBody = body.deepCopy();
+        JsonNode logParams = logBody.at("/query/script_score/script/params");
+        if (!(logParams instanceof ObjectNode params)) {
+            throw new IllegalStateException("向量检索请求参数结构无效");
+        }
+        params.put("query_vector", "[omitted; dimensions=" + queryVector.size() + "]");
+        log.info("发送向量索引检索请求: method=POST, index={}, vectorField={}, dimensions={}, "
+                        + "candidateCount={}, knowledgeBaseId={}, body={}",
+                safeLogValue(vectorIndex, 128), vectorField, dimensions,
+                size, knowledgeBase == null ? null : knowledgeBase.getId(),
+                toJson(logBody));
+        long searchStartNanos = System.nanoTime();
+        HttpResponse<String> search = elasticsearchRequest("POST",
+                "/" + vectorIndex + "/_search", toJson(body));
+        if (search.statusCode() >= 300) {
+            throw new IllegalStateException("RAG 向量检索失败: " + search.statusCode()
+                    + " " + search.body());
+        }
+        JsonNode root = objectMapper.readTree(search.body());
+        log.info("向量索引检索请求完成: index={}, status={}, returned={}, elapsedMs={}",
+                safeLogValue(vectorIndex, 128), search.statusCode(),
+                root.path("hits").path("hits").size(),
+                Duration.ofNanos(System.nanoTime() - searchStartNanos).toMillis());
+        List<RagDtos.SourceReference> refs = new ArrayList<>();
+        for (JsonNode hit : root.path("hits").path("hits")) {
+            refs.add(toSourceReference(hit.path("_source"), knowledgeBase, hit.path("_score").asDouble(0)));
+        }
+        return refs;
+    }
+
     /**
      * 全文召回：IK 分词匹配 heading/title/content（权重 heading^3 > title^2 > content），
      * 与向量召回相同的 size 与范围过滤；失败时返回空列表，退化为纯向量召回。
@@ -2946,18 +3043,20 @@ public class RagService {
     }
 
     /**
-     * RRF（Reciprocal Rank Fusion）融合向量召回与全文召回：
-     * score(d) = Σ 1/(k + rank)，rank 从 1 开始，k=60；同一 doc 两路都命中时分数相加，
-     * 融合分写回 score（无重排时下游按 score 排序即保持 RRF 顺序），同分保持向量召回顺序（稳定排序）。
+     * RRF（Reciprocal Rank Fusion）融合多路召回（原始向量 / 语义变体向量 / 全文）：
+     * score(d) = Σ 1/(k + rank)，各列表 rank 从 1 开始，k=60；同一 doc 多路命中时分数相加，
+     * 融合分写回 score（无重排时下游按 score 排序即保持 RRF 顺序），同分保持先列表顺序（稳定排序）。
      */
-    private List<RagDtos.SourceReference> fuseRrfCandidates(List<RagDtos.SourceReference> vectorCandidates,
-            List<RagDtos.SourceReference> fullTextCandidates) {
-        if (fullTextCandidates.isEmpty()) return vectorCandidates;
-        if (vectorCandidates.isEmpty()) return fullTextCandidates;
+    private List<RagDtos.SourceReference> fuseRrfCandidates(List<List<RagDtos.SourceReference>> recallLists) {
+        List<List<RagDtos.SourceReference>> nonEmpty =
+                recallLists.stream().filter(list -> !list.isEmpty()).toList();
+        if (nonEmpty.isEmpty()) return List.of();
+        if (nonEmpty.size() == 1) return new ArrayList<>(nonEmpty.get(0));
         Map<String, Double> scores = new LinkedHashMap<>();
         Map<String, RagDtos.SourceReference> byId = new LinkedHashMap<>();
-        addRrfScores(scores, byId, vectorCandidates);
-        addRrfScores(scores, byId, fullTextCandidates);
+        for (List<RagDtos.SourceReference> list : nonEmpty) {
+            addRrfScores(scores, byId, list);
+        }
         List<RagDtos.SourceReference> fused = new ArrayList<>(byId.values());
         fused.forEach(ref -> ref.setScore(scores.get(ref.getId())));
         fused.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
