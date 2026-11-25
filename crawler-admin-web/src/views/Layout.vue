@@ -154,11 +154,13 @@ const visibleMenuList = computed(() => {
   return filterVisible(menuList.value)
 })
 const pwdDialogVisible = ref(false)
-// 移动端判断：宽度 < 768，或小屏幕（短边 < 768）横屏——横屏时宽度过阈值但仍是手机，
-// 侧边菜单需按抽屉隐藏
+// 移动端判断：宽度 < 768，或手机横屏（短边 < 768 且长边 < 1024）——横屏手机宽度已过 768 阈值，
+// 侧边菜单需按抽屉隐藏；长边 < 1024 用于排除低分辨率/高缩放的桌面窗口（如 1366×768 缩放 125%）
 const isMobileViewport = () =>
   window.innerWidth < 768 ||
-  (window.matchMedia('(orientation: landscape)').matches && Math.min(window.innerWidth, window.innerHeight) < 768)
+  (window.matchMedia('(orientation: landscape)').matches &&
+    Math.min(window.innerWidth, window.innerHeight) < 768 &&
+    Math.max(window.innerWidth, window.innerHeight) < 1024)
 const mobile = ref(isMobileViewport())
 const drawerOpen = ref(false)
 const tabsViewport = ref<HTMLElement | null>(null)
