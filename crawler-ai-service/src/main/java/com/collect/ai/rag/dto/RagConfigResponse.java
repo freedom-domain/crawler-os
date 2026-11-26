@@ -21,6 +21,7 @@ public class RagConfigResponse {
     private String chatModel;
     private boolean apiKeyConfigured;
     private Integer topK;
+    private Integer maxChunksPerDocument;
     private String vectorIndexName;
     private String vectorIndexPrefix;
     private String vectorIndex;

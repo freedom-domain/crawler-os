@@ -16,6 +16,7 @@ public final class RagDtos {
         private String question;
         private Integer topK;
         private Integer recallTopK;
+        private Integer maxChunksPerDocument;
         private Long spiderId;
         private String spiderGroup;
         private Long knowledgeBaseId;

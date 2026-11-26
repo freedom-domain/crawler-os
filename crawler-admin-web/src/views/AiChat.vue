@@ -451,8 +451,8 @@
                     class="retrieval-settings-trigger"
                     text
                     circle
-                    aria-label="编辑召回和返回数量"
-                    :title="`召回 TOP K：${recallTopK} 条；返回数量：${topK} 条`"
+                    aria-label="编辑召回、返回和单文档上限"
+                    :title="`召回 TOP K：${recallTopK} 条；返回数量：${topK} 条；单文档上限：${maxChunksPerDocument} 条`"
                   >
                     <el-icon><Setting /></el-icon>
                   </el-button>
@@ -465,6 +465,10 @@
                   <span>返回数量</span>
                   <el-select v-model="topK" size="small" aria-label="返回数量">
                     <el-option v-for="count in returnOptions" :key="count" :label="`${count} 条`" :value="count" />
+                  </el-select>
+                  <span title="同一来源文档最多保留的 chunk 数，避免单篇长文档挤占返回名额">单文档上限</span>
+                  <el-select v-model="maxChunksPerDocument" size="small" aria-label="单文档上限">
+                    <el-option v-for="count in maxChunksOptions" :key="count" :label="`${count} 条`" :value="count" />
                   </el-select>
                 </div>
               </el-popover>
@@ -895,6 +899,7 @@ const readChatSelection = () => {
 const savedChatSelection = readChatSelection()
 const savedTopK = Number(savedChatSelection.topK)
 const savedRecallTopK = Number(savedChatSelection.recallTopK)
+const savedMaxChunksPerDocument = Number(savedChatSelection.maxChunksPerDocument)
 const sidebarCollapsed = ref(savedChatSelection.sidebarCollapsed === true)
 const assistants = ref<any[]>([])
 const chatModels = ref<any[]>([])
@@ -1239,8 +1244,14 @@ const recallTopK = ref(
     ? savedRecallTopK
     : 5
 )
+const maxChunksPerDocument = ref(
+  Number.isInteger(savedMaxChunksPerDocument) && savedMaxChunksPerDocument >= 1 && savedMaxChunksPerDocument <= 20
+    ? savedMaxChunksPerDocument
+    : 1
+)
 const returnOptions = computed(() => [...new Set([3, 5, 8, 10, topK.value])].sort((a, b) => a - b))
 const recallOptions = computed(() => [...new Set([3, 5, 8, 10, 20, recallTopK.value])].sort((a, b) => a - b))
+const maxChunksOptions = computed(() => [...new Set([1, 2, 3, 4, 5, maxChunksPerDocument.value])].sort((a, b) => a - b))
 const saveChatSelection = () => {
   const current = readChatSelection()
   const next = {
@@ -1249,11 +1260,12 @@ const saveChatSelection = () => {
     chatModelId: selectedChatModelId.value == null ? undefined : String(selectedChatModelId.value),
     topK: topK.value,
     recallTopK: recallTopK.value,
+    maxChunksPerDocument: maxChunksPerDocument.value,
     sidebarCollapsed: sidebarCollapsed.value
   }
   localStorage.setItem(CHAT_SELECTION_STORAGE_KEY, JSON.stringify(next))
 }
-watch([selectedAssistantId, selectedChatModelId, topK, recallTopK, sidebarCollapsed], saveChatSelection)
+watch([selectedAssistantId, selectedChatModelId, topK, recallTopK, maxChunksPerDocument, sidebarCollapsed], saveChatSelection)
 const sending = ref(false)
 const cancelingMessageIds = ref(new Set<number>())
 const streamConnections = new Map<number, Promise<void>>()
@@ -1965,6 +1977,7 @@ const sendMessage = async (questionOverride?: string) => {
       question,
       topK: topK.value,
       recallTopK: recallTopK.value,
+      maxChunksPerDocument: maxChunksPerDocument.value,
       chatModelId: selectedChatModelId.value
     })
     responseMessage.id = Number(response.headers.get('X-Chat-Message-Id')) || undefined

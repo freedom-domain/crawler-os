@@ -25,6 +25,8 @@ public class AiRagConfig {
     private String chatModel;
     private String apiKey;
     private Integer topK;
+    /** 召回融合阶段每个文档最多保留的 chunk（命中）条数，NULL 按 1 处理 */
+    private Integer maxChunksPerDocument;
     private String vectorIndex;
     private String vectorIndexPrefix;
     private LocalDateTime createTime;

@@ -83,6 +83,8 @@ public class RagConfigService {
         response.setChatModel(config.getChatModel());
         response.setApiKeyConfigured(StringUtils.hasText(config.getApiKey()));
         response.setTopK(config.getTopK());
+        response.setMaxChunksPerDocument(config.getMaxChunksPerDocument() == null
+                ? 1 : config.getMaxChunksPerDocument());
         response.setVectorIndexName(properties.resolveVectorIndex());
         response.setVectorIndexPrefix(properties.getRag().getVectorIndexPrefix());
         response.setVectorIndex(properties.resolveVectorIndex());
@@ -157,6 +159,10 @@ public class RagConfigService {
             }
         }
 
+        if (request.getMaxChunksPerDocument() != null) {
+            config.setMaxChunksPerDocument(request.getMaxChunksPerDocument());
+        }
+
         try {
             validate(config);
         } catch (IllegalArgumentException e) {
@@ -226,6 +232,8 @@ public class RagConfigService {
                 ? 8192 : chatModel.getContextLength());
         rag.setApiKey(config.getApiKey());
         rag.setTopK(config.getTopK());
+        rag.setMaxChunksPerDocument(config.getMaxChunksPerDocument() == null
+                ? 1 : config.getMaxChunksPerDocument());
         rag.setVectorIndexPrefix(properties.getRag().getVectorIndexPrefix());
         rag.setVectorIndexEnvironment(properties.getRag().getVectorIndexEnvironment());
         properties.replace(rag);
@@ -447,6 +455,7 @@ public class RagConfigService {
         config.setChatModel(defaults.getChatModel());
         config.setApiKey(defaults.getApiKey());
         config.setTopK(defaults.getTopK());
+        config.setMaxChunksPerDocument(defaults.getMaxChunksPerDocument());
         config.setVectorIndex(resolveDefaultVectorIndex(env));
         config.setVectorIndexPrefix(defaults.getVectorIndexPrefix());
         config.setCreateTime(LocalDateTime.now());
@@ -473,6 +482,10 @@ public class RagConfigService {
         if (config.getDimensions() == null || config.getDimensions() < 1
                 || config.getTopK() == null || config.getTopK() < 1 || config.getTopK() > 20) {
             throw new IllegalArgumentException("向量维度或 topK 不合法");
+        }
+        if (config.getMaxChunksPerDocument() != null
+                && (config.getMaxChunksPerDocument() < 1 || config.getMaxChunksPerDocument() > 20)) {
+            throw new IllegalArgumentException("文档命中返回条数须在 1-20 之间");
         }
         if (config.getApiKey() != null && config.getApiKey().length() > 1024) {
             throw new IllegalArgumentException("API Key 长度不能超过 1024 个字符");

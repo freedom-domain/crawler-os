@@ -97,6 +97,9 @@
             <el-option label="直接上传文档" value="UPLOAD" />
           </el-select>
         </el-form-item>
+        <el-form-item v-if="form.sourceType === 'ES_INDEX'" label="源索引">
+          <el-input :model-value="fixedConfig.sourceIndex" disabled />
+        </el-form-item>
         <el-form-item v-if="form.sourceType === 'UPLOAD'" label="MinIO Bucket">
           <el-input :model-value="fixedConfig.uploadBucket" disabled />
         </el-form-item>
@@ -167,12 +170,6 @@
             </el-descriptions-item>
           </el-descriptions>
           <small class="field-hint">配置后，检索会先召回候选文档，再由该模型重新排序。</small>
-        </el-form-item>
-        <el-form-item label="固定配置">
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="源索引">{{ fixedConfig.sourceIndex || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="向量字段">{{ fixedConfig.vectorField || '-' }}</el-descriptions-item>
-          </el-descriptions>
         </el-form-item>
         <div class="form-grid">
           <el-form-item label="排序">

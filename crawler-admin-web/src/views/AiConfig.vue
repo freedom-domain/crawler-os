@@ -55,6 +55,12 @@
             <el-form-item label="检索与分块参数">
               <span>Top K {{ selectedVectorModel?.topK ?? config.topK }} · 分块策略按文档字符数和类型自动匹配</span>
             </el-form-item>
+            <el-form-item label="文档命中返回条数">
+              <el-input-number v-model="form.maxChunksPerDocument" :min="1" :max="20" :step="1" controls-position="right" />
+              <span style="margin-left: 12px; color: var(--el-text-color-secondary); font-size: 12px">
+                召回融合时每篇文档最多保留的 chunk 条数，默认 1；大于 1 时同文档多个章节可进入回答上下文
+              </span>
+            </el-form-item>
           </div>
           <div class="index-preview">
             <span>源索引</span><code>{{ config.sourceIndex || '配置文件' }}</code>
@@ -155,6 +161,7 @@ interface RagConfig {
   chatModel: string
   apiKeyConfigured: boolean
   topK: number
+  maxChunksPerDocument: number
   vectorIndexName: string
   vectorIndexPrefix: string
   vectorIndex: string
@@ -175,6 +182,7 @@ const emptyConfig = (): RagConfig => ({
   chatModel: '',
   apiKeyConfigured: false,
   topK: 5,
+  maxChunksPerDocument: 1,
   vectorIndexName: '',
   vectorIndexPrefix: '',
   vectorIndex: '',
@@ -205,7 +213,8 @@ const form = reactive({
   vectorModelId: null as string | null,
   chatModelId: null as string | null,
   vectorIndexSuffix: '',
-  vectorIndexPrefix: ''
+  vectorIndexPrefix: '',
+  maxChunksPerDocument: 1
 })
 const selectedVectorModel = computed(() =>
   vectorModels.value.find(model => model.id === form.vectorModelId)
@@ -239,7 +248,8 @@ const applyConfig = (data: RagConfig) => {
     vectorModelId: data.vectorModelId,
     chatModelId: data.chatModelId,
     vectorIndexSuffix,
-    vectorIndexPrefix
+    vectorIndexPrefix,
+    maxChunksPerDocument: data.maxChunksPerDocument ?? 1
   })
 }
 
@@ -285,7 +295,8 @@ const saveConfig = async () => {
   saving.value = true
   const payload: Record<string, unknown> = {
     vectorModelId: form.vectorModelId,
-    chatModelId: form.chatModelId
+    chatModelId: form.chatModelId,
+    maxChunksPerDocument: form.maxChunksPerDocument
   }
   try {
     const response: any = await updateRagConfig(payload)

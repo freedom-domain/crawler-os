@@ -16,6 +16,7 @@ public class RagConfigRequest {
     private String apiKey;
     private Boolean clearApiKey;
     private Integer topK;
+    private Integer maxChunksPerDocument;
     private String vectorIndex;
     private String vectorIndexPrefix;
 }

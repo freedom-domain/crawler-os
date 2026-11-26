@@ -40,6 +40,8 @@ public class RagProperties {
         private int contextLength = 8192;
         private int dimensions = 1024;
         private int topK = 5;
+        /** 召回融合后每个文档（doc_id）最多保留的 chunk 数：1=仅保留代表 chunk；>1=允许同一文档多个章节进入上下文 */
+        private int maxChunksPerDocument = 1;
         private String vectorIndexPrefix = "spider_content_vector";
         private String vectorIndexEnvironment = "";
 
@@ -57,6 +59,7 @@ public class RagProperties {
             copy.setContextLength(contextLength);
             copy.setDimensions(dimensions);
             copy.setTopK(topK);
+            copy.setMaxChunksPerDocument(maxChunksPerDocument);
             copy.setVectorIndexPrefix(vectorIndexPrefix);
             copy.setVectorIndexEnvironment(vectorIndexEnvironment);
             return copy;

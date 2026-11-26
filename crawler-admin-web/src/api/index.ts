@@ -274,6 +274,7 @@ export const sendChatMessage = (id: number, data: {
   question: string
   topK: number
   recallTopK: number
+  maxChunksPerDocument: number
   chatModelId?: string | number
 }) =>
   request.post(`/ai/chat/conversations/${id}/messages`, data, chatRequestConfig)
@@ -281,6 +282,7 @@ export const streamChatMessage = (id: number, data: {
   question: string
   topK: number
   recallTopK: number
+  maxChunksPerDocument: number
   chatModelId?: string | number
 }) => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }

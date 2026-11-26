@@ -26,6 +26,7 @@ public final class AiChatDtos {
         private String question;
         private Integer topK;
         private Integer recallTopK;
+        private Integer maxChunksPerDocument;
         private Long chatModelId;
     }
 

@@ -62,6 +62,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.function.BooleanSupplier;
@@ -88,6 +89,15 @@ public class RagService {
 
     private static final String NO_RETRIEVED_RECORDS_ANSWER =
             "当前知识库中没有检索到相关记录，请调整问题或先添加相关知识库文档。";
+
+    /** 重排最大候选数：按 RRF 顺序取前 N 条送重排，避免 payload 过大拖慢重排 */
+    private static final int RERANK_MAX_CANDIDATES = 50;
+    /** 送重排的单条文档最大字符数（标题 + 摘要开头），完整父块仅在最终上下文组装时使用 */
+    private static final int RERANK_DOC_MAX_CHARS = 500;
+    /** 语义召回改写调用超时：改写是增强项，超时应快速退化为无改写召回 */
+    private static final Duration REWRITE_TIMEOUT = Duration.ofSeconds(10);
+    /** 改写上下文单条历史消息最大字符数，防止长回答撑大上下文或超出模型 num_ctx */
+    private static final int REWRITE_HISTORY_MSG_MAX_CHARS = 500;
 
     private record StreamingChatResult(
             String answer, long waitDurationMs, Long thinkingDurationMs, long generationDurationMs) {
@@ -1886,6 +1896,10 @@ public class RagService {
         int topK = request.getTopK() == null
                 ? rag.getTopK()
                 : Math.max(1, Math.min(request.getTopK(), 20));
+        // 单文档 chunk 上限：聊天窗口可按请求覆盖，缺省取 RAG 配置，范围与 topK 一致
+        int maxChunksPerDocument = request.getMaxChunksPerDocument() == null
+                ? Math.max(1, rag.getMaxChunksPerDocument())
+                : Math.max(1, Math.min(request.getMaxChunksPerDocument(), 20));
 
         ObjectNode filter = null;
         if (!loggedIn) {
@@ -1956,19 +1970,41 @@ public class RagService {
                     ? knowledgeVectorModel.getDimensions()
                     : properties.resolveDimensions();
             String vectorField = properties.resolveVectorField();
-            List<Double> queryVector = knowledgeVectorModel == null
-                    ? createEmbedding(request.getQuestion())
-                    : createEmbedding(request.getQuestion(), knowledgeVectorModel, dimensions);
-            // 语义召回：改写变体用当前召回模型逐一向量化，失败跳过该变体
-            List<List<Double>> semanticVectors = new ArrayList<>();
-            for (String semanticQuery : semanticQueries) {
+            // 原问题 + 改写变体合并为一次批量 embedding 调用（服务端支持数组输入），失败回退逐条请求
+            List<List<Double>> recallVectors = null;
+            if (!semanticQueries.isEmpty()) {
+                List<String> recallTexts = new ArrayList<>();
+                recallTexts.add(request.getQuestion());
+                recallTexts.addAll(semanticQueries);
                 try {
-                    semanticVectors.add(knowledgeVectorModel == null
-                            ? createEmbedding(semanticQuery)
-                            : createEmbedding(semanticQuery, knowledgeVectorModel, dimensions));
+                    recallVectors = knowledgeVectorModel == null
+                            ? createEmbeddings(recallTexts)
+                            : createEmbeddings(recallTexts, knowledgeVectorModel, dimensions);
                 } catch (Exception e) {
-                    log.warn("语义召回变体向量化失败，跳过该变体: query={}, error={}",
-                            semanticQuery, e.getMessage());
+                    log.warn("召回向量批量向量化失败，回退逐条请求: error={}", e.getMessage());
+                }
+            }
+            List<Double> queryVector;
+            List<List<Double>> semanticVectors = new ArrayList<>();
+            if (recallVectors != null) {
+                queryVector = recallVectors.get(0);
+                for (int i = 1; i < recallVectors.size(); i++) {
+                    semanticVectors.add(recallVectors.get(i));
+                }
+            } else {
+                queryVector = knowledgeVectorModel == null
+                        ? createEmbedding(request.getQuestion())
+                        : createEmbedding(request.getQuestion(), knowledgeVectorModel, dimensions);
+                // 语义召回：批量失败时改写变体用当前召回模型逐一向量化，失败跳过该变体
+                for (String semanticQuery : semanticQueries) {
+                    try {
+                        semanticVectors.add(knowledgeVectorModel == null
+                                ? createEmbedding(semanticQuery)
+                                : createEmbedding(semanticQuery, knowledgeVectorModel, dimensions));
+                    } catch (Exception e) {
+                        log.warn("语义召回变体向量化失败，跳过该变体: query={}, error={}",
+                                semanticQuery, e.getMessage());
+                    }
                 }
             }
             try {
@@ -1989,18 +2025,31 @@ public class RagService {
                 // 混合召回：IK 全文检索路并入联合 RRF 融合
                 recallLists.add(searchFullTextCandidates(
                         vectorIndex, request.getQuestion(), recallPoolSize, knowledgeBase, filter));
-                List<RagDtos.SourceReference> fused = fuseRrfCandidates(recallLists);
+                List<RagDtos.SourceReference> fused = fuseRrfCandidates(recallLists, maxChunksPerDocument);
                 if (rerankModel != null && !fused.isEmpty()) {
-                    // 全部召回候选进重排，由重排 API 按 top_n = 返回数量返回最优的 topK 条
-                    List<String> documents = fused.stream()
-                            .map(candidate -> candidate.getTitle() + "\n" + candidate.getSnippet())
+                    // 重排输入瘦身：按 RRF 顺序取前 N 条并用短文本（标题 + 摘要开头），
+                    // 避免 2000 字父块撑大 payload 拖慢重排；完整父块仅用于最终上下文组装
+                    List<RagDtos.SourceReference> rerankPool = fused.size() > RERANK_MAX_CANDIDATES
+                            ? new ArrayList<>(fused.subList(0, RERANK_MAX_CANDIDATES)) : fused;
+                    List<String> documents = rerankPool.stream()
+                            .map(candidate -> {
+                                String text = candidate.getTitle() + "\n" + candidate.getSnippet();
+                                return text.length() > RERANK_DOC_MAX_CHARS
+                                        ? text.substring(0, RERANK_DOC_MAX_CHARS) : text;
+                            })
                             .toList();
-                    List<RerankService.Result> ranked = rerankService.rerank(
-                            rerankModel, request.getQuestion(), documents, topK);
-                    for (RerankService.Result result : ranked) {
-                        RagDtos.SourceReference candidate = fused.get(result.index());
-                        candidate.setScore(result.score());
-                        sources.add(candidate);
+                    try {
+                        // 由重排 API 按 top_n = 返回数量返回最优的 topK 条；重排失败退化为 RRF 召回顺序
+                        List<RerankService.Result> ranked = rerankService.rerank(
+                                rerankModel, request.getQuestion(), documents, topK);
+                        for (RerankService.Result result : ranked) {
+                            RagDtos.SourceReference candidate = rerankPool.get(result.index());
+                            candidate.setScore(result.score());
+                            sources.add(candidate);
+                        }
+                    } catch (Exception e) {
+                        log.warn("重排失败，退化为 RRF 召回顺序: error={}", e.getMessage());
+                        sources.addAll(fused);
                     }
                 } else {
                     sources.addAll(fused);
@@ -2012,14 +2061,16 @@ public class RagService {
         }
 
         sources.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
-        // 检索后近似去重：overlap 会产生高度相似的相邻 chunk，
-        // 用字符 bigram Jaccard 相似度过滤，避免近似 chunk 挤占 topK 名额
+        // 检索后去重：① 每文档最多保留 maxChunksPerDocument 条，避免单篇长文档的 chunk 挤占 topK 名额；
+        // ② 字符 bigram Jaccard 相似度过滤高度相似的 chunk（overlap 会产生高度相似的相邻 chunk）
+        Map<String, Integer> perDocCount = new HashMap<>();
         List<RagDtos.SourceReference> deduplicated = new ArrayList<>();
         for (RagDtos.SourceReference ref : sources) {
+            int sameDoc = perDocCount.merge(ref.getId(), 1, Integer::sum);
             boolean nearDuplicate = deduplicated.stream()
-                    .anyMatch(existing -> existing.getId().equals(ref.getId())
-                            || jaccardSimilarity(existing.getSnippet(), ref.getSnippet()) > 0.9);
-            if (!nearDuplicate) deduplicated.add(ref);
+                    .anyMatch(existing -> jaccardSimilarity(existing.getSnippet(), ref.getSnippet()) > 0.9);
+            if (sameDoc > maxChunksPerDocument || nearDuplicate) continue;
+            deduplicated.add(ref);
         }
         if (deduplicated.size() > topK) deduplicated = new ArrayList<>(deduplicated.subList(0, topK));
         sources = deduplicated;
@@ -2397,7 +2448,11 @@ public class RagService {
                     RagDtos.ChatHistoryMessage item = history.get(i);
                     if (item == null || item.getContent() == null || item.getContent().isBlank()) continue;
                     if (!"user".equals(item.getRole()) && !"assistant".equals(item.getRole())) continue;
-                    messages.addObject().put("role", item.getRole()).put("content", item.getContent());
+                    String content = item.getContent();
+                    if (content.length() > REWRITE_HISTORY_MSG_MAX_CHARS) {
+                        content = content.substring(0, REWRITE_HISTORY_MSG_MAX_CHARS);
+                    }
+                    messages.addObject().put("role", item.getRole()).put("content", content);
                 }
             }
             messages.addObject().put("role", "user").put("content", question);
@@ -2409,7 +2464,8 @@ public class RagService {
                 body.put("temperature", 0.2);
                 body.put("max_tokens", 160);
             }
-            HttpResponse<String> response = openAiRequest(ollama ? "/api/chat" : "/chat/completions", body, rag);
+            // 改写是增强项：短超时，失败快速退化为无改写召回
+            HttpResponse<String> response = openAiRequest(ollama ? "/api/chat" : "/chat/completions", body, rag, REWRITE_TIMEOUT);
             if (response.statusCode() >= 300) {
                 throw new IllegalStateException("查询改写调用失败: " + response.statusCode() + " " + response.body());
             }
@@ -2686,8 +2742,12 @@ public class RagService {
         return openAiRequest(path, body, properties.getRag());
     }
 
+    private HttpResponse<String> openAiRequest(String path, ObjectNode body, RagProperties.Rag rag) throws Exception {
+        return openAiRequest(path, body, rag, Duration.ofSeconds(120));
+    }
+
     private HttpResponse<String> openAiRequest(
-            String path, ObjectNode body, RagProperties.Rag rag) throws Exception {
+            String path, ObjectNode body, RagProperties.Rag rag, Duration timeout) throws Exception {
         String baseUrl;
         if (path.equals("/api/embeddings")) {
             baseUrl = rag.getEmbeddingBaseUrl().replaceAll("/$", "").replaceAll("/v1$", "");
@@ -2705,7 +2765,7 @@ public class RagService {
         URI requestUri = URI.create(baseUrl + path);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(requestUri)
-                .timeout(Duration.ofSeconds(120))
+                .timeout(timeout)
                 .header("Content-Type", "application/json");
         boolean embeddingRequest = path.equals("/api/embeddings") || path.equals("/embeddings");
         String apiKey = embeddingRequest ? rag.getEmbeddingApiKey() : rag.getApiKey();
@@ -3047,30 +3107,51 @@ public class RagService {
      * score(d) = Σ 1/(k + rank)，各列表 rank 从 1 开始，k=60；同一 doc 多路命中时分数相加，
      * 融合分写回 score（无重排时下游按 score 排序即保持 RRF 顺序），同分保持先列表顺序（稳定排序）。
      */
-    private List<RagDtos.SourceReference> fuseRrfCandidates(List<List<RagDtos.SourceReference>> recallLists) {
+    /**
+     * 多路召回 RRF 融合（k=60）。按文档（doc_id）聚合：
+     * <ul>
+     *   <li>文档分数 = 其全部 chunk 在各路的 RRF 贡献之和（多 chunk 命中的文档排名更高）；</li>
+     *   <li>每文档最多保留 maxChunksPerDocument 个 chunk，按 chunk 自身 RRF 贡献取最高者
+     *       （代表 chunk 是总贡献最高的，而非"最先被召回到的"）。</li>
+     * </ul>
+     * 返回列表按文档分数降序。
+     */
+    static List<RagDtos.SourceReference> fuseRrfCandidates(List<List<RagDtos.SourceReference>> recallLists,
+            int maxChunksPerDocument) {
         List<List<RagDtos.SourceReference>> nonEmpty =
                 recallLists.stream().filter(list -> !list.isEmpty()).toList();
         if (nonEmpty.isEmpty()) return List.of();
-        if (nonEmpty.size() == 1) return new ArrayList<>(nonEmpty.get(0));
-        Map<String, Double> scores = new LinkedHashMap<>();
-        Map<String, RagDtos.SourceReference> byId = new LinkedHashMap<>();
+        final int k = 60;
+        Map<String, Double> docScores = new LinkedHashMap<>();
+        Map<String, Double> chunkScores = new LinkedHashMap<>();
+        Map<String, RagDtos.SourceReference> chunksByKey = new LinkedHashMap<>();
+        Map<String, List<RagDtos.SourceReference>> chunksByDoc = new LinkedHashMap<>();
         for (List<RagDtos.SourceReference> list : nonEmpty) {
-            addRrfScores(scores, byId, list);
+            for (int rank = 0; rank < list.size(); rank++) {
+                RagDtos.SourceReference ref = list.get(rank);
+                double contribution = 1.0 / (k + rank + 1);
+                docScores.merge(ref.getId(), contribution, Double::sum);
+                String chunkKey = ref.getId() + "#" + ref.getChunkId();
+                chunkScores.merge(chunkKey, contribution, Double::sum);
+                // 同一 chunk 可能出现在多路召回：分数累加，但文档 chunk 列表只保留一个引用
+                RagDtos.SourceReference previous = chunksByKey.putIfAbsent(chunkKey, ref);
+                if (previous == null) {
+                    chunksByDoc.computeIfAbsent(ref.getId(), id -> new ArrayList<>()).add(ref);
+                }
+            }
         }
-        List<RagDtos.SourceReference> fused = new ArrayList<>(byId.values());
-        fused.forEach(ref -> ref.setScore(scores.get(ref.getId())));
+        List<RagDtos.SourceReference> fused = new ArrayList<>();
+        for (List<RagDtos.SourceReference> docChunks : chunksByDoc.values()) {
+            docChunks.stream()
+                    .sorted(Comparator.comparingDouble(
+                            (RagDtos.SourceReference c) -> chunkScores.get(c.getId() + "#" + c.getChunkId()))
+                            .reversed())
+                    .limit(maxChunksPerDocument)
+                    .forEach(fused::add);
+        }
+        fused.forEach(ref -> ref.setScore(docScores.get(ref.getId())));
         fused.sort(Comparator.comparingDouble(RagDtos.SourceReference::getScore).reversed());
         return fused;
-    }
-
-    private static void addRrfScores(Map<String, Double> scores, Map<String, RagDtos.SourceReference> byId,
-            List<RagDtos.SourceReference> candidates) {
-        final int k = 60;
-        for (int rank = 0; rank < candidates.size(); rank++) {
-            RagDtos.SourceReference ref = candidates.get(rank);
-            byId.putIfAbsent(ref.getId(), ref);
-            scores.merge(ref.getId(), 1.0 / (k + rank + 1), Double::sum);
-        }
     }
 
     private RagDtos.QueryResponse emptyQueryResponse(
