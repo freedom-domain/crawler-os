@@ -360,6 +360,12 @@
               >
                 <span>总耗时 {{ formatDuration(Math.max(0, elapsedClock - message.generationStartedAt)) }}</span>
               </div>
+              <div
+                v-if="message.role === 'assistant' && message.status === 'SUCCESS' && message.completedAt"
+                class="message-stats"
+              >
+                <span>{{ formatDateTime(message.completedAt) }}</span>
+              </div>
               <div v-if="message.status === 'FAILED'" class="failed-message-actions">
                 <span class="message-status-failed">回答失败</span>
                 <el-button
@@ -763,6 +769,7 @@ import {
 } from '@/api'
 import ContentPreviewDialog from '@/components/ContentPreviewDialog.vue'
 import { resolvePreviewHtml } from '@/utils/previewHtml'
+import { formatDateTime } from '@/utils/dateTime'
 import {
   ArrowDown, ArrowLeft, ArrowRight, ChatDotRound, Close, Cpu, Delete, DocumentCopy, EditPen, FullScreen, Help, Link, Loading, MagicStick, Minus, Moon, Plus,
   Document, Picture, Promotion, Refresh, Setting, Sunny, UserFilled
@@ -799,6 +806,7 @@ interface ChatMessage {
   reasoningText?: string
   sources?: SourceReference[]
   generationStartedAt?: number
+  completedAt?: number
   durationMs?: number
   waitDurationMs?: number
   thinkingDurationMs?: number
@@ -1225,6 +1233,13 @@ const closeSourceSnapshot = () => {
 const countCharacters = (value: string) => Array.from(value).length
 const formatDuration = (durationMs: number) =>
   durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)} 秒` : `${Math.round(durationMs)} 毫秒`
+// 历史消息没有完成时间字段，用创建时间 + 总耗时近似回答完成时刻
+const historyCompletedAt = (createdAt: unknown, durationMs: unknown) => {
+  if (!createdAt) return undefined
+  const started = new Date(createdAt as string).getTime()
+  if (Number.isNaN(started)) return undefined
+  return started + (typeof durationMs === 'number' ? durationMs : 0)
+}
 const elapsedClock = ref(performance.now())
 let elapsedClockTimer: number | undefined
 const formatTokenRate = (content: string, durationMs: number) =>
@@ -1393,7 +1408,10 @@ const loadMessages = async (conversation: Conversation) => {
       durationMs: item.durationMs,
       waitDurationMs: item.waitDurationMs ?? undefined,
       thinkingDurationMs: item.thinkingDurationMs ?? undefined,
-      generationDurationMs: item.generationDurationMs
+      generationDurationMs: item.generationDurationMs,
+      completedAt: item.status === 'SUCCESS'
+        ? historyCompletedAt(item.createdAt, item.durationMs)
+        : undefined
     }))
     conversation.messagesLoaded = true
     loaded = true
@@ -1790,6 +1808,7 @@ const consumeChatStream = async (response: Response, message: ChatMessage, conve
         message.durationMs = typeof payload.durationMs === 'number'
           ? payload.durationMs
           : elapsedMs
+        message.completedAt = Date.now()
         message.generationStartedAt = undefined
       }
       completed = true
