@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public final class AiKnowledgeBaseDtos {
     private AiKnowledgeBaseDtos() {}
@@ -42,6 +43,8 @@ public final class AiKnowledgeBaseDtos {
         private String vectorField;
         private String sourceType;
         private String uploadBucket;
+        @JsonSerialize(contentUsing = ToStringSerializer.class)
+        private List<Long> spiderIds;
         private Integer sort;
     }
 
@@ -63,6 +66,9 @@ public final class AiKnowledgeBaseDtos {
         private String vectorField;
         private String sourceType;
         private String uploadBucket;
+        @JsonSerialize(contentUsing = ToStringSerializer.class)
+        private List<Long> spiderIds;
+        private List<String> spiderNames;
         private Integer sort;
         private LocalDateTime createTime;
         private LocalDateTime updateTime;

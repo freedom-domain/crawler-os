@@ -173,9 +173,11 @@ public class RagService {
         boolean uploadKnowledgeBase = "UPLOAD".equalsIgnoreCase(base.getSourceType());
         Long ownerKnowledgeBaseId = uploadKnowledgeBase ? base.getId() : null;
         // 批量重建只操作当前知识库的文档：UPLOAD 类型仅取本知识库上传的文档；
-        // ES_INDEX 类型排除已归属其他知识库的上传文档（带 knowledgeBaseId 标记）。
+        // ES_INDEX 类型排除已归属其他知识库的上传文档（带 knowledgeBaseId 标记），
+        // 并只取知识库选定爬虫的文档（未选定时收录全部爬虫）。
         List<JsonNode> documents = fetchContentDocuments(properties.resolveSourceIndex(),
-                ownerKnowledgeBaseId, !uploadKnowledgeBase);
+                ownerKnowledgeBaseId, !uploadKnowledgeBase, true,
+                uploadKnowledgeBase ? null : base.getSpiderIds());
         ensureKnowledgeVectorIndex(base, model);
         deleteKnowledgeVectors(vectorIndex, base.getId());
         long chunks = indexKnowledgeBaseDocuments(base, model, documents,
@@ -212,8 +214,9 @@ public class RagService {
         String vectorIndex = resolveKnowledgeVectorIndex(model);
         ensureKnowledgeVectorIndex(base, model);
         Set<String> vectorized = findAllVectorizedDocumentIds(base);
-        // 与全量重建相同的过滤：排除已排除文档 + 已归属其他知识库的上传文档
-        List<String> newDocumentIds = fetchContentDocuments(sourceIndex, null, true, false).stream()
+        // 与全量重建相同的过滤：排除已排除文档 + 已归属其他知识库的上传文档 + 仅取选定爬虫
+        List<String> newDocumentIds = fetchContentDocuments(sourceIndex, null, true, false,
+                        base.getSpiderIds()).stream()
                 .map(document -> document.path("_id").asText())
                 .filter(id -> !id.isBlank() && !vectorized.contains(id))
                 .toList();
@@ -1591,7 +1594,8 @@ public class RagService {
 
     /**
      * 知识库与源文档一对一可见：UPLOAD 类型仅可见本知识库上传的文档；
-     * ES_INDEX 类型仅可见未归属任何知识库的源文档，其他知识库上传的文档不可见。
+     * ES_INDEX 类型仅可见未归属任何知识库的源文档，其他知识库上传的文档不可见；
+     * 限定了爬虫的 ES_INDEX 知识库只可见所选爬虫抓取的文档。
      */
     private void applyKnowledgeBaseScope(ObjectNode bool, AiKnowledgeBase base) {
         if (base == null) return;
@@ -1599,17 +1603,46 @@ public class RagService {
             appendTo(bool, "filter").add(knowledgeBaseOwnerQuery(base.getId()));
         } else {
             appendTo(bool, "must_not").add(knowledgeBaseDocumentExistsQuery());
+            appendSpiderScopeFilter(bool, base);
         }
+    }
+
+    /**
+     * ES 来源知识库限定了爬虫时追加 spiderId 过滤；未选定时收录全部爬虫的文档。
+     */
+    private void appendSpiderScopeFilter(ObjectNode bool, AiKnowledgeBase base) {
+        List<Long> spiderIds = base.getSpiderIds();
+        if (spiderIds == null || spiderIds.isEmpty()) return;
+        appendTo(bool, "filter").add(spiderIdsTermsQuery(spiderIds));
+    }
+
+    private ObjectNode spiderIdsTermsQuery(List<Long> spiderIds) {
+        return objectMapper.createObjectNode().set("terms",
+                objectMapper.createObjectNode()
+                        .set("spiderId", objectMapper.valueToTree(spiderIds)));
     }
 
     /** 校验源文档在该知识库的可见范围内，防止跨知识库读取或操作其他知识库的文档 */
     private void assertKnowledgeBaseOwnsDocument(AiKnowledgeBase base, String documentId) {
         JsonNode hit = findSourceDocument(properties.resolveSourceIndex(), documentId,
-                "knowledgeBaseId");
-        JsonNode ownerId = hit.path("_source").path("knowledgeBaseId");
-        boolean visible = "UPLOAD".equalsIgnoreCase(base.getSourceType())
-                ? ownerId.isNumber() && ownerId.asLong() == base.getId()
-                : !ownerId.isNumber();
+                "knowledgeBaseId", "spiderId");
+        JsonNode source = hit.path("_source");
+        JsonNode ownerId = source.path("knowledgeBaseId");
+        boolean visible;
+        if ("UPLOAD".equalsIgnoreCase(base.getSourceType())) {
+            visible = ownerId.isNumber() && ownerId.asLong() == base.getId();
+        } else {
+            visible = !ownerId.isNumber();
+            // 限定了爬虫的知识库：文档必须来自所选爬虫之一
+            if (visible) {
+                List<Long> spiderIds = base.getSpiderIds();
+                if (spiderIds != null && !spiderIds.isEmpty()) {
+                    JsonNode spiderId = source.path("spiderId");
+                    visible = spiderId.isNumber()
+                            && spiderIds.contains(spiderId.asLong());
+                }
+            }
+        }
         if (!visible) {
             throw new BizException("该文档不属于当前知识库");
         }
@@ -2132,18 +2165,29 @@ public class RagService {
                 excludeKnowledgeBaseDocuments, true);
     }
 
-    /** includeSource=false 时只取 _id（增量同步定位新文档，减少 scroll 传输量） */
     private List<JsonNode> fetchContentDocuments(String sourceIndex, Long ownerKnowledgeBaseId,
             boolean excludeKnowledgeBaseDocuments, boolean includeSource)
             throws IllegalStateException {
+        return fetchContentDocuments(sourceIndex, ownerKnowledgeBaseId,
+                excludeKnowledgeBaseDocuments, includeSource, null);
+    }
+
+    /**
+     * includeSource=false 时只取 _id（增量同步定位新文档，减少 scroll 传输量）；
+     * spiderIds 非空时只取所选爬虫的文档（限定了爬虫的 ES 来源知识库）。
+     */
+    private List<JsonNode> fetchContentDocuments(String sourceIndex, Long ownerKnowledgeBaseId,
+            boolean excludeKnowledgeBaseDocuments, boolean includeSource, List<Long> spiderIds)
+            throws IllegalStateException {
         try {
+            List<Long> scopedSpiderIds = spiderIds == null ? List.of() : spiderIds;
             ObjectNode body = objectMapper.createObjectNode();
             body.put("size", 1000);
             body.put("_source", includeSource);
             body.set("sort", objectMapper.createArrayNode().add("_doc"));
             List<String> excludedIds = getExcludedDocumentIds(sourceIndex);
             if (excludedIds.isEmpty() && ownerKnowledgeBaseId == null
-                    && !excludeKnowledgeBaseDocuments) {
+                    && !excludeKnowledgeBaseDocuments && scopedSpiderIds.isEmpty()) {
                 body.set("query", matchAllQuery());
             } else {
                 ObjectNode activeQuery = objectMapper.createObjectNode();
@@ -2156,6 +2200,9 @@ public class RagService {
                 }
                 if (excludeKnowledgeBaseDocuments) {
                     appendTo(activeQuery, "must_not").add(knowledgeBaseDocumentExistsQuery());
+                }
+                if (!scopedSpiderIds.isEmpty()) {
+                    appendTo(activeQuery, "filter").add(spiderIdsTermsQuery(scopedSpiderIds));
                 }
                 body.set("query", objectMapper.createObjectNode().set("bool", activeQuery));
             }

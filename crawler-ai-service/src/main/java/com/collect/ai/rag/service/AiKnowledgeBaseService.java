@@ -7,10 +7,12 @@ import com.collect.ai.entity.AiKnowledgeBase;
 import com.collect.ai.entity.AiRagVectorModel;
 import com.collect.ai.entity.AiRagRerankModel;
 import com.collect.ai.entity.AiAssistantKnowledgeBase;
+import com.collect.ai.entity.Spider;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.mapper.AiRagVectorModelMapper;
 import com.collect.ai.mapper.AiRagRerankModelMapper;
 import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
+import com.collect.ai.mapper.SpiderMapper;
 import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
 import com.collect.ai.rag.config.RagProperties;
 import com.collect.common.exception.BizException;
@@ -21,8 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +36,7 @@ public class AiKnowledgeBaseService {
     private final AiRagVectorModelMapper vectorModelMapper;
     private final AiRagRerankModelMapper rerankModelMapper;
     private final AiAssistantKnowledgeBaseMapper assistantKnowledgeBaseMapper;
+    private final SpiderMapper spiderMapper;
     private final RagProperties ragProperties;
 
     @Value("${minio.bucket:crawler-knowledge}")
@@ -126,6 +131,14 @@ public class AiKnowledgeBaseService {
         if (request.getRerankModelId() != null
                 && rerankModelMapper.selectById(request.getRerankModelId()) == null)
             throw new BizException("请选择有效的重排模型");
+        if (request.getSpiderIds() != null && !request.getSpiderIds().isEmpty()) {
+            List<Long> spiderIds = distinctSpiderIds(request.getSpiderIds());
+            long existing = spiderMapper.selectCount(new LambdaQueryWrapper<Spider>()
+                    .in(Spider::getId, spiderIds));
+            if (existing != spiderIds.size()) {
+                throw new BizException("所选爬虫不存在或已删除");
+            }
+        }
     }
 
     private AiKnowledgeBase fromRequest(AiKnowledgeBase base, AiKnowledgeBaseDtos.Request request) {
@@ -147,8 +160,22 @@ public class AiKnowledgeBaseService {
         base.setVectorField(normalizeIndex(ragProperties.resolveVectorField()));
         base.setSourceType(sourceType);
         base.setUploadBucket(normalizeBucket(uploadBucket));
+        // 爬虫筛选只对 ES 来源生效；直接上传来源清空已选爬虫
+        base.setSpiderIds("ES_INDEX".equals(sourceType)
+                ? distinctSpiderIds(request.getSpiderIds())
+                : null);
         base.setSort(request.getSort() == null ? 0 : request.getSort());
         return base;
+    }
+
+    /** 去重并剔除空值，保持前端选择顺序 */
+    private static List<Long> distinctSpiderIds(List<Long> spiderIds) {
+        if (spiderIds == null || spiderIds.isEmpty()) return null;
+        LinkedHashSet<Long> distinct = new LinkedHashSet<>();
+        spiderIds.forEach(id -> {
+            if (id != null) distinct.add(id);
+        });
+        return distinct.isEmpty() ? null : List.copyOf(distinct);
     }
 
     private static String normalizeIndex(String value) {
@@ -182,10 +209,25 @@ public class AiKnowledgeBaseService {
         response.setVectorField(ragProperties.resolveVectorField());
         response.setSourceType(base.getSourceType());
         response.setUploadBucket(base.getUploadBucket());
+        response.setSpiderIds(base.getSpiderIds());
+        response.setSpiderNames(resolveSpiderNames(base.getSpiderIds()));
         response.setSort(base.getSort());
         response.setCreateTime(base.getCreateTime());
         response.setUpdateTime(base.getUpdateTime());
         return response;
+    }
+
+    /** 将爬虫 ID 解析为名称；已删除的爬虫回退为 ID 文本 */
+    private List<String> resolveSpiderNames(List<Long> spiderIds) {
+        if (spiderIds == null || spiderIds.isEmpty()) return List.of();
+        Map<Long, String> names = spiderMapper.selectList(new LambdaQueryWrapper<Spider>()
+                        .in(Spider::getId, spiderIds))
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(Spider::getId, Spider::getName,
+                        (a, b) -> a));
+        return spiderIds.stream()
+                .map(id -> names.getOrDefault(id, "爬虫" + id))
+                .toList();
     }
 
     private static long safeCurrent(long current) {
