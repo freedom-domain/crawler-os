@@ -513,7 +513,7 @@ public class RagController {
         return R.ok();
     }
 
-    @Operation(summary = "增量同步内容索引新增文档（只向量化新文档，任务异步执行）")
+    @Operation(summary = "增量同步内容索引文档（向量化新文档与内容变更文档，任务异步执行）")
     @PostMapping("/sync/incremental")
     public R<RagDtos.SyncTaskResponse> syncIncremental(
             @RequestParam(required = false) Long knowledgeBaseId) {

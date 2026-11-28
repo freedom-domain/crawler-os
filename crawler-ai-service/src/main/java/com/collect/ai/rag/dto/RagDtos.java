@@ -35,6 +35,8 @@ public final class RagDtos {
     @Data
     public static class SyncResult {
         private long sourceDocuments;
+        /** 内容变更被重新向量化的文档数（增量同步） */
+        private long updatedDocuments;
         private long chunks;
         private long vectorDocuments;
     }
@@ -43,7 +45,7 @@ public final class RagDtos {
     public static class SyncTaskResponse {
         private String taskId;
         private Long knowledgeBaseId;
-        /** 任务模式：FULL=全量重建，INCREMENTAL=增量同步新文档 */
+        /** 任务模式：FULL=全量重建，INCREMENTAL=增量同步（新文档 + 内容变更文档） */
         private String mode;
         private String status;
         private String message;

@@ -52,6 +52,8 @@ import tools.jackson.databind.node.ObjectNode;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -105,7 +107,7 @@ public class RagService {
 
     private record KnowledgeVectorChunk(
             String documentId, int chunkIndex, String title, String heading, String content,
-            String parentText, Long strategyId, String strategyName) {
+            String parentText, Long strategyId, String strategyName, String contentHash) {
     }
 
     /** 父块（small-to-big）最大长度：检索命中子块后，用父块给 LLM 提供更完整上下文 */
@@ -191,9 +193,11 @@ public class RagService {
     }
 
     /**
-     * 增量向量化：内容索引新增的文档中，只挑出尚未写入该知识库向量索引的文档，
-     * 分块、生成 embedding 并写入知识库向量索引；已向量化文档不重复处理，
-     * 源索引中被删除的旧向量不清理（由全量重建负责）。
+     * 增量向量化：内容索引（爬虫写入的 ES 源索引）中，
+     * ① 尚未写入该知识库向量索引的新文档；
+     * ② 已向量化但源内容发生变更（爬虫重新抓取覆盖内容，内容哈希不一致）的文档；
+     * 两类文档分块、生成 embedding 并写入知识库向量索引（变更文档先清除旧分块），
+     * 内容未变化的文档不重复处理，源索引中被删除文档的旧向量不清理（由全量重建负责）。
      */
     public RagDtos.SyncResult syncNewContentDocuments(Long knowledgeBaseId, BooleanSupplier cancelChecker) {
         if (knowledgeBaseId == null) throw new BizException("请选择知识库");
@@ -215,23 +219,134 @@ public class RagService {
         ensureKnowledgeVectorIndex(base, model);
         Set<String> vectorized = findAllVectorizedDocumentIds(base);
         // 与全量重建相同的过滤：排除已排除文档 + 已归属其他知识库的上传文档 + 仅取选定爬虫
-        List<String> newDocumentIds = fetchContentDocuments(sourceIndex, null, true, false,
+        List<String> scopedDocumentIds = fetchContentDocuments(sourceIndex, null, true, false,
                         base.getSpiderIds()).stream()
                 .map(document -> document.path("_id").asText())
-                .filter(id -> !id.isBlank() && !vectorized.contains(id))
+                .filter(id -> !id.isBlank())
                 .toList();
+        // ① 新文档：尚无向量分块
+        List<String> newDocumentIds = scopedDocumentIds.stream()
+                .filter(id -> !vectorized.contains(id))
+                .toList();
+        // ② 变更文档：已有向量，但爬虫重新抓取后源内容哈希与分块上存的不一致
+        List<String> updatedDocumentIds = findUpdatedDocumentIds(sourceIndex, vectorIndex,
+                base, vectorized, scopedDocumentIds);
         RagDtos.SyncResult result = new RagDtos.SyncResult();
-        if (newDocumentIds.isEmpty()) {
+        if (newDocumentIds.isEmpty() && updatedDocumentIds.isEmpty()) {
             return result;
         }
-        List<JsonNode> documents = fetchSourceDocumentsByIds(sourceIndex, newDocumentIds);
+        // 变更文档的旧分块先删除，避免内容变短后残留过期分块
+        deleteKnowledgeDocumentVectors(vectorIndex, base.getId(), updatedDocumentIds);
+        List<String> documentIds = new ArrayList<>(newDocumentIds.size() + updatedDocumentIds.size());
+        documentIds.addAll(newDocumentIds);
+        documentIds.addAll(updatedDocumentIds);
+        List<JsonNode> documents = fetchSourceDocumentsByIds(sourceIndex, documentIds);
         long chunks = indexKnowledgeBaseDocuments(base, model, documents,
                 chunkStrategies, cancelChecker);
         refreshIndex(vectorIndex);
         result.setSourceDocuments(documents.size());
+        result.setUpdatedDocuments(updatedDocumentIds.size());
         result.setChunks(chunks);
         result.setVectorDocuments(chunks);
         return result;
+    }
+
+    /**
+     * 在“已向量化且仍在当前来源范围内”的文档中，比对源文档内容哈希与分块上存储的哈希，
+     * 返回内容已变更的文档 ID 列表。分块上无存储哈希（历史数据）的文档视为变更，
+     * 触发一次重新向量化以回填哈希。
+     */
+    private List<String> findUpdatedDocumentIds(
+            String sourceIndex, String vectorIndex, AiKnowledgeBase base,
+            Set<String> vectorized, List<String> scopedDocumentIds) {
+        List<String> candidateIds = scopedDocumentIds.stream()
+                .filter(vectorized::contains)
+                .toList();
+        if (candidateIds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, String> storedHashes = fetchStoredContentHashes(vectorIndex, base.getId(), candidateIds);
+        Map<String, String> currentHashes = new HashMap<>();
+        for (JsonNode document : fetchSourceDocumentsByIds(sourceIndex, candidateIds)) {
+            String id = document.path("_id").asText();
+            if (!id.isBlank()) {
+                currentHashes.put(id, contentHashOf(document.path("_source")));
+            }
+        }
+        return candidateIds.stream()
+                .filter(id -> {
+                    String current = currentHashes.get(id);
+                    // 源文档已不在（比对间隙被删除）时不处理，留给全量重建清理
+                    return current != null && !current.equals(storedHashes.get(id));
+                })
+                .toList();
+    }
+
+    /**
+     * 批量读取文档首个分块（chunk_id = 文档ID:0）上存储的内容哈希，
+     * 返回 文档ID -> content_hash；无存储哈希的文档不出现在结果中（视为需要重新向量化）。
+     */
+    private Map<String, String> fetchStoredContentHashes(
+            String vectorIndex, Long knowledgeBaseId, List<String> documentIds) {
+        Map<String, String> hashes = new HashMap<>();
+        for (int start = 0; start < documentIds.size(); start += 500) {
+            List<String> batch = documentIds.subList(start, Math.min(start + 500, documentIds.size()));
+            Map<String, String> documentIdByChunkId = new HashMap<>(batch.size());
+            ArrayNode idArray = objectMapper.createArrayNode();
+            for (String documentId : batch) {
+                String chunkDocumentId = knowledgeBaseChunkDocumentId(knowledgeBaseId, documentId + ":0");
+                documentIdByChunkId.put(chunkDocumentId, documentId);
+                idArray.add(chunkDocumentId);
+            }
+            ObjectNode body = objectMapper.createObjectNode().set("ids", idArray);
+            try {
+                HttpResponse<String> response = elasticsearchRequest(
+                        "POST", "/" + vectorIndex + "/_mget", toJson(body));
+                if (response.statusCode() >= 300) {
+                    throw new IllegalStateException("读取文档分块内容哈希失败: "
+                            + response.statusCode() + " " + response.body());
+                }
+                JsonNode root = objectMapper.readTree(response.body());
+                for (JsonNode document : root.path("docs")) {
+                    if (!document.path("found").asBoolean(false)) continue;
+                    String documentId = documentIdByChunkId.get(document.path("_id").asText(""));
+                    if (documentId == null) continue;
+                    String hash = document.path("_source").path("content_hash").asText("");
+                    if (!hash.isBlank()) {
+                        hashes.put(documentId, hash);
+                    }
+                }
+            } catch (Exception e) {
+                if (e instanceof IllegalStateException state) throw state;
+                throw new IllegalStateException("读取文档分块内容哈希失败: " + e.getMessage(), e);
+            }
+        }
+        return hashes;
+    }
+
+    /** 删除知识库内指定文档的全部向量分块（增量同步中内容变更文档的旧分块清理） */
+    private void deleteKnowledgeDocumentVectors(
+            String vectorIndex, Long knowledgeBaseId, List<String> documentIds) {
+        if (documentIds.isEmpty()) return;
+        ObjectNode bool = objectMapper.createObjectNode();
+        appendTo(bool, "filter").add(knowledgeBaseOwnerQuery(knowledgeBaseId));
+        appendTo(bool, "filter").add(objectMapper.createObjectNode()
+                .set("terms", objectMapper.createObjectNode()
+                        .set("doc_id", objectMapper.valueToTree(documentIds))));
+        ObjectNode body = objectMapper.createObjectNode()
+                .set("query", objectMapper.createObjectNode().set("bool", bool));
+        try {
+            HttpResponse<String> response = elasticsearchRequest("POST",
+                    "/" + vectorIndex + "/_delete_by_query?refresh=true&conflicts=proceed",
+                    toJson(body));
+            if (response.statusCode() >= 300 && response.statusCode() != 404) {
+                throw new IllegalStateException("删除变更文档旧向量失败: "
+                        + response.statusCode() + " " + response.body());
+            }
+        } catch (Exception e) {
+            if (e instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("删除变更文档旧向量失败: " + e.getMessage(), e);
+        }
     }
 
     /** 把源文档逐篇分块、embedding 并写入知识库向量索引，返回写入分块数 */
@@ -249,6 +364,7 @@ public class RagService {
             String id = document.path("_id").asText();
             String title = source.path("title").asText("");
             String content = source.path("content").asText("");
+            String contentHash = contentHashOf(source);
             ChunkingResult chunking = splitText(documentText(title, content), documentTypes(source),
                     chunkStrategies, model);
             List<String> parts = chunking.chunks();
@@ -256,7 +372,8 @@ public class RagService {
                 embeddingBatch.add(new KnowledgeVectorChunk(id, i, title,
                         chunking.headings().get(i), parts.get(i),
                         chunking.parentTexts().get(i),
-                        chunking.strategy().getId(), chunking.strategy().getName()));
+                        chunking.strategy().getId(), chunking.strategy().getName(),
+                        contentHash));
                 if (embeddingBatch.size() == EMBEDDING_BATCH_SIZE) {
                     if (cancelChecker.getAsBoolean()) {
                         throw new SyncCancelledException();
@@ -298,7 +415,8 @@ public class RagService {
                     .put("knowledgeBaseId", base.getId())
                     .put("embedding_model", model.getEmbeddingModel())
                     .put("chunk_strategy_id", chunk.strategyId())
-                    .put("chunk_strategy_name", chunk.strategyName());
+                    .put("chunk_strategy_name", chunk.strategyName())
+                    .put("content_hash", chunk.contentHash());
             ArrayNode vector = row.putArray(properties.resolveVectorField());
             embeddings.get(i).forEach(vector::add);
             operations.add(row);
@@ -596,7 +714,8 @@ public class RagService {
                         .put("knowledgeBaseId", base.getId())
                         .put("embedding_model", model.getEmbeddingModel())
                         .put("chunk_strategy_id", chunking.strategy().getId())
-                        .put("chunk_strategy_name", chunking.strategy().getName());
+                        .put("chunk_strategy_name", chunking.strategy().getName())
+                        .put("content_hash", contentHashOf(source));
                 ArrayNode vector = row.putArray(properties.resolveVectorField());
                 embeddings.get(i).forEach(vector::add);
                 operations.add(row);
@@ -3379,6 +3498,34 @@ public class RagService {
 
     private static String documentText(String title, String content) {
         return title == null || title.isBlank() ? content : title + "\n" + content;
+    }
+
+    /**
+     * 源文档内容哈希（SHA-256，十六进制）：由分块、embedding 的实际输入
+     * （标题 + 正文 + 文档类型集合）计算，写入每个分块的 content_hash 字段。
+     * 增量同步时用它判断爬虫重新抓取后文档内容是否变更。
+     */
+    private static String contentHashOf(JsonNode source) {
+        String title = source.path("title").asText("");
+        String content = source.path("content").asText("");
+        StringBuilder payload = new StringBuilder(documentText(title, content));
+        Set<String> types = documentTypes(source);
+        if (!types.isEmpty()) {
+            payload.append('\u0000');
+            types.stream().sorted().forEach(t -> payload.append(t).append(','));
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(payload.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16))
+                        .append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 不可用", e);
+        }
     }
 
     private static void addFileExtension(Set<String> types, String fileName) {
