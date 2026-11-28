@@ -39,6 +39,14 @@ export interface AiManagementPageParams {
 export const getAssistants = () => request.get('/ai/rag/assistants')
 export const getAssistantPage = (params: AiManagementPageParams) =>
   request.get('/ai/rag/assistants/page', { params })
+export const getAssistantRoles = () => request.get('/ai/rag/assistant-roles')
+export const getAssistantRolePage = (params: AiManagementPageParams) =>
+  request.get('/ai/rag/assistant-roles/page', { params })
+export const getEnabledAssistantRoles = () => request.get('/ai/rag/assistant-roles/enabled')
+export const createAssistantRole = (data: any) => request.post('/ai/rag/assistant-roles', data)
+export const updateAssistantRole = (id: string, data: any) =>
+  request.put(`/ai/rag/assistant-roles/${id}`, data)
+export const deleteAssistantRole = (id: string) => request.delete(`/ai/rag/assistant-roles/${id}`)
 export const getChatAssistants = () => request.get('/ai/chat/conversations/assistants')
 export const createAssistant = (data: any) => request.post('/ai/rag/assistants', data)
 export const updateAssistant = (id: string, data: any) => request.put(`/ai/rag/assistants/${id}`, data)

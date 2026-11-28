@@ -57,6 +57,7 @@ const router = createRouter({
         { path: 'ai-vector-models', redirect: '/ai-models?tab=vector' },
         { path: 'ai-chat-models', redirect: '/ai-models?tab=chat' },
         { path: 'ai-assistants', name: 'AiAssistants', component: () => import('@/views/AiAssistants.vue') },
+        { path: 'ai-assistant-roles', name: 'AiAssistantRoles', component: () => import('@/views/AiAssistantRoles.vue') },
         { path: 'ai-chat', name: 'AiChat', component: () => import('@/views/AiChat.vue') },
         { path: 'ai-chat/:assistantId', name: 'AiChatAssistant', component: () => import('@/views/AiChat.vue') },
         { path: 'cf-ip-management', name: 'CfIpManagement', component: () => import('@/views/CfIpManagement.vue') },

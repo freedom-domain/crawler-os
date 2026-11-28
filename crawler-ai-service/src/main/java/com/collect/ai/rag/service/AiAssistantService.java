@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.collect.ai.entity.AiAssistant;
+import com.collect.ai.entity.AiAssistantRole;
 import com.collect.ai.entity.AiKnowledgeBase;
 import com.collect.ai.entity.AiAssistantKnowledgeBase;
 import com.collect.ai.mapper.AiAssistantMapper;
 import com.collect.ai.mapper.AiAssistantKnowledgeBaseMapper;
+import com.collect.ai.mapper.AiAssistantRoleMapper;
 import com.collect.ai.mapper.AiKnowledgeBaseMapper;
 import com.collect.ai.rag.dto.AiAssistantDtos;
 import com.collect.common.exception.BizException;
@@ -26,6 +28,7 @@ public class AiAssistantService {
     private final AiAssistantMapper assistantMapper;
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiAssistantKnowledgeBaseMapper assistantKnowledgeBaseMapper;
+    private final AiAssistantRoleMapper assistantRoleMapper;
 
     public List<AiAssistantDtos.Response> list() {
         return assistantMapper.selectList(new LambdaQueryWrapper<AiAssistant>()
@@ -127,6 +130,8 @@ public class AiAssistantService {
         if (request.getName().trim().length() > 64) throw new BizException("智能体名称不能超过 64 个字符");
         if (request.getWelcomeMessage() != null && request.getWelcomeMessage().trim().length() > 256)
             throw new BizException("欢迎语不能超过 256 个字符");
+        if (request.getRoleId() != null && assistantRoleMapper.selectById(request.getRoleId()) == null)
+            throw new BizException("请选择有效的角色");
         if (request.getKnowledgeBaseIds() != null) {
             for (Long knowledgeBaseId : request.getKnowledgeBaseIds()) {
                 if (knowledgeBaseMapper.selectById(knowledgeBaseId) == null)
@@ -141,6 +146,7 @@ public class AiAssistantService {
         assistant.setDescription(request.getDescription() == null ? "" : request.getDescription().trim());
         assistant.setAvatar(request.getAvatar() == null ? "" : request.getAvatar().trim());
         assistant.setSystemPrompt(request.getSystemPrompt() == null ? "" : request.getSystemPrompt().trim());
+        assistant.setRoleId(request.getRoleId());
         assistant.setEnabled(request.getEnabled() == null ? Boolean.TRUE : request.getEnabled());
         assistant.setSort(request.getSort() == null ? 0 : request.getSort());
         return assistant;
@@ -167,6 +173,11 @@ public class AiAssistantService {
         response.setDescription(assistant.getDescription());
         response.setAvatar(assistant.getAvatar());
         response.setSystemPrompt(assistant.getSystemPrompt());
+        AiAssistantRole role = assistant.getRoleId() == null
+                ? null : assistantRoleMapper.selectById(assistant.getRoleId());
+        response.setRoleId(assistant.getRoleId());
+        response.setRoleName(role == null ? null : role.getName());
+        response.setEffectiveSystemPrompt(effectiveSystemPrompt(assistant, role));
         response.setEnabled(assistant.getEnabled());
         List<AiAssistantKnowledgeBase> relations = assistantKnowledgeBaseMapper.selectList(
                 new LambdaQueryWrapper<AiAssistantKnowledgeBase>()
@@ -184,6 +195,15 @@ public class AiAssistantService {
         response.setCreateTime(assistant.getCreateTime());
         response.setUpdateTime(assistant.getUpdateTime());
         return response;
+    }
+
+    /** 角色系统提示词优先生效；角色不存在、已停用或提示词为空时回退智能体自身提示词 */
+    private static String effectiveSystemPrompt(AiAssistant assistant, AiAssistantRole role) {
+        if (role != null && Boolean.TRUE.equals(role.getEnabled())
+                && StringUtils.hasText(role.getSystemPrompt())) {
+            return role.getSystemPrompt().trim();
+        }
+        return assistant.getSystemPrompt() == null ? "" : assistant.getSystemPrompt().trim();
     }
 
     private static long safeCurrent(long current) {

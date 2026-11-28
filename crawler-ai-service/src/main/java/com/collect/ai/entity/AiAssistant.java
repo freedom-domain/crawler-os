@@ -18,6 +18,7 @@ public class AiAssistant {
     private String description;
     private String avatar;
     private String systemPrompt;
+    private Long roleId;
     private Boolean enabled;
     private Integer sort;
     private LocalDateTime createTime;

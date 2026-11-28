@@ -1671,7 +1671,7 @@ public class RagService {
             profile.put("name", assistant.getName());
             profile.put("description", assistant.getDescription());
             profile.put("welcomeMessage", assistant.getWelcomeMessage());
-            profile.put("systemPrompt", assistant.getSystemPrompt());
+            profile.put("systemPrompt", assistant.getEffectiveSystemPrompt());
             ArrayNode knowledgeBases = profile.putArray("knowledgeBases");
             if (assistant.getKnowledgeBaseNames() != null) {
                 assistant.getKnowledgeBaseNames().forEach(knowledgeBases::add);
@@ -2093,9 +2093,11 @@ public class RagService {
 
         StreamingChatResult streamingResult = tokenConsumer == null ? null
                 : createStreamingChatAnswer(
-                        request.getQuestion(), context.toString(), history, tokenConsumer, reasoningConsumer, rag);
+                        request.getQuestion(), context.toString(), history, request.getSystemPrompt(),
+                        tokenConsumer, reasoningConsumer, rag);
         String answer = streamingResult == null
-                ? createChatAnswer(request.getQuestion(), context.toString(), history, rag)
+                ? createChatAnswer(request.getQuestion(), context.toString(), history,
+                        request.getSystemPrompt(), rag)
                 : streamingResult.answer();
         RagDtos.QueryResponse response = new RagDtos.QueryResponse();
         response.setAnswer(answer);
@@ -2504,12 +2506,12 @@ public class RagService {
 
     private String createChatAnswer(
             String question, String context, List<RagDtos.ChatHistoryMessage> history,
-            RagProperties.Rag rag) {
+            String systemPrompt, RagProperties.Rag rag) {
         try {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
             ArrayNode messages = body.putArray("messages");
-            appendChatMessages(messages, question, context, history);
+            appendChatMessages(messages, question, context, history, systemPrompt);
             if (!"ollama".equalsIgnoreCase(rag.getChatProvider())) {
                 body.put("temperature", 0.2);
             } else {
@@ -2543,6 +2545,7 @@ public class RagService {
             String question,
             String context,
             List<RagDtos.ChatHistoryMessage> history,
+            String systemPrompt,
             Consumer<String> tokenConsumer,
             Consumer<String> reasoningConsumer,
             RagProperties.Rag rag) {
@@ -2550,7 +2553,7 @@ public class RagService {
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
             ArrayNode messages = body.putArray("messages");
-            appendChatMessages(messages, question, context, history);
+            appendChatMessages(messages, question, context, history, systemPrompt);
             String provider = rag.getChatProvider();
             String path = "ollama".equalsIgnoreCase(provider)
                     ? "/api/chat"
@@ -2600,17 +2603,23 @@ public class RagService {
             ArrayNode messages,
             String question,
             String context,
-            List<RagDtos.ChatHistoryMessage> history) {
+            List<RagDtos.ChatHistoryMessage> history,
+            String systemPrompt) {
         boolean hasContext = context != null && !context.isBlank();
+        String basePrompt = hasContext
+                ? "你是一个只依据提供资料回答问题的中文助手。"
+                        + "如果资料不足，请明确说明不能确定，不要编造。"
+                        + "回答中的每个事实性段落都要在相关内容后标注对应资料编号，格式为 [1]；"
+                        + "若有多个来源支持，可连续标注 [1][2]。编号必须来自提供的参考资料，"
+                        + "不要把所有引用统一放到答案末尾。"
+                : "你是一个友好的中文助手，请结合当前对话历史直接、准确地回答用户问题。";
+        // 角色/智能体自定义系统提示词在前，保留引用与作答规则
+        String content = StringUtils.hasText(systemPrompt)
+                ? systemPrompt.trim() + "\n\n" + basePrompt
+                : basePrompt;
         messages.addObject()
                 .put("role", "system")
-                .put("content", hasContext
-                        ? "你是一个只依据提供资料回答问题的中文助手。"
-                                + "如果资料不足，请明确说明不能确定，不要编造。"
-                                + "回答中的每个事实性段落都要在相关内容后标注对应资料编号，格式为 [1]；"
-                                + "若有多个来源支持，可连续标注 [1][2]。编号必须来自提供的参考资料，"
-                                + "不要把所有引用统一放到答案末尾。"
-                        : "你是一个友好的中文助手，请结合当前对话历史直接、准确地回答用户问题。");
+                .put("content", content);
         if (history != null) {
             for (RagDtos.ChatHistoryMessage item : history) {
                 if (item == null || item.getContent() == null || item.getContent().isBlank()) {

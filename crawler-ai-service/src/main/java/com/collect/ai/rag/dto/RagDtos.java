@@ -22,6 +22,8 @@ public final class RagDtos {
         private Long knowledgeBaseId;
         private List<Long> knowledgeBaseIds;
         private Long chatModelId;
+        /** 智能体（或其角色）生效的系统提示词，为空时使用默认提示词 */
+        private String systemPrompt;
     }
 
     @Data

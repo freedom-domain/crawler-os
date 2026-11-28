@@ -14,7 +14,9 @@ import com.collect.ai.rag.dto.ChunkStrategyResponse;
 import com.collect.ai.rag.dto.RerankModelRequest;
 import com.collect.ai.rag.dto.RerankModelResponse;
 import com.collect.ai.rag.dto.AiAssistantDtos;
+import com.collect.ai.rag.dto.AiAssistantRoleDtos;
 import com.collect.ai.rag.dto.AiKnowledgeBaseDtos;
+import com.collect.ai.rag.service.AiAssistantRoleService;
 import com.collect.ai.rag.service.AiAssistantService;
 import com.collect.ai.rag.service.AiKnowledgeBaseService;
 import com.collect.ai.rag.service.ChatModelService;
@@ -58,6 +60,7 @@ public class RagController {
     private final RerankModelService rerankModelService;
     private final ModelDiscoveryService modelDiscoveryService;
     private final AiAssistantService aiAssistantService;
+    private final AiAssistantRoleService aiAssistantRoleService;
     private final AiKnowledgeBaseService aiKnowledgeBaseService;
     private final RagIndexRebuildTaskService ragIndexRebuildTaskService;
 
@@ -174,6 +177,61 @@ public class RagController {
     public R<Void> deleteAssistant(@PathVariable Long id) {
         requireAdmin();
         aiAssistantService.delete(id);
+        return R.ok();
+    }
+
+    @Operation(summary = "读取智能体角色列表")
+    @GetMapping("/assistant-roles")
+    public R<java.util.List<AiAssistantRoleDtos.Response>> assistantRoles() {
+        requireAdmin();
+        return R.ok(aiAssistantRoleService.list());
+    }
+
+    @Operation(summary = "分页查询智能体角色")
+    @GetMapping("/assistant-roles/page")
+    public R<IPage<AiAssistantRoleDtos.Response>> assistantRolePage(
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "15") long pageSize,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean enabled) {
+        requireAdmin();
+        return R.ok(aiAssistantRoleService.page(page, pageSize, keyword, enabled));
+    }
+
+    @Operation(summary = "读取启用的智能体角色")
+    @GetMapping("/assistant-roles/enabled")
+    public R<java.util.List<AiAssistantRoleDtos.Response>> enabledAssistantRoles() {
+        requireAdmin();
+        return R.ok(aiAssistantRoleService.listEnabled());
+    }
+
+    @Operation(summary = "读取智能体角色详情")
+    @GetMapping("/assistant-roles/{id}")
+    public R<AiAssistantRoleDtos.Response> assistantRole(@PathVariable Long id) {
+        requireAdmin();
+        return R.ok(aiAssistantRoleService.get(id));
+    }
+
+    @Operation(summary = "创建智能体角色")
+    @PostMapping("/assistant-roles")
+    public R<AiAssistantRoleDtos.Response> createAssistantRole(@RequestBody AiAssistantRoleDtos.Request request) {
+        requireAdmin();
+        return R.ok(aiAssistantRoleService.create(request));
+    }
+
+    @Operation(summary = "更新智能体角色")
+    @PutMapping("/assistant-roles/{id}")
+    public R<AiAssistantRoleDtos.Response> updateAssistantRole(
+            @PathVariable Long id, @RequestBody AiAssistantRoleDtos.Request request) {
+        requireAdmin();
+        return R.ok(aiAssistantRoleService.update(id, request));
+    }
+
+    @Operation(summary = "删除智能体角色")
+    @DeleteMapping("/assistant-roles/{id}")
+    public R<Void> deleteAssistantRole(@PathVariable Long id) {
+        requireAdmin();
+        aiAssistantRoleService.delete(id);
         return R.ok();
     }
 

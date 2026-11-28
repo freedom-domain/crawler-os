@@ -17,6 +17,8 @@ public final class AiAssistantDtos {
         private String description;
         private String avatar;
         private String systemPrompt;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long roleId;
         private Boolean enabled;
         @JsonSerialize(contentUsing = ToStringSerializer.class)
         private List<Long> knowledgeBaseIds;
@@ -32,6 +34,11 @@ public final class AiAssistantDtos {
         private String description;
         private String avatar;
         private String systemPrompt;
+        /** 选择角色后优先生效的系统提示词（角色已停用或提示词为空时回退智能体自身提示词） */
+        private String effectiveSystemPrompt;
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long roleId;
+        private String roleName;
         private Boolean enabled;
         @JsonSerialize(contentUsing = ToStringSerializer.class)
         private List<Long> knowledgeBaseIds;

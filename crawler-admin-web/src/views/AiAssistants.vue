@@ -34,6 +34,9 @@
         <el-table :data="assistants" v-loading="loading" empty-text="暂无智能体" stripe resizable border>
           <el-table-column prop="name" label="智能体名称" min-width="180" fixed="left" show-overflow-tooltip resizable />
           <el-table-column prop="id" label="ID" min-width="80" resizable />
+          <el-table-column label="角色" min-width="140" resizable>
+            <template #default="{ row }">{{ row.roleName || '-' }}</template>
+          </el-table-column>
           <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip resizable />
           <el-table-column label="知识库" min-width="220" show-overflow-tooltip resizable>
             <template #default="{ row }">
@@ -97,6 +100,24 @@
             <span class="knowledge-base-picker-action">选择</span>
           </button>
         </el-form-item>
+        <el-form-item label="角色">
+          <el-select
+            v-model="form.roleId"
+            placeholder="不选择则仅使用智能体自身的系统提示词"
+            clearable
+            filterable
+            style="width: 100%"
+          >
+            <el-option
+              v-for="role in assistantRoles"
+              :key="role.id"
+              :label="role.name"
+              :value="role.id"
+              :disabled="!role.enabled"
+            />
+          </el-select>
+          <div class="form-hint">角色启用且系统提示词不为空时，对话优先使用角色的系统提示词。</div>
+        </el-form-item>
         <el-form-item label="系统提示词">
           <el-input v-model="form.systemPrompt" type="textarea" :rows="5" maxlength="4000" placeholder="定义智能体的角色、回答边界和语气" />
         </el-form-item>
@@ -158,7 +179,7 @@ import { useRouter } from 'vue-router'
 import { ChatDotRound, Delete, Edit, Plus, Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  createAssistant, deleteAssistant, getAssistantPage, getKnowledgeBases, updateAssistant
+  createAssistant, deleteAssistant, getAssistantPage, getAssistantRoles, getKnowledgeBases, updateAssistant
 } from '@/api'
 import { formatDateTime } from '@/utils/dateTime'
 import TableRowActions, { type TableRowAction } from '@/components/TableRowActions.vue'
@@ -170,6 +191,8 @@ interface Assistant {
   description: string
   avatar: string
   systemPrompt: string
+  roleId: string | null
+  roleName: string | null
   enabled: boolean
   knowledgeBaseIds: string[]
   knowledgeBaseNames: string[]
@@ -180,6 +203,7 @@ interface Assistant {
 
 const assistants = ref<Assistant[]>([])
 const knowledgeBases = ref<any[]>([])
+const assistantRoles = ref<any[]>([])
 const loading = ref(false)
 const keyword = ref('')
 const enabledFilter = ref<boolean | undefined>()
@@ -195,7 +219,7 @@ const router = useRouter()
 const formRef = ref<FormInstance>()
 const form = reactive({
   name: '', welcomeMessage: '', description: '', avatar: '', systemPrompt: '',
-  enabled: true, knowledgeBaseIds: [] as string[], sort: 0
+  roleId: '' as string, enabled: true, knowledgeBaseIds: [] as string[], sort: 0
 })
 const rules: FormRules = {
   name: [{ required: true, message: '请输入智能体名称', trigger: 'blur' }]
@@ -228,10 +252,11 @@ function resetFilters() {
 async function loadAll() {
   loading.value = true
   try {
-    const [assistantRes, knowledgeBaseRes] = await Promise.all([
-      fetchAssistantPage(), getKnowledgeBases()
+    const [assistantRes, knowledgeBaseRes, roleRes] = await Promise.all([
+      fetchAssistantPage(), getKnowledgeBases(), getAssistantRoles()
     ])
     knowledgeBases.value = knowledgeBaseRes.data || []
+    assistantRoles.value = roleRes.data || []
   } finally {
     loading.value = false
   }
@@ -265,7 +290,7 @@ async function loadAssistantPage() {
 function openCreate() {
   editingId.value = null
   Object.assign(form, { name: '', welcomeMessage: '', description: '', avatar: '', systemPrompt: '',
-    enabled: true, knowledgeBaseIds: [], sort: 0 })
+    roleId: '', enabled: true, knowledgeBaseIds: [], sort: 0 })
   dialogVisible.value = true
 }
 
@@ -277,6 +302,7 @@ function openEdit(row: Assistant) {
     description: row.description,
     avatar: row.avatar,
     systemPrompt: row.systemPrompt,
+    roleId: row.roleId || '',
     enabled: row.enabled,
     knowledgeBaseIds: row.knowledgeBaseIds || [],
     sort: row.sort
@@ -314,8 +340,9 @@ async function saveAssistant() {
   await formRef.value?.validate()
   saving.value = true
   try {
-    if (editingId.value) await updateAssistant(editingId.value, { ...form })
-    else await createAssistant({ ...form })
+    const payload = { ...form, roleId: form.roleId || null }
+    if (editingId.value) await updateAssistant(editingId.value, payload)
+    else await createAssistant(payload)
     ElMessage.success('保存成功')
     dialogVisible.value = false
     await loadAll()
@@ -347,6 +374,7 @@ onMounted(loadAll)
 .card-header h2 { margin:0 0 6px; }
 .card-header p { margin:0; color:var(--el-text-color-secondary); }
 .assistant-toolbar { margin-bottom: 4px; }
+.form-hint { margin-top: 4px; color: var(--ink-500); font-size: 12px; line-height: 1.5; }
 .knowledge-base-picker {
   display: flex;
   width: 100%;

@@ -239,8 +239,9 @@ public class AiChatHistoryController {
         query.setChatModelId(request.getChatModelId());
         Long assistantId = historyService.getAssistantId(userId, conversationId);
         if (assistantId != null) {
-            query.setKnowledgeBaseIds(
-                    aiAssistantService.get(assistantId).getKnowledgeBaseIds());
+            com.collect.ai.rag.dto.AiAssistantDtos.Response assistant = aiAssistantService.get(assistantId);
+            query.setKnowledgeBaseIds(assistant.getKnowledgeBaseIds());
+            query.setSystemPrompt(assistant.getEffectiveSystemPrompt());
         }
         List<RagDtos.ChatHistoryMessage> context =
                 historyService.getSuccessfulContext(userId, conversationId);
@@ -277,8 +278,10 @@ public class AiChatHistoryController {
         query.setChatModelId(request.getChatModelId());
         Long streamingAssistantId = historyService.getAssistantId(userId, conversationId);
         if (streamingAssistantId != null) {
-            query.setKnowledgeBaseIds(
-                    aiAssistantService.get(streamingAssistantId).getKnowledgeBaseIds());
+            com.collect.ai.rag.dto.AiAssistantDtos.Response streamingAssistant =
+                    aiAssistantService.get(streamingAssistantId);
+            query.setKnowledgeBaseIds(streamingAssistant.getKnowledgeBaseIds());
+            query.setSystemPrompt(streamingAssistant.getEffectiveSystemPrompt());
         }
         List<RagDtos.ChatHistoryMessage> context =
                 historyService.getSuccessfulContext(userId, conversationId);
