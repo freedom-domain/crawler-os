@@ -70,6 +70,7 @@ import java.util.LinkedHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1833,7 +1834,7 @@ public class RagService {
                 for (Long knowledgeBaseId : assistant.getKnowledgeBaseIds().stream().limit(5).toList()) {
                     try {
                         List<KnowledgeBaseDtos.Document> documents =
-                                sampleRandomKnowledgeBaseDocuments(knowledgeBaseId, 3);
+                                sampleRandomKnowledgeBaseDocuments(knowledgeBaseId, 5);
                         ObjectNode sample = knowledgeSamples.addObject()
                                 .put("knowledgeBaseId", knowledgeBaseId);
                         ArrayNode documentSamples = sample.putArray("documents");
@@ -1851,21 +1852,26 @@ public class RagService {
         }
 
         try {
+            int variationSeed = ThreadLocalRandom.current().nextInt(100000);
             ObjectNode body = objectMapper.createObjectNode();
             body.put("model", rag.getChatModel());
             ArrayNode messages = body.putArray("messages");
             messages.addObject()
                     .put("role", "system")
                     .put("content", "根据用户提供的智能体和知识库信息，生成 3 个适合用户点击提问的简短中文问题。"
-                            + "问题应具体、彼此不同，并贴合智能体用途。只输出合法 JSON 数组，数组元素为字符串；不要输出 Markdown 或解释。");
+                            + "问题应具体、彼此不同，并贴合智能体用途。"
+                            + "结合本次随机种子自由联想，避免每次都生成最明显、最套路化的问题。"
+                            + "只输出合法 JSON 数组，数组元素为字符串；不要输出 Markdown 或解释。");
             messages.addObject()
                     .put("role", "user")
-                    .put("content", "智能体信息：\n" + profile);
+                    .put("content", "本次随机种子：" + variationSeed + "\n智能体信息：\n" + profile);
             if ("ollama".equalsIgnoreCase(rag.getChatProvider())) {
                 body.put("stream", false);
-                body.putObject("options").put("num_ctx", rag.getContextLength()).put("num_predict", 500);
+                body.putObject("options").put("num_ctx", rag.getContextLength())
+                        .put("num_predict", 500)
+                        .put("temperature", 1.0);
             } else {
-                body.put("temperature", 0.7);
+                body.put("temperature", 1.0);
                 body.put("max_tokens", 500);
             }
 
