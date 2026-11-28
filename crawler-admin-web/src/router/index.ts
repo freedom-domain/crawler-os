@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { hasValidToken, resolveAuthRedirect } from '@/utils/authRedirect'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -70,6 +71,11 @@ const PUBLIC_PATHS = ['/login', '/image-preview', '/public/search']
 
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
+  // 已登录用户访问登录页：渲染表单前直接跳转目标页
+  if (to.path === '/login' && userStore.token && hasValidToken()) {
+    next(resolveAuthRedirect(router, to.query.redirect))
+    return
+  }
   if (!PUBLIC_PATHS.includes(to.path) && !userStore.token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else {

@@ -38,6 +38,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, FormInstance } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { hasValidToken, resolveAuthRedirect } from '@/utils/authRedirect'
 
 const router = useRouter()
 const route = useRoute()
@@ -50,36 +51,11 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
-// 判断 token 是否未过期
-const isTokenValid = (): boolean => {
-  const token = localStorage.getItem('token')
-  if (!token) return false
-  try {
-    const payload = token.split('.')[1]
-    const binary = atob(payload)
-    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0))
-    const json = new TextDecoder('utf-8').decode(bytes)
-    const decoded = JSON.parse(json)
-    const exp = decoded.exp as number
-    return exp * 1000 > Date.now()
-  } catch {
-    return false
-  }
-}
+const getRedirectPath = () => resolveAuthRedirect(router, route.query.redirect)
 
-const getRedirectPath = () => {
-  const redirect = route.query.redirect
-  if (typeof redirect !== 'string' || !redirect.startsWith('/') || redirect.startsWith('//')) {
-    return '/dashboard'
-  }
-  const resolved = router.resolve(redirect)
-  return resolved.matched.length && resolved.path !== '/login'
-    ? resolved.fullPath
-    : '/dashboard'
-}
-
+// 兜底：路由守卫已拦截已登录用户访问登录页，此处覆盖守卫未生效的场景
 onMounted(() => {
-  if (isTokenValid()) {
+  if (userStore.token && hasValidToken()) {
     router.replace(getRedirectPath())
   }
 })
